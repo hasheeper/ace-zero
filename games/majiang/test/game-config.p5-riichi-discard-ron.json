@@ -1,0 +1,64 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "立直宣言位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "路过位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "路过位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "宣言牌荣和位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong P5 Riichi Declaration Ron",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "p5-riichi-discard-ron",
+        "name": "P5 Riichi Declaration Ron",
+        "initialHands": [
+          ["m1", "m2", "m3", "p2", "p3", "p4", "s2", "s3", "s4", "z6", "z6", "z7", "z7"],
+          ["m4", "m5", "m6", "p4", "p5", "p6", "s4", "s5", "s6", "z1", "z1", "z2", "z2"],
+          ["m7", "m8", "p7", "p8", "p9", "s7", "s8", "s9", "z3", "z3", "z4", "z4", "z5"],
+          ["m7", "m8", "p2", "p3", "p4", "s2", "s3", "s4", "z5", "z5", "z5", "z2", "z2"]
+        ],
+        "draws": ["m9", "z5", "z6", "z7"],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "runtimeSetup": {
+      "deadWallTiles": ["p1", "p2", "p3", "p4", "m1", "m5", "m6", "m7", "m8", "s1", "s2", "s3", "s4", "s5"]
+    },
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "m9", "riichi": true } },
+      { "type": "hule", "payload": { "seat": "left" } }
+    ],
+    "expectedSnapshot": {
+      "phase": "round_end",
+      "roundResultType": "hule",
+      "changbang": 0,
+      "lizhibang": 0,
+      "winnerSeat": "left",
+      "fromSeat": "bottom",
+      "scores": {
+        "bottom": 23700,
+        "right": 25000,
+        "top": 25000,
+        "left": 26300
+      },
+      "fanshu": 1,
+      "fu": 40,
+      "defen": 1300,
+      "hupaiNamesIncludes": ["翻牌 白"]
+    }
+  }
+}

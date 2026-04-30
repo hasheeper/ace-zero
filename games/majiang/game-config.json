@@ -1,0 +1,52 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "gameLength": "east-south",
+  "targetScore": 30000,
+  "ruleset": "riichi-4p",
+  "rules": {
+    "bankruptcyEndsGame": true,
+    "akaDora": {
+      "enabled": true,
+      "count": 3
+    },
+    "shibari": {
+      "minYakuHan": 1
+    }
+  },
+  "advancedMode": true,
+  "ai": {
+    "difficultyTiers": ["easy", "normal", "hard", "hell"],
+    "implementedDifficulties": ["easy"],
+    "defaultDifficulty": "easy"
+  },
+  "ui": {
+    "entry": "index.html",
+    "showHandLayer": true,
+    "tableLayout": "4p-octagon"
+  },
+  "players": [
+    { "seat": "bottom", "title": "自家", "name": "南宫", "human": true, "ai": { "enabled": false, "difficulty": "easy" } },
+    { "seat": "right", "title": "下家", "name": "隐僧", "human": false, "ai": { "enabled": true, "difficulty": "easy", "profile": "default" } },
+    { "seat": "top", "title": "对家", "name": "赤羽", "human": false, "ai": { "enabled": true, "difficulty": "easy", "profile": "default" } },
+    { "seat": "left", "title": "上家", "name": "白川", "human": false, "ai": { "enabled": true, "difficulty": "easy", "profile": "default" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong Four-Player",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0,
+    "ruleset": "riichi-4p",
+    "uiMode": "standard",
+    "tableLayout": "4p-octagon"
+  },
+  "ruleOverrides": {
+    "場数": 2
+  },
+  "engine": {
+    "wall": {
+      "preset": false
+    }
+  }
+}

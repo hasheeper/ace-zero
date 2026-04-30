@@ -1,0 +1,59 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "ui": {
+    "entry": "index.html",
+    "showHandLayer": true,
+    "tableLayout": "4p-octagon"
+  },
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "立直荣和位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "下家", "human": false, "ai": { "enabled": true, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "对家", "human": false, "ai": { "enabled": true, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "上家放铳位", "human": false, "ai": { "enabled": true, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong Manual Riichi Then Ron Demo",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "browser-manual-riichi-ron",
+        "name": "Browser Manual Riichi Then Ron Demo",
+        "initialHands": [
+          ["m1", "m2", "m3", "p2", "p3", "p4", "s2", "s3", "s4", "z6", "z6", "z7", "z7"],
+          ["m4", "m5", "m6", "p4", "p5", "p6", "s4", "s5", "s6", "z1", "z1", "z2", "z2"],
+          ["m7", "m8", "m9", "p7", "p8", "p9", "s7", "s8", "s9", "z3", "z3", "z4", "z4"],
+          ["m2", "m3", "m4", "p2", "p3", "p4", "s2", "s3", "s4", "z1", "z1", "m8", "m8"]
+        ],
+        "draws": ["m9", "z5", "z5", "z6", "m9", "p1", "s9", "z1"],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } }
+    ],
+    "expectedSnapshot": {
+      "phase": "await_discard",
+      "turnSeat": "bottom"
+    },
+    "manualGoal": {
+      "summary": "底家首巡手动立直后，三家保持正常 AI 推进，随后上家会在自己巡目摸切 z6，底家可荣和。",
+      "steps": [
+        "页面打开后已停在底家首巡出牌，当前底家可直接立直。",
+        "选择立直，并切出 m9。",
+        "随后下家、对家保持正常 AI 摸打，不会先进入立直。",
+        "上家会在自己的巡目摸到 z6 并打出，底家点击荣和。"
+      ]
+    }
+  }
+}

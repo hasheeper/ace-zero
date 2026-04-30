@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=JetBrains+Mono:wght@400;700;800&family=Noto+Serif+SC:wght@400;700;900&display=swap');
+
+/* Shared theme primitives for the Dashboard app. */
+:root {
+  --bg-void: #0b0c10;
+  --gold-main: #CFB53B;
+  --gold-dim: #7a6e35;
+  --gold-glow: rgba(207, 181, 59, 0.15);
+  --rino-magic: #9B59B6;
+  --rino-glow: rgba(155, 89, 182, 0.4);
+  --rino-text: #d28eff;
+  --mana-blue: #4d94ff;
+  --text-dim: #666;
+  --text-light: #e5e5e5;
+  --theme-page-glow: rgba(155, 89, 182, 0.12);
+  --theme-watermark-stroke: rgba(155, 89, 182, 0.12);
+  --theme-panel-edge: rgba(207, 181, 59, 0.12);
+  --theme-track-accent-bg: rgba(155, 89, 182, 0.12);
+  --semantic-fortune: #ebc970;
+  --semantic-curse: #d26f7b;
+  --semantic-mana: #4d94ff;
+  --semantic-exclusive: #d28eff;
+  --semantic-trait: #cfb53b;
+  --semantic-skill: #d28eff;
+  --semantic-status: #a4bac8;
+  --semantic-warning: #f0ac59;
+  --semantic-void: #b5c0d8;
+  --dock-height: 156px;
+  --art-desktop-width: 100%;
+  --art-desktop-height: 105%;
+  --art-desktop-bottom: -5%;
+  --art-desktop-left: 50%;
+  --art-desktop-offset-x: 0px;
+  --art-desktop-offset-y: 0px;
+  --art-desktop-scale: 1;
+  --art-desktop-size: contain;
+  --art-desktop-position: bottom center;
+  --art-sheet-width: min(90vw, 760px);
+  --art-sheet-height: 104%;
+  --art-sheet-bottom: -7%;
+  --art-sheet-left: 50%;
+  --art-sheet-offset-x: 0px;
+  --art-sheet-offset-y: 0px;
+  --art-sheet-scale: 1;
+  --art-sheet-size: contain;
+  --art-sheet-position: center bottom;
+}
+
+* {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  box-sizing: border-box;
+}
+
+.log-desc {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+body,
+html {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-void);
+  font-family: 'Noto Serif SC', serif;
+  color: var(--text-light);
+  background-image:
+    radial-gradient(circle at 50% 18%, var(--theme-page-glow) 0%, transparent 44%),
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+}

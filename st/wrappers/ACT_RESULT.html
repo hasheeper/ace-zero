@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AceZero ACT Result Wrapper</title>
+  <style>
+    * { box-sizing: border-box; }
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+    #act-result-frame {
+      width: 100%;
+      min-height: 560px;
+      height: 74vh;
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <script id="ace0-act-result-json" type="application/json">$1</script>
+  <iframe
+    id="act-result-frame"
+    title="AceZero ACT Result"
+    src="https://hasheeper.github.io/ace-zero/index.html?app=act-result"
+    sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
+    allow="fullscreen"
+    referrerpolicy="no-referrer"
+  ></iframe>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const frame = document.getElementById('act-result-frame');
+      const hostFrame = window.frameElement;
+
+      function parsePayload() {
+        try {
+          const node = document.getElementById('ace0-act-result-json');
+          const raw = (node && (node.textContent || node.innerText) || '').trim();
+          const placeholder = '$' + '1';
+          if (!raw || raw === placeholder) return null;
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn('[AceZero ACT Result Wrapper] Failed to parse payload:', error);
+          return null;
+        }
+      }
+
+      const payload = parsePayload();
+
+      function resizeHostFrame() {
+        if (!hostFrame) return;
+        const width = Math.min(window.innerWidth || 9999, 860);
+        const height = Math.min(Math.max(window.innerHeight || 560, 560), 900);
+        hostFrame.style.width = `${width}px`;
+        hostFrame.style.maxWidth = '100%';
+        hostFrame.style.height = `${height}px`;
+        hostFrame.style.minHeight = '560px';
+        hostFrame.style.border = 'none';
+      }
+
+      function postPayload() {
+        if (!payload || !frame || !frame.contentWindow) return;
+        frame.contentWindow.postMessage({
+          type: 'acezero-act-result-data',
+          payload
+        }, '*');
+      }
+
+      frame.addEventListener('load', postPayload);
+      window.addEventListener('message', (event) => {
+        const message = event && event.data;
+        if (!message || message.type !== 'acezero-act-result-request') return;
+        postPayload();
+      });
+      window.addEventListener('resize', resizeHostFrame);
+      resizeHostFrame();
+    })();
+  </script>
+</body>
+</html>

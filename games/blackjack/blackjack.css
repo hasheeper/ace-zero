@@ -1,0 +1,51 @@
+/* ============================================
+   夺金廿一 (Blackjack) — 游戏专属样式
+   通用布局来自 ../shared/mini-game-base.css
+   只包含 BJ 独有的：牌桌色、保险、分牌
+   ============================================ */
+
+/* BJ 绿色毡桌（默认即绿色，此处显式声明以保留可读性） */
+:root {
+  --bg-felt: radial-gradient(circle at 50% 40%, rgba(30,56,45,1) 0%, rgba(13,23,18,1) 60%, #050505 100%);
+}
+
+.zone-player .bet-chips { display: none !important; }
+.zone-player .hand-wrapper { padding-bottom: 0; }
+
+/* 给技能区腾空间：收紧左右面板与主按钮宽度 */
+.ui-dashboard {
+  grid-template-columns: 220px 1fr 220px;
+}
+.controls-center .btn-cmd {
+  min-width: 108px;
+}
+.controls-center .btn-cmd.primary {
+  min-width: 132px;
+}
+.controls-center .controls-skills {
+  margin-left: 6px;
+  max-width: none;
+}
+
+/* ============================================
+   QTE: 诅咒按钮亮起状态
+   ============================================ */
+.btn-skill.qte-active {
+  animation: qtePulse 0.6s ease-in-out infinite alternate;
+  box-shadow: 0 0 12px 3px rgba(200,50,50,0.7);
+  border-color: #e44 !important;
+}
+@keyframes qtePulse {
+  from { opacity: 0.8; box-shadow: 0 0 8px 2px rgba(200,50,50,0.5); }
+  to   { opacity: 1;   box-shadow: 0 0 16px 4px rgba(220,60,60,0.9); }
+}
+
+/* ============================================
+   分牌区
+   ============================================ */
+.split-hand { margin-top: 4px; }
+.split-hand .hand-container { min-height: 100px; min-width: 240px; }
+.split-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: #555; letter-spacing: 2px; text-align: center; margin-top: 2px;
+}

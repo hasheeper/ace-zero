@@ -1,0 +1,47 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "九种九牌位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "下家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "对家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "上家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong P3 Nine Kinds",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "p3-nine-kinds",
+        "name": "P3 Nine Kinds",
+        "initialHands": [
+          ["m1", "m9", "p1", "p9", "s1", "s9", "z1", "z2", "z3", "z4", "z5", "z6", "m2"],
+          ["m2", "m3", "m4", "p2", "p3", "p4", "s2", "s3", "s4", "z1", "z1", "z7", "z7"],
+          ["m4", "m5", "m6", "p4", "p5", "p6", "s4", "s5", "s6", "z2", "z2", "z6", "z6"],
+          ["m7", "m8", "m9", "p7", "p8", "p9", "s7", "s8", "s9", "z3", "z3", "z4", "z4"]
+        ],
+        "draws": ["z7"],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "pingju", "payload": { "seat": "bottom", "reason": "九種九牌", "revealedHands": ["m19p19s19z1234567m2,", "", "", ""] } }
+    ],
+    "expectedSnapshot": {
+      "phase": "round_end",
+      "roundResultType": "draw",
+      "roundResultReason": "九種九牌"
+    }
+  }
+}

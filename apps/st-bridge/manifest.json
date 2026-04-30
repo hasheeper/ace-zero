@@ -1,0 +1,104 @@
+{
+  "version": "0.1.0",
+  "defaultPack": "acezero-main",
+  "activePack": "acezero-main",
+  "packs": {
+    "acezero-main": {
+      "label": "AceZero Main",
+      "product": "acezero",
+      "globals": {
+        "ACE0_GAME_APP_URL": "https://hasheeper.github.io/ace-zero/index.html?app=game",
+        "ACE0_DASHBOARD_APP_URL": "https://hasheeper.github.io/ace-zero/index.html?app=dashboard",
+        "ACE0_ACT_RESULT_APP_URL": "https://hasheeper.github.io/ace-zero/index.html?app=act-result"
+      },
+      "scripts": [
+        {
+          "id": "acezero-schema",
+          "type": "module",
+          "url": "./packs/acezero-main/schema/acezero-schema.js"
+        },
+        {
+          "id": "acezero-act-data",
+          "type": "script",
+          "url": "./packs/acezero-main/act/data.js"
+        },
+        {
+          "id": "acezero-act-generated-data",
+          "type": "script",
+          "url": "./packs/acezero-main/act/generated-data.js"
+        },
+        {
+          "id": "acezero-act-generated-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/act/generated-runtime.js"
+        },
+        {
+          "id": "acezero-act-narrative-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/act/narrative-runtime.js"
+        },
+        {
+          "id": "acezero-act-frontend-snapshot",
+          "type": "script",
+          "url": "./packs/acezero-main/act/frontend-snapshot.js"
+        },
+        {
+          "id": "acezero-act-encounter-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/act/encounter-runtime.js"
+        },
+        {
+          "id": "acezero-act-plugin",
+          "type": "script",
+          "url": "./packs/acezero-main/act/plugin.js"
+        },
+        {
+          "id": "acezero-tavern-npc-data",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/npc-data.js"
+        },
+        {
+          "id": "acezero-tavern-docs",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/docs.js"
+        },
+        {
+          "id": "acezero-tavern-battle-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/battle-runtime.js"
+        },
+        {
+          "id": "acezero-tavern-character-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/character-runtime.js"
+        },
+        {
+          "id": "acezero-tavern-context-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/context.js"
+        },
+        {
+          "id": "acezero-tavern-act-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/act-runtime.js"
+        },
+        {
+          "id": "acezero-tavern-result-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/result.js"
+        },
+        {
+          "id": "acezero-tavern-plugin",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/plugin.js"
+        },
+        {
+          "id": "acezero-dashboard-loader",
+          "type": "script",
+          "url": "./packs/acezero-main/dashboard/loader.js",
+          "required": false
+        }
+      ]
+    }
+  }
+}

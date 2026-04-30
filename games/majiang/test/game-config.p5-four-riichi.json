@@ -1,0 +1,63 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "ruleOverrides": {
+    "途中流局あり": true
+  },
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "下家立直", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "对家立直", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "上家立直", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "庄家立直", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong P5 Four Riichi",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "p5-four-riichi",
+        "name": "P5 Four Riichi",
+        "initialHands": [
+          ["m1", "m2", "m3", "p1", "p2", "p3", "s1", "s2", "s3", "z1", "z1", "z1", "z2"],
+          ["m4", "m5", "m6", "p4", "p5", "p6", "s4", "s5", "s6", "z2", "z2", "z2", "z3"],
+          ["m7", "m8", "m9", "p7", "p8", "p9", "s7", "s8", "s9", "z3", "z3", "z3", "z4"],
+          ["m2", "m3", "m4", "p2", "p3", "p4", "s2", "s3", "s4", "z4", "z4", "z4", "z5"]
+        ],
+        "draws": ["m9", "p9", "s9", "m1"],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "m9", "riichi": true } },
+      { "type": "draw", "payload": { "seat": "right" } },
+      { "type": "discard", "payload": { "seat": "right", "tileCode": "p9", "riichi": true } },
+      { "type": "draw", "payload": { "seat": "top" } },
+      { "type": "discard", "payload": { "seat": "top", "tileCode": "s9", "riichi": true } },
+      { "type": "draw", "payload": { "seat": "left" } },
+      { "type": "discard", "payload": { "seat": "left", "tileCode": "m1", "riichi": true } }
+    ],
+    "expectedSnapshot": {
+      "phase": "round_end",
+      "roundResultType": "draw",
+      "roundResultReason": "四家立直",
+      "lizhibang": 4,
+      "revealedHands": [
+        "m123p123s123z1112*",
+        "m456p456s456z2223*",
+        "m789p789s789z3334*",
+        "m234p234s234z4445*"
+      ]
+    }
+  }
+}

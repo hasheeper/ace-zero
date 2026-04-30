@@ -1,0 +1,688 @@
+.az-tutorial-root {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  pointer-events: none;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.az-tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  pointer-events: none;
+}
+
+.az-tutorial-backdrop-svg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.az-tutorial-backdrop-fill {
+  fill: rgba(4, 6, 10, 0.62);
+}
+
+.az-tutorial-backdrop-pane {
+  position: fixed;
+  background: transparent;
+}
+
+.az-tutorial-backdrop.is-visible {
+  opacity: 1;
+}
+
+.az-tutorial-spotlight {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 226, 122, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 0 28px rgba(255, 226, 122, 0.32),
+    inset 0 0 24px rgba(255, 226, 122, 0.08);
+  opacity: 0;
+  transform: translate3d(0, 0, 0);
+  transition:
+    top 0.18s ease,
+    left 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.az-tutorial-spotlight::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 226, 122, 0.36);
+  animation: azTutorialPulse 1.35s ease-in-out infinite;
+}
+
+.az-tutorial-spotlight.is-visible {
+  opacity: 1;
+}
+
+.az-tutorial-focus-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.az-tutorial-focus-ring {
+  position: fixed;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 226, 122, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 0 26px rgba(255, 226, 122, 0.3),
+    inset 0 0 18px rgba(255, 226, 122, 0.08);
+}
+
+.az-tutorial-focus-ring::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 226, 122, 0.28);
+}
+
+.az-tutorial-message {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  min-width: 240px;
+  max-width: min(680px, calc(100vw - 40px));
+  padding: 12px 16px;
+  border-radius: 14px;
+  transform: translate(-50%, -12px);
+  background: rgba(10, 12, 16, 0.92);
+  border: 1px solid rgba(255, 226, 122, 0.3);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #f3e7bf;
+  letter-spacing: 0.4px;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.az-tutorial-message::before {
+  content: 'TUTORIAL';
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(255, 226, 122, 0.78);
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.az-tutorial-message.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.az-tutorial-quick-action {
+  position: fixed;
+  right: 18px;
+  bottom: 56px;
+  left: auto;
+  top: auto;
+  min-width: 108px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 226, 122, 0.26);
+  background: rgba(10, 12, 16, 0.9);
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: #fff1bf;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.az-tutorial-quick-action:hover {
+  border-color: rgba(255, 226, 122, 0.52);
+  background: rgba(16, 18, 24, 0.96);
+}
+
+.az-tutorial-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(380px, calc(100vw - 32px));
+  padding: 18px 18px 16px;
+  border-radius: 18px;
+  background: rgba(8, 9, 12, 0.95);
+  border-top: 1px solid rgba(255, 226, 122, 0.72);
+  border-bottom: 1px solid rgba(255, 226, 122, 0.28);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.72),
+    inset 0 0 28px rgba(255, 226, 122, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #e8e0cf;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease, top 0.18s ease, left 0.18s ease;
+  pointer-events: auto;
+}
+
+.az-tutorial-dialog::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 226, 122, 0.9), transparent);
+  box-shadow: 0 0 10px rgba(255, 226, 122, 0.52);
+}
+
+.az-tutorial-dialog::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, rgba(255, 226, 122, 0.92), rgba(183, 145, 34, 0.88));
+  border-top: 1px solid rgba(255, 241, 191, 0.82);
+  border-left: 1px solid rgba(255, 226, 122, 0.52);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22),
+    0 0 16px rgba(255, 226, 122, 0.34);
+  opacity: 0;
+  transform: rotate(45deg);
+}
+
+.az-tutorial-dialog.is-visible {
+  opacity: 1;
+}
+
+.az-tutorial-dialog[data-placement="top"]::after,
+.az-tutorial-dialog[data-placement="bottom"]::after {
+  left: var(--az-tutorial-arrow-x, 50%);
+  margin-left: -7px;
+  opacity: 1;
+}
+
+.az-tutorial-dialog[data-placement="top"]::after {
+  bottom: -8px;
+}
+
+.az-tutorial-dialog[data-placement="bottom"]::after {
+  top: -8px;
+}
+
+.az-tutorial-dialog[data-placement="left"]::after,
+.az-tutorial-dialog[data-placement="right"]::after {
+  top: var(--az-tutorial-arrow-y, 50%);
+  margin-top: -7px;
+  opacity: 1;
+}
+
+.az-tutorial-dialog[data-placement="left"]::after {
+  right: -8px;
+}
+
+.az-tutorial-dialog[data-placement="right"]::after {
+  left: -8px;
+}
+
+.az-tutorial-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.az-tutorial-dialog-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(255, 226, 122, 0.72);
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.az-tutorial-dialog-title {
+  margin: 0;
+  font-family: 'Cinzel', serif;
+  font-size: 22px;
+  line-height: 1.1;
+  color: #fff1bf;
+}
+
+.az-tutorial-dialog-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 241, 191, 0.88);
+  cursor: pointer;
+}
+
+.az-tutorial-dialog-close:hover {
+  background: rgba(255, 226, 122, 0.14);
+}
+
+.az-tutorial-dialog-body {
+  margin: 0;
+  color: rgba(232, 224, 207, 0.9);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.az-tutorial-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.az-tutorial-dialog-btn {
+  min-width: 92px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 226, 122, 0.25);
+  background: linear-gradient(180deg, rgba(207, 181, 59, 0.18), rgba(207, 181, 59, 0.08));
+  color: #fff1bf;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+
+.az-tutorial-dialog-btn:hover {
+  border-color: rgba(255, 226, 122, 0.5);
+  background: linear-gradient(180deg, rgba(207, 181, 59, 0.28), rgba(207, 181, 59, 0.12));
+}
+
+.az-tutorial-dialog-btn.is-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(232, 224, 207, 0.92);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.az-tutorial-dialog-btn.is-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.az-tutorial-info-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(640px, calc(100vw - 36px));
+  max-height: min(82vh, 760px);
+  padding: 22px 22px 18px;
+  border-radius: 20px;
+  background: rgba(8, 9, 12, 0.96);
+  border-top: 1px solid rgba(255, 226, 122, 0.72);
+  border-bottom: 1px solid rgba(255, 226, 122, 0.22);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.78),
+    inset 0 0 28px rgba(255, 226, 122, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #e8e0cf;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: auto;
+  overflow: auto;
+}
+
+.az-tutorial-info-panel.is-visible {
+  opacity: 1;
+}
+
+.az-tutorial-info-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.az-tutorial-info-panel-title {
+  margin: 0;
+  font-family: 'Cinzel', serif;
+  font-size: 24px;
+  line-height: 1.1;
+  color: #fff1bf;
+}
+
+.az-tutorial-info-panel-sub {
+  margin-top: 6px;
+  color: rgba(255, 226, 122, 0.72);
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+.az-tutorial-info-panel-close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 241, 191, 0.88);
+  cursor: pointer;
+}
+
+.az-tutorial-info-panel-body {
+  display: grid;
+  gap: 12px;
+}
+
+.az-tutorial-info-block {
+  padding: 16px 16px 14px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 226, 122, 0.04), rgba(255, 255, 255, 0.015));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.az-tutorial-info-block h4 {
+  margin: 0 0 10px;
+  color: #ffe89b;
+  font-size: 15px;
+  letter-spacing: 0.6px;
+}
+
+.az-tutorial-info-block p,
+.az-tutorial-info-block li {
+  margin: 0;
+  color: rgba(232, 224, 207, 0.9);
+  font-size: 14px;
+  line-height: 1.72;
+}
+
+.az-tutorial-info-block ul,
+.az-tutorial-info-block ol {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.az-tutorial-keypoints {
+  display: grid;
+  gap: 10px;
+}
+
+.az-tutorial-keypoint {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.az-tutorial-keypoint-label {
+  color: #fff1bf;
+  font-size: 13px;
+  letter-spacing: 0.6px;
+}
+
+.az-tutorial-keypoint-copy {
+  color: rgba(232, 224, 207, 0.82);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.az-tutorial-rank-list {
+  display: grid;
+  gap: 8px;
+}
+
+.az-tutorial-rank-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.az-tutorial-rank-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(255, 226, 122, 0.12);
+  border: 1px solid rgba(255, 226, 122, 0.28);
+  color: #ffe89b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.az-tutorial-rank-copy {
+  min-width: 0;
+}
+
+.az-tutorial-rank-name {
+  display: block;
+  color: #fff1bf;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.az-tutorial-rank-note {
+  display: block;
+  margin-top: 3px;
+  color: rgba(232, 224, 207, 0.68);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.az-tutorial-guide-image-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.az-tutorial-guide-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 226, 122, 0.18);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+}
+
+.az-tutorial-guide-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255, 226, 122, 0.32);
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(255, 241, 191, 0.82);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.az-tutorial-compass-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 1.4fr) minmax(0, 1fr);
+  grid-template-areas:
+    ". top ."
+    "left center right"
+    ". bottom .";
+  gap: 12px;
+  align-items: center;
+}
+
+.az-tutorial-compass-center {
+  grid-area: center;
+}
+
+.az-tutorial-compass-top {
+  grid-area: top;
+}
+
+.az-tutorial-compass-left {
+  grid-area: left;
+}
+
+.az-tutorial-compass-right {
+  grid-area: right;
+}
+
+.az-tutorial-compass-bottom {
+  grid-area: bottom;
+}
+
+.az-tutorial-compass-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 226, 122, 0.1);
+}
+
+.az-tutorial-compass-label {
+  color: #fff1bf;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  line-height: 1.35;
+}
+
+.az-tutorial-compass-copy {
+  margin-top: 4px;
+  color: rgba(232, 224, 207, 0.82);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .az-tutorial-quick-action {
+    right: 12px;
+    bottom: 56px;
+    left: auto;
+    top: auto;
+    min-width: 96px;
+    padding: 9px 12px;
+    font-size: 10px;
+  }
+
+  .az-tutorial-info-panel {
+    width: min(100vw - 20px, 640px);
+    max-height: min(84vh, 760px);
+    padding: 18px 16px 16px;
+  }
+
+  .az-tutorial-info-panel-title {
+    font-size: 21px;
+  }
+
+  .az-tutorial-info-block {
+    padding: 14px 14px 12px;
+  }
+
+  .az-tutorial-rank-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 10px;
+    padding: 9px 10px;
+  }
+
+  .az-tutorial-rank-order {
+    width: 30px;
+    height: 30px;
+    font-size: 11px;
+  }
+
+  .az-tutorial-rank-name {
+    font-size: 14px;
+  }
+
+  .az-tutorial-rank-note,
+  .az-tutorial-keypoint-copy,
+  .az-tutorial-info-block p,
+  .az-tutorial-info-block li {
+    font-size: 12px;
+  }
+
+  .az-tutorial-compass-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "top"
+      "center"
+      "left"
+      "right"
+      "bottom";
+  }
+
+  .az-tutorial-compass-card {
+    padding: 10px 12px;
+  }
+
+  .az-tutorial-compass-label,
+  .az-tutorial-compass-copy {
+    font-size: 12px;
+  }
+}
+
+.az-tutorial-target {
+  position: relative;
+  z-index: 4500 !important;
+}
+
+.az-tutorial-highlight {
+  box-shadow:
+    0 0 0 2px rgba(255, 226, 122, 0.82),
+    0 0 0 6px rgba(255, 226, 122, 0.12),
+    0 0 24px rgba(255, 226, 122, 0.28) !important;
+  animation: azTutorialTargetPulse 1.2s ease-in-out infinite;
+}
+
+.az-tutorial-muted {
+  opacity: 0.34 !important;
+  filter: saturate(0.35) brightness(0.8);
+  transition: opacity 0.16s ease, filter 0.16s ease;
+}
+
+@keyframes azTutorialPulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes azTutorialTargetPulse {
+  0%,
+  100% {
+    transform: translateZ(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+}

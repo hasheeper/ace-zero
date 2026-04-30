@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>麻将分析台</title>
+  <link rel="stylesheet" href="./frontend/styles/analysis.css">
+</head>
+<body>
+  <main class="analysis-page">
+    <header class="analysis-hero">
+      <div class="analysis-kicker">Mahjong Review Desk</div>
+      <h1 class="analysis-title">参考对照分析台</h1>
+      <p class="analysis-subtitle">先选玩家，再选局，然后只看这一位在这一局或全部局里的总分总分析；如果选中单局，会继续展开逐手分析。</p>
+    </header>
+
+    <section class="analysis-toolbar">
+      <div class="toolbar-group">
+        <label class="toolbar-label" for="player-select">选择玩家</label>
+        <select id="player-select" class="toolbar-select"></select>
+      </div>
+      <div class="toolbar-group">
+        <label class="toolbar-label" for="round-select">选择局</label>
+        <select id="round-select" class="toolbar-select"></select>
+      </div>
+      <div class="toolbar-status">
+        <div class="status-line">
+          <span class="status-label">教练状态</span>
+          <strong id="coach-status-pill">待命</strong>
+        </div>
+        <div class="status-line">
+          <span class="status-label">分析状态</span>
+          <strong id="analysis-status-pill">待命</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="analysis-panel analysis-panel-coach">
+      <div class="panel-meta" id="coach-meta-line">等待游戏页写入教练状态</div>
+      <div class="panel-summary" id="coach-summary-block">当前没有教练建议。</div>
+      <div class="panel-recommend" id="coach-recommend-block">暂无动作建议</div>
+      <div class="detail-list" id="coach-reason-block">
+        <div class="empty-state">当前还没有解释理由。</div>
+      </div>
+    </section>
+
+    <section class="analysis-panel">
+      <div class="section-kicker">Summary</div>
+      <h2 class="selection-title" id="selection-title">等待分析对象</h2>
+      <div class="selection-subtitle" id="selection-subtitle">请选择玩家与局。</div>
+      <div class="selection-abstract" id="selection-abstract">当前还没有可用分析。</div>
+
+      <div class="metric-grid">
+        <article class="metric-card">
+          <div class="metric-label">参考一致率</div>
+          <div class="metric-value" id="metric-mortal-rate">-</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">动作族一致率</div>
+          <div class="metric-value" id="metric-action-rate">-</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">立直一致率</div>
+          <div class="metric-value" id="metric-riichi-rate">-</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-label">样本数</div>
+          <div class="metric-value" id="metric-total">-</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="analysis-grid">
+      <article class="analysis-panel">
+        <div class="panel-title">分项分析</div>
+        <div class="panel-meta">按当前筛选，把差异拆成几类来看。</div>
+        <div class="focus-list" id="focus-list">
+          <div class="empty-state">当前还没有重点分歧。</div>
+        </div>
+      </article>
+
+      <article class="analysis-panel">
+        <div class="panel-title">结论</div>
+        <div class="panel-meta" id="conclusion-meta">等待分析状态写入</div>
+        <div class="conclusion-block" id="selection-conclusion">当前还没有总结结论。</div>
+      </article>
+    </section>
+
+    <section class="analysis-grid">
+      <article class="analysis-panel">
+        <div class="panel-title">恶手</div>
+        <div class="panel-meta">需要优先复盘的动作。</div>
+        <div class="hand-list" id="bad-hand-list">
+          <div class="empty-state">当前没有恶手样本。</div>
+        </div>
+      </article>
+
+      <article class="analysis-panel">
+        <div class="panel-title">中性手</div>
+        <div class="panel-meta">方向一致，但细节与参考建议不同。</div>
+        <div class="hand-list" id="neutral-hand-list">
+          <div class="empty-state">当前没有中性样本。</div>
+        </div>
+      </article>
+
+      <article class="analysis-panel">
+        <div class="panel-title">善手</div>
+        <div class="panel-meta">和参考建议一致的动作。</div>
+        <div class="hand-list" id="good-hand-list">
+          <div class="empty-state">当前没有善手样本。</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="analysis-panel" id="action-analysis-section">
+      <div class="section-kicker">Step By Step</div>
+      <h2 class="panel-title" id="action-analysis-title">逐手分析</h2>
+      <div class="panel-meta" id="action-analysis-meta">当选择某一局时，这里会展开每一项动作。</div>
+      <div class="action-list" id="action-list">
+        <div class="empty-state">当前是全部局视角，暂不展开逐手分析。</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="./frontend/scripts/analysis/analysis-page.js"></script>
+</body>
+</html>

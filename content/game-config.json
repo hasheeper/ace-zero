@@ -1,0 +1,47 @@
+{
+  "gameMode": "texas-holdem",
+  "blinds": [20, 40],
+  "chips": 4000,
+  "heroChips": 4000,
+
+  "hero": {
+    "vanguard": { "name": "RINO", "level": 5, "trait": "crimson_crown" },
+    "rearguard": { "name": "RINO_REAR", "level": 4, "trait": "obsessive_love" },
+    "attrs": { "moirai": 80, "chaos": 20, "psyche": 30, "void": 0 },
+    "vanguardSkills": ["royal_decree", "grand_wish", "minor_wish", "heart_read"],
+    "rearguardSkills": [],
+    "mana": 100,
+    "maxMana": 100,
+    "mental": { "discipline": 62, "composureMax": 100, "resistProbe": 14, "resistPresence": 12, "resistTaunt": 12 }
+  },
+
+  "heroSeat": "BTN",
+
+  "seats": {
+    "SB": {
+      "vanguard": { "name": "COTA", "level": 5, "trait": "contract_template" },
+      "rearguard": { "name": "COTA_REAR", "level": 4, "trait": "dealer_hands_fault" },
+      "ai": "aggressive",
+      "difficulty": "cota",
+      "emotion": "confident",
+      "attrs": { "moirai": 18, "chaos": 18, "psyche": 84, "void": 0 },
+      "skills": ["deal_card", "gather_or_spread", "clarity"],
+      "mana": 90,
+      "maxMana": 90,
+      "mental": { "discipline": 62, "composureMax": 100, "resistProbe": 14, "resistPresence": 12, "resistTaunt": 12 }
+    },
+    "BB": {
+      "vanguard": { "name": "VV", "level": 5, "trait": "laser_eye" },
+      "rearguard": { "name": "VV_REAR", "level": 4, "trait": "service_fee" },
+      "ai": "balanced",
+      "difficulty": "vv",
+      "emotion": "calm",
+      "attrs": { "moirai": 18, "chaos": 18, "psyche": 84, "void": 0 },
+      "skills": ["clairvoyance", "bubble_liquidation", "clarity"],
+      "mana": 90,
+      "maxMana": 90,
+      "mental": { "discipline": 70, "composureMax": 100, "resistProbe": 18, "resistPresence": 14, "resistTaunt": 14 }
+    }
+  }
+}
+

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Character Dossier</title>
+<link rel="stylesheet" href="./shared/theme.css">
+<link rel="stylesheet" href="./shell/shell.css">
+<link rel="stylesheet" href="./pages/dossier/style.css">
+<link rel="stylesheet" href="./pages/expansion/style.css">
+<link rel="stylesheet" href="./pages/overview/style.css" id="home-page-stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;800;900&family=JetBrains+Mono:wght@400;700;800&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body class="is-home-page">
+
+  <div class="dashboard-page-nav" id="dashboard-page-nav" aria-label="Dashboard pages">
+    <button class="dashboard-page-btn is-active" id="page-btn-overview" type="button" data-page-target="overview" aria-label="Open overview page" title="Overview">
+      <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z"></path></svg>
+    </button>
+    <button class="dashboard-page-btn" id="page-btn-dossier" type="button" data-page-target="dossier" aria-label="Open dossier page" title="Dossier">
+      <svg viewBox="0 0 256 256" aria-hidden="true"><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"></path></svg>
+    </button>
+  </div>
+
+  <div class="dashboard-pages">
+    <section class="dashboard-page home-page is-active" id="dashboard-page-overview" data-page="overview">
+      <div class="terminal-container">
+        <header class="sys-topbar" id="sysTopbar"></header>
+        <div class="main-layout">
+          <aside class="sidebar">
+            <div class="archive-tree" id="archiveTree"></div>
+          </aside>
+          <main class="center-board">
+            <div class="panel-header" id="map-layer-meta" style="background:transparent; position:absolute; z-index: 20; border:none; color: rgba(255,255,255,0.4); pointer-events: none;">MACRO THREAT MAP</div>
+            <div class="map-viewport" id="mapViewport">
+              <div class="map-layer" id="mapLayer"></div>
+            </div>
+            <div id="plannerDrawerMount"></div>
+            <div id="phaseBarMount"></div>
+          </main>
+          <aside class="right-sidebar">
+            <div class="intel-body" id="intelBody"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="dashboard-page dossier-page" id="dashboard-page-dossier" data-page="dossier">
+      <div class="visual-stage">
+        <div class="sys-watermark" id="char-watermark">RINO</div>
+        <div class="standing-art"></div>
+        <div class="fade-bottom"></div>
+      </div>
+
+      <div class="mobile-spacer"></div>
+
+      <div class="terminal-panel">
+        <div class="terminal-bg"></div>
+
+        <div class="header-block">
+          <div class="name-zone">
+            <div class="sub-name">
+              <span class="sub-heart" id="char-suit-symbol">♥</span>
+              <span class="sub-title" id="char-subtitle">THE DEADLOCK HOST</span>
+              <span class="sub-slash">·</span>
+              <span class="sub-attr" id="char-attr">MOIRAI</span>
+            </div>
+            <h1 id="char-name">RINO</h1>
+          </div>
+
+          <div class="meta-box" id="meta-box">
+            <div class="meta-group lvl-sec">
+              <span class="meta-label">LV.</span>
+              <span class="meta-val white" id="char-level">5</span>
+            </div>
+            <div class="meta-divider"></div>
+            <div class="meta-group mana-sec">
+              <span class="meta-label" id="resource-label">FORTUNE</span>
+              <span class="meta-val-group val">
+                <span class="meta-val blue" id="resource-current">100</span>
+                <span class="meta-slash">/</span>
+                <span class="meta-val blue" id="resource-max">100</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="details-fade-group" id="details-group">
+          <div class="status-block" id="status-block"></div>
+
+          <div class="deck-title-row">
+            <div class="deck-title" id="deck-title">Active Protocols</div>
+            <div class="deck-title-divider" aria-hidden="true"></div>
+          </div>
+
+          <div class="cmd-grid" id="cmd-grid"></div>
+
+          <div class="log-panel" id="log-box">
+            <div class="log-content-wrap">
+              <div class="log-header-row">
+                <div class="log-title" id="log-title">SYSTEM IDLE<span class="cursor"></span></div>
+                <div class="log-status" id="log-status">AWAITING</div>
+              </div>
+              <div class="log-divider"></div>
+              <div class="log-desc" id="log-desc">
+                <div class="log-desc-line">AWAITING DIRECTIVE...</div>
+                <div class="log-desc-hint">Hover or Tap protocol to decrypt.</div>
+              </div>
+              <div class="log-footer-row">
+                <div class="log-meta" id="log-meta"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="bgm-widget" id="bgm-widget">
+    <div class="bgm-vinyl-wrapper" id="bgm-bubble" aria-label="Toggle audio terminal" role="button" tabindex="0">
+      <div class="bgm-vinyl-disc" id="bgm-disc"></div>
+      <div class="bgm-vinyl-sheen"></div>
+    </div>
+
+    <div class="bgm-panel" id="bgm-panel">
+      <div class="bgm-header">
+        <span class="bgm-header-title">AUDIO TERMINAL</span>
+        <div class="bgm-header-tools">
+          <button class="bgm-auto-toggle" id="bgm-auto-toggle" type="button" aria-pressed="false" title="Auto play current character exclusive track">
+            <span class="bgm-auto-toggle-label">AUTO EX</span>
+            <span class="bgm-auto-toggle-indicator"></span>
+          </button>
+          <div class="bgm-status-dot" id="bgm-status-dot"></div>
+        </div>
+      </div>
+
+      <div class="bgm-player" id="bgm-player">
+        <div class="bgm-np-label">NOW PLAYING</div>
+        <div class="bgm-np-info">
+          <div class="bgm-np-title" id="bgm-np-text">SYSTEM IDLE</div>
+          <div class="visualizer" id="bgm-visualizer">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+
+        <div class="bgm-controls-row">
+          <button class="bgm-btn-main" id="bgm-btn-playpause" type="button" disabled aria-label="Play or pause">
+            <svg id="icon-play" viewBox="0 0 24 24"><path d="M6 4l15 8-15 8z"/></svg>
+            <svg id="icon-pause" viewBox="0 0 24 24" style="display:none;"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
+          </button>
+
+          <div class="bgm-progress-wrapper">
+            <input type="range" class="bgm-slider" id="bgm-progress" value="0" min="0" max="100" step="1" disabled>
+            <div class="bgm-timestamps">
+              <span id="time-current">00:00</span>
+              <span id="time-total">00:00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bgm-track-list" id="bgm-track-list"></div>
+    </div>
+  </div>
+
+  <div class="roster-dock" id="roster-dock" aria-label="Character roster dock">
+    <div class="dock-gradient-bar"></div>
+
+    <button class="nav-arrow nav-left disabled" id="nav-btn-left" type="button" aria-label="Previous character">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </button>
+
+    <div class="roster-track" id="roster-track"></div>
+
+    <button class="nav-arrow nav-right disabled" id="nav-btn-right" type="button" aria-label="Next character">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    </button>
+  </div>
+
+<script src="./shared/svg-library.js"></script>
+<script src="./shared/characters.js"></script>
+<script src="./shared/utils.js"></script>
+<script src="./shell/bridge.js"></script>
+<script src="./pages/dossier/index.js"></script>
+<script src="./pages/expansion/index.js"></script>
+<script src="./shell/shell.js"></script>
+<script src="./pages/overview/config.debug.js"></script>
+<script src="./pages/overview/config.tavern.js"></script>
+<script src="./pages/overview/campaign-runtime.js"></script>
+<script src="./pages/overview/planner-runtime.js"></script>
+<script src="./pages/overview/execution-runtime.js"></script>
+<script src="./pages/overview/index.js"></script>
+</body>
+</html>

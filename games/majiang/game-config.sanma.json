@@ -1,0 +1,51 @@
+{
+  "mode": "single-round",
+  "tableSize": 3,
+  "gameLength": "east-south",
+  "targetScore": 40000,
+  "ruleset": "riichi-3p-sanma",
+  "rules": {
+    "bankruptcyEndsGame": true,
+    "akaDora": {
+      "enabled": true,
+      "count": 2
+    },
+    "shibari": {
+      "minYakuHan": 1
+    }
+  },
+  "advancedMode": true,
+  "ai": {
+    "difficultyTiers": ["easy", "normal", "hard", "hell"],
+    "implementedDifficulties": [],
+    "defaultDifficulty": "normal"
+  },
+  "ui": {
+    "entry": "index.html",
+    "showHandLayer": true,
+    "tableLayout": "3p-rounded-triangle"
+  },
+  "players": [
+    { "seat": "bottom", "title": "自家", "name": "南宫", "human": true, "ai": { "enabled": false, "difficulty": "normal" } },
+    { "seat": "right", "title": "下家", "name": "隐僧", "human": false, "ai": { "enabled": true, "difficulty": "normal", "profile": "default" } },
+    { "seat": "left", "title": "上家", "name": "赤羽", "human": false, "ai": { "enabled": true, "difficulty": "normal", "profile": "default" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong Sanma",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0,
+    "ruleset": "riichi-3p-sanma",
+    "uiMode": "sanma",
+    "tableLayout": "3p-rounded-triangle"
+  },
+  "ruleOverrides": {
+    "場数": 2
+  },
+  "engine": {
+    "wall": {
+      "preset": false
+    }
+  }
+}

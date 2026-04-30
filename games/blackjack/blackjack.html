@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AceZero - 夺金廿一</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/deck-of-cards/example/example.css" />
+  <link rel="stylesheet" href="../../assets/deck-of-cards/acezero-chips.css" />
+  <link rel="stylesheet" href="../../assets/logo/acezero-logo.css" />
+  <link rel="stylesheet" href="./shared/mini-game-base.css" />
+  <link rel="stylesheet" href="blackjack.css" />
+</head>
+<body>
+  <main class="table-frame">
+    <div class="watermark">ACEZERO // BJ-TERMINAL</div>
+
+    <div class="deck-shoe"></div>
+    <div id="deck-wrapper" class="deck-origin"><div id="deck-mount"></div></div>
+
+    <section class="zone zone-dealer">
+      <div class="hand-wrapper">
+        <div class="score-bubble" id="dealer-score">0</div>
+        <div class="hand-container" id="dealer-cards"></div>
+      </div>
+      <div class="zone-tag">DEALER</div>
+    </section>
+
+    <section class="zone zone-center">
+      <div class="logo-text">夺金廿一</div>
+      <div class="payout-text">Pays 3 to 2 · Dealer stands on 17</div>
+      <div id="main-pot-area">
+        <div id="pot-clusters"></div>
+        <div class="pot-info-hover">
+          <div class="pot-label">TOTAL POT</div>
+          <div class="pot-val-hover"><span id="pot-amount">0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="zone zone-player">
+      <div class="zone-tag player-tag" id="meta-player">PLAYER: ---</div>
+      <div class="hand-wrapper">
+        <div class="score-bubble" id="player-score">0</div>
+        <div class="hand-container" id="player-cards"></div>
+      </div>
+      <!-- 分牌：第二手 -->
+      <div class="hand-wrapper split-hand hidden" id="split-hand-wrapper">
+        <div class="score-bubble" id="split-score">0</div>
+        <div class="hand-container" id="split-cards"></div>
+        <div class="split-label">SPLIT</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 下注选择器 -->
+  <div id="bet-selector" class="bet-selector hidden">
+    <div class="bet-selector-inner">
+      <div class="bet-selector-header">
+        <div class="bet-title">BET SIZING</div>
+        <div class="bet-range-info">
+          <span>MIN: <span id="bet-min">10</span></span>
+          <span>MAX: <span id="bet-max">500</span></span>
+        </div>
+      </div>
+      <div class="bet-summary-row">
+        <div class="bet-stat-box">
+          <div class="bet-stat-label">BALANCE</div>
+          <div class="bet-stat-value" id="bet-balance">0</div>
+        </div>
+        <div class="bet-amount-box">
+          <div class="bet-stat-label">BET AMOUNT</div>
+          <div class="bet-amount" id="bet-amount">0.5</div>
+          <div class="bet-currency" id="bet-currency">金弗</div>
+        </div>
+      </div>
+      <div class="bet-presets">
+        <button class="bet-preset-btn" type="button" data-bet-preset="min">MIN</button>
+        <button class="bet-preset-btn" type="button" data-bet-preset="base">BASE</button>
+        <button class="bet-preset-btn" type="button" data-bet-preset="half">1/2</button>
+        <button class="bet-preset-btn" type="button" data-bet-preset="max">MAX</button>
+      </div>
+      <div class="bet-slider-shell">
+        <div class="bet-slider-ends">
+          <span>LOW</span>
+          <span>HIGH</span>
+        </div>
+        <div class="bet-slider-row">
+          <button class="bet-adjust-btn" type="button" data-bet-adjust="-1">-</button>
+          <input class="bet-slider" type="range" min="10" max="500" step="10" value="50" />
+          <button class="bet-adjust-btn" type="button" data-bet-adjust="1">+</button>
+        </div>
+      </div>
+      <button class="btn-cmd primary bet-confirm" id="btn-deal">CONFIRM BET</button>
+    </div>
+  </div>
+
+  <nav class="ui-dashboard">
+    <div class="info-panel">
+      <div class="stat-box">
+        <div class="stat-label">BALANCE</div>
+        <div class="stat-val gold" id="chips">0</div>
+      </div>
+      <div class="stat-box mana-box" id="mana-box">
+        <div class="stat-label">MANA</div>
+        <div class="mana-bar-wrapper">
+          <div class="mana-bar" id="mana-bar"></div>
+        </div>
+        <div class="stat-val mana-val" id="mana-text">0/0</div>
+      </div>
+    </div>
+
+    <div class="controls-center">
+      <button class="btn-cmd" id="btn-hit" disabled>HIT</button>
+      <button class="btn-cmd" id="btn-stand" disabled>STAND</button>
+      <button class="btn-cmd primary" id="btn-new-round">NEW ROUND</button>
+      <div class="controls-skills" id="skill-bar">
+        <button class="btn-skill moirai" id="btn-skill-lucky" disabled title="幸运一击 ♥ (15 Mana)">
+          <span class="skill-icon">♥</span><span class="skill-name">运</span>
+        </button>
+        <button class="btn-skill chaos" id="btn-skill-curse" disabled title="厄运转嫁 ♠ (20 Mana)">
+          <span class="skill-icon">♠</span><span class="skill-name">厄</span>
+        </button>
+        <button class="btn-skill psyche" id="btn-skill-peek" disabled title="底牌窥探 ♦ (10 Mana)">
+          <span class="skill-icon">♦</span><span class="skill-name">窥</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="status-panel">
+      <div class="status-msg" id="message">点击 NEW ROUND 开始夺金廿一。</div>
+    </div>
+  </nav>
+
+  <script src="../../assets/deck-of-cards/dist/deck.js"></script>
+  <script src="../../assets/deck-of-cards/acezero-currency.js"></script>
+  <script src="../../assets/deck-of-cards/acezero-chips.js"></script>
+  <script src="./shared/mini-game-force.js"></script>
+  <script src="../../assets/logo/acezero-logo.js"></script>
+  <script src="./shared/mini-game-base.js"></script>
+  <script src="./shared/mini-game-logger.js"></script>
+  <script src="blackjack.js"></script>
+</body>
+</html>

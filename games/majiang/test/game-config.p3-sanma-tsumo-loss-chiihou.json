@@ -1,0 +1,63 @@
+{
+  "mode": "single-round",
+  "tableSize": 3,
+  "ruleset": "riichi-3p-sanma",
+  "advancedMode": true,
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "庄家过路位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "三麻子家自摸位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "另一名闲家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong P3 Sanma Tsumo Loss Chiihou",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "p3-sanma-tsumo-loss-chiihou",
+        "name": "P3 Sanma Tsumo Loss Chiihou",
+        "initialHands": [
+          ["m1", "m9", "p1", "p9", "s1", "s9", "z1", "z2", "z3", "z4", "z5", "z6", "z7"],
+          ["p1", "p2", "p3", "p7", "p8", "p9", "s1", "s2", "s3", "s7", "s8", "s9", "z2"],
+          ["m1", "m9", "p4", "p5", "p6", "s4", "s5", "s6", "z1", "z1", "z3", "z3", "z5"]
+        ],
+        "draws": [],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "runtimeSetup": {
+      "deadWallTiles": ["m1", "m9", "p1", "p9", "z4", "s1", "s9", "z1", "z2", "z3", "z5", "z6", "z7", "p4"],
+      "liveWallTiles": ["m1", "z2", "p4"]
+    },
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "m1" } },
+      { "type": "pass", "payload": { "seat": "right", "reason": "p3-sanma-tsumo-loss-pass" } },
+      { "type": "draw", "payload": { "seat": "right" } },
+      { "type": "hule", "payload": { "seat": "right" } }
+    ],
+    "expectedSnapshot": {
+      "phase": "round_end",
+      "roundResultType": "hule",
+      "winnerSeat": "right",
+      "fromSeat": null,
+      "haidi": 0,
+      "tianhu": 2,
+      "damanguan": 1,
+      "defen": 24000,
+      "hupaiNamesIncludes": ["地和"],
+      "scores": {
+        "bottom": 19000,
+        "right": 59000,
+        "left": 27000
+      }
+    }
+  }
+}

@@ -1,0 +1,371 @@
+/* ACEZERO shared animated logo — extracted shared asset */
+.az-logo {
+  --az-logo-scale: 1;
+  --az-gold-light: #FDF4C3;
+  --az-gold-bright: #F9DF9F;
+  --az-gold-mid: #D4A747;
+  --az-gold-dark: #906A1C;
+  --az-gold-shadow: #5B4011;
+  --az-black: #0A0A0A;
+  --az-metallic: linear-gradient(
+    180deg,
+    var(--az-gold-bright) 0%,
+    var(--az-gold-light) 12%,
+    var(--az-gold-mid) 35%,
+    var(--az-gold-shadow) 52%,
+    var(--az-gold-mid) 65%,
+    var(--az-gold-bright) 80%,
+    var(--az-gold-dark) 100%
+  );
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: scale(calc(0.9 * var(--az-logo-scale)));
+  transform-origin: center center;
+  filter: drop-shadow(0 25px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 5px var(--az-black));
+  user-select: none;
+}
+
+/* ----- 1. 扑克牌层 ----- */
+.az-logo-cards {
+  position: absolute;
+  top: -80px;
+  left: 170px;
+  z-index: 1;
+  transform: scale(0.95);
+  transition: transform 0.3s ease;
+}
+
+.az-logo-cards:hover {
+  transform: scale(1.05) translateY(-10px);
+}
+
+.az-logo-card {
+  width: 80px;
+  height: 120px;
+  background: var(--az-black);
+  border: 4px solid var(--az-gold-mid);
+  border-radius: 6px;
+  position: absolute;
+  box-shadow: 0 0 0 5px var(--az-black);
+  transform-origin: bottom right;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 40px;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.az-logo-card:nth-child(1) { transform: rotate(-42deg) translate(-50px, 30px); color: var(--az-gold-bright); }
+.az-logo-card:nth-child(1)::before { content: "♥"; }
+
+.az-logo-card:nth-child(2) { transform: rotate(-25deg) translate(-25px, 15px); color: var(--az-gold-bright); }
+.az-logo-card:nth-child(2)::before { content: "♠"; }
+
+.az-logo-card:nth-child(3) { transform: rotate(-8deg) translate(0px, 0px); color: var(--az-gold-bright); font-size: 50px; }
+.az-logo-card:nth-child(3)::before { content: "♦"; }
+
+.az-logo-cards:hover .az-logo-card:nth-child(1) { transform: rotate(-55deg) translate(-70px, 40px); }
+.az-logo-cards:hover .az-logo-card:nth-child(3) { transform: rotate(5deg) translate(20px, -5px); }
+
+/* ----- 2. 背景圆盘阵列层 ----- */
+.az-logo-wheel {
+  position: absolute;
+  top: -110px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 430px;
+  height: 430px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  --roulette-size: 390px;
+}
+
+.az-logo-roulette {
+  position: relative;
+  width: var(--roulette-size);
+  height: var(--roulette-size);
+  border-radius: 50%;
+  background-color: var(--az-black);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 0 2px var(--az-black), 0 0 25px rgba(212, 167, 71, 0.4);
+}
+
+.az-logo-layer {
+  position: absolute;
+  top: 0; bottom: 0; left: 0; right: 0;
+  margin: auto;
+  border-radius: 50%;
+}
+
+.az-logo-layer-outer {
+  width: 100%;
+  height: 100%;
+  border: 4px solid var(--az-gold-mid);
+  box-shadow: inset 0 0 0 10px var(--az-black), inset 0 0 0 13px var(--az-gold-mid);
+  animation: az-spin-cw 24s linear infinite;
+}
+
+.az-logo-suit {
+  position: absolute;
+  font-size: 22px;
+  font-family: sans-serif;
+  color: var(--az-gold-bright);
+  text-shadow: 0 0 5px rgba(0,0,0,0.8);
+  line-height: 1;
+}
+
+.az-logo-suit.top { top: -11px; left: 50%; transform: translateX(-50%); }
+.az-logo-suit.right { right: -11px; top: 50%; transform: translateY(-50%) rotate(90deg); }
+.az-logo-suit.bottom { bottom: -12px; left: 50%; transform: translateX(-50%) rotate(180deg); }
+.az-logo-suit.left { left: -11px; top: 50%; transform: translateY(-50%) rotate(-90deg); }
+
+.az-logo-layer-ticks {
+  width: 82%;
+  height: 82%;
+  animation: az-spin-ccw 35s linear infinite;
+}
+
+.az-logo-ticks-short {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, var(--az-gold-dark) 0deg 0.5deg, transparent 0.5deg 3.5deg);
+  mask: radial-gradient(transparent 68%, black 69%);
+  -webkit-mask: radial-gradient(transparent 68%, black 69%);
+}
+
+.az-logo-ticks-long {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, var(--az-gold-bright) 0deg 0.8deg, transparent 0.8deg 15deg);
+  mask: radial-gradient(transparent 55%, black 56%);
+  -webkit-mask: radial-gradient(transparent 55%, black 56%);
+}
+
+.az-logo-layer-inner {
+  width: 60%;
+  height: 60%;
+  border: 2px solid var(--az-gold-mid);
+  box-shadow: inset 0 0 0 15px var(--az-black), inset 0 0 0 17px var(--az-gold-dark);
+  animation: az-spin-cw 15s linear infinite;
+}
+
+.az-logo-layer-inner::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 0; right: 0;
+  margin: auto;
+  width: 40%;
+  height: 40%;
+  border: 2px solid var(--az-gold-mid);
+  border-radius: 50%;
+  background: var(--az-black);
+  z-index: 2;
+}
+
+.az-logo-spoke {
+  position: absolute;
+  top: 0; bottom: 0; left: 0; right: 0;
+  margin: auto;
+  width: 2px;
+  height: 100%;
+  background: var(--az-gold-mid);
+  z-index: 1;
+  mask: radial-gradient(transparent 25%, black 26%);
+  -webkit-mask: radial-gradient(transparent 25%, black 26%);
+}
+
+.az-logo-layer-core {
+  width: 12%;
+  height: 12%;
+  background: radial-gradient(circle, var(--az-black) 30%, var(--az-gold-dark) 100%);
+  border: 2px solid var(--az-gold-bright);
+  animation: az-pulse-glow 3s ease-in-out infinite;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.az-logo-core-diamond {
+  width: 8px;
+  height: 8px;
+  background: var(--az-gold-bright);
+  transform: rotate(45deg);
+}
+
+/* ----- 3. 主英文排版层 ----- */
+.az-logo-text {
+  font-family: 'Cinzel', serif;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  letter-spacing: -3px;
+  animation: az-float 6s ease-in-out infinite;
+}
+
+.az-logo-letter {
+  position: relative;
+  font-size: 130px;
+  font-weight: 900;
+  line-height: 1;
+  display: inline-block;
+}
+
+.az-logo-letter::before {
+  content: attr(data-char);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--az-black);
+  -webkit-text-stroke: 22px var(--az-black);
+  z-index: -1;
+}
+
+.az-logo-grad {
+  background:
+    linear-gradient(
+      110deg,
+      transparent 25%,
+      rgba(255, 255, 255, 0.2) 35%,
+      rgba(255, 255, 255, 0.9) 45%,
+      rgba(255, 255, 255, 0.9) 50%,
+      rgba(255, 255, 255, 0.2) 60%,
+      transparent 70%
+    ),
+    var(--az-metallic);
+  background-size: 300% 100%, 100% 100%;
+  background-position: 150% 0, 0 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+  position: relative;
+  animation: az-sheen 4s ease-in-out infinite;
+}
+
+.az-logo-letter:nth-child(1) .az-logo-grad { animation-delay: 0.0s; }
+.az-logo-letter:nth-child(2) .az-logo-grad { animation-delay: 0.1s; }
+.az-logo-letter:nth-child(3) .az-logo-grad { animation-delay: 0.2s; }
+.az-logo-letter:nth-child(4) .az-logo-grad { animation-delay: 0.3s; }
+.az-logo-letter:nth-child(5) .az-logo-grad { animation-delay: 0.4s; }
+.az-logo-letter:nth-child(6) .az-logo-grad { animation-delay: 0.5s; }
+.az-logo-letter:nth-child(7) .az-logo-grad { animation-delay: 0.6s; }
+
+.az-logo-letter-z {
+  font-size: 200px;
+  margin: 0 -2px;
+  transform: translateY(12px);
+}
+
+.az-logo-inner-star {
+  font-family: sans-serif;
+  position: absolute;
+  font-size: 55px;
+  transform: translate(-50%, -50%);
+  -webkit-text-stroke: 0px;
+  z-index: 1;
+}
+
+.az-logo-inner-star::before {
+  content: "✦";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--az-black);
+  -webkit-text-stroke: 6px var(--az-black);
+  z-index: -1;
+}
+
+/* ----- 4. 中文副标题层 ----- */
+.az-logo-grad-static {
+  background: var(--az-metallic);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+  position: relative;
+}
+
+.az-logo-cn {
+  position: relative;
+  z-index: 11;
+  margin-top: -15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: 'Noto Serif SC', serif;
+}
+
+.az-logo-cn-char {
+  position: relative;
+  font-size: 65px;
+  font-weight: 900;
+  display: inline-block;
+  letter-spacing: 8px;
+}
+
+.az-logo-cn-char::before {
+  content: attr(data-char);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--az-black);
+  -webkit-text-stroke: 20px var(--az-black);
+  z-index: -1;
+}
+
+.az-logo-cn-star {
+  position: relative;
+  font-family: sans-serif;
+  font-size: 35px;
+  margin: 0 5px;
+  top: -5px;
+}
+
+.az-logo-cn-star::before {
+  content: "✦";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--az-black);
+  -webkit-text-stroke: 15px var(--az-black);
+  z-index: -1;
+}
+
+/* ----- Animations ----- */
+@keyframes az-spin-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes az-spin-ccw {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes az-pulse-glow {
+  0%, 100% { box-shadow: 0 0 10px var(--az-gold-dark); }
+  50% { box-shadow: 0 0 25px var(--az-gold-bright); }
+}
+
+@keyframes az-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes az-sheen {
+  0% { background-position: 150% 0, 0 0; }
+  25%, 100% { background-position: -50% 0, 0 0; }
+}

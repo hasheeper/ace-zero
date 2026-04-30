@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "defaultApp": "game",
+  "apps": {
+    "game": {
+      "id": "game",
+      "name": "Ace Zero Game",
+      "type": "game",
+      "container": "./index.html?app=game",
+      "entry": "./apps/game/index.html",
+      "legacyEntry": "./index.html",
+      "status": "active",
+      "notes": "Standalone GitHub Pages game surface. Game engines live under games/ and are routed by registry/games.json."
+    },
+    "tutorial": {
+      "id": "tutorial",
+      "name": "Ace Zero Tutorial",
+      "type": "tutorial",
+      "container": "./index.html?app=tutorial",
+      "entry": "./apps/tutorial/index.html",
+      "status": "active",
+      "notes": "Standalone tutorial launcher. Currently routes Texas Hold'em tutorial courses into app=game."
+    },
+    "dashboard": {
+      "id": "dashboard",
+      "name": "Ace Zero Dashboard",
+      "type": "dashboard",
+      "container": "./index.html?app=dashboard",
+      "entry": "./apps/dashboard/index.html",
+      "status": "active",
+      "notes": "GitHub Pages dashboard app used by the ST bridge dashboard loader."
+    },
+    "act-result": {
+      "id": "act-result",
+      "name": "Ace Zero ACT Result",
+      "type": "message",
+      "container": "./index.html?app=act-result",
+      "entry": "./apps/act-result/index.html",
+      "status": "active",
+      "notes": "GitHub Pages ACT result card app used by ST wrapper payloads."
+    }
+  }
+}

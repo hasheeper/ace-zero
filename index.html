@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Ace Zero App Container</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #050507;
+    }
+
+    #app-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+
+    #loading,
+    #error {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      max-width: min(520px, calc(100vw - 32px));
+      font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0;
+      text-align: center;
+    }
+
+    #loading { color: rgba(244, 231, 191, 0.75); }
+
+    #error {
+      display: none;
+      color: #ff8080;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">Loading Ace Zero app...</div>
+  <div id="error"></div>
+  <iframe
+    id="app-frame"
+    title="Ace Zero App"
+    sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
+    allow="fullscreen"
+    allowfullscreen
+    referrerpolicy="no-referrer"
+  ></iframe>
+
+  <script>
+    (async function () {
+      'use strict';
+
+      const query = new URLSearchParams(location.search);
+      const hash = new URLSearchParams(location.hash.slice(1));
+      const getParam = (name) => query.get(name) || hash.get(name);
+      const frame = document.getElementById('app-frame');
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+
+      function showError(message) {
+        loading.style.display = 'none';
+        error.style.display = 'block';
+        error.textContent = message;
+      }
+
+      function copyRuntimeParams(targetUrl) {
+        for (const [key, value] of query.entries()) {
+          if (key === 'app' || key === 'target') continue;
+          targetUrl.searchParams.set(key, value);
+        }
+        return targetUrl;
+      }
+
+      try {
+        const registryUrl = new URL('./registry/apps.json', location.href);
+        const repoRootUrl = new URL('./', location.href);
+        const response = await fetch(registryUrl, { cache: 'no-cache' });
+        if (!response.ok) throw new Error(`Failed to load registry: HTTP ${response.status}`);
+        const registry = await response.json();
+        const appId = getParam('app') || getParam('target') || registry.defaultApp || 'game';
+        const app = registry.apps && registry.apps[appId];
+        if (!app) throw new Error(`App not found: ${appId}`);
+
+        const entry = app.entry || app.legacyEntry;
+        if (!entry) throw new Error(`No entry configured for app: ${appId}`);
+
+        frame.src = copyRuntimeParams(new URL(entry.replace(/^\.\//, ''), repoRootUrl)).href;
+        frame.addEventListener('load', () => {
+          loading.style.display = 'none';
+          try {
+            frame.contentWindow.postMessage({
+              type: 'acezero-container-ready',
+              appId,
+              app
+            }, '*');
+          } catch (_) {}
+        });
+
+        window.addEventListener('message', (event) => {
+          const message = event.data;
+          if (!message) return;
+          if (event.source === frame.contentWindow) {
+            if (message.type === 'acezero-open-app' && message.app) {
+              const nextUrl = new URL('./index.html', location.href);
+              nextUrl.searchParams.set('app', String(message.app));
+              if (message.params && typeof message.params === 'object') {
+                Object.entries(message.params).forEach(([key, value]) => {
+                  if (value !== undefined && value !== null && value !== '') {
+                    nextUrl.searchParams.set(key, String(value));
+                  }
+                });
+              }
+              location.href = nextUrl.href;
+              return;
+            }
+            try {
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage(message, '*');
+              }
+            } catch (_) {}
+            return;
+          }
+          try {
+            if (frame.contentWindow) frame.contentWindow.postMessage(message, '*');
+          } catch (_) {}
+        });
+      } catch (err) {
+        console.error('[Ace Zero App Container]', err);
+        showError(`Ace Zero app container failed\n${err && err.message ? err.message : String(err)}`);
+      }
+    })();
+  </script>
+</body>
+</html>

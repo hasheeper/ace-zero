@@ -1,0 +1,35 @@
+{
+  "mode": "match",
+  "tableSize": 4,
+  "gameLength": "east-south",
+  "targetScore": 35000,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "players": [
+    { "seat": "bottom", "title": "自家", "name": "南宫", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "下家", "name": "隐僧", "human": false, "ai": { "enabled": true, "difficulty": "beta", "profile": "default" } },
+    { "seat": "top", "title": "对家", "name": "幽兰", "human": false, "ai": { "enabled": true, "difficulty": "beta", "profile": "default" } },
+    { "seat": "left", "title": "上家", "name": "剑客", "human": false, "ai": { "enabled": true, "difficulty": "beta", "profile": "default" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong West Entry Target Score Regression",
+    "qijia": 0,
+    "zhuangfeng": 1,
+    "jushu": 3,
+    "changbang": 0,
+    "lizhibang": 0,
+    "ruleset": "riichi-4p",
+    "uiMode": "standard",
+    "tableLayout": "4p-octagon",
+    "defen": [32000, 21000, 34000, 13000]
+  },
+  "ruleOverrides": {
+    "場数": 2,
+    "延長戦方式": 1
+  },
+  "engine": {
+    "wall": {
+      "preset": false
+    }
+  }
+}

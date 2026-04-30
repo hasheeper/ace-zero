@@ -1,0 +1,223 @@
+/* ============================================
+   龙凤决 (Dragon Tiger) — 游戏专属样式加强版
+   通用布局来自 ../shared/mini-game-base.css
+   ============================================ */
+
+/* 定义阵营专属主题色与发光变量 */
+:root {
+  --bg-felt: radial-gradient(circle at 50% 40%, #111a22 0%, #070b0e 60%, #020304 100%);
+  --dt-dragon: #e74c3c;
+  --dt-dragon-glow: rgba(231, 76, 60, 0.45);
+  --dt-tiger: #3498db;
+  --dt-tiger-glow: rgba(52, 152, 219, 0.45);
+  --dt-tie: #2ecc71;
+  --dt-tie-glow: rgba(46, 204, 113, 0.45);
+}
+
+/* ---- 竞技场布局 ---- */
+.dt-arena {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 60px;
+  width: 100%;
+  margin-top: 54px;
+  margin-bottom: 36px;
+}
+
+/* 龙凤决顶部已足够密集，去掉上区 DEALER 标签避免挤压 */
+.zone-dealer .zone-tag {
+  display: none;
+}
+
+/* 给中区整体留更多呼吸感 */
+.zone-center {
+  padding-top: 12px;
+}
+
+/* 筹码视觉下移，避免贴近标题和赔率行 */
+#main-pot-area {
+  margin-top: 28px;
+}
+
+.dt-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+}
+
+/* ---- 阵营标题 ---- */
+.side-label {
+  font-family: 'Cinzel', serif;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  margin: 0;
+  padding-left: 8px; /* 平衡字距造成的视觉偏移 */
+}
+
+.dragon-label {
+  color: var(--dt-dragon);
+  text-shadow: 0 0 20px var(--dt-dragon-glow), 0 2px 4px rgba(0,0,0,0.8);
+}
+
+.tiger-label {
+  color: var(--dt-tiger);
+  text-shadow: 0 0 20px var(--dt-tiger-glow), 0 2px 4px rgba(0,0,0,0.8);
+}
+
+.dt-vs {
+  font-family: 'Cinzel', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--gold-dim);
+  text-shadow: 0 0 15px rgba(207, 181, 59, 0.3);
+  letter-spacing: 4px;
+  opacity: 0.8;
+  margin-top: 10px;
+}
+
+/* ---- 牌位设计 ---- */
+.card-slot {
+  width: 122px;
+  height: 172px;
+  background: rgba(10, 15, 20, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  position: relative;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* 牌位暗格水印（空槽时显示） */
+#dragon-card::before {
+  content: '';
+  position: absolute;
+  inset: 12% 10%;
+  background: rgba(231, 76, 60, 0.12);
+  -webkit-mask-image: url('../../assets/svg/dt-dragon-emblem.svg');
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-image: url('../../assets/svg/dt-dragon-emblem.svg');
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  pointer-events: none;
+}
+#tiger-card::before {
+  content: '';
+  position: absolute;
+  inset: 12% 10%;
+  background: rgba(52, 152, 219, 0.12);
+  -webkit-mask-image: url('../../assets/svg/dt-tiger-emblem.svg');
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-image: url('../../assets/svg/dt-tiger-emblem.svg');
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  pointer-events: none;
+}
+
+.card-slot .card {
+  position: relative !important; 
+  top: auto !important; 
+  left: auto !important;
+  transform: none !important; 
+  width: 106px !important;
+  height: 148px !important;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.7);
+  z-index: 10;
+}
+
+/* 获胜动画：上浮 + 强光 */
+.card-slot.dragon-win { 
+  border-color: var(--dt-dragon); 
+  box-shadow: 0 0 30px var(--dt-dragon-glow), inset 0 0 15px var(--dt-dragon-glow); 
+  transform: translateY(-8px) scale(1.05);
+}
+.card-slot.tiger-win { 
+  border-color: var(--dt-tiger); 
+  box-shadow: 0 0 30px var(--dt-tiger-glow), inset 0 0 15px var(--dt-tiger-glow); 
+  transform: translateY(-8px) scale(1.05);
+}
+
+/* ---- 分数牌匾 ---- */
+.side-score { 
+  font-family: 'JetBrains Mono', monospace; 
+  font-size: 16px; 
+  font-weight: 700; 
+  color: #fff; 
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 20px;
+  border-radius: 20px;
+  min-width: 60px;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+  transition: color 0.3s;
+}
+
+.dragon-win ~ .side-score { color: var(--dt-dragon); border-color: var(--dt-dragon-glow); }
+.tiger-win ~ .side-score { color: var(--dt-tiger); border-color: var(--dt-tiger-glow); }
+
+/* ---- 各阵营专属下注按钮加强 ---- */
+.dt-bet-btn { 
+  min-width: 90px !important; 
+  position: relative;
+  overflow: hidden;
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+}
+
+/* 押龙按钮 */
+#btn-dragon { border-bottom-color: rgba(231,76,60,0.3); }
+#btn-dragon:hover:not(:disabled) { border-color: var(--dt-dragon); color: var(--dt-dragon); background: rgba(231,76,60,0.08); }
+#btn-dragon.selected {
+  border-color: var(--dt-dragon); 
+  background: linear-gradient(135deg, rgba(231,76,60,0.3), rgba(192,57,43,0.1)) !important; 
+  color: #fff !important; 
+  text-shadow: 0 0 8px var(--dt-dragon);
+  box-shadow: inset 0 0 15px var(--dt-dragon-glow);
+}
+
+/* 押虎按钮 */
+#btn-tiger { border-bottom-color: rgba(52,152,219,0.3); }
+#btn-tiger:hover:not(:disabled) { border-color: var(--dt-tiger); color: var(--dt-tiger); background: rgba(52,152,219,0.08); }
+#btn-tiger.selected {
+  border-color: var(--dt-tiger); 
+  background: linear-gradient(135deg, rgba(52,152,219,0.3), rgba(41,128,185,0.1)) !important; 
+  color: #fff !important; 
+  text-shadow: 0 0 8px var(--dt-tiger);
+  box-shadow: inset 0 0 15px var(--dt-tiger-glow);
+}
+
+/* 押和按钮 */
+#btn-tie { border-bottom-color: rgba(46,204,113,0.3); }
+#btn-tie:hover:not(:disabled) { border-color: var(--dt-tie); color: var(--dt-tie); background: rgba(46,204,113,0.08); }
+#btn-tie.selected {
+  border-color: var(--dt-tie); 
+  background: linear-gradient(135deg, rgba(46,204,113,0.3), rgba(39,174,96,0.1)) !important; 
+  color: #fff !important; 
+  text-shadow: 0 0 8px var(--dt-tie);
+  box-shadow: inset 0 0 15px var(--dt-tie-glow);
+}
+
+/* ---- 响应式微调 ---- */
+@media (max-width: 800px) {
+  .dt-arena { gap: 20px; margin-top: 28px; margin-bottom: 18px; }
+  .side-label { font-size: 20px; letter-spacing: 4px; }
+  .card-slot { width: 92px; height: 132px; }
+  #dragon-card::before, #tiger-card::before { inset: 13% 11%; }
+  .card-slot .card { width: 80px !important; height: 114px !important; }
+  .dt-vs { font-size: 16px; margin-top: 5px; }
+  #main-pot-area { margin-top: 20px; }
+}

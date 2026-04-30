@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AceZero - Game Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/logo/acezero-logo.css" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ============================================
+       ui-root: 全屏居中容器
+       ============================================ */
+    .ui-root {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 40%, #151515 0%, #000 100%);
+      overflow: hidden;
+    }
+
+    /* ============================================
+       ui-scale: 固定尺寸游戏容器 (1100x850)
+       通过 JS 计算 --ui-scale 实现自适应缩放
+       ============================================ */
+    .ui-scale {
+      width: 1100px !important;
+      height: 850px !important;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+      margin: 0;
+      border-radius: 24px;
+      overflow: hidden;
+      transform-origin: center center;
+      transform: scale(var(--ui-scale, 1));
+      background: #0b0c10;
+      box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+    }
+
+    /* ============================================
+       游戏 iframe: 填满 ui-scale 容器
+       ============================================ */
+    #game-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+
+    /* ============================================
+       加载遮罩
+       ============================================ */
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(ellipse at 50% 58%, rgba(18, 16, 10, 0.98) 0%, rgba(0,0,0,0.995) 70%);
+      z-index: 100;
+      transition: opacity 0.5s ease;
+      overflow: hidden;
+    }
+
+    #loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-logo.az-logo {
+      --az-logo-scale: 0.54;
+    }
+
+    .loading-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: rgba(255,255,255,0.52);
+      letter-spacing: 3px;
+      text-align: center;
+    }
+
+    .tutorial-picker {
+      width: min(640px, calc(100% - 48px));
+      padding: 28px 28px 24px;
+      border-radius: 22px;
+      background:
+        linear-gradient(180deg, rgba(18, 18, 18, 0.96), rgba(8, 8, 8, 0.98));
+      border: 1px solid rgba(255, 223, 120, 0.24);
+      box-shadow:
+        0 28px 80px rgba(0, 0, 0, 0.58),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      color: #f4e7bf;
+    }
+
+    .tutorial-picker[hidden] {
+      display: none !important;
+    }
+
+    .tutorial-picker-kicker {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: rgba(255, 223, 120, 0.7);
+      margin-bottom: 10px;
+    }
+
+    .tutorial-picker-title {
+      margin: 0 0 10px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 34px;
+      line-height: 1.08;
+      color: #fff2c8;
+    }
+
+    .tutorial-picker-subtitle {
+      margin: 0 0 22px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: rgba(244, 231, 191, 0.8);
+    }
+
+    .tutorial-picker-options {
+      display: grid;
+      gap: 14px;
+    }
+
+    .tutorial-picker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .tutorial-picker-back {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 223, 120, 0.18);
+      background: rgba(255, 255, 255, 0.03);
+      color: rgba(255, 242, 200, 0.9);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: border-color 0.16s ease, background 0.16s ease;
+    }
+
+    .tutorial-picker-back:hover {
+      border-color: rgba(255, 223, 120, 0.34);
+      background: rgba(255, 223, 120, 0.08);
+    }
+
+    .tutorial-picker-section {
+      margin: 0 0 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: rgba(255, 223, 120, 0.72);
+    }
+
+    .tutorial-picker-option {
+      width: 100%;
+      padding: 18px 20px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 223, 120, 0.16);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .tutorial-picker-option:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 223, 120, 0.34);
+      background:
+        linear-gradient(180deg, rgba(255, 223, 120, 0.08), rgba(255, 223, 120, 0.03));
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+    }
+
+    .tutorial-picker-option-label {
+      display: block;
+      margin-bottom: 6px;
+      font-family: 'Noto Serif SC', serif;
+      font-size: 22px;
+      line-height: 1.2;
+      color: #fff2c8;
+    }
+
+    .tutorial-picker-option-desc {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: rgba(244, 231, 191, 0.68);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ui-root" id="ui-root">
+    <div class="ui-scale" id="ui-scale">
+
+      <!-- 加载遮罩 -->
+      <div id="loading-overlay">
+        <div class="loading-logo" data-acezero-logo></div>
+        <div class="loading-sub" id="loading-status">LOADING ENGINE...</div>
+        <div id="tutorial-picker" class="tutorial-picker" hidden></div>
+      </div>
+
+      <!-- 游戏 iframe：填满 ui-scale 容器 -->
+      <iframe id="game-frame" title="AceZero Game" src="" allowfullscreen></iframe>
+
+    </div>
+  </div>
+
+  <!-- 通用数据加载器 -->
+  <script src="./runtime/data-loader.js"></script>
+  <script src="../../assets/logo/acezero-logo.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ============================================
+      // 游戏路由表 - gameId → 游戏入口路径
+      // 新增游戏优先添加到 registry/games.json；这里仅作为静态兜底。
+      // ============================================
+      const GAME_ROUTES = {
+        'texas-holdem': './modules/texas-holdem/index.html',
+        'blackjack': './modules/blackjack/index.html',
+        'dice': './modules/dice/index.html',
+        'dragon-tiger': './modules/dragon-tiger/index.html',
+        'mahjong': './modules/mahjong/index.html',
+        'majiang': './modules/mahjong/index.html',
+        'mahjong-analysis': './modules/mahjong-analysis/index.html',
+        'majiang-analysis': './modules/mahjong-analysis/index.html',
+        'sanma': './modules/mahjong-sanma/index.html',
+        'majiang-sanma': './modules/mahjong-sanma/index.html'
+      };
+
+      const DEFAULT_GAME_CONFIG_PATH = '../../content/game-config.json';
+      const DEFAULT_TUTORIAL_INDEX_PATH = '../../content/tutorials/texas-holdem/tutorial-index.json';
+      let _routeRegistry = null;
+      let DEFAULT_GAME = 'texas-holdem';
+      const URL_PARAMS = new URLSearchParams(window.location.search || '');
+
+      // ============================================
+      // UI-SCALE 自适应缩放（参考 参考/index.css 模式）
+      // 固定设计尺寸 1100x850，根据窗口大小缩放
+      // ============================================
+      const DESIGN_W = 1100;
+      const DESIGN_H = 850;
+      const uiScale = document.getElementById('ui-scale');
+
+      function recalcScale() {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const scale = Math.min(vw / DESIGN_W, vh / DESIGN_H, 1.15);
+        uiScale.style.setProperty('--ui-scale', scale.toFixed(4));
+      }
+
+      recalcScale();
+      window.addEventListener('resize', recalcScale);
+
+      // ============================================
+      // 引擎核心
+      // ============================================
+      const frame = document.getElementById('game-frame');
+      const overlay = document.getElementById('loading-overlay');
+      const loadingStatus = document.getElementById('loading-status');
+      const tutorialPicker = document.getElementById('tutorial-picker');
+      let _currentConfig = null;
+
+      let _configSource = null; // 'injected' | 'static'
+      let _configSentToGame = false;
+      let _frameReady = false;
+
+      function tutorialPathCandidates(path) {
+        const raw = String(path || '').trim();
+        if (!raw) return [];
+        if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith('/') || raw.startsWith('./') || raw.startsWith('../')) {
+          return [raw];
+        }
+        return [raw, '../../' + raw];
+      }
+
+      async function loadGameRoutes() {
+        if (_routeRegistry) return _routeRegistry;
+        try {
+          const resp = await fetch('../../registry/games.json', { cache: 'no-cache' });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const registry = await resp.json();
+          if (!registry || typeof registry !== 'object' || !registry.routes) {
+            throw new Error('Invalid game route registry');
+          }
+          _routeRegistry = registry;
+          DEFAULT_GAME = registry.defaultGame || DEFAULT_GAME;
+          console.log('[ENGINE] routes loaded:', Object.keys(registry.routes));
+          return _routeRegistry;
+        } catch (err) {
+          console.warn('[ENGINE] registry/games.json 加载失败，使用内置路由:', err);
+          _routeRegistry = {
+            defaultGame: DEFAULT_GAME,
+            routes: Object.fromEntries(Object.entries(GAME_ROUTES).map(([id, entry]) => [id, { id, entry, aliases: [] }]))
+          };
+          return _routeRegistry;
+        }
+      }
+
+      async function fetchTutorialJson(path) {
+        const candidates = tutorialPathCandidates(path);
+        for (const candidate of candidates) {
+          try {
+            const resp = await fetch(candidate);
+            if (!resp.ok) continue;
+            return await resp.json();
+          } catch (err) {
+            console.warn('[ENGINE] 教程配置读取失败:', candidate, err);
+          }
+        }
+        return null;
+      }
+
+      function getUrlConfig() {
+        const config = {};
+        const mappedKeys = [
+          'gameId',
+          'gameMode',
+          'sessionMode',
+          'tutorialConfigPath',
+          'tutorialProfile',
+          'tutorialCourse',
+          'tutorialLauncherPath'
+        ];
+
+        mappedKeys.forEach(function (key) {
+          const value = URL_PARAMS.get(key);
+          if (value) config[key] = value;
+        });
+
+        const configPath = URL_PARAMS.get('config');
+        if (configPath) config.configPath = configPath;
+
+        if (!config.gameId && !config.gameMode && config.tutorialConfigPath) {
+          config.gameMode = 'texas-holdem';
+        }
+
+        return Object.keys(config).length ? config : null;
+      }
+
+      function getRememberedTutorialProfile() {
+        try {
+          return localStorage.getItem('acezero:tutorial-profile:texas-holdem') || null;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function setRememberedTutorialProfile(profileId) {
+        try {
+          localStorage.setItem('acezero:tutorial-profile:texas-holdem', profileId || '');
+        } catch (err) {
+          console.warn('[ENGINE] 无法保存教程入口选择:', err);
+        }
+      }
+
+      function getRememberedTutorialCourse(profileId) {
+        if (!profileId) return null;
+        try {
+          return localStorage.getItem('acezero:tutorial-course:texas-holdem:' + profileId) || null;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function setRememberedTutorialCourse(profileId, courseId) {
+        if (!profileId) return;
+        try {
+          localStorage.setItem('acezero:tutorial-course:texas-holdem:' + profileId, courseId || '');
+        } catch (err) {
+          console.warn('[ENGINE] 无法保存教程阶段选择:', err);
+        }
+      }
+
+      function findTutorialProfile(indexConfig, preferredId) {
+        const profiles = Array.isArray(indexConfig && indexConfig.profiles) ? indexConfig.profiles : [];
+        if (!profiles.length) return null;
+        const targetId = preferredId || getRememberedTutorialProfile() || null;
+        if (targetId) {
+          const exact = profiles.find(profile => profile && profile.id === targetId);
+          if (exact) return exact;
+        }
+        const novice = profiles.find(profile => profile && /novice|newbie|intro/i.test(String(profile.id || '')));
+        return novice || profiles[0] || null;
+      }
+
+      function findTutorialCourse(profile, preferredId) {
+        const courses = Array.isArray(profile && profile.courses) ? profile.courses : [];
+        if (!courses.length) {
+          return profile && profile.configPath ? {
+            id: profile.id || 'default-course',
+            label: profile.label || '开始教程',
+            description: profile.description || '',
+            configPath: profile.configPath
+          } : null;
+        }
+        const targetId = preferredId || getRememberedTutorialCourse(profile && profile.id) || null;
+        if (targetId) {
+          const exact = courses.find(course => course && course.id === targetId);
+          if (exact) return exact;
+        }
+        return courses[0] || null;
+      }
+
+      function showTutorialPicker(indexConfig, sourcePath, preferredProfileId) {
+        const profiles = Array.isArray(indexConfig && indexConfig.profiles) ? indexConfig.profiles : [];
+        if (!profiles.length) return Promise.resolve(null);
+
+        overlay.classList.remove('hidden');
+        loadingStatus.style.display = 'none';
+        tutorialPicker.hidden = false;
+
+        return new Promise(function (resolve) {
+          let activeProfile = preferredProfileId
+            ? findTutorialProfile(indexConfig, preferredProfileId)
+            : null;
+
+          function renderProfileList() {
+            tutorialPicker.innerHTML = [
+              '<div class="tutorial-picker-kicker">TUTORIAL ROUTER</div>',
+              '<h2 class="tutorial-picker-title">' + (indexConfig.title || '选择你的教程入口') + '</h2>',
+              '<p class="tutorial-picker-subtitle">' + (indexConfig.subtitle || '先告诉系统你更接近哪一类玩家。') + '</p>',
+              '<div class="tutorial-picker-section">先选玩家类型</div>',
+              '<div class="tutorial-picker-options"></div>'
+            ].join('');
+
+            const optionsEl = tutorialPicker.querySelector('.tutorial-picker-options');
+            profiles.forEach(function (profile) {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'tutorial-picker-option';
+              btn.innerHTML = [
+                '<span class="tutorial-picker-option-label">' + (profile.label || profile.id || '教程入口') + '</span>',
+                '<span class="tutorial-picker-option-desc">' + (profile.description || '') + '</span>'
+              ].join('');
+              btn.addEventListener('click', function () {
+                activeProfile = profile;
+                setRememberedTutorialProfile(profile.id || '');
+                renderCourseList(profile);
+              });
+              optionsEl.appendChild(btn);
+            });
+          }
+
+          function renderCourseList(profile) {
+            const courses = Array.isArray(profile && profile.courses) ? profile.courses : [];
+            const profileLabel = (profile && profile.label) || '教程';
+
+            tutorialPicker.innerHTML = [
+              '<div class="tutorial-picker-kicker">TUTORIAL ROUTER</div>',
+              '<div class="tutorial-picker-header">',
+              '  <div>',
+              '    <h2 class="tutorial-picker-title">' + profileLabel + '</h2>',
+              '    <p class="tutorial-picker-subtitle">' + ((profile && profile.description) || '') + '</p>',
+              '  </div>',
+              '  <button type="button" class="tutorial-picker-back">返回上一级</button>',
+              '</div>',
+              '<div class="tutorial-picker-section">选择课程阶段</div>',
+              '<div class="tutorial-picker-options"></div>'
+            ].join('');
+
+            const backBtn = tutorialPicker.querySelector('.tutorial-picker-back');
+            const optionsEl = tutorialPicker.querySelector('.tutorial-picker-options');
+            backBtn.addEventListener('click', renderProfileList);
+
+            const normalizedCourses = courses.length ? courses : [findTutorialCourse(profile, null)].filter(Boolean);
+            normalizedCourses.forEach(function (course) {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'tutorial-picker-option';
+              btn.innerHTML = [
+                '<span class="tutorial-picker-option-label">' + (course.label || course.id || '课程') + '</span>',
+                '<span class="tutorial-picker-option-desc">' + (course.description || '') + '</span>'
+              ].join('');
+              btn.addEventListener('click', function () {
+                setRememberedTutorialProfile(profile.id || '');
+                setRememberedTutorialCourse(profile.id || '', course.id || '');
+                tutorialPicker.hidden = true;
+                tutorialPicker.innerHTML = '';
+                loadingStatus.style.display = '';
+                loadingStatus.textContent = 'LOADING TUTORIAL...';
+                resolve({
+                  profile: profile,
+                  course: course
+                });
+              });
+              optionsEl.appendChild(btn);
+            });
+          }
+
+          if (activeProfile) {
+            renderCourseList(activeProfile);
+          } else {
+            renderProfileList();
+          }
+        });
+      }
+
+      async function maybeResolveTutorialConfig(config) {
+        if (!config || !config.tutorialConfigPath || config._tutorialResolved) return config;
+
+        const tutorialPath = String(config.tutorialConfigPath).trim();
+        if (!tutorialPath) return config;
+
+        try {
+          loadingStatus.textContent = 'LOADING TUTORIAL...';
+          const tutorialConfig = await fetchTutorialJson(tutorialPath);
+          if (!tutorialConfig) return config;
+
+          if (tutorialConfig.sessionMode === 'tutorial-index' && Array.isArray(tutorialConfig.profiles)) {
+            const selectedEntry = await showTutorialPicker(
+              tutorialConfig,
+              tutorialPath,
+              config.tutorialProfile || null
+            );
+            if (!selectedEntry || !selectedEntry.course || !selectedEntry.course.configPath) {
+              return Object.assign({}, config, {
+                _tutorialResolved: true
+              });
+            }
+
+            return maybeResolveTutorialConfig(Object.assign({}, config, {
+              sessionMode: 'tutorial',
+              tutorialProfile: (selectedEntry.profile && selectedEntry.profile.id) || null,
+              tutorialCourse: (selectedEntry.course && selectedEntry.course.id) || null,
+              tutorialConfigPath: selectedEntry.course.configPath,
+              tutorialLauncherPath: tutorialPath
+            }));
+          }
+
+          return Object.assign({}, config, tutorialConfig, {
+            tutorialLauncher: {
+              profile: config.tutorialProfile || null,
+              course: config.tutorialCourse || null,
+              path: config.tutorialLauncherPath || tutorialPath
+            },
+            _tutorialResolved: true
+          });
+        } catch (e) {
+          console.warn('[ENGINE] 教程配置加载失败:', e);
+          return config;
+        }
+      }
+
+      // 1. 确定配置来源（外部注入 or 本地 JSON）
+      async function resolveConfig() {
+        if (_currentConfig) return _currentConfig;
+
+        // 优先：外部注入（来自 STver.html postMessage）
+        let injected = window.AceZeroDataLoader.getInjectedConfig();
+        if (injected) {
+          console.log('[ENGINE] 使用外部注入配置');
+          _currentConfig = await maybeResolveTutorialConfig(injected);
+          _configSource = 'injected';
+          return _currentConfig;
+        }
+
+        const urlConfig = getUrlConfig();
+        if (urlConfig) {
+          console.log('[ENGINE] 使用 URL 配置');
+          _currentConfig = await maybeResolveTutorialConfig(urlConfig);
+          _configSource = 'url';
+          return _currentConfig;
+        }
+
+        // 如果没有注入配置，主动请求并等待 100ms
+        console.log('[ENGINE] 未检测到注入配置，主动请求...');
+        window.AceZeroDataLoader.requestDataFromParent();
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // 再次检查注入配置
+        injected = window.AceZeroDataLoader.getInjectedConfig();
+        if (injected) {
+          console.log('[ENGINE] 请求后收到注入配置');
+          _currentConfig = await maybeResolveTutorialConfig(injected);
+          _configSource = 'injected';
+          return _currentConfig;
+        }
+
+        // 回退：加载本地 game-config.json
+        try {
+          loadingStatus.textContent = 'LOADING CONFIG...';
+          const resp = await fetch(DEFAULT_GAME_CONFIG_PATH);
+          // fetch 期间注入配置可能已到达
+          if (_configSource === 'injected') {
+            console.log('[ENGINE] fetch 期间注入配置已到达，丢弃 game-config.json');
+            return _currentConfig;
+          }
+          if (resp.ok) {
+            const config = await resp.json();
+            // 二次检查：resp.json() 也是异步，注入可能在此期间到达
+            if (_configSource === 'injected') {
+              console.log('[ENGINE] json 解析期间注入配置已到达，丢弃 game-config.json');
+              return _currentConfig;
+            }
+            console.log('[ENGINE] 从 game-config.json 加载配置');
+            _currentConfig = await maybeResolveTutorialConfig(config);
+            _configSource = 'static';
+            return _currentConfig;
+          }
+        } catch (e) {
+          console.warn('[ENGINE] game-config.json 加载失败:', e);
+        }
+
+        // 最终回退：默认 gameId
+        _currentConfig = { gameId: DEFAULT_GAME };
+        _configSource = 'static';
+        return _currentConfig;
+      }
+
+      // 2. 根据 gameId 路由到对应游戏
+      function resolveGameUrl(gameId) {
+        const registryRoutes = _routeRegistry && _routeRegistry.routes;
+        const registryEntry = registryRoutes && (registryRoutes[gameId] || registryRoutes[DEFAULT_GAME]);
+        const route = (registryEntry && registryEntry.entry) || GAME_ROUTES[gameId] || GAME_ROUTES[DEFAULT_GAME];
+        return new URL(route, window.location.href).href;
+      }
+
+      function resolveGameKey(config) {
+        const raw = (config && (config.gameMode || config.gameId)) || DEFAULT_GAME;
+        const norm = String(raw).toLowerCase();
+        const registryRoutes = _routeRegistry && _routeRegistry.routes ? _routeRegistry.routes : {};
+        if (registryRoutes[norm] || GAME_ROUTES[norm]) return norm;
+        const matched = Object.values(registryRoutes).find((entry) => {
+          const aliases = Array.isArray(entry && entry.aliases) ? entry.aliases : [];
+          return aliases.map((alias) => String(alias).toLowerCase()).includes(norm);
+        });
+        if (matched && matched.id) return matched.id;
+        return DEFAULT_GAME;
+      }
+
+      // 3. 向游戏 iframe 发送配置（附带来源标记，仅首次生效）
+      function sendConfigToGame(config, source) {
+        if (!frame || !frame.contentWindow) return;
+        // iframe 尚未 load → 不发送（脚本还没注册监听）
+        if (!_frameReady) return;
+        if (_configSentToGame) {
+          console.log('[ENGINE] 配置已发送，忽略重复');
+          return;
+        }
+        _configSentToGame = true;
+        frame.contentWindow.postMessage({
+          type: 'acezero-game-data',
+          payload: config,
+          source: source || _configSource || 'static'
+        }, '*');
+      }
+
+      async function reopenTutorialPicker(payload) {
+        const tutorialPath = String(payload && payload.path || DEFAULT_TUTORIAL_INDEX_PATH).trim();
+        const profileId = payload && payload.profile ? String(payload.profile) : null;
+        const config = await maybeResolveTutorialConfig({
+          gameMode: 'texas-holdem',
+          sessionMode: 'tutorial-index',
+          tutorialProfile: profileId,
+          tutorialConfigPath: tutorialPath
+        });
+        _currentConfig = config;
+        _configSource = 'static';
+        _configSentToGame = false;
+        _frameReady = false;
+
+        const gameId = resolveGameKey(config);
+        loadingStatus.style.display = '';
+        loadingStatus.textContent = 'LOADING ' + gameId.toUpperCase() + '...';
+        overlay.classList.remove('hidden');
+
+        let gameSrc = resolveGameUrl(gameId);
+        const sep = gameSrc.includes('?') ? '&' : '?';
+        gameSrc += sep + 'v=' + Date.now();
+        frame.src = gameSrc;
+
+        frame.addEventListener('load', function onReload() {
+          _frameReady = true;
+          sendConfigToGame(_currentConfig, _configSource);
+          overlay.classList.add('hidden');
+          frame.removeEventListener('load', onReload);
+        });
+      }
+
+      // 4. 启动
+      async function boot() {
+        await loadGameRoutes();
+        const config = await resolveConfig();
+        const gameId = resolveGameKey(config);
+
+        console.log('[ENGINE] gameId:', gameId);
+        loadingStatus.textContent = 'LOADING ' + gameId.toUpperCase() + '...';
+
+        // 设置 iframe src
+        let gameSrc = resolveGameUrl(gameId);
+        const sep = gameSrc.includes('?') ? '&' : '?';
+        gameSrc += sep + 'v=' + Date.now();
+        frame.src = gameSrc;
+
+        // iframe 加载完成后：传递最新配置 + 隐藏 loading
+        frame.addEventListener('load', function onLoad() {
+          _frameReady = true;
+          // 始终发送最新的 _currentConfig（可能在 fetch 期间被注入配置更新）
+          sendConfigToGame(_currentConfig, _configSource);
+          overlay.classList.add('hidden');
+          frame.removeEventListener('load', onLoad);
+        });
+      }
+
+      // 5. 监听游戏主动请求配置（绕过 _configSentToGame 防重复）
+      window.addEventListener('message', async (event) => {
+        const msg = event?.data;
+        if (!msg) return;
+
+        if (msg.type === 'acezero-data-request') {
+          const config = await resolveConfig();
+          if (!frame || !frame.contentWindow) return;
+          frame.contentWindow.postMessage({
+            type: 'acezero-game-data',
+            payload: config,
+            source: _configSource || 'static'
+          }, '*');
+          return;
+        }
+
+        if (msg.type === 'acezero-open-tutorial-picker') {
+          await reopenTutorialPicker(msg.payload || {});
+        }
+      });
+
+      // 6. 处理外部注入延迟到达（STver → index → game）
+      window.AceZeroDataLoader.onConfigLoaded(function (config) {
+        console.log('[ENGINE] 外部配置延迟到达');
+        _currentConfig = config;
+        _configSource = 'injected';
+        // 如果已经发过 static 配置，重置标记让 injected 能覆盖
+        _configSentToGame = false;
+        sendConfigToGame(config, 'injected');
+      });
+
+      // ============================================
+      // 启动引擎
+      // ============================================
+      boot();
+
+    })();
+  </script>
+</body>
+</html>

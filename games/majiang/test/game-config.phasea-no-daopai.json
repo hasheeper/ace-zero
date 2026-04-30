@@ -1,0 +1,39 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "听牌宣言位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "下家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "对家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "上家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong Phase A No Daopai",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "ruleOverrides": {
+    "ノーテン宣言あり": true
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "phasea-no-daopai",
+        "name": "Phase A No Daopai",
+        "initialHands": [
+          ["m1", "m2", "m3", "p1", "p2", "p3", "s1", "s2", "s3", "z2", "z2", "z3", "z3"],
+          ["m4", "m5", "m6", "p4", "p5", "p6", "s4", "s5", "s6", "z1", "z4", "z5", "z6"],
+          ["m7", "m8", "m9", "p7", "p8", "p9", "s7", "s8", "s9", "z1", "z5", "z6", "z7"],
+          ["m1", "m4", "m7", "p1", "p4", "p7", "s1", "s4", "s7", "z1", "z3", "z5", "z7"]
+        ],
+        "draws": [],
+        "gangDraws": []
+      }
+    }
+  }
+}

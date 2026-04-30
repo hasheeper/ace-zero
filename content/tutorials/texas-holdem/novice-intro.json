@@ -1,0 +1,179 @@
+{
+  "gameMode": "texas-holdem",
+  "sessionMode": "tutorial",
+  "blinds": [10, 20],
+  "chips": 2000,
+  "heroChips": 2000,
+  "heroSeat": "BTN",
+  "tutorial": {
+    "enabled": true,
+    "profile": "novice",
+    "course": "holdem-basics",
+    "lesson": "table-and-actions",
+    "step": 1,
+    "currentHandIndex": 0,
+    "showBasicHoldemIntro": true,
+    "showActionGlossary": true,
+    "showCoachPrompts": true,
+    "allowHintReplay": true,
+    "allowStepSkip": false,
+    "systems": {
+      "holdem": true,
+      "magic": false,
+      "mental": false
+    },
+    "hands": [
+      {
+        "id": "intro",
+        "title": "介绍局",
+        "lesson": "table-and-actions",
+        "endSummary": "你已经看完了一手牌最基础的流转：底牌、位置、翻牌、公共牌推进和摊牌比大小。",
+        "script": {
+          "disableMoz": true,
+          "disableAISkills": true,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["Ah", "7c"],
+            "BB": ["Kd", "9s"]
+          },
+          "board": {
+            "flop": ["2c", "7d", "Jh"],
+            "turn": "Tc",
+            "river": "3s"
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "check", "note": "教程局：让新手先完成自己的第一个动作" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "turn": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "river": {
+              "BB": [
+                { "action": "check" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "ahead",
+        "title": "顺风局",
+        "lesson": "ahead-value",
+        "endSummary": "这一局的重点不是复杂计算，而是建立直觉：当你明显领先时，应该更主动地先把底池和节奏握在手里。",
+        "fixedRaiseTo": 40,
+        "script": {
+          "disableMoz": true,
+          "disableAISkills": true,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["As", "Kd"],
+            "BB": ["Qh", "9c"]
+          },
+          "board": {
+            "flop": ["Ac", "7d", "2s"],
+            "turn": "Jh",
+            "river": "3c"
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "call" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "raise", "amount": 20 }
+              ]
+            },
+            "turn": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "river": {
+              "BB": [
+                { "action": "check" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "behind",
+        "title": "逆风局",
+        "lesson": "behind-fold",
+        "endSummary": "逆风局最重要的不是硬撑，而是及时止损。看见自己没成型、对手还在施压时，弃牌往往就是最好的决定。",
+        "script": {
+          "disableMoz": true,
+          "disableAISkills": true,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["Kc", "8d"],
+            "BB": ["Ah", "Qh"]
+          },
+          "board": {
+            "flop": ["As", "7c", "2d"],
+            "turn": "9s",
+            "river": "3h"
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "raise", "amount": 40 }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "hero": {
+    "vanguard": { "name": "KAZU", "level": 1, "trait": "steady_hand" },
+    "attrs": { "moirai": 0, "chaos": 0, "psyche": 0, "void": 0 },
+    "vanguardSkills": [],
+    "rearguardSkills": [],
+    "mana": 0,
+    "maxMana": 0,
+    "mental": {
+      "discipline": 50,
+      "composureMax": 100,
+      "resistProbe": 0,
+      "resistPresence": 0,
+      "resistTaunt": 0
+    }
+  },
+  "seats": {
+    "BB": {
+      "vanguard": { "name": "RINO", "level": 1, "trait": "crimson_crown" },
+      "ai": "passive",
+      "difficulty": "noob",
+      "emotion": "calm",
+      "attrs": { "moirai": 0, "chaos": 0, "psyche": 0, "void": 0 },
+      "skills": [],
+      "mana": 0,
+      "maxMana": 0,
+      "mental": {
+        "discipline": 50,
+        "composureMax": 100,
+        "resistProbe": 0,
+        "resistPresence": 0,
+        "resistTaunt": 0
+      }
+    }
+  }
+}

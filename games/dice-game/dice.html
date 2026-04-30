@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>AceZero - 乾坤骰</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/deck-of-cards/acezero-chips.css" />
+  <link rel="stylesheet" href="../../assets/logo/acezero-logo.css" />
+  <link rel="stylesheet" href="./shared/mini-game-base.css" />
+  <link rel="stylesheet" href="./shared/dice-3d.css" />
+  <link rel="stylesheet" href="dice.css" />
+</head>
+<body>
+  <main class="table-frame">
+    <div class="watermark">ACEZERO // DICE-TERMINAL</div>
+
+    <!-- 上区：骰子结果 -->
+    <section class="zone zone-dealer">
+      <div class="zone-tag">DEALER</div>
+      <div class="cup-area">
+        <div class="dice-scene" id="dice-cup">
+          <!-- Die 1 -->
+          <div class="cube" id="die-1">
+            <div class="cube__face cube__face--1"><div class="pip" style="grid-area:2/2"></div></div>
+            <div class="cube__face cube__face--2"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--3"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:2/2"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--4"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--5"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:2/2"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--6"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:2/1"></div><div class="pip" style="grid-area:2/3"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+          </div>
+          <!-- Die 2 -->
+          <div class="cube" id="die-2">
+            <div class="cube__face cube__face--1"><div class="pip" style="grid-area:2/2"></div></div>
+            <div class="cube__face cube__face--2"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--3"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:2/2"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--4"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--5"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:2/2"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--6"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:2/1"></div><div class="pip" style="grid-area:2/3"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+          </div>
+          <!-- Die 3 -->
+          <div class="cube" id="die-3">
+            <div class="cube__face cube__face--1"><div class="pip" style="grid-area:2/2"></div></div>
+            <div class="cube__face cube__face--2"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--3"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:2/2"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--4"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--5"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:2/2"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+            <div class="cube__face cube__face--6"><div class="pip" style="grid-area:1/1"></div><div class="pip" style="grid-area:1/3"></div><div class="pip" style="grid-area:2/1"></div><div class="pip" style="grid-area:2/3"></div><div class="pip" style="grid-area:3/1"></div><div class="pip" style="grid-area:3/3"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="dice-total" id="dice-total">请下注</div>
+    </section>
+
+    <!-- 中央 -->
+    <section class="zone zone-center">
+      <div class="logo-text">乾坤骰</div>
+      <div class="payout-text">BIG/SMALL 1:1 · ODD/EVEN 1:1 · TRIPLE 1:30</div>
+      <div id="main-pot-area">
+        <div id="pot-clusters"></div>
+        <div class="pot-info-hover">
+          <div class="pot-label">TOTAL POT</div>
+          <div class="pot-val-hover"><span id="pot-amount">0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 下区：下注板 -->
+    <section class="zone zone-player">
+      <div class="bet-separator">
+        <div class="line"></div>
+        <div class="text">PLACE YOUR BET</div>
+        <div class="line"></div>
+      </div>
+
+      <div class="bet-panel">
+        <div class="bet-board">
+          <div class="bet-row primary-row">
+            <button class="bet-option hero-btn" data-bet="big" disabled>
+              <div class="bet-bg"></div>
+              <span class="bet-label">大</span>
+              <span class="bet-odds">1:1</span>
+              <span class="bet-range">11-17</span>
+            </button>
+
+            <div class="bet-vs-divider"></div>
+
+            <button class="bet-option hero-btn" data-bet="small" disabled>
+              <div class="bet-bg"></div>
+              <span class="bet-label">小</span>
+              <span class="bet-odds">1:1</span>
+              <span class="bet-range">4-10</span>
+            </button>
+          </div>
+
+          <div class="bet-row secondary-row">
+            <button class="bet-option sub-btn" data-bet="odd" disabled>
+              <span class="bet-label-sm">单</span>
+              <span class="bet-tag">ODD</span>
+            </button>
+
+            <button class="bet-option sub-btn triple" data-bet="triple" disabled>
+              <span class="bet-label-sm">豹子</span>
+              <span class="bet-tag">1:30</span>
+            </button>
+
+            <button class="bet-option sub-btn" data-bet="even" disabled>
+              <span class="bet-label-sm">双</span>
+              <span class="bet-tag">EVEN</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 下注选择器 -->
+  <div id="bet-selector" class="bet-selector hidden">
+    <div class="bet-selector-inner">
+      <div class="bet-selector-header">
+        <div class="bet-title">BET SIZING</div>
+        <div class="bet-range-info">
+          <span>MIN: <span id="bet-min">10</span></span>
+          <span>MAX: <span id="bet-max">500</span></span>
+        </div>
+      </div>
+      <div class="bet-summary-row">
+        <div class="bet-stat-box">
+          <div class="bet-stat-label">BALANCE</div>
+          <div class="bet-stat-value" id="bet-balance">0</div>
+        </div>
+        <div class="bet-amount-box">
+          <div class="bet-stat-label">BET AMOUNT</div>
+          <div class="bet-amount" id="bet-amount">0.5</div>
+          <div class="bet-currency" id="bet-currency">金弗</div>
+        </div>
+      </div>
+      <div class="bet-presets">
+        <button class="bet-preset-btn" type="button" data-bet-preset="min">MIN</button>
+        <button class="bet-preset-btn" type="button" data-bet-preset="base">BASE</button>
+        <button class="bet-preset-btn" type="button" data-bet-preset="half">1/2</button>
+        <button class="bet-preset-btn" type="button" data-bet-preset="max">MAX</button>
+      </div>
+      <div class="bet-slider-shell">
+        <div class="bet-slider-ends">
+          <span>LOW</span>
+          <span>HIGH</span>
+        </div>
+        <div class="bet-slider-row">
+          <button class="bet-adjust-btn" type="button" data-bet-adjust="-1">-</button>
+          <input class="bet-slider" type="range" min="10" max="500" step="10" value="50" />
+          <button class="bet-adjust-btn" type="button" data-bet-adjust="1">+</button>
+        </div>
+      </div>
+      <button class="btn-cmd primary bet-confirm" id="btn-deal">CONFIRM BET</button>
+    </div>
+  </div>
+
+  <nav class="ui-dashboard">
+    <div class="info-panel">
+      <div class="stat-box">
+        <div class="stat-label">BALANCE</div>
+        <div class="stat-val gold" id="chips">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">ROUND</div>
+        <div class="stat-val" id="round-count">0</div>
+      </div>
+      <div class="stat-box mana-box" id="mana-box">
+        <div class="stat-label">MANA</div>
+        <div class="mana-bar-wrapper"><div class="mana-bar" id="mana-bar"></div></div>
+        <div class="stat-val mana-val" id="mana-text">0/0</div>
+      </div>
+    </div>
+
+    <div class="controls-center">
+      <button class="btn-cmd primary" id="btn-new-round">NEW ROUND</button>
+      <button class="btn-cmd" id="btn-roll" disabled>ROLL</button>
+      <div class="controls-skills" id="skill-bar">
+        <button class="btn-skill moirai" id="btn-skill-fortune" disabled title="天命骰 ♥ (15 Mana)">
+          <span class="skill-icon">♥</span><span class="skill-name">命</span>
+        </button>
+        <button class="btn-skill chaos" id="btn-skill-jinx" disabled title="厄运骰 ♠ (20 Mana)">
+          <span class="skill-icon">♠</span><span class="skill-name">厄</span>
+        </button>
+        <button class="btn-skill psyche" id="btn-skill-foresight" disabled title="预知 ♦ (10 Mana)">
+          <span class="skill-icon">♦</span><span class="skill-name">知</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="status-panel">
+      <div class="status-msg" id="message">点击 NEW ROUND 开始乾坤骰。</div>
+    </div>
+  </nav>
+
+  <script src="../../assets/deck-of-cards/acezero-currency.js"></script>
+  <script src="../../assets/deck-of-cards/acezero-chips.js"></script>
+  <script src="./shared/mini-game-force.js"></script>
+  <script src="../../assets/logo/acezero-logo.js"></script>
+  <script src="./shared/mini-game-base.js"></script>
+  <script src="./shared/mini-game-logger.js"></script>
+  <script src="dice.js"></script>
+</body>
+</html>

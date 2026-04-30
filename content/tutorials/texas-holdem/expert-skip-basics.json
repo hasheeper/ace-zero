@@ -1,0 +1,265 @@
+{
+  "gameMode": "texas-holdem",
+  "sessionMode": "tutorial",
+  "blinds": [20, 40],
+  "chips": 3000,
+  "heroChips": 3000,
+  "heroSeat": "BTN",
+  "tutorial": {
+    "enabled": true,
+    "profile": "expert",
+    "course": "magic-basics",
+    "lesson": "fortune-opening",
+    "step": 1,
+    "currentHandIndex": 0,
+    "skipCourses": ["holdem-basics"],
+    "showBasicHoldemIntro": false,
+    "showActionGlossary": true,
+    "showCoachPrompts": true,
+    "allowHintReplay": true,
+    "allowStepSkip": true,
+    "systems": {
+      "holdem": true,
+      "magic": true,
+      "mental": false
+    },
+    "glossary": {
+      "coreRule": "技能改变的是局势、信息和节奏，但德州底层仍然是比大小。",
+      "terms": [
+        {
+          "id": "fortune",
+          "label": "fortune",
+          "summary": "把结果往对自己更有利的方向推。"
+        },
+        {
+          "id": "curse",
+          "label": "curse",
+          "summary": "把结果往对目标更不利的方向推。"
+        },
+        {
+          "id": "psyche",
+          "label": "psyche",
+          "summary": "灵视裁定，不只是读信息，还能拦截并转化指向目标的 curse。"
+        }
+      ],
+      "triangle": [
+        "Chaos > Moirai",
+        "Moirai > Psyche",
+        "Psyche > Chaos"
+      ],
+      "priorityNote": "当 fortune 与 curse 同时压在同一个目标上时，教程里默认先提醒玩家优先警惕厄运。"
+    },
+    "hands": [
+      {
+        "id": "fortune-intro",
+        "title": "好运局",
+        "lesson": "fortune-opening",
+        "focus": ["fortune", "mana", "still_showdown"],
+        "endSummary": "好运帮你把局势推向了舒服的位置，但真正让你赢下这手牌的，仍然是你最后的牌型更大。",
+        "script": {
+          "disableMoz": false,
+          "disableAISkills": false,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["Ah", "Qh"],
+            "BB": ["Kd", "Ts"]
+          },
+          "board": {
+            "flop": ["Qd", "7h"]
+          },
+          "mozSelected": {
+            "flop": "Qs"
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "call", "note": "高手进阶第1局：让玩家顺利进入好运展示" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "raise", "amount": 20, "note": "好运结算后，给玩家一个明确的 CALL 教学点" }
+              ]
+            },
+            "turn": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "river": {
+              "BB": [
+                { "action": "check" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "curse-pressure",
+        "title": "厄运局",
+        "lesson": "curse-pressure",
+        "focus": ["curse", "priority", "disruption"],
+        "endSummary": "厄运不会直接替你赢牌，但它会让对手原本能顺利兑现的优势开始变形。教学上先记住：好运和厄运同时压住一个目标时，要先警惕厄运。",
+        "heroOverride": {
+          "vanguard": { "name": "SIA", "level": 4, "trait": "arcane_charm" },
+          "attrs": { "moirai": 80, "chaos": 45, "psyche": 40, "void": 0 },
+          "vanguardSkills": ["minor_wish", "grand_wish", "hex", "havoc"],
+          "rearguardSkills": [],
+          "mana": 80,
+          "maxMana": 80,
+          "mental": {
+            "discipline": 60,
+            "composureMax": 100,
+            "resistProbe": 12,
+            "resistPresence": 10,
+            "resistTaunt": 10
+          }
+        },
+        "script": {
+          "disableMoz": false,
+          "disableAISkills": true,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["Js", "Tc"],
+            "BB": ["Ah", "9h"]
+          },
+          "board": {
+            "flop": ["Jd", "5c"]
+          },
+          "mozSelected": {
+            "flop": "2s"
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "call" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "check", "note": "厄运教学收在翻牌结果，后续先让玩家自由试" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "psyche-convert",
+        "title": "灵视局",
+        "lesson": "psyche-convert",
+        "focus": ["psyche", "counter", "convert"],
+        "endSummary": "灵视不只是偷看，它还能拦下指向目标的厄运，并把其中一部分转成自己的收益。这就是 psyche 真正强的地方。",
+        "heroOverride": {
+          "vanguard": { "name": "RINO", "level": 4, "trait": "crimson_crown" },
+          "attrs": { "moirai": 80, "chaos": 18, "psyche": 46, "void": 0 },
+          "vanguardSkills": ["minor_wish", "grand_wish", "refraction"],
+          "rearguardSkills": [],
+          "mana": 80,
+          "maxMana": 80,
+          "mental": {
+            "discipline": 60,
+            "composureMax": 100,
+            "resistProbe": 12,
+            "resistPresence": 10,
+            "resistTaunt": 10
+          }
+        },
+        "seatOverrides": {
+          "BB": {
+            "vanguard": { "name": "SIA", "level": 4, "trait": "arcane_charm" },
+            "ai": "balanced",
+            "difficulty": "regular",
+            "emotion": "calm",
+            "attrs": { "moirai": 18, "chaos": 52, "psyche": 20, "void": 0 },
+            "skills": ["hex", "havoc"],
+            "mana": 80,
+            "maxMana": 80,
+            "mental": {
+              "discipline": 58,
+              "composureMax": 100,
+              "resistProbe": 10,
+              "resistPresence": 10,
+              "resistTaunt": 10
+            }
+          }
+        },
+        "script": {
+          "disableMoz": false,
+          "disableAISkills": true,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["Ks", "Qd"],
+            "BB": ["9c", "9h"]
+          },
+          "board": {
+            "flop": ["Kh", "8c"]
+          },
+          "mozSelected": {
+            "flop": "Qs"
+          },
+          "npcSkills": {
+            "preflop": [
+              {
+                "seat": "BB",
+                "skillKey": "hex",
+                "target": "hero"
+              }
+            ]
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "call" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "turn": {
+              "BB": [
+                { "action": "check" }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "nextCoursePath": "content/tutorials/texas-holdem/mental-special.json"
+  },
+  "hero": {
+    "vanguard": { "name": "RINO", "level": 4, "trait": "crimson_crown" },
+    "attrs": { "moirai": 80, "chaos": 18, "psyche": 40, "void": 0 },
+    "vanguardSkills": ["minor_wish", "grand_wish"],
+    "rearguardSkills": [],
+    "mana": 80,
+    "maxMana": 80,
+    "mental": {
+      "discipline": 60,
+      "composureMax": 100,
+      "resistProbe": 12,
+      "resistPresence": 10,
+      "resistTaunt": 10
+    }
+  },
+  "seats": {
+    "BB": {
+      "vanguard": { "name": "KAZU", "level": 3, "trait": "null_armor" },
+      "ai": "balanced",
+      "difficulty": "regular",
+      "emotion": "calm",
+      "attrs": { "moirai": 20, "chaos": 24, "psyche": 18, "void": 55 },
+      "skills": ["clarity", "insulation"],
+      "mana": 60,
+      "maxMana": 60,
+      "mental": {
+        "discipline": 56,
+        "composureMax": 100,
+        "resistProbe": 10,
+        "resistPresence": 10,
+        "resistTaunt": 10
+      }
+    }
+  }
+}

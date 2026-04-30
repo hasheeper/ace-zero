@@ -1,0 +1,270 @@
+{
+  "gameMode": "texas-holdem",
+  "sessionMode": "tutorial",
+  "blinds": [20, 40],
+  "chips": 3200,
+  "heroChips": 3200,
+  "heroSeat": "BTN",
+  "tutorial": {
+    "enabled": true,
+    "profile": "expert",
+    "course": "mental-special",
+    "lesson": "mental-basics",
+    "step": 1,
+    "currentHandIndex": 0,
+    "skipCourses": ["holdem-basics", "magic-basics"],
+    "showBasicHoldemIntro": false,
+    "showActionGlossary": true,
+    "showCoachPrompts": true,
+    "allowHintReplay": true,
+    "allowStepSkip": true,
+    "systems": {
+      "holdem": true,
+      "magic": true,
+      "mental": true
+    },
+    "glossary": {
+      "coreRule": "心理战改的是对手怎么打，不是牌本身怎么比。",
+      "terms": [
+        {
+          "id": "presence",
+          "label": "presence",
+          "summary": "压场，逼对手更保守。"
+        },
+        {
+          "id": "taunt",
+          "label": "taunt",
+          "summary": "挑衅，让对手更冒进。"
+        },
+        {
+          "id": "probe",
+          "label": "probe",
+          "summary": "试探，读取状态并让对手失准。"
+        }
+      ]
+    },
+    "hands": [
+      {
+        "id": "mental-basics",
+        "title": "心理战单课",
+        "lesson": "mental-basics",
+        "focus": ["presence", "taunt", "probe", "ai_tendency"],
+        "endSummary": "心理战真正改变的是 AI 的行动倾向，而不是牌本身的大小关系。",
+        "seatOverrides": {
+          "BB": {
+            "vanguard": { "name": "MOB", "level": 1, "trait": "none" },
+            "ai": "passive",
+            "difficulty": "noob",
+            "emotion": "fearful",
+            "attrs": { "moirai": 8, "chaos": 6, "psyche": 4, "void": 0 },
+            "skills": [],
+            "mana": 20,
+            "maxMana": 20,
+            "mental": {
+              "discipline": 8,
+              "composureMax": 24,
+              "resistProbe": 1,
+              "resistPresence": 0,
+              "resistTaunt": 0
+            }
+          }
+        },
+        "script": {
+          "disableMoz": true,
+          "disableAISkills": true,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["Ah", "9c"],
+            "BB": ["Kd", "8d"]
+          },
+          "board": {
+            "flop": ["9h", "4s", "2c"],
+            "turn": "Jd",
+            "river": "3h"
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "call" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "turn": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "river": {
+              "BB": [
+                { "action": "check" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "kazu-rino-contrast",
+        "title": "KAZU / RINO 对照局",
+        "lesson": "role-contrast",
+        "focus": ["tempo", "role_identity", "kazu", "rino"],
+        "endSummary": "这一局的重点不是背答案，而是记住：主手和副手的资源、特质和技能会叠在一起，真正实战会比这组参考搭配复杂得多。",
+        "heroOverride": {
+          "vanguard": { "name": "KAZU", "level": 4, "trait": "null_armor" },
+          "rearguard": { "name": "RINO_REAR", "level": 4, "trait": "obsessive_love" },
+          "attrs": { "moirai": 48, "chaos": 24, "psyche": 46, "void": 18 },
+          "vanguardSkills": ["clarity", "insulation"],
+          "rearguardSkills": ["minor_wish", "heart_read"],
+          "mana": 90,
+          "maxMana": 90,
+          "mental": {
+            "discipline": 64,
+            "composureMax": 100,
+            "resistProbe": 14,
+            "resistPresence": 12,
+            "resistTaunt": 12
+          }
+        },
+        "seatOverrides": {
+          "BB": {
+            "vanguard": { "name": "MOB", "level": 2, "trait": "none" },
+            "ai": "balanced",
+            "difficulty": "regular",
+            "emotion": "calm",
+            "attrs": { "moirai": 12, "chaos": 10, "psyche": 8, "void": 0 },
+            "skills": [],
+            "mana": 30,
+            "maxMana": 30,
+            "mental": {
+              "discipline": 36,
+              "composureMax": 72,
+              "resistProbe": 6,
+              "resistPresence": 6,
+              "resistTaunt": 6
+            }
+          }
+        },
+        "script": {
+          "disableMoz": true,
+          "disableAISkills": true,
+          "disableHandFloor": true,
+          "holeCards": {
+            "BTN": ["Ks", "Qh"],
+            "BB": ["Jc", "9c"]
+          },
+          "board": {
+            "flop": ["Kd", "7s", "2h"],
+            "turn": "9d",
+            "river": "4c"
+          },
+          "aiActions": {
+            "preflop": {
+              "BB": [
+                { "action": "call" }
+              ]
+            },
+            "flop": {
+              "BB": [
+                { "action": "check" }
+              ]
+            },
+            "turn": {
+              "BB": [
+                { "action": "call" }
+              ]
+            },
+            "river": {
+              "BB": [
+                { "action": "check" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "special-live-match",
+        "title": "综合实战局",
+        "lesson": "advanced-live-match",
+        "focus": ["fortune", "curse", "psyche", "mental", "showdown"],
+        "endSummary": "综合局的顺序永远是先读牌，再读局，再决定要不要动技能，最后仍然回到谁的最佳 5 张牌更大。",
+        "heroOverride": {
+          "vanguard": { "name": "KAZU", "level": 4, "trait": "null_armor" },
+          "rearguard": { "name": "RINO_REAR", "level": 4, "trait": "obsessive_love" },
+          "attrs": { "moirai": 84, "chaos": 24, "psyche": 42, "void": 64 },
+          "vanguardSkills": ["clarity", "insulation", "reality"],
+          "rearguardSkills": ["minor_wish", "heart_read", "royal_decree"],
+          "mana": 110,
+          "maxMana": 110,
+          "mental": {
+            "discipline": 68,
+            "composureMax": 104,
+            "resistProbe": 14,
+            "resistPresence": 13,
+            "resistTaunt": 13
+          }
+        },
+        "seatOverrides": {
+          "BB": {
+            "vanguard": { "name": "BOSS", "level": 5, "trait": "none" },
+            "ai": "balanced",
+            "difficulty": "boss",
+            "emotion": "confident",
+            "attrs": { "moirai": 72, "chaos": 56, "psyche": 46, "void": 0 },
+            "skills": ["grand_wish", "havoc", "refraction"],
+            "mana": 110,
+            "maxMana": 110,
+            "mental": {
+              "discipline": 54,
+              "composureMax": 92,
+              "resistProbe": 10,
+              "resistPresence": 9,
+              "resistTaunt": 9
+            }
+          }
+        },
+        "script": {
+          "disableHandFloor": true
+        }
+      }
+    ]
+  },
+  "hero": {
+    "vanguard": { "name": "KAZU", "level": 4, "trait": "steady_hand" },
+    "rearguard": { "name": "RINO_REAR", "level": 4, "trait": "obsessive_love" },
+    "attrs": { "moirai": 48, "chaos": 24, "psyche": 46, "void": 18 },
+    "vanguardSkills": ["clarity", "insulation"],
+    "rearguardSkills": ["minor_wish", "heart_read"],
+    "mana": 90,
+    "maxMana": 90,
+    "mental": {
+      "discipline": 64,
+      "composureMax": 100,
+      "resistProbe": 14,
+      "resistPresence": 12,
+      "resistTaunt": 12
+    }
+  },
+  "seats": {
+    "BB": {
+      "vanguard": { "name": "SIA", "level": 4, "trait": "marked_destiny" },
+      "rearguard": { "name": "COTA_REAR", "level": 4, "trait": "dealer_hands_fault" },
+      "ai": "aggressive",
+      "difficulty": "regular",
+      "emotion": "confident",
+      "attrs": { "moirai": 32, "chaos": 56, "psyche": 42, "void": 0 },
+      "skills": ["bad_omen", "clarity", "deal_card"],
+      "mana": 90,
+      "maxMana": 90,
+      "mental": {
+        "discipline": 62,
+        "composureMax": 100,
+        "resistProbe": 12,
+        "resistPresence": 12,
+        "resistTaunt": 12
+      }
+    }
+  }
+}

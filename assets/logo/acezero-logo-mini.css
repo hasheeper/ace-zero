@@ -1,0 +1,130 @@
+.az-logo-mini {
+  --azm-size: 1;
+  --azm-gold-1: #fff1b0;
+  --azm-gold-2: #f2d37a;
+  --azm-gold-3: #c89c3d;
+  --azm-gold-4: #775114;
+  --azm-black: #0a0d12;
+  --azm-metal: linear-gradient(180deg, var(--azm-gold-1) 0%, var(--azm-gold-2) 24%, var(--azm-gold-3) 62%, var(--azm-gold-4) 100%);
+  position: relative;
+  width: calc(42px * var(--azm-size));
+  height: calc(42px * var(--azm-size));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,0.42));
+}
+
+.az-logo-mini-ring,
+.az-logo-mini-ring::before,
+.az-logo-mini-ring::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  content: '';
+}
+
+.az-logo-mini-ring {
+  background: radial-gradient(circle, rgba(12,16,22,0.96) 48%, rgba(6,8,11,1) 100%);
+  border: 1px solid rgba(242, 211, 122, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 18px rgba(200,156,61,0.12);
+}
+
+.az-logo-mini-ring::before {
+  inset: 4px;
+  border: 1px solid rgba(242, 211, 122, 0.35);
+}
+
+.az-logo-mini-ring::after {
+  inset: 9px;
+  border: 1px solid rgba(255, 241, 176, 0.16);
+}
+
+.az-logo-mini-wheel {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  overflow: hidden;
+  opacity: 0.42;
+}
+
+.az-logo-mini-wheel::before,
+.az-logo-mini-wheel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.az-logo-mini-wheel::before {
+  background: repeating-conic-gradient(from 0deg, rgba(242,211,122,0.24) 0deg 1.2deg, transparent 1.2deg 30deg);
+  mask: radial-gradient(transparent 62%, black 64%, black 68%, transparent 70%);
+  -webkit-mask: radial-gradient(transparent 62%, black 64%, black 68%, transparent 70%);
+  animation: azm-spin-cw 14s linear infinite;
+}
+
+.az-logo-mini-wheel::after {
+  background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.06) 48%, transparent 100%);
+  transform: rotate(24deg);
+}
+
+.az-logo-mini-text {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-family: 'Cinzel', serif;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.az-logo-mini-letter {
+  position: relative;
+  font-size: calc(18px * var(--azm-size));
+  letter-spacing: -0.02em;
+}
+
+.az-logo-mini-letter--z {
+  font-size: calc(21px * var(--azm-size));
+  transform: translateY(0.5px);
+}
+
+.az-logo-mini-grad {
+  background: linear-gradient(180deg, var(--azm-gold-1) 0%, var(--azm-gold-2) 24%, var(--azm-gold-3) 58%, var(--azm-gold-4) 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 10px rgba(242,211,122,0.18);
+}
+
+.az-logo-mini-core {
+  position: relative;
+  width: calc(11px * var(--azm-size));
+  height: calc(11px * var(--azm-size));
+  margin: 0 calc(1px * var(--azm-size));
+  border-radius: 50%;
+  border: 1px solid rgba(242, 211, 122, 0.8);
+  box-shadow: 0 0 0 1px rgba(10,13,18,0.85), inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 8px rgba(242,211,122,0.18);
+  background: radial-gradient(circle, rgba(12,16,22,1) 28%, rgba(26,18,6,1) 100%);
+  transform: translateY(0.5px);
+}
+
+.az-logo-mini-core::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(4px * var(--azm-size));
+  height: calc(4px * var(--azm-size));
+  background: var(--azm-metal);
+  transform: translate(-50%, -50%) rotate(45deg);
+  box-shadow: 0 0 6px rgba(255,241,176,0.25);
+}
+
+@keyframes azm-spin-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

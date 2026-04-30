@@ -1,0 +1,324 @@
+/* =========================================
+   乾坤骰 (Dice) — 游戏专属样式优化版
+   高级质感：深邃景深、物理线框、霓虹金光点缀
+   ========================================= */
+
+/* 1. 更深邃有质感的酒红/暗金牌桌绒面 */
+:root {
+  --bg-felt: radial-gradient(ellipse at 50% 35%, #2a1515 0%, #170a0a 45%, #050202 100%);
+}
+
+/* 修复并下移被遮挡的水印 (覆盖 base.css) */
+.watermark {
+  top: auto;
+  bottom: 15%;
+  opacity: 0.03;
+  font-size: 14px;
+}
+
+/* ---- 上区：优化间距与层级 ---- */
+.zone-dealer {
+  padding-top: 15px;
+  z-index: 30;
+}
+
+/* 2. 具有物理凹陷感和边缘高光的骰盅托盘 */
+.cup-area {
+  display: flex;
+  justify-content: center;
+  padding: 35px 40px;
+  background: linear-gradient(180deg, rgba(5,5,5,0.9) 0%, rgba(15,10,10,0.8) 100%);
+  border-radius: 24px;
+  border-top: 1px solid rgba(0,0,0,0.8);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  box-shadow:
+    inset 0 15px 35px rgba(0, 0, 0, 0.95),
+    inset 0 0 10px rgba(0,0,0,0.8),
+    0 4px 15px rgba(0,0,0,0.4);
+  position: relative;
+}
+
+/* 骰盅托盘内侧的微弱金色装饰线 */
+.cup-area::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(207, 181, 59, 0.1);
+  border-radius: 18px;
+  pointer-events: none;
+}
+
+/* 3. 状态提示牌设计 */
+.dice-total {
+  margin-top: -15px;
+  background: #0a0a0c;
+  border: 1px solid rgba(207, 181, 59, 0.3);
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 11px;
+  color: var(--gold-main);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5), inset 0 0 8px rgba(207, 181, 59, 0.1);
+  z-index: 10;
+}
+
+.zone-tag {
+  margin-top: 12px;
+}
+
+/* ---- 中区：减少拥挤感，强化标题 ---- */
+.zone-center {
+  padding-top: 10px;
+  z-index: 20;
+}
+
+.logo-text {
+  font-size: 32px;
+  letter-spacing: 6px;
+  text-shadow: 0 4px 20px rgba(207, 181, 59, 0.4);
+  margin-bottom: 2px;
+}
+
+.payout-text {
+  color: #8a7c5c;
+  letter-spacing: 3px;
+  font-size: 11px;
+}
+
+/* ---- 区域分割装饰线 ---- */
+.bet-separator {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  opacity: 0.6;
+}
+
+.bet-separator .line {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent 0%, rgba(207, 181, 59, 0.4) 50%, transparent 100%);
+}
+
+.bet-separator .text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--gold-dim);
+  letter-spacing: 3px;
+}
+
+/* ---- 下区：下注面板 ---- */
+.bet-panel {
+  width: min(500px, 94vw);
+  position: relative;
+}
+
+.bet-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bet-row {
+  display: flex;
+  width: 100%;
+}
+
+.primary-row {
+  height: 110px;
+  gap: 15px;
+  position: relative;
+}
+
+.secondary-row {
+  height: 60px;
+  gap: 10px;
+}
+
+.bet-option {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.bet-option.hero-btn {
+  flex: 1;
+  background: rgba(10, 10, 12, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(207, 181, 59, 0.3);
+  border-radius: 4px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+}
+
+.bet-option .bet-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.05) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.bet-option .bet-label {
+  font-family: 'Cinzel', serif;
+  font-size: 36px;
+  font-weight: 700;
+  color: #777;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  margin-bottom: 2px;
+  transition: color 0.3s, transform 0.3s;
+}
+
+.bet-option .bet-odds {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 1px;
+}
+
+.bet-option .bet-range {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #555;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 4px;
+  width: 60%;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.bet-vs-divider {
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,0.1), transparent);
+}
+
+.bet-option.sub-btn {
+  flex: 1;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 2px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.sub-btn .bet-label-sm {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.sub-btn .bet-tag {
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.5;
+}
+
+.sub-btn.triple {
+  flex: 1.2;
+  border-color: rgba(192, 57, 43, 0.3);
+  background: rgba(192, 57, 43, 0.05);
+}
+
+/* ---- 交互状态 ---- */
+.bet-option:hover:not(:disabled) {
+  border-color: rgba(207, 181, 59, 0.6);
+  box-shadow: 0 0 15px rgba(207, 181, 59, 0.1);
+}
+
+.bet-option:hover:not(:disabled) .bet-label {
+  color: #ccc;
+}
+
+.bet-option:hover:not(:disabled) .bet-range {
+  color: #999;
+  border-color: rgba(255,255,255,0.3);
+}
+
+.sub-btn.triple:hover:not(:disabled) {
+  border-color: #e74c3c;
+  box-shadow: 0 0 15px rgba(231, 76, 60, 0.15);
+}
+
+.bet-option.hero-btn.selected {
+  background: linear-gradient(145deg, rgba(207,181,59,0.1), rgba(0,0,0,0.8));
+  border: 1px solid var(--gold-main);
+  box-shadow:
+    0 0 25px rgba(207, 181, 59, 0.15),
+    inset 0 0 20px rgba(207, 181, 59, 0.05);
+}
+
+.bet-option.hero-btn.selected .bet-bg {
+  opacity: 1;
+}
+
+.bet-option.hero-btn.selected .bet-label {
+  color: var(--gold-main);
+  transform: scale(1.1);
+  text-shadow: 0 0 15px rgba(207,181,59,0.6);
+}
+
+.bet-option.hero-btn.selected .bet-range {
+  color: var(--gold-main);
+  border-color: var(--gold-main);
+}
+
+.bet-option.hero-btn.selected .bet-odds {
+  color: var(--gold-dim);
+}
+
+.sub-btn.selected {
+  background: rgba(207, 181, 59, 0.15);
+  border: 1px solid var(--gold-main);
+  color: var(--gold-main);
+  box-shadow: 0 0 15px rgba(207, 181, 59, 0.2);
+}
+
+.sub-btn.triple.selected {
+  background: rgba(231, 76, 60, 0.15);
+  border-color: #e74c3c;
+  color: #e74c3c;
+  box-shadow: 0 0 20px rgba(231, 76, 60, 0.3);
+}
+
+.bet-option:disabled {
+  opacity: 0.5;
+  filter: grayscale(0.8);
+  cursor: not-allowed;
+}
+
+/* ---- 响应式优化 ---- */
+@media (max-width: 800px) {
+  .logo-text {
+    font-size: 24px;
+  }
+
+  .cup-area {
+    padding: 25px;
+  }
+
+  .bet-panel {
+    width: 92vw;
+  }
+
+  .primary-row {
+    height: 90px;
+  }
+
+  .bet-option .bet-label {
+    font-size: 28px;
+  }
+
+  .secondary-row {
+    height: 50px;
+  }
+}

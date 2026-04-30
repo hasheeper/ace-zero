@@ -1,0 +1,75 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "包牌和了位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "白牌放铳位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "发牌放铳位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "中牌包牌位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong P6 Daisangen Pao",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "p6-daisangen-pao",
+        "name": "P6 Daisangen Pao",
+        "initialHands": [
+          ["z5", "z5", "z6", "z6", "z7", "z7", "m1", "m1", "m1", "z1", "p1", "p2", "p3"],
+          ["z5", "m2", "m2", "m3", "m3", "p4", "p4", "p5", "p5", "s1", "s1", "s2", "s2"],
+          ["z6", "m4", "m4", "m5", "m5", "p6", "p6", "p7", "p7", "s3", "s3", "s4", "s4"],
+          ["z7", "m6", "m6", "m7", "m7", "p8", "p8", "p9", "p9", "s5", "s5", "s6", "s6"]
+        ],
+        "draws": ["m9", "p1", "s7", "m8", "z1"],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "runtimeSetup": {
+      "deadWallTiles": ["m1", "m2", "m3", "m4", "z3", "p1", "p2", "p3", "p4", "z1", "s1", "s2", "s3", "s4"]
+    },
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "p1" } },
+      { "type": "draw", "payload": { "seat": "right" } },
+      { "type": "discard", "payload": { "seat": "right", "tileCode": "z5" } },
+      { "type": "call", "payload": { "seat": "bottom", "meldString": "z555+" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "p2" } },
+      { "type": "draw", "payload": { "seat": "top" } },
+      { "type": "discard", "payload": { "seat": "top", "tileCode": "z6" } },
+      { "type": "call", "payload": { "seat": "bottom", "meldString": "z666=" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "p3" } },
+      { "type": "draw", "payload": { "seat": "left" } },
+      { "type": "discard", "payload": { "seat": "left", "tileCode": "z7" } },
+      { "type": "call", "payload": { "seat": "bottom", "meldString": "z777-" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "m9" } },
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "hule", "payload": { "seat": "bottom" } }
+    ],
+    "expectedSnapshot": {
+      "phase": "round_end",
+      "roundResultType": "hule",
+      "winnerSeat": "bottom",
+      "baojiaSeat": "left",
+      "baojiaYaku": "大三元",
+      "damanguan": 1,
+      "defen": 48000,
+      "hupaiNamesIncludes": ["大三元"],
+      "scores": {
+        "bottom": 73000,
+        "right": 25000,
+        "top": 25000,
+        "left": -23000
+      }
+    }
+  }
+}

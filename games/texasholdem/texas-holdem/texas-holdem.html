@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Gilded Terminal - Unified Interface</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;700&family=Noto+Serif+SC:wght@900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+  <link href="../../../assets/deck-of-cards/example/example.css" rel="stylesheet">
+  <link href="../../../assets/deck-of-cards/acezero-chips.css" rel="stylesheet">
+  <link href="../../../assets/logo/acezero-logo.css" rel="stylesheet">
+  <link href="texas-holdem.css" rel="stylesheet">
+  <link href="ui/mental-ui.css" rel="stylesheet">
+  <link href="ui/tutorial-ui.css" rel="stylesheet">
+</head>
+<body>
+
+  <!-- 1. 核心游戏桌容器 (View) -->
+  <div id="poker-table">
+    <!-- 座位 -->
+    <div id="seats-container"></div>
+
+    <!-- 中央公共牌/筹码区域 -->
+    <div id="center-layout">
+      <!-- 底池 -->
+      <div id="main-pot-area">
+        <div id="pot-clusters"></div>
+        <div class="pot-info-hover">
+          <div class="pot-label">TOTAL POT</div>
+          <div class="pot-val-hover"><span id="pot-amount">0</span></div>
+        </div>
+      </div>
+      <!-- 公共牌 -->
+      <div class="card-container" id="community-cards"></div>
+      <!-- 牌堆 -->
+      <div id="deck-wrapper" class="deck-inline">
+        <div id="deck-mount"></div>
+        <div class="deck-label">DECK</div>
+      </div>
+    </div>
+
+    <!-- 屏幕中央提示文字 -->
+    <div class="terminal-text" id="game-message">SYSTEM READY</div>
+  </div>
+
+
+  <!-- 2. 悬浮的技能信息与反馈层 (Overlay Layers) -->
+  <div id="floating-layers">
+    <div id="raise-backdrop" style="display:none;"></div>
+    <div id="raise-controls" style="display:none;">
+      <div class="raise-selector-inner">
+        <div class="raise-selector-header">
+          <div class="raise-selector-title">BET SIZING</div>
+          <button id="btn-cancel-raise" class="raise-close-btn" aria-label="关闭加注面板">✕</button>
+        </div>
+        <div class="raise-summary-row">
+          <div class="raise-stat-box">
+            <div class="raise-stat-label">TO CALL</div>
+            <div id="raise-to-call-display" class="raise-stat-value">0</div>
+          </div>
+          <div class="raise-amount-box">
+            <div class="raise-stat-label">AMOUNT</div>
+            <div id="raise-amount-display" class="raise-amount-value">1金</div>
+          </div>
+        </div>
+        <div class="raise-presets">
+          <button type="button" class="raise-preset-btn" data-raise-preset="min">MIN</button>
+          <button type="button" class="raise-preset-btn" data-raise-preset="half">1/2</button>
+          <button type="button" class="raise-preset-btn" data-raise-preset="pot">POT</button>
+          <button type="button" class="raise-preset-btn" data-raise-preset="max">MAX</button>
+        </div>
+        <div id="raise-slider-shell" class="raise-slider-shell">
+          <div class="raise-slider-ends">
+            <span id="raise-min-display">0</span>
+            <span id="raise-max-display">0</span>
+          </div>
+          <div class="raise-slider-row">
+            <button type="button" id="btn-raise-minus" class="raise-adjust-btn" aria-label="减少加注额度">−</button>
+            <input type="range" id="raise-slider" min="0" max="1000" step="10">
+            <button type="button" id="btn-raise-plus" class="raise-adjust-btn" aria-label="增加加注额度">+</button>
+          </div>
+        </div>
+        <div class="raise-selector-actions">
+          <button id="btn-confirm-raise" class="btn-cmd btn-confirm-raise">OK</button>
+        </div>
+      </div>
+    </div>
+    <!-- 先知预览面板 (浮动在加注区上方) -->
+    <div id="foresight-panel" style="display:none;"></div>
+    <!-- 发牌时力量对抗展示（由 JS 动态填充） -->
+    <div id="force-pk-overlay" style="display:none;"></div>
+  </div>
+
+
+  <!-- 3. Grimoire 技能抽屉 (Slide-up Drawer) -->
+  <div id="grimoire-player">
+    <div class="deck-header">
+      <span>/// TACTICAL INVENTORY</span>
+      <span id="moz-status" class="moz-status ready">魔运就绪</span>
+    </div>
+
+    <div class="deck-container">
+      <!-- Force Balance Bar (可选显示) -->
+      <div id="force-balance" style="display:none;">
+        <div class="force-ally"></div>
+        <div class="force-enemy"></div>
+      </div>
+
+      <!-- 技能卡牌面板 (由 skill-ui.js 动态填充) -->
+      <div id="skill-panel"></div>
+    </div>
+  </div>
+
+
+  <!-- 4. 底部操作仪表盘 (Dashboard) -->
+  <div id="game-dashboard">
+
+    <!-- = [ LEFT: Pylon / Info ] ======================== -->
+    <div class="pylon">
+      <div class="pylon-label">CHIPS TO CALL</div>
+      <div class="pylon-val"><span id="to-call-amount">0</span></div>
+    </div>
+
+    <!-- = [ CENTER: Command Deck ] ======================== -->
+    <div class="command-deck">
+      <!-- 主按钮栏 (游戏中显示) -->
+      <div id="action-row" class="action-row">
+        <button id="btn-fold" class="btn-cmd" disabled>FOLD</button>
+        <button id="btn-check-call" class="btn-cmd" disabled>CHECK</button>
+        <button id="btn-raise" class="btn-cmd btn-gold" disabled>RAISE</button>
+        <button id="btn-mental-toggle" class="btn-cmd btn-mental-main">
+          <div class="mental-label">MENTAL</div>
+          <div id="mental-equity-display" class="mental-equity">--</div>
+        </button>
+      </div>
+
+      <!-- 心理战全息战术面板 -->
+      <div id="mental-skills" style="display:none;">
+        <div class="mental-header">
+          <div class="mental-header-title">SYSTEM // NEURAL OVERRIDE</div>
+          <div class="mental-header-line"></div>
+        </div>
+        <div class="mental-grid">
+          <button id="btn-presence" class="btn-mental node-presence">
+            <span class="bg-icon-layer bg-icon-mask" style="-webkit-mask-image:url('../../../assets/svg/gaze.svg'); mask-image:url('../../../assets/svg/gaze.svg');"></span>
+            <div class="mental-text-group">
+              <div class="mental-title">压场</div>
+              <div class="mental-sub">PRESENCE</div>
+            </div>
+          </button>
+          <button id="btn-taunt" class="btn-mental node-taunt">
+            <span class="bg-icon-layer bg-icon-mask" style="-webkit-mask-image:url('../../../assets/svg/shouting.svg'); mask-image:url('../../../assets/svg/shouting.svg');"></span>
+            <div class="mental-text-group">
+              <div class="mental-title">挑衅</div>
+              <div class="mental-sub">TAUNT</div>
+            </div>
+          </button>
+          <button id="btn-probe" class="btn-mental node-probe">
+            <span class="bg-icon-layer bg-icon-mask" style="-webkit-mask-image:url('../../../assets/svg/mad-scientist.svg'); mask-image:url('../../../assets/svg/mad-scientist.svg');"></span>
+            <div class="mental-text-group">
+              <div class="mental-title">试探</div>
+              <div class="mental-sub">PROBE</div>
+            </div>
+          </button>
+          <button id="btn-center-self" class="btn-mental node-center">
+            <span class="bg-icon-layer bg-icon-mask" style="-webkit-mask-image:url('../../../assets/svg/coma.svg'); mask-image:url('../../../assets/svg/coma.svg');"></span>
+            <div class="mental-text-group">
+              <div class="mental-title">定神</div>
+              <div class="mental-sub">CENTER</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- 系统控制栏 (idle 时显示) -->
+      <div id="idle-row" class="action-row">
+        <button id="btn-toggle-log" class="btn-cmd">LOG</button>
+        <button id="btn-deal" class="btn-cmd btn-gold">NEW HAND</button>
+      </div>
+      <button id="btn-copy-log" class="btn-cmd btn-mini" style="display:none;">CPY</button>
+    </div>
+
+    <!-- = [ RIGHT: Grimoire Key + Mana ] ======================== -->
+    <div class="magic-dock">
+      <div id="magic-key">
+        <div class="key-content">
+          <svg class="key-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l10 6-10 14L2 8z"/></svg>
+          <div class="key-lbl">GRIMOIRE</div>
+        </div>
+        <div class="mp-module">
+          <div id="mana-text" class="mp-nums">MP 100/100</div>
+          <div class="mp-slot">
+            <div id="mana-bar" class="mp-fluid mana-fill high"></div>
+          </div>
+        </div>
+      </div>
+      <!-- 反噬指示器 -->
+      <div id="backlash-indicator" style="display:none;"></div>
+    </div>
+
+  </div>
+
+
+  <!-- 日志弹窗 (隐藏状态，点击 LOG 显示) -->
+  <div id="game-log-panel" style="display:none;">
+      <div class="log-header">BATTLE LOG</div>
+      <pre id="game-log-content"></pre>
+  </div>
+
+  <!-- 5. 开局 Splash (首次加载 / idle 时居中大按钮) -->
+  <div id="splash-overlay">
+    <div class="splash-inner">
+      <div class="th-splash-logo" data-acezero-logo></div>
+      <div class="splash-sub">/// TERMINAL V.3.2</div>
+      <button id="splash-deal" class="btn-cmd btn-gold splash-btn">NEW HAND</button>
+    </div>
+  </div>
+
+  <!-- 6. 结算弹窗 (手牌结束后弹出) -->
+  <div id="endhand-modal" style="display:none;">
+    <div class="endhand-inner">
+      <div class="endhand-title" id="endhand-title">HAND COMPLETE</div>
+      <div class="endhand-result" id="endhand-result"></div>
+      <div id="endhand-reveal-wrap" class="endhand-reveal-wrap" style="display:none;">
+        <div class="endhand-reveal-title">REVEAL HANDS</div>
+        <div id="endhand-reveal-hint" class="endhand-reveal-hint"></div>
+        <div id="endhand-reveal-list" class="endhand-reveal-list"></div>
+      </div>
+      <div class="endhand-actions">
+        <button id="endhand-log" class="btn-cmd">COPY LOG</button>
+        <button id="endhand-continue" class="btn-cmd btn-gold">CONTINUE</button>
+        <button id="endhand-restart" class="btn-cmd">RESTART</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debug 按钮 (隐藏) -->
+  <div id="debug-panel" style="visibility:hidden; position:absolute;">
+     <button id="btn-force-next">Force Next</button>
+  </div>
+
+
+  <!-- 第三方库（全局挂载，非 ES Module） -->
+  <script src="../../../assets/deck-of-cards/dist/deck.js"></script>
+  <script src="../pokersolver/pokersolver.js"></script>
+
+  <!-- 核心引擎（IIFE，逐步迁移） -->
+  <script src="../../../assets/deck-of-cards/acezero-currency.js"></script>
+  <script src="../../../assets/deck-of-cards/acezero-chips.js"></script>
+  <script src="core/equity-estimator.js"></script>
+  <script src="core/runtime/role-runtime.js"></script>
+  <script src="core/runtime/runtime-flow.js"></script>
+  <script src="core/runtime/force-runtime.js"></script>
+  <script src="core/runtime/asset-ledger.js"></script>
+  <script src="core/runtime/npc-role-director.js"></script>
+  <script src="core/runtime/runtime-module-registry.js"></script>
+  <script src="core/runtime/builtin-role-modules.js"></script>
+  <script src="core/poker-ai.js"></script>
+  <script src="utils/game-logger.js"></script>
+  <script src="core/skill-system.js"></script>
+  <script src="core/mental-pressure.js"></script>
+  <script src="core/monte-of-zero.js"></script>
+  <script src="ui/skill-ui.js"></script>
+  <script src="ui/mental-ui.js"></script>
+  <script src="ui/tutorial-ui.js"></script>
+  <script src="ui/tutorial-content.js"></script>
+  <script src="ui/tutorial-controller.js"></script>
+
+  <!-- RPG 系统层（ES Module） -->
+  <script type="module" src="rpg/rpg-init.js"></script>
+
+  <!-- 游戏主逻辑（IIFE，逐步迁移） -->
+  <script src="../../../assets/logo/acezero-logo.js"></script>
+  <script src="texas-holdem.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "天和位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "下家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "对家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "上家", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong P3 Tenhou",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "p3-tenhou",
+        "name": "P3 Tenhou",
+        "initialHands": [
+          ["m1", "m2", "m3", "p1", "p2", "p3", "s1", "s2", "s3", "z2", "z2", "z3", "z3"],
+          ["m4", "m5", "m6", "p4", "p5", "p6", "s4", "s5", "s6", "z1", "z1", "z4", "z4"],
+          ["m7", "m8", "m9", "p7", "p8", "p9", "s7", "s8", "s9", "z5", "z5", "z6", "z6"],
+          ["m1", "m4", "m7", "p1", "p4", "p7", "s1", "s4", "s7", "z1", "z3", "z5", "z7"]
+        ],
+        "draws": [],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "runtimeSetup": {
+      "deadWallTiles": ["m1", "m2", "m3", "m4", "z4", "p1", "p2", "p3", "p4", "z1", "s1", "s2", "s3", "s4"],
+      "liveWallTiles": ["z2", "m8"]
+    },
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "hule", "payload": { "seat": "bottom" } }
+    ],
+    "expectedSnapshot": {
+      "phase": "round_end",
+      "roundResultType": "hule",
+      "winnerSeat": "bottom",
+      "fromSeat": null,
+      "haidi": 0,
+      "tianhu": 1,
+      "damanguan": 1,
+      "defen": 48000,
+      "hupaiNamesIncludes": ["天和"],
+      "scores": {
+        "bottom": 73000,
+        "right": 9000,
+        "top": 9000,
+        "left": 9000
+      }
+    }
+  }
+}

@@ -1,0 +1,102 @@
+/* =========================================
+   dice-3d.css — 可复用 3D 实体骰子组件
+   用法：每颗骰子 .cube 内含 6 个 .cube__face--N,
+        每面用 .pip + inline grid-area 排列点数。
+        JS 通过设置 .cube 的 transform rotateX/Y 来选面。
+   ========================================= */
+
+/* ---- 变量 (可被游戏CSS覆盖) ---- */
+:root {
+  --die-size: 80px;
+  --pip-size: 13px;
+  --dice-glow: rgba(207, 181, 59, 0.4);
+}
+
+/* ---- 3D 场景容器 ---- */
+.dice-scene {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 50px;
+  perspective: 1600px;
+}
+
+/* ---- 立方体骰子 ---- */
+.cube {
+  width: var(--die-size);
+  height: var(--die-size);
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateX(0deg) rotateY(0deg);
+  /* 弹性缓动，体现实心物体的重量感 */
+  transition: transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1.05);
+}
+
+/* ---- 骰面：哑光黑漆材质 ---- */
+.cube__face {
+  position: absolute;
+  width: var(--die-size);
+  height: var(--die-size);
+  /* 哑光黑漆渐变 */
+  background: linear-gradient(135deg, #2c2c2c 0%, #111111 50%, #050505 100%);
+  /* 倒角反光 */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* 微弱金光边 */
+  box-shadow: inset 0 0 0 1px rgba(207, 181, 59, 0.15);
+  border-radius: 14px;
+  /* 3x3 Pips Grid */
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  padding: 12px;
+  box-sizing: border-box;
+  /* 不透明物体必须隐藏背面 */
+  backface-visibility: hidden;
+}
+
+/* ---- 空间构建 (translateZ = die-size / 2) ---- */
+.cube__face--1 { transform: rotateY(  0deg) translateZ(calc(var(--die-size) / 2)); }
+.cube__face--6 { transform: rotateY(180deg) translateZ(calc(var(--die-size) / 2)); }
+.cube__face--2 { transform: rotateY( 90deg) translateZ(calc(var(--die-size) / 2)); }
+.cube__face--5 { transform: rotateY(-90deg) translateZ(calc(var(--die-size) / 2)); }
+.cube__face--3 { transform: rotateX( 90deg) translateZ(calc(var(--die-size) / 2)); }
+.cube__face--4 { transform: rotateX(-90deg) translateZ(calc(var(--die-size) / 2)); }
+
+/* ---- 金属质感点数 (Pips) ---- */
+.cube .pip {
+  width: var(--pip-size);
+  height: var(--pip-size);
+  border-radius: 50%;
+  align-self: center;
+  justify-self: center;
+  /* 黄金流沙质感 */
+  background: radial-gradient(circle at 30% 30%, #ffd700 0%, #cfb53b 40%, #8a7826 100%);
+  /* 凹陷阴影 */
+  box-shadow:
+    inset 1px 1px 3px rgba(0, 0, 0, 0.9),
+    0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+/* 1 点 (Ace) — 红宝石质感，稍大 */
+.cube__face--1 .pip {
+  width: 18px;
+  height: 18px;
+  background: radial-gradient(circle at 30% 30%, #e74c3c 0%, #900 60%, #400 100%);
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 10px rgba(231, 76, 60, 0.4);
+}
+
+/* 快速旋转模式（JS 动画阶段用短 transition） */
+.cube.rolling {
+  transition: transform 0.15s linear;
+}
+
+/* ---- 响应式 ---- */
+@media (max-width: 800px) {
+  :root {
+    --die-size: 60px;
+    --pip-size: 10px;
+  }
+  .dice-scene { gap: 24px; }
+  .cube__face { padding: 8px; border-radius: 10px; }
+  .cube__face--1 .pip { width: 14px; height: 14px; }
+}

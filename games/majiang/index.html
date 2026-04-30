@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>四人麻将 · 黑金 SVG 实体牌桌</title>
+  <link rel="stylesheet" href="./frontend/styles/app.css">
+</head>
+<body id="app" class="hide-zones">
+
+
+  <div id="debug-panel-root"></div>
+
+  <aside class="coach-card" id="coach-card" aria-live="polite">
+    <div class="coach-card-head">
+      <div class="coach-card-head-copy">
+        <div class="coach-card-kicker" id="coach-card-kicker">Coach</div>
+        <div class="coach-card-mode" id="coach-card-mode">摸打建议</div>
+      </div>
+      <div class="coach-card-head-actions">
+        <div class="coach-card-status" id="coach-card-status">待命</div>
+        <button class="floating-card-close" id="coach-card-close" type="button" aria-label="关闭教练建议">×</button>
+      </div>
+    </div>
+    <div class="coach-card-meta" id="coach-card-meta">等待建议接入</div>
+    <div class="coach-card-summary" id="coach-card-summary">当前还没有教练建议。</div>
+    <div class="coach-card-recommend" id="coach-card-recommend">暂无动作建议</div>
+    <div class="coach-card-reason-summary" id="coach-card-reason-summary">当前还没有解释理由。</div>
+    <div class="coach-card-reasons" id="coach-card-reasons"></div>
+  </aside>
+
+  <aside class="review-card" id="review-card" aria-live="polite">
+    <div class="coach-card-head">
+      <div class="coach-card-head-copy">
+        <div class="coach-card-kicker" id="review-card-kicker">Review</div>
+        <div class="coach-card-mode" id="review-card-mode">行动复盘</div>
+      </div>
+      <div class="coach-card-head-actions">
+        <div class="coach-card-status" id="review-card-status">待命</div>
+        <button class="floating-card-close" id="review-card-close" type="button" aria-label="关闭复盘建议">×</button>
+      </div>
+    </div>
+    <div class="coach-card-meta" id="review-card-meta">等待复盘接入</div>
+    <div class="coach-card-summary" id="review-card-summary">当前还没有复盘。</div>
+    <div class="coach-card-recommend" id="review-card-recommend">暂无复盘建议</div>
+    <div class="coach-card-reason-summary" id="review-card-reason-summary">当前还没有复盘说明。</div>
+    <div class="coach-card-reasons" id="review-card-reasons"></div>
+  </aside>
+
+  <aside class="analysis-card" id="analysis-card" aria-live="polite">
+    <div class="analysis-card-head">
+      <div class="analysis-card-kicker">Analysis</div>
+      <div class="coach-card-head-actions">
+        <div class="analysis-card-status" id="analysis-card-status">待命</div>
+        <button class="floating-card-close" id="analysis-card-close" type="button" aria-label="关闭分析浮层">×</button>
+      </div>
+    </div>
+    <div class="analysis-card-meta" id="analysis-card-meta">等待分析接入</div>
+    <div class="analysis-card-summary" id="analysis-card-summary">这个版块会专门展示参考一致率、善手恶手和分歧分布。</div>
+    <div class="analysis-card-metrics" id="analysis-card-metrics">暂无分析数据</div>
+    <div class="analysis-card-focus" id="analysis-card-focus">暂无重点问题</div>
+  </aside>
+
+  <div class="ui-actions-layer without-hand" id="ui-actions-layer">
+    <div class="debug-actions-wrap" id="debug-actions-wrap"></div>
+  </div>
+
+  <div class="table-interaction-proxy-layer" id="table-interaction-proxy-layer" aria-hidden="true"></div>
+  <div class="ui-debug-layer" id="ui-debug-layer">
+    <div class="debug-hand-bar">
+      <div class="debug-hand-layout">
+        <div class="debug-hand-shell">
+          <div class="debug-hand-status-layer" id="debug-hand-status-layer"></div>
+          <div class="debug-hand-group" id="debug-hand-tiles"></div>
+        </div>
+        <div class="debug-meld-shell">
+          <div class="debug-own-meld" id="debug-own-meld"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cutin-layer" id="cutin-layer">
+    <div class="cutin-backdrop"></div>
+    <div class="cutin-line" id="cutin-line"></div>
+    <div class="cutin-ink" id="cutin-ink"></div>
+    <div class="cutin-text-group" id="cutin-text-group">
+      <div class="cutin-watermark" id="cutin-watermark">东一局</div>
+      <div class="cutin-text" id="cutin-text">碰</div>
+    </div>
+  </div>
+
+  <div class="scene">
+    <div class="board-container">
+      <div class="oriental-base" id="oriental-base">
+        <div class="wind-corner corner-tl" id="wind-left">西</div>
+        <div class="wind-corner corner-tr" id="wind-top">北</div>
+        <div class="wind-corner corner-bl" id="wind-bottom">東</div>
+        <div class="wind-corner corner-br" id="wind-right">南</div>
+        <div class="octagon-wrapper">
+          <div class="octagon-border">
+            <div class="octagon-inner">
+              <div class="edge-score score-top" id="score-top">32,100<div class="turn-line"></div></div>
+              <div class="edge-score score-left" id="score-left">19,500<div class="turn-line"></div></div>
+              <div class="edge-score score-right" id="score-right">24,000<div class="turn-line"></div></div>
+              <div class="edge-score score-bottom" id="score-bottom">25,000<div class="turn-line"></div></div>
+              <div class="center-content">
+                <div class="module-wrap info-wrap">
+                  <div class="module-box info-box">
+                    <div class="info-round"><span id="info-round-text">東一</span><span class="round-char">局</span></div>
+                    <div class="tenbou-row" id="info-tenbou-row">
+                      <div class="tenbou-item"><div class="stick"><div class="dot-100"></div></div><span class="tenbou-num" id="info-honba-count">0</span></div>
+                      <div class="tenbou-item" id="info-riichi-item"><div class="stick"><div class="dot-1000"></div></div><span class="tenbou-num" id="info-riichi-count">2</span></div>
+                    </div>
+                    <div class="info-divider" id="info-divider"></div>
+                    <div class="info-remain"><span class="remain-lbl">余</span><span class="remain-num" id="info-remain-count">64</span></div>
+                  </div>
+                </div>
+                <div class="module-wrap dora-wrap" id="center-dora-wrap">
+                  <div class="module-box dora-box">
+                    <div class="dora-tier" id="center-dora-tier">
+                      <div class="dora-slot open"><img class="dora-tile" src="../../assets/riichi-mahjong-tiles/Regular/Man5.svg" alt="五万"></div>
+                      <div class="dora-slot"></div><div class="dora-slot"></div><div class="dora-slot"></div><div class="dora-slot"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="player-wrapper seat-bottom" id="seat-bottom">
+        <div class="zone river has-tiles">
+          <div class="river-bottom" id="bottom-river"></div>
+        </div>
+        <div class="riichi-stick-zone is-hidden" id="bottom-riichi-stick"></div>
+        <div class="zone kita has-tiles">
+          <div class="kita-strip" id="bottom-kita"></div>
+        </div>
+        <div class="zone hand has-tiles">
+          <div class="hand-bottom" id="bottom-hand"></div>
+        </div>
+        <div class="zone meld has-tiles">
+          <div class="meld-bottom" id="bottom-meld"></div>
+        </div>
+        <div class="nameplate"><span class="p-title" id="bottom-nameplate-title">雀士</span> <span id="bottom-nameplate-name" style="font-weight:700">南宫</span></div>
+      </div>
+
+      <div class="player-wrapper seat-right" id="seat-right"></div>
+
+      <div class="player-wrapper seat-top" id="seat-top"></div>
+
+      <div class="player-wrapper seat-left" id="seat-left"></div>
+
+    </div>
+  </div>
+
+  <script src="./frontend/scripts/app-entry.js"></script>
+</body>
+</html>

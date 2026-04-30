@@ -1,0 +1,71 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "ruleOverrides": {
+    "ノーテン罰あり": false,
+    "連荘方式": 2
+  },
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "庄家听牌位", "human": true, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "right", "title": "测试者", "name": "非庄听牌位", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "top", "title": "测试者", "name": "未听牌A", "human": false, "ai": { "enabled": false, "difficulty": "beta" } },
+    { "seat": "left", "title": "测试者", "name": "未听牌B", "human": false, "ai": { "enabled": false, "difficulty": "beta" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong Phase B No Noten Penalty",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "phaseb-exhaustive-noten-penalty-off",
+        "name": "Phase B No Noten Penalty",
+        "initialHands": [
+          ["m1", "m2", "m3", "p1", "p2", "p3", "s1", "s2", "s3", "z2", "z2", "z3", "z3"],
+          ["m4", "m5", "m6", "p4", "p5", "p6", "s4", "s5", "s6", "z1", "z1", "z1", "z2"],
+          ["m7", "m8", "m9", "p7", "p8", "p9", "s7", "s8", "s9", "z5", "z5", "z6", "z7"],
+          ["m1", "m4", "m7", "p1", "p4", "p7", "s1", "s4", "s7", "z1", "z3", "z5", "z7"]
+        ],
+        "draws": [],
+        "gangDraws": []
+      }
+    }
+  },
+  "testing": {
+    "runtimeSetup": {
+      "liveWallTiles": ["m5", "m6", "p6", "s6"]
+    },
+    "fastForwardActions": [
+      { "type": "draw", "payload": { "seat": "bottom" } },
+      { "type": "discard", "payload": { "seat": "bottom", "tileCode": "m5" } },
+      { "type": "draw", "payload": { "seat": "right" } },
+      { "type": "discard", "payload": { "seat": "right", "tileCode": "m6" } },
+      { "type": "draw", "payload": { "seat": "top" } },
+      { "type": "discard", "payload": { "seat": "top", "tileCode": "p6" } },
+      { "type": "draw", "payload": { "seat": "left" } },
+      { "type": "discard", "payload": { "seat": "left", "tileCode": "s6" } }
+    ],
+    "expectedSnapshot": {
+      "phase": "round_end",
+      "roundResultType": "draw",
+      "roundResultReason": "荒牌平局",
+      "tenpaiSeats": ["bottom"],
+      "notenSeats": ["right", "top", "left"],
+      "revealedHands": ["m123p123s123z2233", "", "", ""],
+      "fenpei": [0, 0, 0, 0],
+      "scores": {
+        "bottom": 25000,
+        "right": 25000,
+        "top": 25000,
+        "left": 25000
+      },
+      "dealerContinues": true
+    }
+  }
+}

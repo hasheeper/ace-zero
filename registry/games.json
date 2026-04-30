@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "defaultGame": "texas-holdem",
+  "routes": {
+    "texas-holdem": {
+      "id": "texas-holdem",
+      "name": "Texas Hold'em",
+      "type": "card-game",
+      "status": "game-container",
+      "entry": "./modules/texas-holdem/index.html",
+      "gameEntry": "../../games/texasholdem/texas-holdem/texas-holdem.html",
+      "aliases": ["texas", "holdem"]
+    },
+    "blackjack": {
+      "id": "blackjack",
+      "name": "Blackjack",
+      "type": "mini-game",
+      "status": "game-container",
+      "entry": "./modules/blackjack/index.html",
+      "gameEntry": "../../games/blackjack/blackjack.html",
+      "aliases": ["21"]
+    },
+    "dice": {
+      "id": "dice",
+      "name": "Dice",
+      "type": "mini-game",
+      "status": "game-container",
+      "entry": "./modules/dice/index.html",
+      "gameEntry": "../../games/dice-game/dice.html",
+      "aliases": ["骰", "乾坤骰"]
+    },
+    "dragon-tiger": {
+      "id": "dragon-tiger",
+      "name": "Dragon Tiger",
+      "type": "mini-game",
+      "status": "game-container",
+      "entry": "./modules/dragon-tiger/index.html",
+      "gameEntry": "../../games/dragon-tiger/dragon-tiger.html",
+      "aliases": ["dragon_tiger", "龙虎", "龙凤决"]
+    },
+    "mahjong": {
+      "id": "mahjong",
+      "name": "Mahjong",
+      "type": "engine",
+      "status": "game-container",
+      "entry": "./modules/mahjong/index.html",
+      "gameEntry": "../../games/majiang/index.html",
+      "aliases": ["majiang"]
+    },
+    "mahjong-analysis": {
+      "id": "mahjong-analysis",
+      "name": "Mahjong Analysis",
+      "type": "analysis",
+      "status": "game-container",
+      "entry": "./modules/mahjong-analysis/index.html",
+      "gameEntry": "../../games/majiang/analysis.html",
+      "aliases": ["majiang-analysis"]
+    },
+    "sanma": {
+      "id": "sanma",
+      "name": "Mahjong Sanma",
+      "type": "engine",
+      "status": "game-container",
+      "entry": "./modules/mahjong-sanma/index.html",
+      "gameEntry": "../../games/majiang/index.html?config=./game-config.sanma.json",
+      "aliases": ["majiang-sanma"]
+    }
+  }
+}
