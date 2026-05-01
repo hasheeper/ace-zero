@@ -7,3 +7,5 @@ coverage/
 .tmp/
 *.log
 __pycache__/
+!assets/deck-of-cards/dist/
+!assets/deck-of-cards/dist/**

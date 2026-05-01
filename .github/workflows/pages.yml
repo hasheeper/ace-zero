@@ -48,16 +48,25 @@ jobs:
       - name: Check required static entries
         run: |
           set -euo pipefail
-          test -f index.html
-          test -f registry/apps.json
-          test -f registry/games.json
-          test -f apps/game/index.html
-          test -f apps/tutorial/index.html
-          test -f apps/dashboard/index.html
-          test -f apps/act-result/index.html
-          test -f apps/st-bridge/bridge.js
-          test -f assets/riichi-mahjong-tiles/Regular/Man5.svg
-          test -f assets/deck-of-cards/dist/deck.js
+          required_files=(
+            index.html
+            registry/apps.json
+            registry/games.json
+            apps/game/index.html
+            apps/tutorial/index.html
+            apps/dashboard/index.html
+            apps/act-result/index.html
+            apps/st-bridge/bridge.js
+            assets/riichi-mahjong-tiles/Regular/Man5.svg
+            assets/deck-of-cards/dist/deck.js
+          )
+          for file in "${required_files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "::error::Missing required static file: $file"
+              exit 1
+            fi
+            echo "OK $file"
+          done
 
   deploy:
     name: Deploy
