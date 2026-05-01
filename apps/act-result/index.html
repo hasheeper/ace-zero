@@ -1504,19 +1504,15 @@
       function applyPayload(payload) {
         runtimePayload = payload && typeof payload === 'object' ? payload : null;
         render(getPayload());
-        reportContentSize();
+        scheduleContentReports();
       }
 
       function measureContentHeight() {
         var widget = document.querySelector('.mech-widget');
-        var rect = widget ? widget.getBoundingClientRect() : null;
-        var body = document.body;
-        var html = document.documentElement;
-        return Math.ceil(Math.max(
-          rect ? rect.bottom : 0,
-          body ? body.scrollHeight : 0,
-          html ? html.scrollHeight : 0
-        ));
+        if (!widget) return 400;
+        var rect = widget.getBoundingClientRect();
+        var height = Math.max(widget.offsetHeight || 0, rect ? rect.height : 0);
+        return Math.ceil(height);
       }
 
       function reportContentSize() {
@@ -1533,6 +1529,13 @@
         });
       }
 
+      function scheduleContentReports() {
+        reportContentSize();
+        setTimeout(reportContentSize, 80);
+        setTimeout(reportContentSize, 240);
+        setTimeout(reportContentSize, 600);
+      }
+
       window.addEventListener('message', function (event) {
         var msg = event && event.data;
         if (!msg || msg.type !== 'acezero-act-result-data') return;
@@ -1540,11 +1543,12 @@
       });
 
       render(getPayload());
-      reportContentSize();
+      scheduleContentReports();
       window.addEventListener('resize', syncSummaryMarquee);
       window.addEventListener('resize', reportContentSize);
       if (window.ResizeObserver) {
-        new ResizeObserver(reportContentSize).observe(document.body);
+        var observedWidget = document.querySelector('.mech-widget');
+        new ResizeObserver(reportContentSize).observe(observedWidget || document.body);
       }
       try {
         if (window.parent && window.parent !== window) {
