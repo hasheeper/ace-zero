@@ -1,0 +1,40 @@
+{
+  "type": "phase_advance",
+  "worldClock": {
+    "day": 1,
+    "phaseIndex": 0
+  },
+  "fromWorldLocation": {
+    "layer": "THE_STREET",
+    "layerIndex": 1,
+    "site": "下街层"
+  },
+  "worldLocation": {
+    "layer": "THE_EXCHANGE",
+    "layerIndex": 2,
+    "site": "中市短焦点"
+  },
+  "worldLayerShifted": true,
+  "fromNodeIndex": 0,
+  "toNodeIndex": 1,
+  "toPhaseIndex": 1,
+  "advancedPhases": 1,
+  "summary": "一段 advanced. 一段 advanced.",
+  "fundsDelta": 12,
+  "assetsDelta": 0,
+  "debtDelta": 0,
+  "majorDebtDelta": 0,
+  "manaDelta": {
+    "红章": 1
+  },
+  "limitedDelta": {
+    "combat": 1,
+    "contract": 0,
+    "rest": 0,
+    "event": 0
+  },
+  "reserveDelta": {},
+  "needsRouteChoice": false,
+  "routeOptions": [],
+  "routeOptionLabels": {}
+}
