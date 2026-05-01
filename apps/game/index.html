@@ -47,17 +47,21 @@
       margin: 0;
       overflow: hidden;
       background: #0b0c10;
+      isolation: isolate;
     }
 
     /* ============================================
        游戏 iframe: 填满 ui-scale 容器
        ============================================ */
     #game-frame {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       border: 0;
       display: block;
       background: transparent;
+      z-index: 1;
     }
 
     /* ============================================
@@ -72,7 +76,7 @@
       justify-content: center;
       align-items: center;
       background: radial-gradient(ellipse at 50% 58%, rgba(18, 16, 10, 0.98) 0%, rgba(0,0,0,0.995) 70%);
-      z-index: 100;
+      z-index: 1000;
       transition: opacity 0.5s ease;
       overflow: hidden;
     }
@@ -287,6 +291,20 @@
       let _configSource = null; // 'injected' | 'static'
       let _configSentToGame = false;
       let _frameReady = false;
+      let _loadingFallbackTimer = null;
+
+      function hideLoadingOverlay() {
+        if (_loadingFallbackTimer) {
+          clearTimeout(_loadingFallbackTimer);
+          _loadingFallbackTimer = null;
+        }
+        overlay.classList.add('hidden');
+      }
+
+      function waitForGameReadyFallback() {
+        if (_loadingFallbackTimer) clearTimeout(_loadingFallbackTimer);
+        _loadingFallbackTimer = setTimeout(hideLoadingOverlay, 6000);
+      }
 
       function tutorialPathCandidates(path) {
         const raw = String(path || '').trim();
@@ -696,7 +714,7 @@
         frame.addEventListener('load', function onReload() {
           _frameReady = true;
           sendConfigToGame(_currentConfig, _configSource);
-          overlay.classList.add('hidden');
+          waitForGameReadyFallback();
           frame.removeEventListener('load', onReload);
         });
       }
@@ -721,7 +739,7 @@
           _frameReady = true;
           // 始终发送最新的 _currentConfig（可能在 fetch 期间被注入配置更新）
           sendConfigToGame(_currentConfig, _configSource);
-          overlay.classList.add('hidden');
+          waitForGameReadyFallback();
           frame.removeEventListener('load', onLoad);
         });
       }
@@ -730,6 +748,11 @@
       window.addEventListener('message', async (event) => {
         const msg = event?.data;
         if (!msg) return;
+
+        if (msg.type === 'acezero-game-ready') {
+          hideLoadingOverlay();
+          return;
+        }
 
         if (msg.type === 'acezero-data-request') {
           const config = await resolveConfig();

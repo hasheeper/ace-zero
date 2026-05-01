@@ -78,11 +78,11 @@ body {
 #game-stage {
   position: absolute;
   left: 50%;
-  top: 50%;
+  bottom: 0;
   width: 1100px;
   height: 850px;
-  transform: translate(-50%, -50%) scale(var(--game-stage-scale, 1));
-  transform-origin: center center;
+  transform: translateX(-50%) scale(var(--game-stage-scale, 1));
+  transform-origin: bottom center;
   overflow: visible;
 }
 
@@ -4348,14 +4348,20 @@ body.raise-open #btn-raise {
    11. Splash Overlay (Game Start)
 ========================================================= */
 #splash-overlay {
-  position: fixed;
-  inset: 0;
+  position: absolute;
+  inset: -140px;
+  width: auto;
+  height: auto;
   z-index: 2000;
-  background: radial-gradient(ellipse at 50% 60%, rgba(18, 16, 10, 0.97) 0%, rgba(0,0,0,0.99) 70%);
+  background:
+    radial-gradient(ellipse at 50% 60%, rgba(18, 16, 10, 0.98) 0%, rgba(0,0,0,0.995) 70%),
+    #000;
   display: flex;
   align-items: center;
   justify-content: center;
   animation: splashFadeIn 0.6s ease-out;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 #splash-overlay.hidden {

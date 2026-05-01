@@ -4681,8 +4681,8 @@
     const stageW = 1100;
     const stageH = 850;
     const stageScale = Math.min(
-      (window.innerWidth - 20) / stageW,
-      (window.innerHeight - 20) / stageH,
+      window.innerWidth / stageW,
+      window.innerHeight / stageH,
       1
     );
     const safeStageScale = Number.isFinite(stageScale) ? stageScale : 1;
@@ -5094,6 +5094,13 @@
 
     // 如果在 iframe 中，主动请求配置
     requestConfigFromEngine();
+    try {
+      if (window.parent && window.parent !== window) {
+        requestAnimationFrame(function () {
+          window.parent.postMessage({ type: 'acezero-game-ready' }, '*');
+        });
+      }
+    } catch (_) {}
   }
   
   init();

@@ -49,6 +49,13 @@
   frame.addEventListener('load', () => {
     frameReady = true;
     flushPendingMessages();
+    try {
+      if (window.parent && window.parent !== window) {
+        requestAnimationFrame(() => {
+          window.parent.postMessage({ type: 'acezero-game-ready' }, '*');
+        });
+      }
+    } catch (_) {}
   });
 
   window.addEventListener('message', (event) => {

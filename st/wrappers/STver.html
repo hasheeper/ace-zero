@@ -12,7 +12,6 @@
       height: 100%;
       overflow: hidden;
       background: transparent;
-      border-radius: 10px;
     }
     #app-frame {
       width: 100%;
@@ -21,7 +20,6 @@
       border: 0;
       display: block;
       background: transparent;
-      border-radius: 10px;
     }
 
     #frame-toolbar {
@@ -169,26 +167,28 @@
       // ============================================
       function resizeHostFrame() {
         if (!hostFrame) return;
-        const maxWidth = 1100;
-        const ratio = 850 / 1100;
+        const designWidth = 1100;
+        const designHeight = 850;
+        const ratio = designHeight / designWidth;
+        const parentWidth = hostFrame.parentElement
+          ? hostFrame.parentElement.clientWidth
+          : 0;
+        const availableWidth = parentWidth || window.innerWidth || designWidth;
+        const width = Math.min(designWidth, Math.max(1, availableWidth));
+        const height = Math.round(width * ratio);
+
         hostFrame.style.width = '100%';
-        hostFrame.style.maxWidth = maxWidth + 'px';
-
-        let realWidth = hostFrame.getBoundingClientRect().width || hostFrame.offsetWidth;
-        if (!realWidth || realWidth === 0) {
-          realWidth = hostFrame.parentElement ? hostFrame.parentElement.clientWidth : (window.innerWidth || maxWidth);
-          realWidth = Math.min(realWidth, maxWidth);
-        }
-
-        hostFrame.style.height = Math.max(540, Math.round(realWidth * ratio)) + 'px';
-        hostFrame.style.minHeight = '540px';
+        hostFrame.style.maxWidth = designWidth + 'px';
+        hostFrame.style.height = height + 'px';
+        hostFrame.style.minHeight = '0';
         hostFrame.style.border = 'none';
-        hostFrame.style.boxShadow = '0 0 0 1px rgba(128, 128, 128, 0.18), 0 8px 24px rgba(0, 0, 0, 0.18)';
-        hostFrame.style.borderRadius = '10px';
-        hostFrame.style.margin = '10px auto';
+        hostFrame.style.boxShadow = 'none';
+        hostFrame.style.borderRadius = '0';
+        hostFrame.style.margin = '0 auto';
         hostFrame.style.display = 'block';
       }
       resizeHostFrame();
+      requestAnimationFrame(resizeHostFrame);
       window.addEventListener('resize', resizeHostFrame);
 
       // ============================================
