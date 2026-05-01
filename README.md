@@ -7,6 +7,12 @@ Standalone AceZero game app repository.
 - `index.html` is the canonical GitHub Pages app container.
 - `apps/game/index.html` is the current game dashboard/runtime shell.
 
+## Deploy
+
+GitHub Pages is deployed by `.github/workflows/pages.yml` from `main`.
+
+In repository settings, set Pages source to `GitHub Actions`.
+
 ## Layout
 
 ```text

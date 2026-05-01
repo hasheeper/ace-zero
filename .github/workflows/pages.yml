@@ -1,0 +1,81 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate static app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JSON
+        run: |
+          node -e "for (const f of ['registry/apps.json','registry/games.json','apps/st-bridge/manifest.json','content/game-config.json','content/tutorials/texas-holdem/tutorial-index.json']) JSON.parse(require('fs').readFileSync(f,'utf8'));"
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check apps/game/runtime/data-loader.js
+          node --check apps/st-bridge/bridge.js
+          node --check apps/st-bridge/packs/acezero-main/dashboard/loader.js
+          node --check games/majiang/frontend/scripts/app-entry.js
+          node --check games/texasholdem/texas-holdem/texas-holdem.js
+
+      - name: Check required static entries
+        run: |
+          test -f index.html
+          test -f registry/apps.json
+          test -f registry/games.json
+          test -f apps/game/index.html
+          test -f apps/tutorial/index.html
+          test -f apps/dashboard/index.html
+          test -f apps/act-result/index.html
+          test -f apps/st-bridge/bridge.js
+          test -f assets/riichi-mahjong-tiles/Regular/Man5.svg
+          test -f assets/deck-of-cards/dist/deck.js
+
+  deploy:
+    name: Deploy
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare static artifact
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '_site' \
+            ./ _site/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
