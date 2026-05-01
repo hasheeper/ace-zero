@@ -11,6 +11,9 @@ permissions:
   pages: write
   id-token: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -21,14 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
 
       - name: Validate JSON
         run: |
+          set -euo pipefail
           node -e "for (const f of ['registry/apps.json','registry/games.json','apps/st-bridge/manifest.json','content/game-config.json','content/tutorials/texas-holdem/tutorial-index.json']) JSON.parse(require('fs').readFileSync(f,'utf8'));"
 
       - name: Validate JavaScript syntax
         run: |
+          set -euo pipefail
           node --check apps/game/runtime/data-loader.js
           node --check apps/st-bridge/bridge.js
           node --check apps/st-bridge/packs/acezero-main/dashboard/loader.js
@@ -37,6 +47,7 @@ jobs:
 
       - name: Check required static entries
         run: |
+          set -euo pipefail
           test -f index.html
           test -f registry/apps.json
           test -f registry/games.json
@@ -57,13 +68,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Prepare static artifact
         run: |
+          set -euo pipefail
           mkdir -p _site
           rsync -a \
             --exclude '.git' \
@@ -72,10 +84,11 @@ jobs:
             ./ _site/
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+          include-hidden-files: true
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
