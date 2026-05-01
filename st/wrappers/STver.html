@@ -12,6 +12,7 @@
       height: 100%;
       overflow: hidden;
       background: transparent;
+      border-radius: 10px;
     }
     #app-frame {
       width: 100%;
@@ -20,6 +21,7 @@
       border: 0;
       display: block;
       background: transparent;
+      border-radius: 10px;
     }
 
     #frame-toolbar {
@@ -29,30 +31,45 @@
       z-index: 2147483647;
       display: flex;
       gap: 8px;
-      pointer-events: auto;
+      pointer-events: none;
     }
 
     .tool-btn {
+      pointer-events: auto;
       appearance: none;
-      border: 1px solid rgba(0, 0, 0, 0.18);
-      background: rgba(255, 255, 255, 0.92);
-      color: #2B2B2B;
-      border-radius: 10px;
-      padding: 8px 10px;
-      font-size: 12px;
-      font-weight: 700;
-      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(18, 18, 18, 0.38);
+      color: rgba(255, 255, 255, 0.68);
+      border-radius: 8px;
+      padding: 8px;
       cursor: pointer;
       user-select: none;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
       backdrop-filter: blur(6px);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.14);
+    }
+
+    .tool-btn:hover {
+      background: rgba(28, 28, 28, 0.86);
+      border-color: rgba(255, 255, 255, 0.36);
+      color: rgba(255, 255, 255, 0.92);
+      transform: translateY(-2px);
     }
 
     .tool-btn:active {
-      transform: translateY(1px);
+      transform: translateY(0);
     }
 
     .tool-btn[hidden] {
-      display: none;
+      display: none !important;
+    }
+
+    .tool-icon {
+      width: 16px;
+      height: 16px;
     }
 
     html.pseudo-fullscreen,
@@ -63,19 +80,36 @@
       height: 100vh;
       height: 100dvh;
       background: #000;
+      border-radius: 0 !important;
+      z-index: 999999;
     }
 
     html.pseudo-fullscreen #app-frame {
       width: 100vw;
       height: 100vh;
       height: 100dvh;
+      border-radius: 0;
     }
   </style>
 </head>
 <body>
   <div id="frame-toolbar">
-    <button id="btn-enter" class="tool-btn" type="button">放大</button>
-    <button id="btn-exit" class="tool-btn" type="button" hidden>退出</button>
+    <button id="btn-enter" class="tool-btn" type="button" title="放大" aria-label="放大">
+      <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+        <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
+        <path d="M21 16v3a2 2 0 0 1-2 2h-3"></path>
+        <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
+      </svg>
+    </button>
+    <button id="btn-exit" class="tool-btn" type="button" hidden title="退出" aria-label="退出">
+      <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+        <path d="M16 3v3a2 2 0 0 0 2 2h3"></path>
+        <path d="M21 16h-3a2 2 0 0 0-2 2v3"></path>
+        <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+      </svg>
+    </button>
   </div>
   <script id="acezero-json" type="application/json">$1</script>
 
@@ -85,6 +119,7 @@
     src="https://hasheeper.github.io/ace-zero/index.html?app=game"
     sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
     allow="fullscreen"
+    allowfullscreen
     referrerpolicy="no-referrer"
   ></iframe>
 
@@ -134,13 +169,24 @@
       // ============================================
       function resizeHostFrame() {
         if (!hostFrame) return;
-        const width = Math.min(window.innerWidth || 9999, 1280);
-        const height = Math.min(window.innerHeight || screen.height || 900, 860);
-        hostFrame.style.width = width + 'px';
-        hostFrame.style.maxWidth = '100%';
-        hostFrame.style.height = height + 'px';
+        const maxWidth = 1100;
+        const ratio = 850 / 1100;
+        hostFrame.style.width = '100%';
+        hostFrame.style.maxWidth = maxWidth + 'px';
+
+        let realWidth = hostFrame.getBoundingClientRect().width || hostFrame.offsetWidth;
+        if (!realWidth || realWidth === 0) {
+          realWidth = hostFrame.parentElement ? hostFrame.parentElement.clientWidth : (window.innerWidth || maxWidth);
+          realWidth = Math.min(realWidth, maxWidth);
+        }
+
+        hostFrame.style.height = Math.max(540, Math.round(realWidth * ratio)) + 'px';
         hostFrame.style.minHeight = '540px';
         hostFrame.style.border = 'none';
+        hostFrame.style.boxShadow = '0 0 0 1px rgba(128, 128, 128, 0.18), 0 8px 24px rgba(0, 0, 0, 0.18)';
+        hostFrame.style.borderRadius = '10px';
+        hostFrame.style.margin = '10px auto';
+        hostFrame.style.display = 'block';
       }
       resizeHostFrame();
       window.addEventListener('resize', resizeHostFrame);

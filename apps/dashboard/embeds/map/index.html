@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucky Capital - 维多利亚沙盘模式 (强化版)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #211c19; font-family: 'Courier New', Courier, monospace; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        #ui-panel {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(24, 20, 18, 0.7);
+            border: 1px solid #7a6345; padding: 20px;
+            color: #b5a794; width: 260px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8), 0 0 10px rgba(122, 99, 69, 0.3);
+            backdrop-filter: blur(8px);
+        }
+        h1 { margin: 0 0 10px 0; font-size: 1.1rem; color: #d4a373; text-transform: uppercase; border-bottom: 1px solid #4a3e31; padding-bottom: 10px; font-weight: normal; letter-spacing: 2px;}
+        label { font-size: 0.8rem; color: #8e8374; text-transform: uppercase; letter-spacing: 1px;}
+        select {
+            width: 100%; padding: 6px; margin-top: 8px; margin-bottom: 20px;
+            background: rgba(10, 8, 7, 0.8); color: #d4a373; 
+            border: 1px solid #7a6345; font-family: inherit; outline: none;
+        }
+        select:focus { border-color: #b58b52; }
+        .legend-item { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 0.8rem; }
+        .color-box { width: 12px; height: 12px; display: inline-block; border: 1px solid #111; border-radius: 2px;}
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #d4a373; font-size: 1.2rem; pointer-events: none; letter-spacing: 3px;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="loading">... AWAITING COVENANT ...</div>
+    <div id="ui-panel">
+        <h1>Lucky Capital</h1>
+        <label for="level-select">Sector Override</label>
+        <select id="level-select">
+            <option value="0">Level_0 . The Rust</option>
+            <option value="1">Level_1 . The Street</option>
+            <option value="2">Level_2 . The Exchange</option>
+            <option value="3">Level_3 . The Court</option>
+            <option value="-1">Auto-Rotate View (All)</option>
+        </select>
+        <h1>Structural Index</h1>
+        <div id="legend"></div>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // 调整了切割深度，确保全部都会得到细分
+        const PALETTE = {
+            terrain: {
+                1: { name: '住宅/公寓', main: 0x3d3936, roof: 0x22201e, h: [4, 10], maxSplits: 4 }, 
+                2: { name: '博彩/场子', main: 0x4a2a2a, roof: 0x1f1111, h:[8, 14], maxSplits: 4, emit: 0x1a0505 }, 
+                3: { name: '商业/交易', main: 0x544938, roof: 0x262118, h:[12, 18], maxSplits: 3, emit: 0x141005 }, 
+                4: { name: '防务/工业', main: 0x473224, roof: 0x1f140e, h: [6, 12], maxSplits: 3 }, 
+                5: { name: '机关/监控', main: 0x45484d, roof: 0x1d1f21, h:[16, 26], maxSplits: 2, isGothic: true }, // 切2次刚好四分
+                6: { name: '塌陷/废墟', main: 0x242226, roof: 0x111012, h: [1, 3],  maxSplits: 4 } 
+            }
+        };
+
+        const legendDiv = document.getElementById('legend');
+        Object.keys(PALETTE.terrain).forEach(key => {
+            const data = PALETTE.terrain[key];
+            legendDiv.innerHTML += `
+                <div class="legend-item">
+                    <span>${data.name}</span>
+                    <span class="color-box" style="background: #${data.main.toString(16).padStart(6, '0')}"></span>
+                </div>`;
+        });
+
+        let scene, camera, renderer, controls;
+        let cityGroup = new THREE.Group();
+        const GRID_SIZE = 16;
+        const CELL_SIZE = 12;
+        let ldtkData = null;
+
+        const unitRoofGeo = new THREE.ConeGeometry(Math.SQRT1_2, 1, 4);
+        unitRoofGeo.rotateY(Math.PI / 4); 
+        unitRoofGeo.translate(0, 0.5, 0); 
+        const unitBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+        unitBoxGeo.translate(0, 0.5, 0);
+
+        initThree();
+        loadMapData();
+
+        function initThree() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2b2520);
+            scene.fog = new THREE.FogExp2(0x2b2520, 0.0035);
+
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1500);
+            camera.position.set(130, 140, 130);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0, 0);
+            controls.maxPolarAngle = Math.PI / 2 - 0.08; 
+            controls.autoRotate = false;
+            controls.autoRotateSpeed = 0.5;
+
+            const ambientLight = new THREE.AmbientLight(0x404552, 2.0); 
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xdba972, 3.0); 
+            dirLight.position.set(60, 100, -40);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.left = -120;
+            dirLight.shadow.camera.right = 120;
+            dirLight.shadow.camera.top = 120;
+            dirLight.shadow.camera.bottom = -120;
+            dirLight.shadow.bias = -0.0005; 
+            scene.add(dirLight);
+            scene.add(cityGroup);
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        async function loadMapData() {
+            try {
+                const response = await fetch('./acezero.json'); 
+                ldtkData = await response.json();
+                document.getElementById('loading').style.display = 'none';
+
+                document.getElementById('level-select').addEventListener('change', (e) => {
+                    const val = parseInt(e.target.value);
+                    if(val === -1) { controls.autoRotate = true; } 
+                    else { controls.autoRotate = false; renderLevel(val); }
+                });
+
+                renderLevel(0);
+            } catch (error) {
+                console.error("加载JSON失败: ", error);
+                document.getElementById('loading').innerText = "SYSTEM OFFLINE";
+                document.getElementById('loading').style.color = "#a33";
+            }
+        }
+
+        function renderLevel(levelIndex) {
+            while(cityGroup.children.length > 0) cityGroup.remove(cityGroup.children[0]); 
+
+            const level = ldtkData.levels[levelIndex];
+            if(!level) return;
+            const terrainLayer = level.layerInstances.find(l => l.__identifier === "Terrain");
+            if(!terrainLayer) return;
+
+            const groundGeo = new THREE.BoxGeometry(GRID_SIZE * CELL_SIZE, 2, GRID_SIZE * CELL_SIZE);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x161514, roughness: 0.9, metalness: 0.1 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.position.y = -1;
+            ground.receiveShadow = true;
+            cityGroup.add(ground);
+
+            const terrainCsv = terrainLayer.intGridCsv;
+            for (let i = 0; i < terrainCsv.length; i++) {
+                const val = terrainCsv[i];
+                if (val === 0 || !PALETTE.terrain[val]) continue; 
+
+                const x = i % GRID_SIZE;
+                const z = Math.floor(i / GRID_SIZE);
+                const cellOriginX = (x - GRID_SIZE / 2) * CELL_SIZE;
+                const cellOriginZ = (z - GRID_SIZE / 2) * CELL_SIZE;
+
+                generateCellBSP(cellOriginX, cellOriginZ, val);
+            }
+        }
+
+        function sliceArea(rects, bounds, depth, maxDepth) {
+            // ⭐ 强制细分逻辑：
+            // 如果深度没达到2（意味着还切不到至少四块），绝对不可以提前停止！
+            if (depth >= maxDepth || (depth >= 2 && Math.random() < 0.25)) {
+                rects.push(bounds);
+                return;
+            }
+
+            // 防止切得比纸还薄
+            if (bounds.w < 2.5 || bounds.d < 2.5) {
+                rects.push(bounds);
+                return;
+            }
+
+            let splitHorizontally = bounds.w > bounds.d; 
+            if (bounds.w / bounds.d < 1.5 && bounds.d / bounds.w < 1.5) {
+                splitHorizontally = Math.random() > 0.5; // 切面方向随机化
+            }
+
+            // 比例在 35% ~ 65% 之间随机，制造出错落感但避免极端的畸形
+            let splitRatio = 0.35 + Math.random() * 0.3; 
+
+            if (splitHorizontally) {
+                let splitAmount = bounds.w * splitRatio;
+                sliceArea(rects, { x: bounds.x, z: bounds.z, w: splitAmount, d: bounds.d }, depth + 1, maxDepth);
+                sliceArea(rects, { x: bounds.x + splitAmount, z: bounds.z, w: bounds.w - splitAmount, d: bounds.d }, depth + 1, maxDepth);
+            } else {
+                let splitAmount = bounds.d * splitRatio;
+                sliceArea(rects, { x: bounds.x, z: bounds.z, w: bounds.w, d: splitAmount }, depth + 1, maxDepth);
+                sliceArea(rects, { x: bounds.x, z: bounds.z + splitAmount, w: bounds.w, d: bounds.d - splitAmount }, depth + 1, maxDepth);
+            }
+        }
+
+        function generateCellBSP(ox, oz, terrainType) {
+            const config = PALETTE.terrain[terrainType];
+            
+            let rects =[];
+            sliceArea(rects, { x: ox, z: oz, w: CELL_SIZE, d: CELL_SIZE }, 0, config.maxSplits);
+
+            const matBuilding = new THREE.MeshStandardMaterial({ 
+                color: config.main, roughness: 0.8, metalness: 0.2, emissive: config.emit || 0x000000 
+            });
+            const matRoof = new THREE.MeshStandardMaterial({ color: config.roof, roughness: 0.9, metalness: 0.1 });
+
+            // 将切割好的一张张地皮盖成楼
+            rects.forEach(rect => {
+                const gap = 1.0; // 统一街道间隙宽度
+                const bWidth = rect.w - gap;
+                const bDepth = rect.d - gap;
+                if (bWidth < 0.8 || bDepth < 0.8) return; 
+
+                const center_X = rect.x + rect.w / 2;
+                const center_Z = rect.z + rect.d / 2;
+                
+                const bHeight = config.h[0] + Math.random() * (config.h[1] - config.h[0]);
+
+                const meshBody = new THREE.Mesh(unitBoxGeo, matBuilding);
+                meshBody.scale.set(bWidth, bHeight, bDepth);
+                meshBody.position.set(center_X, 0, center_Z);
+                meshBody.castShadow = true;
+                meshBody.receiveShadow = true;
+                cityGroup.add(meshBody);
+
+                // ⭐ 智能屋顶筛选逻辑：只给“瘦”的建筑加屋顶
+                // 评判标准：最短的那一条边必须低于 4.5 单元，太胖的建筑将被判定为平顶。
+                const isThin = Math.min(bWidth, bDepth) <= 4.5 && (terrainType !== 6); 
+
+                if (isThin) { 
+                    const meshRoof = new THREE.Mesh(unitRoofGeo, matRoof);
+                    let roofHeight = config.isGothic ? bHeight * 0.7 : (bWidth + bDepth) * 0.18;
+                    meshRoof.scale.set(bWidth, roofHeight, bDepth); 
+                    meshRoof.position.set(center_X, bHeight, center_Z);
+                    meshRoof.castShadow = true;
+                    cityGroup.add(meshRoof);
+                }
+
+                // 工业/平顶楼顶附属设施：如果有平顶，或者本身是工业区，就一定概率长出管道/烟囱 
+                if ((terrainType === 4 && Math.random() > 0.4) || (!isThin && Math.random() > 0.6 && terrainType !== 6)) {
+                    const chimH = 1 + Math.random();
+                    const meshChim = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, chimH, 6), new THREE.MeshStandardMaterial({color: 0x111111, metalness:0.3}));
+                    // 排在平地屋顶的边缘或者中央稍微错开一点的位置
+                    meshChim.position.set(center_X + (Math.random()-0.5)*bWidth*0.6, bHeight + chimH/2, center_Z + (Math.random()-0.5)*bDepth*0.6);
+                    meshChim.castShadow = true;
+                    cityGroup.add(meshChim);
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

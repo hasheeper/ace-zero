@@ -1111,6 +1111,7 @@
     if (externalConfigApplied) return;
     if (window.parent && window.parent !== window) return;
 
+    // 只有直接打开 legacy blackjack 时才走这里；正常 GitPage/App/STver 模式由 apps/game 统一注入。
     var paths = ['../../content/game-config.json', './game-config.json'];
     for (var i = 0; i < paths.length; i++) {
       try {

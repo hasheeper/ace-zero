@@ -4,7 +4,7 @@
  * ===========================================
  *
  * 提供所有小游戏共享的：
- *  - 配置加载 (game-config.json / postMessage)
+ *  - 配置接收 (apps/game host postMessage；standalone debug 才读本地 JSON)
  *  - Mana 管理
  *  - 下注选择器逻辑
  *  - HUD 更新辅助
@@ -60,6 +60,7 @@
       if (_applied) return;
       if (window.parent && window.parent !== window) return;
 
+      // 只有直接打开 legacy game 时才走这里；正常 GitPage/App/STver 模式由 apps/game 统一注入。
       var paths = ['../../content/game-config.json', './game-config.json'];
       for (var i = 0; i < paths.length; i++) {
         try {
@@ -81,7 +82,7 @@
       }
     }
 
-    // 监听外部注入
+    // 监听 apps/game host 转发的统一 game-config
     window.addEventListener('message', function (event) {
       var msg = event && event.data;
       if (!msg || msg.type !== 'acezero-game-data') return;

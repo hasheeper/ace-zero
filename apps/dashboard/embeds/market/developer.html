@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Market Developer Log</title>
+  <style>
+    :root {
+      --bg: #050608;
+      --panel: rgba(10, 14, 20, 0.82);
+      --border: rgba(179, 156, 104, 0.22);
+      --text: #d9dde3;
+      --dim: #6a768d;
+      --gold: #d4af37;
+      --teal: #3aebc8;
+      --red: #b35a5a;
+      --mono: "JetBrains Mono", "Courier New", monospace;
+      --serif: "Noto Serif SC", serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.35) 2px, rgba(0, 0, 0, 0.35) 4px);
+      color: var(--text);
+      font-family: var(--mono);
+      padding: 24px;
+    }
+
+    .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .title {
+      color: var(--gold);
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 1.4px;
+    }
+
+    .title .cn {
+      font-family: var(--serif);
+      font-size: 14px;
+      opacity: 0.7;
+      margin-left: 6px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn, .select {
+      height: 32px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 0 12px;
+    }
+
+    .btn {
+      cursor: pointer;
+    }
+
+    .meta {
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      min-height: 70vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .list {
+      flex: 1;
+      overflow: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .entry {
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-left: 2px solid rgba(179, 156, 104, 0.45);
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.28);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .entry[data-type^="runtime"] { border-left-color: var(--red); }
+    .entry[data-type^="promise"] { border-left-color: var(--red); }
+    .entry[data-type^="action"] { border-left-color: var(--teal); }
+    .entry[data-type^="phase"] { border-left-color: var(--gold); }
+
+    .entry-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+    }
+
+    .entry-type {
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .entry-time {
+      color: var(--dim);
+      font-size: 11px;
+    }
+
+    .entry-msg {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .entry-details {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #9ea8ba;
+      font-size: 12px;
+      line-height: 1.45;
+      font-family: var(--mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="header">
+      <div class="title">MARKET_DEV_LOG <span class="cn">· 开发者日志</span></div>
+      <div class="toolbar">
+        <select class="select" id="type-filter">
+          <option value="all">全部类型</option>
+        </select>
+        <button class="btn" id="btn-refresh">刷新</button>
+        <button class="btn" id="btn-copy-all">复制日志</button>
+        <button class="btn" id="btn-clear">清空</button>
+        <span class="meta" id="log-meta">0 条记录</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="list" id="log-list"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/developer.js"></script>
+</body>
+</html>

@@ -4,9 +4,9 @@
  * ===========================================
  * 
  * 职责:
- * - 接收酒馆插件(acezero-tavern-plugin.js)通过 postMessage 注入的 game-config
- * - 解析并应用游戏配置（hero、seats、blinds 等）
- * - 提供默认配置（当没有外部注入时）
+ * - 接收 STver.html / 父级 App Host 通过 postMessage 注入的 game-config
+ * - 缓存统一 game-config（hero、seats、blinds 等）并通知 apps/game host
+ * - 静态 fallback 由 apps/game/index.html 统一读取 content/game-config.json
  * - 主动向父窗口请求数据
  * 
  * JSON 格式 (game-config v4):
@@ -89,7 +89,7 @@
   }
 
   // ============================================
-  // postMessage 监听 - 接收 STver.html 的数据
+  // postMessage 监听 - 接收 STver.html 或父级 App Host 的统一 game-config
   // ============================================
   window.addEventListener('message', function (event) {
     const msg = event?.data;

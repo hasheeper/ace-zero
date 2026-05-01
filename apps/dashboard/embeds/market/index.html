@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>命运市场审计终端 - AceZero Terminal</title>
+  <link rel="stylesheet" href="./css/base.css" />
+  <link rel="stylesheet" href="./css/layout.css" />
+  <link rel="stylesheet" href="./css/components.css" />
+</head>
+<body>
+  <div class="terminal-viewport" id="terminal-viewport">
+    <div class="terminal-container" id="terminal-container">
+      <div class="sys-ticker">
+        <div class="ticker-group">
+          <div class="stat-pair">
+            <span class="stat-label">DAY</span>
+            <span class="stat-val" id="tk-day">D00</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">PHASE</span>
+            <span class="stat-val cn glow-gold" id="tk-phase">晨相</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">NEXT</span>
+            <span class="stat-val cn" id="tk-next">昼相</span>
+          </div>
+        </div>
+
+        <div class="slash-divider"></div>
+
+        <div class="ticker-group ticker-group-center">
+          <div class="stat-pair">
+            <span class="stat-label">S_SUPL</span>
+            <span class="stat-val glow-teal" id="tk-supply">0.0</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">S_SANC</span>
+            <span class="stat-val glow-gold" id="tk-sanctuary">0.0</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">S_CLR</span>
+            <span class="stat-val glow-red" id="tk-clearance">0.0</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">K0</span>
+            <span class="stat-val glow-warn" id="tk-k0">0.0</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">D_DIST</span>
+            <span class="stat-val glow-red" id="tk-distortion">0.0</span>
+          </div>
+        </div>
+
+        <div class="ticker-group">
+          <div class="slash-divider"></div>
+          <div class="stat-pair">
+            <span class="stat-label">CAPITAL</span>
+            <span class="stat-val glow-gold stat-capital" id="tk-cash">0.0 ₣</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">CREDIT</span>
+            <span class="stat-val glow-teal" id="tk-credit-available">0.0 ₣</span>
+          </div>
+          <div class="stat-pair">
+            <span class="stat-label">USED</span>
+            <span class="stat-val glow-warn" id="tk-credit-used">0.0</span>
+          </div>
+          <div class="ticker-system-group">
+            <div class="stat-pair stat-pair-stack">
+              <span class="stat-label">MODE</span>
+              <span class="stat-val glow-gold" id="tk-market-mode" title="Price Breach · 裂价合约">PRICE BREACH</span>
+            </div>
+            <div class="stat-pair stat-pair-stack">
+              <span class="stat-label">SEED</span>
+              <span class="stat-val seed-code" id="tk-market-seed" title="Seed hash hidden">••••••••</span>
+            </div>
+          </div>
+          <div class="ticker-action-group" id="ticker-action-group" hidden>
+            <button class="cmd-btn btn-override" id="btn-advance-phase">
+              <span class="en">SYS.ADVANCE</span>
+              <span class="cn">强制推演</span>
+            </button>
+            <div class="black-market-anchor" id="black-market-anchor">
+              <button class="cmd-btn btn-black-market" id="btn-toggle-black-market">
+                <span class="en">SYS.BLACK</span>
+                <span class="cn" id="black-market-toggle-label">开启黑市</span>
+              </button>
+            </div>
+            <button class="cmd-btn btn-reset" id="btn-reset">
+              <span class="en">SYS.RESET</span>
+              <span class="cn">大盘重置</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="main-layout">
+        <aside class="sidebar" id="left-sidebar">
+          <div class="matrix-panel-header">
+            <div class="matrix-header-copy">
+              <span class="matrix-header-en">ASSET_MATRIX</span>
+              <span class="matrix-header-cn">监测标的</span>
+            </div>
+            <button class="matrix-toggle" id="btn-toggle-sidebar" type="button" aria-label="折叠左侧标的栏" title="折叠左侧标的栏">
+              <span class="matrix-toggle-glyph" id="sidebar-toggle-glyph">&lsaquo;&lsaquo;</span>
+            </button>
+          </div>
+          <div id="asset-list"></div>
+        </aside>
+
+        <main class="center-board">
+          <div class="chart-header">
+            <div class="hud-corner-tl"></div>
+            <div class="hud-corner-br"></div>
+
+            <div class="header-info-panel">
+              <div class="scope-title">MARKET_SCOPE <span class="scope-title-cn">审视窗</span></div>
+              <h1 class="scope-asset-name" id="chart-title">福液</h1>
+              <div class="board-badge" id="board-badge">A 福液板</div>
+              <div class="sync-badge">
+                <div class="pulse-dot"></div>
+                <span id="meta-sync">SYNC_LOCKED: D00 · 晨相</span>
+              </div>
+            </div>
+
+            <div class="board-data-module">
+              <div class="module-driver-strip">
+                <div class="strip-section strip-left">
+                  <span class="strip-label">DRIVER <span class="cn">/ 主控因子</span></span>
+                  <span class="strip-val-alert" id="meta-driver">-</span>
+                </div>
+                <div class="strip-section strip-right">
+                  <span class="strip-label" id="meta-context-label">DELIVERY <span class="cn">/ 交割</span></span>
+                  <span class="strip-val-base" id="meta-context">-</span>
+                </div>
+              </div>
+
+              <div class="board-context-panel" id="board-context-panel"></div>
+            </div>
+          </div>
+
+          <div class="top-panel-drawer-row">
+            <button class="drawer-handle" id="btn-toggle-top-panel" type="button" aria-label="折叠顶部板块面板" title="折叠顶部板块面板">
+              <span class="drawer-handle-core">
+                <span class="drawer-handle-line"></span>
+                <span class="drawer-handle-glyph" id="top-panel-toggle-glyph">&uarr;</span>
+                <span class="drawer-handle-line"></span>
+              </span>
+            </button>
+          </div>
+
+          <div class="canvas-wrapper">
+            <div class="hud-overlay">OPTICAL_TARGETING_ACTIVE 运势轨迹捕捉中</div>
+            <canvas id="kline-canvas"></canvas>
+            <div id="crosshair-hud">
+              <div class="crosshair-corner tl"></div>
+              <div class="crosshair-corner tr"></div>
+              <div class="crosshair-corner bl"></div>
+              <div class="crosshair-corner br"></div>
+
+              <div class="hud-header-row">
+                <div class="target-icon">⌖</div>
+                <div class="hud-header-copy">
+                  <div class="hud-header-text">LCK_TARGET</div>
+                  <div class="hud-phase-text" id="hud-phase">D00 · 晨相</div>
+                </div>
+              </div>
+
+              <div class="hud-data-list">
+                <div class="hud-row">
+                  <div class="hud-label-group">
+                    <span class="hud-label-cn">初相</span>
+                    <span class="hud-label-en">INIT</span>
+                  </div>
+                  <div class="hud-dotted-line"></div>
+                  <span class="hud-val" id="hud-o">0.000</span>
+                </div>
+                <div class="hud-row">
+                  <div class="hud-label-group">
+                    <span class="hud-label-cn">定相</span>
+                    <span class="hud-label-en">SETTLE</span>
+                  </div>
+                  <div class="hud-dotted-line"></div>
+                  <span class="hud-val" id="hud-c">0.000</span>
+                </div>
+                <div class="hud-row">
+                  <div class="hud-label-group">
+                    <span class="hud-label-cn">峰涌</span>
+                    <span class="hud-label-en">MAX</span>
+                  </div>
+                  <div class="hud-dotted-line"></div>
+                  <span class="hud-val" id="hud-h">0.000</span>
+                </div>
+                <div class="hud-row">
+                  <div class="hud-label-group">
+                    <span class="hud-label-cn">谷息</span>
+                    <span class="hud-label-en">MIN</span>
+                  </div>
+                  <div class="hud-dotted-line"></div>
+                  <span class="hud-val" id="hud-l">0.000</span>
+                </div>
+                <div class="hud-row alert-block">
+                  <div class="hud-label-group">
+                    <span class="hud-label-cn">扭曲载量</span>
+                    <span class="hud-label-en">VOL_DIST</span>
+                  </div>
+                  <div class="hud-dotted-line hud-dotted-line-alert"></div>
+                  <span class="hud-val hud-val-alert" id="hud-v">0000</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="execution-desk">
+            <div class="exec-col exec-col-spot">
+              <div class="col-header">
+                <div class="hdr-title" id="spot-exec-title">
+                  SPOT_EXEC <span class="hdr-title-cn">· 当前现货</span>
+                  <span class="hdr-inline-meta" id="spot-sub">D00 <span class="hdr-time-cn">晨相</span></span>
+                </div>
+              </div>
+              <div class="data-slot slot-teal">
+                <div class="badge-top-right" id="spot-badge">0 LU</div>
+                <div class="num-main" id="spot-price">0.000</div>
+                <div class="spot-detail-strip">
+                  <div class="spot-detail-item">
+                    <span class="spot-detail-label">COST</span>
+                    <span class="spot-detail-value" id="spot-avg-cost">0.000</span>
+                  </div>
+                  <div class="spot-detail-item">
+                    <span class="spot-detail-label">PNL</span>
+                    <span class="spot-detail-value" id="spot-pnl">0.0 ₣</span>
+                  </div>
+                </div>
+                <div class="spot-funding-note" id="spot-funding-note">融资来源: 现金</div>
+              </div>
+              <div class="action-row">
+                <button class="btn btn-buy" id="btn-buy-spot">BUY_SPOT</button>
+                <button class="btn btn-sell" id="btn-sell-spot">SELL_SPOT</button>
+                <button class="btn btn-neutral" id="btn-sell-spot-all">CLOSE_ALL</button>
+              </div>
+            </div>
+
+            <div class="exec-col exec-col-forward">
+              <div class="col-header">
+                <div class="hdr-title">
+                  FORWARD+1 <span class="hdr-title-cn">· 次相</span>
+                  <span class="hdr-inline-meta" id="fwd1-sub">D00 <span class="hdr-time-cn">昼相</span></span>
+                </div>
+              </div>
+              <div class="data-slot slot-red" id="fwd1-slot">
+                <div class="badge-top-right" id="fwd1-holdings">0 pos</div>
+                <div class="num-main" id="fwd1-price">0.000</div>
+                <div class="badge-bottom-right" id="fwd1-basis">Δ +0.000</div>
+              </div>
+              <div class="action-row">
+                <button class="btn btn-neutral" id="btn-buy-fwd1"><span>锁定</span> F+1</button>
+              </div>
+            </div>
+
+            <div class="exec-col exec-col-forward">
+              <div class="col-header">
+                <div class="hdr-title">
+                  FORWARD+2 <span class="hdr-title-cn">· 次日</span>
+                  <span class="hdr-inline-meta" id="fwd2-sub">D01 <span class="hdr-time-cn">晨相</span></span>
+                </div>
+              </div>
+              <div class="data-slot slot-teal" id="fwd2-slot">
+                <div class="badge-top-right" id="fwd2-holdings">0 pos</div>
+                <div class="num-main" id="fwd2-price">0.000</div>
+                <div class="badge-bottom-right" id="fwd2-basis">Δ +0.000</div>
+              </div>
+              <div class="action-row">
+                <button class="btn btn-neutral" id="btn-buy-fwd2"><span>锁定</span> F+2</button>
+              </div>
+            </div>
+
+            <div class="exec-col exec-col-leverage">
+              <div class="col-header">
+                <div class="hdr-title">
+                  LEVERAGE_CTRL <span class="hdr-title-cn">杠杆控制</span>
+                </div>
+              </div>
+              <div class="data-slot slot-alert leverage-slot">
+                <div class="hud-corner tr"></div>
+                <div class="hud-corner bl"></div>
+                <div class="leverage-panel leverage-panel-embedded">
+                  <div class="leverage-head">
+                    <span class="lbl">MAGNITUDE</span>
+                    <span class="val" id="leverage-value">1.0x</span>
+                  </div>
+                  <div class="slider-wrapper">
+                    <div class="slider-track-bg"></div>
+                    <input
+                      type="range"
+                      id="leverage-slider"
+                      min="1"
+                      max="20"
+                      step="0.5"
+                      value="1"
+                    />
+                  </div>
+                  <div class="leverage-meta-grid">
+                    <div class="meta-item">
+                      <span class="meta-label">NOTIONAL <span class="cn">/头寸</span></span>
+                      <span class="meta-val" id="leverage-notional">0.0 <span class="currency">₣</span></span>
+                    </div>
+                    <div class="meta-item">
+                      <span class="meta-label">MARGIN <span class="cn">/保证金</span></span>
+                      <span class="meta-val" id="leverage-margin">0.0 <span class="currency">₣</span></span>
+                    </div>
+                    <div class="meta-item alert-data">
+                      <span class="meta-label">BORROWED <span class="cn">/信用负债</span></span>
+                      <span class="meta-val" id="leverage-borrowed">0.0 <span class="currency">₣</span></span>
+                    </div>
+                    <div class="meta-item">
+                      <span class="meta-label">LIMIT <span class="cn">/当前可达 最高档</span></span>
+                      <span class="meta-val" id="leverage-max">1.0x</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <aside class="right-sidebar">
+          <div class="section-bets">
+            <div class="sidebar-panel-header">
+              CRACK_BETS <span class="sidebar-panel-cn">裂价押单阵列</span>
+            </div>
+            <div class="board-bet-subtitle" id="bet-context-subtitle">交割裂价押单</div>
+            <div class="scrollable-list" id="bet-list"></div>
+            <div class="action-group">
+              <button class="btn-micro action-align" id="btn-open-align">
+                <span class="en">ACT: ALIGN</span>
+                <span class="cn">打开押顺面板</span>
+              </button>
+              <button class="btn-micro action-fracture" id="btn-open-fracture">
+                <span class="en">ACT: FRACT</span>
+                <span class="cn">打开押裂面板</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <div class="section-detail">
+            <div class="detail-tabs" id="right-detail-tabs">
+              <button class="detail-tab active" type="button" data-detail-tab="zero">
+                PROTOCOL_0 <span class="sidebar-panel-cn">· 零号契约</span>
+              </button>
+              <button class="detail-tab" type="button" data-detail-tab="credit">
+                CREDIT_LINE <span class="sidebar-panel-cn">· 授信池</span>
+              </button>
+            </div>
+
+            <div class="detail-panel detail-panel-zero" id="detail-panel-zero">
+              <div class="hazard-banner">[ !! WARNING: ANOMALOUS DEBT STRUCTURE !! ]</div>
+              <div class="k0-body" id="zero-body"></div>
+            </div>
+
+            <div class="detail-panel detail-panel-credit" id="detail-panel-credit" hidden>
+              <div class="credit-body" id="credit-body"></div>
+            </div>
+          </div>
+
+          <div class="bet-modal-shell" id="order-modal-shell" hidden>
+            <div class="bet-modal-backdrop" id="order-modal-backdrop"></div>
+            <div class="bet-modal" id="order-modal">
+              <div class="bet-modal-corner tl"></div>
+              <div class="bet-modal-corner tr"></div>
+              <div class="bet-modal-corner bl"></div>
+              <div class="bet-modal-corner br"></div>
+              <div class="bet-modal-header">
+                <div class="bet-modal-title-block">
+                  <div class="bet-modal-title" id="order-modal-title">SPOT BUY · 下单票据</div>
+                  <div class="bet-modal-subtitle" id="order-modal-subtitle">按手数扩展的统一下单面板</div>
+                </div>
+                <button class="bet-modal-close" id="btn-order-modal-close" type="button" aria-label="关闭下单面板">×</button>
+              </div>
+              <div class="bet-modal-body">
+                <div class="order-ledger-grid">
+                  <div class="bet-ledger-row">
+                    <span class="bet-ledger-label">TARGET</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="order-ledger-target">福液</span>
+                  </div>
+                  <div class="bet-ledger-row">
+                    <span class="bet-ledger-label">MODE</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="order-ledger-mode">SPOT BUY</span>
+                  </div>
+                  <div class="bet-ledger-row">
+                    <span class="bet-ledger-label">PRICE</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="order-ledger-price">0.000</span>
+                  </div>
+                  <div class="bet-ledger-row">
+                    <span class="bet-ledger-label">CTX</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="order-ledger-context">A板 · 交割</span>
+                  </div>
+                </div>
+
+                <div class="order-ticket-controls">
+                  <div class="order-ticket-head">
+                    <span class="bet-draft-label">LOT</span>
+                    <span class="bet-draft-value" id="order-lot-caption">10 LU</span>
+                  </div>
+                  <input type="number" id="order-lot-input" min="1" step="1" value="1" />
+                  <div class="order-preset-group" id="order-preset-group">
+                    <button class="bet-strike-chip" type="button" data-order-preset="1">1</button>
+                    <button class="bet-strike-chip" type="button" data-order-preset="5">5</button>
+                    <button class="bet-strike-chip" type="button" data-order-preset="10">10</button>
+                    <button class="bet-strike-chip" type="button" data-order-preset="25">25</button>
+                    <button class="bet-strike-chip" type="button" data-order-preset="50">50</button>
+                    <button class="bet-strike-chip" type="button" data-order-preset="max">MAX</button>
+                  </div>
+                </div>
+
+                <div class="order-preview-grid">
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label">QUANTITY</span>
+                    <span class="bet-preview-value" id="order-preview-quantity">0 LU</span>
+                  </div>
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label" id="order-preview-primary-label">NOTIONAL</span>
+                    <span class="bet-preview-value" id="order-preview-primary">0.0 ₣</span>
+                  </div>
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label" id="order-preview-secondary-label">MARGIN</span>
+                    <span class="bet-preview-value" id="order-preview-secondary">0.0 ₣</span>
+                  </div>
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label" id="order-preview-tertiary-label">BORROWED</span>
+                    <span class="bet-preview-value" id="order-preview-tertiary">0.0 ₣</span>
+                  </div>
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label" id="order-preview-quaternary-label">CASH_REQ</span>
+                    <span class="bet-preview-value" id="order-preview-quaternary">0.0 ₣</span>
+                  </div>
+                </div>
+
+                <div class="order-funding-note" id="order-funding-note">预计融资来源: 现金</div>
+                <div class="order-status-note" id="order-status-note">当前可执行</div>
+              </div>
+              <div class="bet-modal-actions">
+                <button class="bet-modal-btn muted" id="btn-order-modal-cancel" type="button">取消</button>
+                <button class="bet-modal-btn confirm" id="btn-order-modal-confirm" type="button">执行下单</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bet-modal-shell" id="bet-modal-shell" hidden>
+            <div class="bet-modal-backdrop" id="bet-modal-backdrop"></div>
+            <div class="bet-modal" id="bet-modal">
+              <div class="bet-modal-corner tl"></div>
+              <div class="bet-modal-corner tr"></div>
+              <div class="bet-modal-corner bl"></div>
+              <div class="bet-modal-corner br"></div>
+              <div class="bet-modal-header">
+                <div class="bet-modal-title-block">
+                  <div class="bet-modal-title" id="bet-modal-title">ALIGN_TICKET 押顺确认</div>
+                  <div class="bet-modal-subtitle" id="bet-modal-subtitle">价格方向票据，不直接占用现货持仓</div>
+                </div>
+                <button class="bet-modal-close" id="btn-bet-modal-close" type="button" aria-label="关闭押单确认面板">×</button>
+              </div>
+              <div class="bet-modal-body">
+                <div class="bet-preview-ledger">
+                  <div class="bet-ledger-row">
+                    <span class="bet-ledger-label">TARGET</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="bet-preview-target">福液</span>
+                  </div>
+                  <div class="bet-ledger-row">
+                    <span class="bet-ledger-label">ENTRY</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="bet-preview-entry">0.000</span>
+                  </div>
+                  <div class="bet-ledger-row row-trigger">
+                    <span class="bet-ledger-label">TRIGGER</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="bet-preview-trigger">0.000</span>
+                  </div>
+                  <div class="bet-ledger-row">
+                    <span class="bet-ledger-label">SETTLE</span>
+                    <span class="bet-ledger-dots"></span>
+                    <span class="bet-ledger-value" id="bet-preview-settle">D00 晨相</span>
+                  </div>
+                </div>
+
+                <div class="bet-draft-control">
+                  <div class="bet-draft-head">
+                    <span class="bet-draft-label">SIZE</span>
+                    <span class="bet-draft-value" id="bet-size-value">1x</span>
+                  </div>
+                  <input type="range" id="bet-size-slider" min="1" max="5" step="1" value="1" />
+                </div>
+
+                <div class="bet-strike-group" id="bet-strike-group">
+                  <button class="bet-strike-chip" type="button" data-bet-strike="tight">近阈值</button>
+                  <button class="bet-strike-chip is-active" type="button" data-bet-strike="standard">标准</button>
+                  <button class="bet-strike-chip" type="button" data-bet-strike="wide">远阈值</button>
+                </div>
+
+                <div class="bet-preview-grid">
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label">PREMIUM</span>
+                    <span class="bet-preview-value" id="bet-preview-premium">0.0 ₣</span>
+                  </div>
+                  <div class="bet-preview-cell highlight-payout">
+                    <span class="bet-preview-label">PAYOUT</span>
+                    <span class="bet-preview-value" id="bet-preview-payout">0.0 ₣</span>
+                  </div>
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label">DISTANCE</span>
+                    <span class="bet-preview-value" id="bet-preview-distance">0.0%</span>
+                  </div>
+                  <div class="bet-preview-cell">
+                    <span class="bet-preview-label">CASH</span>
+                    <span class="bet-preview-value" id="bet-preview-cash">0.0 ₣</span>
+                  </div>
+                </div>
+              </div>
+              <div class="bet-modal-actions">
+                <button class="bet-modal-btn muted" id="btn-bet-modal-cancel" type="button">取消</button>
+                <button class="bet-modal-btn confirm" id="btn-bet-modal-confirm" type="button">签发契约</button>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

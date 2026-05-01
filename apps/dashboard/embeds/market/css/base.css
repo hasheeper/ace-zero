@@ -1,0 +1,160 @@
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=JetBrains+Mono:wght@400;700;800&family=Noto+Serif+SC:wght@400;700;900&display=swap");
+
+:root {
+  --bg-void: #050608;
+  --bg-panel: #0a0c11;
+  --bg-card: #10131a;
+  --border-grid: #1a1e26;
+  --border-panel: #2a313d;
+
+  --text-main: #c5c6c7;
+  --text-dim: #5c677d;
+  --text-brass: #b39c68;
+
+  --flow-up: #3aebc8;
+  --flow-up-dim: #173636;
+  --sediment-down: #8b3a3a;
+  --sediment-down-dim: #3d1c1c;
+  --sanc-gold: #d4af37;
+  --warn: #f0ac59;
+
+  --font-ui: "JetBrains Mono", "Courier New", monospace;
+  --font-title: "Cinzel", serif;
+  --font-cn: "Noto Serif SC", serif;
+}
+
+* {
+  box-sizing: border-box;
+  user-select: none;
+}
+
+body {
+  background-color: var(--bg-void);
+  color: var(--text-main);
+  font-family: var(--font-ui);
+  padding: 16px;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-size: 12px;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.3) 2px,
+    rgba(0, 0, 0, 0.3) 4px
+  );
+}
+
+.tk-val {
+  font-weight: 700;
+}
+
+.tk-up {
+  color: var(--flow-up);
+}
+
+.tk-down {
+  color: var(--sediment-down);
+}
+
+.tk-warn {
+  color: var(--warn);
+}
+
+.tk-gold {
+  color: var(--sanc-gold);
+}
+
+.btn-mini {
+  background: transparent;
+  border: 1px solid #4a5568;
+  color: #cfd6df;
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-mini:hover {
+  border-color: var(--flow-up);
+  color: var(--flow-up);
+  box-shadow: 0 0 10px rgba(58, 235, 200, 0.15);
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.up {
+  color: var(--flow-up);
+}
+
+.down {
+  color: var(--sediment-down);
+}
+
+.gold {
+  color: var(--sanc-gold);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.small {
+  font-size: 10px;
+}
+
+.terminal-container.black-market-mode {
+  --text-main: #dfb1b1;
+  --text-dim: #7d5c5c;
+  --text-brass: #b36448;
+  --flow-up: #f48d8d;
+  --flow-up-dim: #3c1f1f;
+  --sediment-down: #bb4f4f;
+  --sediment-down-dim: #482121;
+  --sanc-gold: #c67a4a;
+  --warn: #ffb07a;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.9),
+    inset 0 0 30px rgba(196, 103, 73, 0.08);
+}
+
+.terminal-container.black-market-mode .stat-val,
+.terminal-container.black-market-mode .num-main,
+.terminal-container.black-market-mode .meta-val,
+.terminal-container.black-market-mode .m-val,
+.terminal-container.black-market-mode .credit-row-value,
+.terminal-container.black-market-mode .credit-meta-value,
+.terminal-container.black-market-mode .matrix-val,
+.terminal-container.black-market-mode .node-title,
+.terminal-container.black-market-mode .scope-asset-name,
+.terminal-container.black-market-mode .ticket-price,
+.terminal-container.black-market-mode .ticket-payout,
+.terminal-container.black-market-mode .ticket-target,
+.terminal-container.black-market-mode .modal-title,
+.terminal-container.black-market-mode .modal-hero-value,
+.terminal-container.black-market-mode .badge-top-right,
+.terminal-container.black-market-mode .badge-bottom-right {
+  color: #e7b6b6 !important;
+  text-shadow: 0 0 10px rgba(196, 103, 73, 0.16);
+}
+
+.terminal-container.black-market-mode .group-leader,
+.terminal-container.black-market-mode .cmd-btn .cn,
+.terminal-container.black-market-mode .hdr-title,
+.terminal-container.black-market-mode .scope-title,
+.terminal-container.black-market-mode .board-badge,
+.terminal-container.black-market-mode .strip-label,
+.terminal-container.black-market-mode .leverage-head .lbl,
+.terminal-container.black-market-mode .matrix-header-en,
+.terminal-container.black-market-mode .sidebar-panel-header,
+.terminal-container.black-market-mode .board-bet-subtitle {
+  color: #c67a4a !important;
+  text-shadow: 0 0 10px rgba(196, 103, 73, 0.18);
+}

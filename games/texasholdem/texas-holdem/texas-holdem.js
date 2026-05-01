@@ -4999,7 +4999,7 @@
       return;
     }
 
-    // 独立运行时：加载本地 game-config.json
+    // 独立运行时：加载同构的本地 game-config.json；正常 App/STver 模式由 apps/game 统一注入。
     const configPaths = ['../../../content/game-config.json', 'game-config.json'];
     
     for (const path of configPaths) {
