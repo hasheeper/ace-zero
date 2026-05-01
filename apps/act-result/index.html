@@ -1504,6 +1504,33 @@
       function applyPayload(payload) {
         runtimePayload = payload && typeof payload === 'object' ? payload : null;
         render(getPayload());
+        reportContentSize();
+      }
+
+      function measureContentHeight() {
+        var widget = document.querySelector('.mech-widget');
+        var rect = widget ? widget.getBoundingClientRect() : null;
+        var body = document.body;
+        var html = document.documentElement;
+        return Math.ceil(Math.max(
+          rect ? rect.bottom : 0,
+          body ? body.scrollHeight : 0,
+          html ? html.scrollHeight : 0
+        ));
+      }
+
+      function reportContentSize() {
+        requestAnimationFrame(function () {
+          var height = measureContentHeight();
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({
+                type: 'acezero-act-result-size',
+                height: height
+              }, '*');
+            }
+          } catch (_) {}
+        });
       }
 
       window.addEventListener('message', function (event) {
@@ -1513,7 +1540,12 @@
       });
 
       render(getPayload());
+      reportContentSize();
       window.addEventListener('resize', syncSummaryMarquee);
+      window.addEventListener('resize', reportContentSize);
+      if (window.ResizeObserver) {
+        new ResizeObserver(reportContentSize).observe(document.body);
+      }
       try {
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'acezero-act-result-request' }, '*');

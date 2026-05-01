@@ -11,14 +11,15 @@
       margin: 0;
       padding: 0;
       width: 100%;
-      min-height: 100%;
+      height: auto;
+      min-height: 0;
       overflow: hidden;
       background: transparent;
     }
     #act-result-frame {
       width: 100%;
-      min-height: 400px;
-      height: 74vh;
+      height: 1px;
+      min-height: 0;
       border: 0;
       display: block;
       background: transparent;
@@ -42,6 +43,7 @@
 
       const frame = document.getElementById('act-result-frame');
       const hostFrame = window.frameElement;
+      let lastHeight = 1;
 
       function parsePayload() {
         try {
@@ -60,13 +62,25 @@
 
       function resizeHostFrame() {
         if (!hostFrame) return;
-        const width = Math.min(window.innerWidth || 9999, 860);
-        const height = Math.min(Math.max(window.innerHeight || 560, 560), 900);
-        hostFrame.style.width = `${width}px`;
+        const parentWidth = hostFrame.parentElement ? hostFrame.parentElement.clientWidth : 0;
+        const width = Math.min(parentWidth || window.innerWidth || 860, 860);
+        hostFrame.style.width = '100%';
         hostFrame.style.maxWidth = '100%';
-        hostFrame.style.height = `${height}px`;
-        hostFrame.style.minHeight = '560px';
+        hostFrame.style.height = `${lastHeight}px`;
+        hostFrame.style.minHeight = '0';
         hostFrame.style.border = 'none';
+        hostFrame.style.margin = '0';
+        hostFrame.style.display = 'block';
+        frame.style.width = `${width}px`;
+        frame.style.maxWidth = '100%';
+        frame.style.height = `${lastHeight}px`;
+      }
+
+      function applyContentHeight(value) {
+        const next = Math.max(1, Math.ceil(Number(value) || 1));
+        if (Math.abs(next - lastHeight) < 2) return;
+        lastHeight = next;
+        resizeHostFrame();
       }
 
       function postPayload() {
@@ -80,8 +94,14 @@
       frame.addEventListener('load', postPayload);
       window.addEventListener('message', (event) => {
         const message = event && event.data;
-        if (!message || message.type !== 'acezero-act-result-request') return;
-        postPayload();
+        if (!message) return;
+        if (message.type === 'acezero-act-result-size') {
+          applyContentHeight(message.height);
+          return;
+        }
+        if (message.type === 'acezero-act-result-request') {
+          postPayload();
+        }
       });
       window.addEventListener('resize', resizeHostFrame);
       resizeHostFrame();
