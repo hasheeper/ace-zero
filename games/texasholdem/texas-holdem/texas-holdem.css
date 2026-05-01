@@ -38,6 +38,7 @@
   --card-w: 70px;
   --card-h: 98px;
   --gap-base: 20px;
+  --game-stage-scale: 1;
 }
 
 /* =========================================================
@@ -74,13 +75,24 @@ body {
   overflow: hidden;
 }
 
+#game-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1100px;
+  height: 850px;
+  transform: translate(-50%, -50%) scale(var(--game-stage-scale, 1));
+  transform-origin: center center;
+  overflow: visible;
+}
+
 /* =========================================================
    2. 牌桌主体 - 经典跑道型布局 (Racetrack Layout)
 ========================================================= */
 #poker-table {
   position: absolute;
   left: 50%;
-  top: calc((100vh - 100px) / 2);
+  top: 375px;
   transform: translate(-50%, -50%);
   transform-origin: center center;
   width: 1100px;
@@ -1342,18 +1354,18 @@ body {
    6b. 底部操作仪表盘 (Dashboard)
 ========================================================= */
 #game-dashboard {
-  position: fixed;
+  position: absolute;
   bottom: 0;
   left: 0;
-  width: 100%;
+  width: 1100px;
   height: 100px;
   background: linear-gradient(180deg, #121013 0%, #050406 100%);
   border-top: 1px solid rgba(191, 149, 63, 0.4);
   box-shadow: 0 -10px 50px rgba(0,0,0,0.8);
   display: grid;
-  grid-template-columns: 200px auto 260px;
-  gap: 20px;
-  padding: 0 10px;
+  grid-template-columns: 200px minmax(0, 1fr) 260px;
+  gap: 12px;
+  padding: 0 14px;
   align-items: center;
   z-index: 900;
 }

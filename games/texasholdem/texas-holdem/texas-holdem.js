@@ -4674,24 +4674,21 @@
   }
 
   function fitTableToScreen() {
+    const stage = document.getElementById('game-stage');
     const table = document.getElementById('poker-table');
-    if (!table) return;
+    if (!stage || !table) return;
 
-    const tableW = 1100;
-    // 实际视觉高度 = 表上溢出120 + 牌桌550 + 表下溢出160 = 830
-    const totalVisualH = 830;
-    const dashboardH = 100; // 底部仪表盘高度
-    const availW = window.innerWidth - 20;
-    const availH = window.innerHeight - dashboardH - 20;
+    const stageW = 1100;
+    const stageH = 850;
+    const stageScale = Math.min(
+      (window.innerWidth - 20) / stageW,
+      (window.innerHeight - 20) / stageH,
+      1
+    );
+    const safeStageScale = Number.isFinite(stageScale) ? stageScale : 1;
+    document.documentElement.style.setProperty('--game-stage-scale', safeStageScale.toFixed(4));
 
-    let scale = Math.min(availW / tableW, availH / totalVisualH);
-    if (!Number.isFinite(scale)) {
-      scale = 1;
-    }
-    if (scale > 1.05) scale = 1.05;
-
-    // 保留 CSS 的 translate(-50%, -50%) 居中 + 缩放
-    table.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    table.style.transform = 'translate(-50%, -50%)';
   }
 
   // ========== 技能系统 UI（已迁移到 skill-ui.js） ==========
