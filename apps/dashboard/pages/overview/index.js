@@ -6603,6 +6603,30 @@ ${phaseSegments}
         syncPlannerOpenState();
     });
 
+    function createOverviewMapView() {
+        const mapViewApi = getOverviewMapViewApi();
+        if (!mapViewApi || typeof mapViewApi.create !== 'function') return null;
+        return mapViewApi.create({
+            appState,
+            getCanvas: () => canvas,
+            getNodeData,
+            getMapNodes,
+            getMapTopology,
+            getRenderedMapTopology,
+            isConnectionVisibleInMapFog,
+            getCurrentNodeData,
+            isBossNodeId,
+            isFinaleNodeId,
+            getCampaignTotalNodes,
+            isVisitedConnection,
+            updateMapUI,
+            applyAutoMacroLayout,
+            syncLayerSize,
+            fitLayerToViewport,
+            centerViewportOnCurrentFocus
+        });
+    }
+
     function initSVGPaths() {
         if (overviewMapView) overviewMapView.rebuild();
     }
