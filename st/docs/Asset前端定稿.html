@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Asset Contract Settlement</title>
+<style>
+    /* =======================================================
+       1. 全局变量与底垫场景
+    ======================================================= */
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=JetBrains+Mono:wght@400;700;800&family=Noto+Serif+SC:wght@400;700;900&display=swap');
+
+    :root {
+        --bg-panel: transparent;
+        --gold-main: #CFB53B;
+        --gold-glow: rgba(207, 181, 59, 0.4);
+        --text-dim: #647087;
+        --text-light: #e5e5e5;
+        --warn-red: #e85555;
+        
+        --font-ui: "JetBrains Mono", monospace;
+        --font-title: "Cinzel", serif;
+        --font-cn: "Noto Serif SC", serif;
+        
+        /* 派系原点高级纯正发色 */
+        --semantic-trait: #e0ca58;    
+        --semantic-curse: #d26f7b;    
+        --semantic-mana: #5f9cf5;     
+        --semantic-void: #b5c0d8;     
+    }
+
+    * { box-sizing: border-box; user-select: none; }
+    body {
+        margin: 0; padding: 0; height: 100vh;
+        /* 透明嵌入版：底图交给 Dashboard / plan 页面，不再自带整页黑底 */
+        background: transparent;
+        background-size: 100% 100%, 40px 40px, 40px 40px;
+        color: #fff; display: flex; align-items: flex-end; 
+    }
+
+    /* =======================================================
+       2. 抽屉主容器与 Tab (解决“断头台”Bug的核心骨架)
+    ======================================================= */
+    .planner-drawer {
+        position: relative; width: 100%; 
+        height: 380px; /* ★ 高度绝对锁死在黄金尺寸 */
+        background: linear-gradient(180deg, rgba(10, 12, 17, 0.58) 0%, rgba(5, 6, 8, 0.36) 100%);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(207, 181, 59, 0.2);
+        box-shadow: 0 -15px 50px rgba(0,0,0,0.45), inset 0 20px 30px rgba(0,0,0,0.18);
+        display: flex; flex-direction: column; overflow: hidden;
+    }
+    .planner-drawer::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 4px);
+    }
+
+    /* 顶部标头 */
+    .planner-panel-header {
+        flex: 0 0 auto; padding: 0 40px; border-bottom: 1px solid rgba(255,255,255,0.045);
+        display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 10;
+        box-shadow: inset 0 -5px 15px rgba(0,0,0,0.12);
+    }
+
+    .drawer-tabs { display: flex; gap: 40px; }
+    .drawer-tab {
+        background: transparent; border: none; padding: 18px 0 16px 0;
+        color: var(--text-dim); border-bottom: 2px solid transparent; cursor: pointer;
+        font-family: var(--font-title); font-size: 12px; font-weight: 800; letter-spacing: 3px;
+        transition: 0.3s ease;
+    }
+    .drawer-tab:hover:not(.is-active) { color: var(--text-light); text-shadow: 0 0 8px rgba(255,255,255,0.2); }
+    .drawer-tab.is-active { color: var(--gold-main); border-bottom-color: var(--gold-main); text-shadow: 0 0 12px var(--gold-glow); }
+
+    .asset-counter {
+        font-family: var(--font-title); font-size: 13px; font-weight: 900; letter-spacing: 2px;
+        color: var(--gold-main); text-shadow: 0 0 10px var(--gold-glow); display: flex; align-items: center; gap: 8px;
+    }
+    .asset-counter::before { content: '✦'; font-size: 10px; color: var(--gold-main); }
+
+    /* 视图层：min-height: 0 允许内部元素发生滚动 */
+    .drawer-view { 
+        display: none; flex: 1; padding: 25px 40px 30px 40px; gap: 30px; 
+        animation: slideUp 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; position: relative; z-index: 10; 
+        box-sizing: border-box; min-height: 0;
+    }
+    .drawer-view.is-active { display: flex; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* =======================================================
+       3. 核心探测面板 (左侧动态星盘)
+    ======================================================= */
+    .detect-panel { flex: 0 0 160px; display: flex; flex-direction: column; gap: 8px; position: relative; padding-right: 25px;}
+    .detect-panel::after { content: ''; position: absolute; right: 0; top: 5%; bottom: 5%; width: 1px; background: linear-gradient(180deg, transparent, rgba(255,255,255,0.08), transparent); }
+    
+    .detect-label { font-family: var(--font-ui); font-size: 9px; color: var(--text-dim); font-weight: 800; letter-spacing: 2px; line-height: 1.2;}
+    .detect-target { font-family: var(--font-title); font-size: 17px; color: #fff; font-weight: 900; letter-spacing: 2px; margin-bottom: 4px; }
+    
+    .astrolabe-ring {
+        width: 42px; height: 42px; border: 1px solid rgba(207, 181, 59, 0.6); border-radius: 50%; flex-shrink: 0;
+        background: radial-gradient(circle, rgba(207,181,59,0.1) 0%, transparent 70%); display: flex; justify-content: center; align-items: center;
+        box-shadow: 0 0 15px rgba(207,181,59,0.15), inset 0 0 10px rgba(207,181,59,0.1); margin-bottom: 6px;
+    }
+    .astrolabe-ring .magic-core { 
+        width: 10px; height: 10px; background: var(--gold-main); transform: rotate(45deg); box-shadow: 0 0 12px var(--gold-main); 
+        animation: corePulse 2s infinite alternate, coreSpin 8s linear infinite;
+    }
+    @keyframes corePulse { 0% { transform: rotate(45deg) scale(0.9); opacity: 0.8;} 100% { transform: rotate(45deg) scale(1.1); opacity: 1;} }
+    @keyframes coreSpin { 0% { transform: rotate(45deg); } 100% { transform: rotate(405deg); } }
+    
+    .detect-msg { font-family: var(--font-ui); font-size: 9px; color: rgba(255,255,255,0.5); letter-spacing: 1px; }
+
+    .btn-action {
+        margin-top: auto; min-height: 30px; width: 100%;
+        border: 1px solid rgba(207,181,59,0.28); background: rgba(207,181,59,0.08); color: rgba(255,255,255,0.86);
+        font-family: var(--font-ui); font-size: 9px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;
+        display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;
+        clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+    }
+    .btn-action:hover { border-color: var(--gold-main); background: rgba(207,181,59,0.2); color: #fff; box-shadow: 0 0 14px var(--gold-glow); }
+
+    /* =======================================================
+       4. EXTRACT 抽取卡牌 (完美无切断的文字排版)
+    ======================================================= */
+    .cmd-card {
+        --card-accent: #b0b4ba; 
+        position: relative; height: 100%; flex: 1; 
+        background: transparent; border: none; cursor: pointer;
+        clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+        display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start;
+        padding: 24px 26px; transition: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        isolation: isolate; text-align: left;
+    }
+    .cmd-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.01) 100%); border-radius: inherit; clip-path: inherit; z-index: -2; transition: 0.3s ease; }
+    .cmd-card::after { content: ''; position: absolute; inset: 1px; background: linear-gradient(160deg, rgba(22,24,30,0.72) 0%, rgba(10,11,14,0.46) 100%); clip-path: polygon(13.5px 0, 100% 0, 100% calc(100% - 13.5px), calc(100% - 13.5px) 100%, 0 100%, 0 13.5px); z-index: -1; transition: 0.3s ease; box-shadow: inset 0 20px 40px rgba(0,0,0,0.36); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    .cmd-card-accent-line { position: absolute; top: 1px; left: 14px; right: 0; height: 2px; background: linear-gradient(90deg, var(--card-accent), transparent); z-index: -1; opacity: 0.8; }
+    .bg-svg { position: absolute; right: -5px; bottom: -15px; font-family: var(--font-title); font-size: 110px; font-weight: 900; color: #fff; opacity: 0.02; transition: all 0.3s ease; z-index: 0; font-style: italic; line-height: 1; }
+
+    .cmd-type { font-family: var(--font-ui); font-size: 10px; color: rgba(255,255,255,0.4); margin-bottom: 10px; z-index: 2; transition: 0.28s ease; letter-spacing: 1.5px; text-transform: uppercase;}
+    .cmd-name-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; z-index: 2; width: 100%;}
+    .cmd-name { font-family: var(--font-cn); font-size: 18px; font-weight: 900; color: #fff; letter-spacing: 1.5px; transition: 0.28s ease; line-height: 1.2; text-shadow: 0 0 8px rgba(0,0,0,0.8); }
+    .cmd-level { font-family: var(--font-ui); font-size: 11px; color: var(--card-accent); opacity: 0.9; font-weight: bold; }
+    .cmd-desc { font-family: var(--font-cn); font-size: 11px; color: rgba(220,220,220,0.6); z-index: 2; line-height: 1.7; letter-spacing: 0.5px; }
+    .cmd-note { color: rgba(255,255,255,0.3); font-size: 10px; margin-top: 6px; display: block; }
+
+    .cmd-card:hover { transform: translateY(-4px); }
+    .cmd-card:hover::before { background: linear-gradient(180deg, color-mix(in srgb, var(--card-accent) 60%, rgba(255,255,255,0.2)) 0%, rgba(255,255,255,0.05) 100%); }
+    .cmd-card:hover::after { background: rgba(18,20,26,0.72); }
+    .cmd-card:hover .cmd-name { color: var(--card-accent); text-shadow: 0 0 12px color-mix(in srgb, var(--card-accent) 50%, transparent); }
+    .cmd-card:hover .cmd-type { color: color-mix(in srgb, var(--card-accent) 80%, #fff); }
+
+    /* =======================================================
+       5. ACTIVE DECK (完美无界限滚动区域)
+    ======================================================= */
+    .deck-scroll-area {
+        flex: 1; display: flex; flex-direction: column; 
+        overflow-y: auto; overflow-x: hidden; 
+        padding-right: 20px; margin-right: -10px;
+        min-height: 0; padding-bottom: 5px; 
+        scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;
+    }
+    .deck-scroll-area::-webkit-scrollbar { width: 4px; }
+    .deck-scroll-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+    .deck-grid-vertical { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    
+    .mini-slot {
+        height: 56px; padding: 0 16px; position: relative;
+        display: flex; flex-direction: column; justify-content: center;
+        clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        transition: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); isolation: isolate; cursor: pointer;
+    }
+
+    .mini-slot.filled { background: rgba(19,21,26,0.38); border: none; }
+    .mini-slot.filled::after { 
+        content: ''; position: absolute; inset: 1px; background: linear-gradient(160deg, rgba(24,26,32,0.62), rgba(10,11,14,0.38)); 
+        z-index: -1; clip-path: polygon(7.5px 0, 100% 0, 100% calc(100% - 7.5px), calc(100% - 7.5px) 100%, 0 100%, 0 7.5px);
+        box-shadow: inset 0 2px 2px rgba(255,255,255,0.02), inset 0 10px 20px rgba(0,0,0,0.5); /* 强化孔位雕刻感 */
+    }
+    .mini-slot.filled::before { 
+        content: ''; position: absolute; left: 1px; top: 6px; bottom: 6px; width: 3px; 
+        background: var(--c); box-shadow: 0 0 8px var(--c); z-index: 10; border-radius: 1.5px; transition: 0.2s;
+    }
+    
+    .mini-slot.filled:hover, .mini-slot.filled.is-focused { transform: translateX(4px); }
+    .mini-slot.filled:hover::after, .mini-slot.filled.is-focused::after { background: rgba(25,28,36,0.72); }
+    .mini-slot.filled.is-focused::before { width: 5px; box-shadow: 0 0 16px var(--c); }
+    .mini-slot.filled.is-focused { filter: brightness(1.2); }
+    
+    .mini-slot .type { font-family: var(--font-ui); font-size: 8px; color: var(--c, rgba(255,255,255,0.3)); font-weight: 800; letter-spacing: 1px; opacity: 0.9;}
+    .mini-slot .name-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 3px; }
+    .mini-slot .name { font-family: var(--font-cn); font-size: 14px; font-weight: 900; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 6px rgba(0,0,0,0.9);}
+    .mini-slot .lvl { font-family: var(--font-ui); font-size: 10px; color: var(--c); font-weight: bold; }
+
+    .mini-slot.empty { background: transparent; pointer-events: none; }
+    .mini-slot.empty::after { content: ''; position: absolute; inset: 1px; background: rgba(0,0,0,0.4); z-index: -1; box-shadow: inset 0 5px 15px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.03); clip-path: polygon(7.5px 0, 100% 0, 100% calc(100% - 7.5px), calc(100% - 7.5px) 100%, 0 100%, 0 7.5px); }
+    .mini-slot.empty .name { font-weight: normal; color: rgba(255,255,255,0.25); font-size: 12px; }
+    
+    .mini-slot.locked { background: transparent; cursor: not-allowed; }
+    .mini-slot.locked::after { content: ''; position: absolute; inset: 1px; z-index: -1; background: repeating-linear-gradient(-45deg, rgba(255,255,255,0.015), rgba(255,255,255,0.015) 4px, rgba(0,0,0,0.5) 4px, rgba(0,0,0,0.5) 8px); box-shadow: inset 0 5px 15px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.02); clip-path: polygon(7.5px 0, 100% 0, 100% calc(100% - 7.5px), calc(100% - 7.5px) 100%, 0 100%, 0 7.5px); }
+    .mini-slot.locked .name { color: rgba(255,255,255,0.15); font-weight: normal; font-size: 12px; }
+
+    .void-section-vertical { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 25px; margin-top: 18px; position: relative; margin-bottom: 5px; }
+    .void-section-vertical::before { content: 'VOID ISOLATION'; position: absolute; top: -8px; left: 0; font-family: var(--font-ui); font-size: 9px; color: var(--semantic-void); background: transparent; padding: 0 10px 0 0; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 10px rgba(181,192,216,0.22); }
+
+    /* =======================================================
+       6. 右侧超高质感读取面板 (固定高度不跳跃)
+    ======================================================= */
+    .details-panel {
+        flex: 0 0 280px; 
+        background: rgba(14, 15, 20, 0.36); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 25px 22px;
+        display: flex; flex-direction: column; position: relative; overflow: hidden;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03);
+        transition: 0.3s ease; height: 100%;
+    }
+    
+    .details-panel::before {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+        background: var(--dp-color, transparent); box-shadow: 0 0 15px var(--dp-color, transparent);
+        transition: background 0.3s ease; opacity: 0.85;
+    }
+
+    .dp-bg-svg {
+        position: absolute; right: -15px; bottom: -20px;
+        font-family: var(--font-title); font-size: 160px; font-weight: 900;
+        color: var(--dp-color, #fff); opacity: 0.025; font-style: italic;
+        pointer-events: none; transition: 0.3s ease; line-height: 1; z-index: 0;
+    }
+
+    .dp-type { font-family: var(--font-ui); font-size: 9px; color: rgba(255,255,255,0.4); font-weight: 800; letter-spacing: 2px; margin-bottom: 12px; z-index: 2; position: relative;}
+    .dp-name-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; z-index: 2; position: relative;}
+    .dp-name { font-family: var(--font-cn); font-size: 19px; font-weight: 900; color: #fff; text-shadow: 0 0 10px rgba(0,0,0,0.9); }
+    .dp-lvl { font-family: var(--font-ui); font-size: 11px; color: var(--dp-color, #fff); font-weight: bold; text-shadow: 0 0 8px color-mix(in srgb, var(--dp-color) 40%, transparent);}
+    
+    .dp-divider { width: 100%; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,0.1), transparent); margin-bottom: 18px; z-index: 2; position: relative;}
+    .dp-desc { font-family: var(--font-cn); font-size: 12px; color: rgba(220,220,220,0.78); line-height: 1.7; letter-spacing: 0.5px; z-index: 2; position: relative;}
+    
+    .dp-action-area { margin-top: auto; display: flex; flex-direction: column; gap: 10px; z-index: 10; position: relative;}
+    .dp-note { font-family: var(--font-ui); font-size: 9px; color: var(--dp-color, #fff); font-weight: 800; opacity: 0.85; letter-spacing: 1.5px; text-transform: uppercase; text-align: center;}
+
+    /* 高危摧毁按钮 */
+    .btn-unequip {
+        width: 100%; min-height: 32px;
+        background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.5);
+        font-family: var(--font-ui); font-size: 10px; font-weight: 800; letter-spacing: 2px;
+        cursor: pointer; transition: 0.2s ease; border-radius: 3px; position: relative; overflow: hidden;
+    }
+    .btn-unequip:hover { 
+        border-color: var(--warn-red); color: #fff; 
+        background: linear-gradient(90deg, rgba(232,85,85,0.15) 0%, rgba(139,37,37,0.05) 100%);
+        box-shadow: 0 0 15px rgba(232,85,85,0.25), inset 0 0 15px rgba(232,85,85,0.15);
+        text-shadow: 0 0 10px var(--warn-red);
+    }
+    .btn-unequip:hover::before {
+        content: ''; position: absolute; right: 0; bottom: 0; width: 6px; height: 6px;
+        border-bottom: 2px solid var(--warn-red); border-right: 2px solid var(--warn-red);
+    }
+
+    .details-panel.is-idle .dp-type, .details-panel.is-idle .dp-name-row, .details-panel.is-idle .dp-divider, .details-panel.is-idle .dp-desc, .details-panel.is-idle .dp-action-area { display: none; }
+    .details-panel.is-idle::after { content: 'TARGET EMPTY SLOT'; position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; font-family: var(--font-ui); font-size: 10px; color: rgba(255,255,255,0.2); letter-spacing: 2px; }
+
+</style>
+</head>
+<body>
+
+<div class="planner-drawer">
+    
+    <!-- 顶部导航 -->
+    <div class="planner-panel-header">
+        <div class="drawer-tabs">
+            <button class="drawer-tab" data-target="view-planner">PHASE PLANNER</button>
+            <button class="drawer-tab" data-target="view-extract">CONTRACT EXTRACT</button>
+            <button class="drawer-tab is-active" data-target="view-deck">ACTIVE DECK</button>
+        </div>
+        <div class="asset-counter">ASSET POINTS : 3</div>
+    </div>
+
+    <!-- VIEW 1: PLANNER PHSOLDER -->
+    <div class="drawer-view" id="view-planner">
+        <div style="flex:1; display:flex; justify-content:center; align-items:center; color: var(--text-dim); font-family: var(--font-ui); font-size: 11px; letter-spacing:2px;">[ ALIGN PHASE TOKENS HERE ]</div>
+    </div>
+
+    <!-- VIEW 2: EXTRACT 契约抽取页 -->
+    <div class="drawer-view" id="view-extract">
+        <div class="detect-panel">
+            <span class="detect-label">CATALYST DETECTED</span>
+            <span class="detect-target">SEGMENT 2</span>
+            <div class="astrolabe-ring"><div class="magic-core"></div></div>
+            <span class="detect-msg">Generating MID POOL · COST 2 ASSET...</span>
+            <button class="btn-action">REROLL POOL</button>
+        </div>
+        
+        <div style="flex: 1; display: flex; gap: 16px;">
+            <button class="cmd-card" style="--card-accent: var(--semantic-trait);">
+                <div class="cmd-card-accent-line"></div>
+                <div class="bg-svg">U</div>
+                <span class="cmd-type">BRONZE · UNIVERSAL</span>
+                <div class="cmd-name-row"><span class="cmd-name">魔力扩容</span></div>
+                <div class="cmd-desc">Mana Max +4<span class="cmd-note">无需前置条件，可叠加生效。</span></div>
+            </button>
+            <button class="cmd-card" style="--card-accent: var(--semantic-curse);">
+                <div class="cmd-card-accent-line"></div>
+                <div class="bg-svg">C</div>
+                <span class="cmd-type">SILVER · CHAOS SKILL</span>
+                <div class="cmd-name-row"><span class="cmd-name">灾乱 (Havoc)</span><span class="cmd-level">Lv.2</span></div>
+                <div class="cmd-desc">对选定目标施加极高厄运，若场上仅存一名目标，必定追加一次打击。</div>
+            </button>
+            <button class="cmd-card" style="--card-accent: var(--semantic-void);">
+                <div class="cmd-card-accent-line"></div>
+                <div class="bg-svg">V</div>
+                <span class="cmd-type">GOLD · VOID FRAME</span>
+                <div class="cmd-name-row"><span class="cmd-name">现实还原 I</span></div>
+                <div class="cmd-desc">清空当前街内所有非 Void 临时魔运力量。<span class="cmd-note">每场局限调用 1 次。</span></div>
+            </button>
+        </div>
+    </div>
+
+    <!-- VIEW 3: ACTIVE DECK 卡组装配 (可完美滚动，右侧绝对固定) -->
+    <div class="drawer-view is-active" id="view-deck">
+        
+        <div class="detect-panel">
+            <span class="detect-label">CAPACITY LIMIT</span>
+            <span class="detect-target" style="font-size: 26px; margin-bottom: 2px;">4<span style="color: var(--text-dim); font-size: 16px;"> / 8</span></span>
+            <button class="btn-action" style="margin-top: auto;">EXPAND (1 ASSET)</button>
+        </div>
+
+        <!-- 卡槽滚动区 -->
+        <div class="deck-scroll-area">
+            <div class="deck-grid-vertical">
+                <!-- 每一格通过 Data Attributes 携带信息抛给右侧面板 -->
+                <div class="mini-slot filled is-focused" style="--c: var(--semantic-trait);" 
+                     data-p-color="var(--semantic-trait)" data-p-bg="U" data-p-type="UNIVERSAL / BRONZE" data-p-name="Mana Max +4" data-p-lvl="PASSIVE" data-p-desc="直接提升宿主的法力极大阈值与缓冲界限。<br><br>无论何种境地，作为维系魔力流转的第一基石永远生效。可叠加。" data-p-note="[ STATUS: ACTIVE ]">
+                    <span class="type">UNIVERSAL</span>
+                    <div class="name-row"><span class="name">Mana Max +4</span><span class="lvl">Pass.</span></div>
+                </div>
+
+                <div class="mini-slot filled" style="--c: var(--semantic-trait);" 
+                     data-p-color="var(--semantic-trait)" data-p-bg="M" data-p-type="MOIRAI / BRONZE" data-p-name="小愿望" data-p-lvl="LV.1" data-p-desc="基础补运法术。<br><br>消耗极少法力，为你当前牌局强行施加小型好运偏转以度过难关。可与其他天命效果叠加。" data-p-note="[ STATUS: ACTIVE ]">
+                    <span class="type">MOIRAI</span>
+                    <div class="name-row"><span class="name">小愿望</span><span class="lvl">Lv.1</span></div>
+                </div>
+
+                <div class="mini-slot filled" style="--c: var(--semantic-curse);" 
+                     data-p-color="var(--semantic-curse)" data-p-bg="C" data-p-type="CHAOS / SILVER" data-p-name="灾乱 (Havoc)" data-p-lvl="LV.2" data-p-desc="进阶施咒节点。<br><br>对选定目标施加极高厄运。若场上仅存一名存活目标，则其必须承受灾乱余波，必定追加二次打击以巩固斩杀。" data-p-note="[ STATUS: ACTIVE ]">
+                    <span class="type">CHAOS</span>
+                    <div class="name-row"><span class="name">灾乱 (Havoc)</span><span class="lvl">Lv.2</span></div>
+                </div>
+
+                <div class="mini-slot filled" style="--c: var(--semantic-mana);" 
+                     data-p-color="var(--semantic-mana)" data-p-bg="P" data-p-type="PSYCHE / SILVER" data-p-name="法力护盾协同" data-p-lvl="PASSIVE" data-p-desc="每次将洞察力(Psyche)进行完美防守时，均有概率将溢出的运算力直接转为真实护盾，填补充能。" data-p-note="[ STATUS: ACTIVE ]">
+                    <span class="type">PSYCHE</span>
+                    <div class="name-row"><span class="name">法力护盾协同</span><span class="lvl">Pass.</span></div>
+                </div>
+                
+                <div class="mini-slot empty"><span class="type" style="color: rgba(255,255,255,0.2);">EMPTY</span><div class="name-row"><span class="name" style="color: rgba(255,255,255,0.3);">未装配指令</span></div></div>
+                <div class="mini-slot locked"><span class="type" style="color: rgba(255,255,255,0.1);">LOCKED</span><div class="name-row"><span class="name">硬件锁止</span></div></div>
+                <div class="mini-slot locked"><span class="type" style="color: rgba(255,255,255,0.1);">LOCKED</span><div class="name-row"><span class="name">硬件锁止</span></div></div>
+                <div class="mini-slot locked"><span class="type" style="color: rgba(255,255,255,0.1);">LOCKED</span><div class="name-row"><span class="name">硬件锁止</span></div></div>
+            </div>
+
+            <!-- Void 专门分区 -->
+            <div class="void-section-vertical">
+                <div class="mini-slot filled" style="--c: var(--semantic-void); background: rgba(181, 192, 216, 0.04);"
+                     data-p-color="var(--semantic-void)" data-p-bg="V" data-p-type="VOID FRAME / GOLD" data-p-name="绝缘校准" data-p-lvl="FRAME" data-p-desc="针对零号体质（KAZU）的专属抑制协议。<br><br>抑制全场无论敌我、任何形式的额外魔运强度 30%。强制抹平盘口，并大幅度降低超载吸收带来的副面损伤。" data-p-note="[ KAZU EXCLUSIVE ]">
+                    <span class="type" style="color: var(--semantic-void);">VOID FRAME</span>
+                    <div class="name-row"><span class="name">绝缘校准</span></div>
+                </div>
+                <div class="mini-slot empty" style="border-color: rgba(181, 192, 216, 0.15);">
+                    <span class="type" style="color: rgba(181, 192, 216, 0.15);">EMPTY VOID</span>
+                    <div class="name-row"><span class="name" style="color: rgba(181, 192, 216, 0.3);">未装配零号参数</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 绝对固定在右侧的详情读取器 -->
+        <div class="details-panel" id="slot-details" style="--dp-color: var(--semantic-trait);">
+            <div class="dp-bg-svg" id="dp-bg">U</div>
+            <div class="dp-type" id="dp-type">UNIVERSAL / BRONZE</div>
+            <div class="dp-name-row">
+                <div class="dp-name" id="dp-name">Mana Max +4</div>
+                <div class="dp-lvl" id="dp-lvl">PASSIVE</div>
+            </div>
+            <div class="dp-divider"></div>
+            <div class="dp-desc" id="dp-desc">直接提升宿主的法力极大阈值与缓冲界限。<br><br>无论何种境地，作为维系魔力流转的第一基石永远生效。可叠加。</div>
+            <div class="dp-action-area">
+                <div class="dp-note" id="dp-note">[ STATUS: ACTIVE ]</div>
+                <button class="btn-unequip">REPLACE & DESTROY OLD CARD</button>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- 控制脚本 -->
+<script>
+    // Tab 切页面逻辑
+    document.querySelectorAll('.drawer-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            document.querySelectorAll('.drawer-tab').forEach(t => t.classList.remove('is-active'));
+            document.querySelectorAll('.drawer-view').forEach(v => v.classList.remove('is-active'));
+            
+            e.target.classList.add('is-active');
+            const targetId = e.target.getAttribute('data-target');
+            document.getElementById(targetId).classList.add('is-active');
+        });
+    });
+
+    // 插槽悬停 -> 右侧面板数据解算
+    const slots = document.querySelectorAll('.mini-slot');
+    const DP = {
+        panel: document.getElementById('slot-details'),
+        bg: document.getElementById('dp-bg'),
+        type: document.getElementById('dp-type'),
+        name: document.getElementById('dp-name'),
+        lvl: document.getElementById('dp-lvl'),
+        desc: document.getElementById('dp-desc'),
+        note: document.getElementById('dp-note')
+    };
+
+    slots.forEach(slot => {
+        slot.addEventListener('mouseenter', () => {
+            // 清除所有的聚焦高亮状态
+            slots.forEach(s => s.classList.remove('is-focused'));
+            
+            // 判断当前悬停的是否是“已装配卡牌”的有效槽位
+            if (slot.classList.contains('filled')) {
+                slot.classList.add('is-focused');
+                
+                // 唤醒详情面板
+                DP.panel.classList.remove('is-idle');
+
+                // 提取 data-* 自定义属性，注入到右侧面板 DOM 中
+                DP.panel.style.setProperty('--dp-color', slot.getAttribute('data-p-color'));
+                DP.bg.innerText = slot.getAttribute('data-p-bg');
+                DP.type.innerText = slot.getAttribute('data-p-type');
+                DP.name.innerText = slot.getAttribute('data-p-name');
+                DP.lvl.innerText = slot.getAttribute('data-p-lvl');
+                DP.desc.innerHTML = slot.getAttribute('data-p-desc');
+                DP.note.innerText = slot.getAttribute('data-p-note');
+            } else {
+                // 如果悬停在“空槽位”或“锁止的槽位”上，面板进入待机/空闲状态
+                DP.panel.classList.add('is-idle');
+                DP.panel.style.setProperty('--dp-color', 'transparent');
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

@@ -102,6 +102,11 @@
     return typeof value === 'string' ? value.trim() : fallback;
   }
 
+  function normalizePendingActAssetDeckCommands(actState) {
+    const list = Array.isArray(actState?.pendingAssetDeckCommands) ? actState.pendingAssetDeckCommands : [];
+    return list.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+  }
+
   function isHeroMacroToken(value) {
     return value === '{{user}}' || value === '<user>';
   }
@@ -206,6 +211,102 @@
     }
 
     return null;
+  }
+
+  function getAssetDeckModuleApi() {
+    const hostRoot = getAce0HostRoot();
+    const candidates = [];
+    if (hostRoot && typeof hostRoot === 'object') candidates.push(hostRoot);
+    if (window && typeof window === 'object' && !candidates.includes(window)) candidates.push(window);
+    if (typeof globalThis === 'object' && globalThis && !candidates.includes(globalThis)) candidates.push(globalThis);
+    if (typeof unsafeWindow === 'object' && unsafeWindow && !candidates.includes(unsafeWindow)) candidates.push(unsafeWindow);
+
+    for (const candidate of candidates) {
+      try {
+        const assetDeck = candidate?.ACE0Modules?.assetDeck;
+        if (assetDeck && typeof assetDeck.applyAssetDeckCommand === 'function') {
+          return assetDeck;
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  function applyPendingActAssetDeckCommands(nextState, nextActState) {
+    const pendingCommands = normalizePendingActAssetDeckCommands(nextActState);
+    const commandsToApply = pendingCommands.filter((item) => {
+      const status = (normalizeDashboardString(item.status, 'pending') || 'pending').toLowerCase();
+      return status === 'pending' && item.command && typeof item.command === 'object' && !Array.isArray(item.command);
+    });
+    if (!commandsToApply.length) return nextActState;
+
+    const assetDeckModule = getAssetDeckModuleApi();
+    if (!assetDeckModule || typeof assetDeckModule.applyAssetDeckCommand !== 'function') {
+      throw new Error('AssetDeck runtime is not loaded in host; cannot settle ACT asset commands.');
+    }
+
+    let currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
+      ? assetDeckModule.normalizeAssetDeckState(nextState.world.assetDeck)
+      : (nextState.world.assetDeck || {});
+    const consumedIds = new Set();
+    const resolutionHistory = Array.isArray(nextActState.resolutionHistory)
+      ? cloneJsonData(nextActState.resolutionHistory, [])
+      : [];
+
+    commandsToApply.forEach((pending) => {
+      const command = cloneJsonData(pending.command, {}) || {};
+      const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
+        ? cloneJsonData(command.payload, {})
+        : {};
+      command.payload = {
+        ...payload,
+        requestId: normalizeDashboardString(payload.requestId || pending.id, '')
+      };
+      if (!command.payload.source && pending.nodeId) {
+        command.payload.source = {
+          type: 'act_asset_token',
+          actId: normalizeDashboardString(nextActState.id, ''),
+          nodeId: pending.nodeId,
+          nodeIndex: pending.nodeIndex,
+          phaseIndex: pending.phaseIndex,
+          level: pending.level,
+          sources: Array.isArray(pending.sources) ? cloneJsonData(pending.sources, []) : []
+        };
+      }
+
+      let commandResult;
+      try {
+        commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
+          seed: `act:${pending.id || Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+        });
+      } catch (error) {
+        commandResult = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
+      }
+
+      const status = commandResult?.ok ? 'resolved' : 'failed';
+      if (commandResult?.assetDeck) currentAssetDeck = cloneJsonData(commandResult.assetDeck, currentAssetDeck);
+      resolutionHistory.push({
+        ...cloneJsonData(pending, {}),
+        type: 'asset',
+        status,
+        outcome: commandResult?.code || (commandResult?.ok ? 'asset_command_applied' : 'asset_command_failed'),
+        summary: pending.summary || `ACT AssetDeck command ${status}`,
+        payload: {
+          commandKind: command.kind || command.type || '',
+          commandPayload: cloneJsonData(command.payload, {}),
+          resultCode: commandResult?.code || '',
+          asset_count: Math.max(0, Math.round(Number(currentAssetDeck?.asset_count) || 0)),
+          error: commandResult?.error || ''
+        }
+      });
+      consumedIds.add(pending.id);
+    });
+
+    nextState.world.assetDeck = cloneJsonData(currentAssetDeck, currentAssetDeck);
+    nextActState.pendingAssetDeckCommands = pendingCommands.filter((item) => !consumedIds.has(item.id));
+    nextActState.resolutionHistory = resolutionHistory;
+    return nextActState;
   }
 
   function resolveDashboardActState(eraVars) {
@@ -324,9 +425,10 @@
       nextState.world[key] = value;
     });
 
-    const nextActState = cloneJsonData(worldPatch.act || commitPayload.act, null);
+    let nextActState = cloneJsonData(worldPatch.act || commitPayload.act, null);
     if (!nextActState || typeof nextActState !== 'object') return false;
 
+    nextActState = applyPendingActAssetDeckCommands(nextState, nextActState);
     nextState.world.act = nextActState;
     if (typeof insertOrAssignVariables === 'function') {
       await insertOrAssignVariables({ stat_data: nextState }, { type: 'message' });
@@ -364,10 +466,98 @@
     }
   }
 
-  function attachDashboardCommitBridge(targetWindow) {
+  async function persistDashboardAssetDeckCommand(commandPayload) {
+    const requestId = typeof commandPayload?.requestId === 'string' ? commandPayload.requestId : '';
+    const assetDeckModule = getAssetDeckModuleApi();
+    if (!assetDeckModule || typeof assetDeckModule.applyAssetDeckCommand !== 'function') {
+      return {
+        ok: false,
+        requestId,
+        error: 'AssetDeck runtime is not loaded in host.'
+      };
+    }
+
+    const command = commandPayload?.command && typeof commandPayload.command === 'object'
+      ? commandPayload.command
+      : (commandPayload && typeof commandPayload === 'object' ? commandPayload : {});
+    const eraVars = getCurrentEraVars();
+    if (!eraVars || typeof eraVars !== 'object') {
+      return {
+        ok: false,
+        requestId,
+        error: 'MVU state is unavailable.'
+      };
+    }
+
+    const nextState = cloneJsonData(eraVars, {}) || {};
+    if (!nextState.world || typeof nextState.world !== 'object') nextState.world = {};
+    const currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
+      ? assetDeckModule.normalizeAssetDeckState(nextState.world.assetDeck)
+      : (nextState.world.assetDeck || {});
+
+    let commandResult;
+    try {
+      commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
+        seed: `host:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        requestId,
+        error: error?.message || String(error)
+      };
+    }
+
+    if (!commandResult?.ok) {
+      return {
+        ok: false,
+        requestId,
+        code: commandResult?.code || 'asset_command_rejected',
+        error: commandResult?.code || 'AssetDeck command rejected.',
+        assetDeck: cloneJsonData(commandResult?.assetDeck, null)
+      };
+    }
+
+    nextState.world.assetDeck = cloneJsonData(commandResult.assetDeck, commandResult.assetDeck);
+    let didPersist = false;
+    if (typeof insertOrAssignVariables === 'function') {
+      await insertOrAssignVariables({ stat_data: nextState }, { type: 'message' });
+      didPersist = true;
+    } else if (ROOT.STBridge?.mvu?.writeVariables) {
+      await ROOT.STBridge.mvu.writeVariables({ stat_data: nextState }, { type: 'message' });
+      didPersist = true;
+    }
+
+    if (!didPersist) {
+      console.warn('[ACE0 Dashboard] insertOrAssignVariables 不可用，无法回写 AssetDeck');
+      return {
+        ok: false,
+        requestId,
+        code: 'persist_unavailable',
+        error: 'Persist bridge is unavailable. MVU state was not updated.',
+        assetDeck: cloneJsonData(commandResult.assetDeck, null)
+      };
+    }
+
+    return {
+      ok: true,
+      requestId,
+      code: commandResult.code || 'asset_command_applied',
+      assetDeck: cloneJsonData(commandResult.assetDeck, null)
+    };
+  }
+
+  function attachDashboardCommitBridge(targetWindow, commitBridge = commitDashboardActState) {
     if (!targetWindow) return;
     try {
-      targetWindow.ACE0DashboardCommitActState = commitDashboardActState;
+      targetWindow.ACE0DashboardCommitActState = commitBridge;
+    } catch (_) {}
+  }
+
+  function attachDashboardAssetDeckCommandBridge(targetWindow, commandBridge = persistDashboardAssetDeckCommand) {
+    if (!targetWindow) return;
+    try {
+      targetWindow.ACE0DashboardApplyAssetDeckCommand = commandBridge;
     } catch (_) {}
   }
 
@@ -380,6 +570,23 @@
       type: 'ACE0_DASHBOARD_ACT_COMMIT_RESULT',
       payload: resultPayload
     }, '*');
+  }
+
+  function postDashboardAssetDeckCommandResult(resultPayload) {
+    const targetWindow = activeIframe?.contentWindow;
+    if (!targetWindow) return;
+    targetWindow.postMessage({
+      type: 'ACE0_DASHBOARD_ASSET_DECK_COMMAND_RESULT',
+      payload: resultPayload
+    }, '*');
+  }
+
+  if (ROOT.__ACE0_DASHBOARD_LOADER_TEST_HOOKS__ === true) {
+    ROOT.ACE0DashboardLoaderTestHooks = {
+      applyPendingActAssetDeckCommands,
+      normalizePendingActAssetDeckCommands
+    };
+    return;
   }
 
   function normalizeIconConfig(icon) {
@@ -613,12 +820,29 @@
 
       const targetWindow = iframe[0]?.contentWindow;
       if (!targetWindow) return;
-      attachDashboardCommitBridge(targetWindow);
+      attachDashboardCommitBridge(targetWindow, commitDashboardActStateAndRefresh);
+      attachDashboardAssetDeckCommandBridge(targetWindow, applyDashboardAssetDeckCommandAndRefresh);
 
       targetWindow.postMessage({
         type: type || 'ACE0_DASHBOARD_REFRESH',
         payload
       }, '*');
+    }
+
+    async function commitDashboardActStateAndRefresh(commitPayload) {
+      const result = await commitDashboardActState(commitPayload);
+      if (result?.ok) {
+        postDashboardData('ACE0_DASHBOARD_REFRESH');
+      }
+      return result;
+    }
+
+    async function applyDashboardAssetDeckCommandAndRefresh(commandPayload) {
+      const result = await persistDashboardAssetDeckCommand(commandPayload);
+      if (result?.ok) {
+        postDashboardData('ACE0_DASHBOARD_REFRESH');
+      }
+      return result;
     }
 
     function initializeIframe() {
@@ -703,6 +927,19 @@
         return;
       }
 
+      if (payload.type === 'ACE0_DASHBOARD_ASSET_DECK_COMMAND' || payload.type === 'ACE0_ASSET_DECK_COMMAND') {
+        const commandPayload = payload.payload || payload.data || payload;
+        const result = await persistDashboardAssetDeckCommand(commandPayload);
+        if (!result.ok) {
+          console.warn('[ACE0 Dashboard] 执行 AssetDeck command 失败:', result.error || result.code);
+        }
+        postDashboardAssetDeckCommandResult(result);
+        if (result.ok) {
+          postDashboardData('ACE0_DASHBOARD_REFRESH');
+        }
+        return;
+      }
+
       if (payload.type === 'ACE0_DASHBOARD_READY' || payload.type === 'ACE0_DASHBOARD_REQUEST_DATA') {
         postDashboardData('ACE0_DASHBOARD_INIT');
       }
@@ -717,18 +954,30 @@
     cleanups.push(() => $(document).off('.ace0Dashboard'));
 
     const hostRoot = getAce0HostRoot();
-    attachDashboardCommitBridge(window);
-    attachDashboardCommitBridge(hostRoot);
+    attachDashboardCommitBridge(window, commitDashboardActStateAndRefresh);
+    attachDashboardCommitBridge(hostRoot, commitDashboardActStateAndRefresh);
+    attachDashboardAssetDeckCommandBridge(window, applyDashboardAssetDeckCommandAndRefresh);
+    attachDashboardAssetDeckCommandBridge(hostRoot, applyDashboardAssetDeckCommandAndRefresh);
     hostRoot.__ACE0_DASHBOARD_FORCE_REFRESH__ = forceRefreshDashboardUi;
     cleanups.push(() => {
       try {
-        if (window.ACE0DashboardCommitActState === commitDashboardActState) {
+        if (window.ACE0DashboardCommitActState === commitDashboardActStateAndRefresh) {
           delete window.ACE0DashboardCommitActState;
         }
       } catch (_) {}
       try {
-        if (hostRoot.ACE0DashboardCommitActState === commitDashboardActState) {
+        if (hostRoot.ACE0DashboardCommitActState === commitDashboardActStateAndRefresh) {
           delete hostRoot.ACE0DashboardCommitActState;
+        }
+      } catch (_) {}
+      try {
+        if (window.ACE0DashboardApplyAssetDeckCommand === applyDashboardAssetDeckCommandAndRefresh) {
+          delete window.ACE0DashboardApplyAssetDeckCommand;
+        }
+      } catch (_) {}
+      try {
+        if (hostRoot.ACE0DashboardApplyAssetDeckCommand === applyDashboardAssetDeckCommandAndRefresh) {
+          delete hostRoot.ACE0DashboardApplyAssetDeckCommand;
         }
       } catch (_) {}
       if (hostRoot.__ACE0_DASHBOARD_FORCE_REFRESH__ === forceRefreshDashboardUi) {
@@ -757,7 +1006,8 @@
       open: openOverlay,
       close: closeOverlay,
       refresh: () => postDashboardData('ACE0_DASHBOARD_REFRESH'),
-      unmount: unmountDashboard
+      unmount: unmountDashboard,
+      applyAssetDeckCommand: applyDashboardAssetDeckCommandAndRefresh
     };
 
     window.ACE0DashboardLoader = {
@@ -766,7 +1016,8 @@
       close: closeOverlay,
       refresh: () => postDashboardData('ACE0_DASHBOARD_REFRESH'),
       unmount: unmountDashboard,
-      commit: commitDashboardActState,
+      commit: commitDashboardActStateAndRefresh,
+      applyAssetDeckCommand: applyDashboardAssetDeckCommandAndRefresh,
       url: resolveDashboardUrl()
     };
 

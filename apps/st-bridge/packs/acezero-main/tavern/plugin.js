@@ -52,6 +52,7 @@
   const ACT_TRANSITION_INJECT_ID = 'ace0_act_transition';
   const ACT_PACING_INJECT_ID = 'ace0_narrative_pacing';
   const ACT_FIRST_MEET_INJECT_ID = 'ace0_first_meet';
+  const ACT_PRE_SIGNAL_INJECT_ID = 'ace0_pre_signal';
   const WORLD_CONTEXT_INJECT_ID = 'ace0_world_context';
   const LOCATION_DOC_INJECT_ID = 'ace0_location_doc';
   const HERO_INTERNAL_KEY = 'KAZU';
@@ -92,8 +93,6 @@
     // 本章已去掉 planning（编排相）——玩家通过 Dashboard 在 executing 过程中随时排/改未来相位的 slot。
     stage: 'executing',
     phase_advance: 0,
-    // 随机池消耗记录 { [nodeId]: { [phaseIndex]: candidateId } }
-    pickedPacks: {},
     controlledNodes: {},
     crisis: 0,
     crisisSignals: [],
@@ -108,6 +107,7 @@
     // 生命周期 = 当前节点/段位内（由 phase_advance 清空）。
     // 绑到 MVU→绑楼层，玩家编辑 / swipe / 重生成都不会掉。
     pendingFirstMeet: {},
+    pendingPreSignal: {},
     pendingTransitionTarget: '',
     transitionRequestTarget: '',
     pendingTransitionPrompt: ''
@@ -122,6 +122,7 @@
   // 相同或更小 → swipe / edit / regen 同一楼层 → 保留 pending 复用。
   // -1 表示尚未注入或已在 CHAT_CHANGED 时重置。
   let lastFirstMeetInjectChatLen = -1;
+  let lastPreSignalInjectChatLen = -1;
 
   function getAce0HostRoot() {
     try {
@@ -617,7 +618,8 @@
       ACT_NARRATIVE_INJECT_ID,
       ACT_TRANSITION_INJECT_ID,
       ACT_PACING_INJECT_ID,
-      ACT_FIRST_MEET_INJECT_ID
+      ACT_FIRST_MEET_INJECT_ID,
+      ACT_PRE_SIGNAL_INJECT_ID
     },
     deps: {
       getAce0HostRoot,
@@ -669,7 +671,7 @@
   function getAllActManagedCharacterKeys() { return ACT_RUNTIME.getAllActManagedCharacterKeys(); }
   async function synchronizeActCharacterState(eraVars) { return await ACT_RUNTIME.synchronizeActCharacterState(eraVars); }
   function buildActStateSummary(eraVars, derivedActState = null) { return ACT_RUNTIME.buildActStateSummary(eraVars, derivedActState); }
-  function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null) { return ACT_RUNTIME.buildActNarrativePrompts(eraVars, derivedActState, firstMeetHints); }
+  function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) { return ACT_RUNTIME.buildActNarrativePrompts(eraVars, derivedActState, firstMeetHints, preSignalHints); }
   function normalizeActSnapshotCounts(raw) { return ACT_RUNTIME.normalizeActSnapshotCounts(raw); }
   function getHeroResourceSnapshot(eraVars) { return ACT_RUNTIME.getHeroResourceSnapshot(eraVars); }
   function getHeroCastStateSnapshot(eraVars, managedCharacters, states) { return ACT_RUNTIME.getHeroCastStateSnapshot(eraVars, managedCharacters, states); }
@@ -678,9 +680,9 @@
   function clearLimitedActTokens(actState) { return ACT_RUNTIME.clearLimitedActTokens(actState); }
   function resetActPhaseSlots(actState, phaseIndex = 0) { return ACT_RUNTIME.resetActPhaseSlots(actState, phaseIndex); }
   function applyNodeRewardsToAct(actState, config, nodeId) { return ACT_RUNTIME.applyNodeRewardsToAct(actState, config, nodeId); }
-  function advanceActToNextNode(actState, config) { return ACT_RUNTIME.advanceActToNextNode(actState, config); }
-  function resolveActNodeTransition(actState, config) { return ACT_RUNTIME.resolveActNodeTransition(actState, config); }
-  function consumeSingleActPhase(actState, heroState, config) { return ACT_RUNTIME.consumeSingleActPhase(actState, heroState, config); }
+  function advanceActToNextNode(actState, config, heroState = {}, contextInput = {}) { return ACT_RUNTIME.advanceActToNextNode(actState, config, heroState, contextInput); }
+  function resolveActNodeTransition(actState, config, heroState = {}, contextInput = {}) { return ACT_RUNTIME.resolveActNodeTransition(actState, config, heroState, contextInput); }
+  function consumeSingleActPhase(actState, heroState, config, contextInput = {}) { return ACT_RUNTIME.consumeSingleActPhase(actState, heroState, config, contextInput); }
   function adjustNarrativeTensionInternal(delta) { return ACT_RUNTIME.adjustNarrativeTensionInternal(delta); }
   function setNarrativeTensionInternal(value) { return ACT_RUNTIME.setNarrativeTensionInternal(value); }
   function resetNarrativeTensionInternal() { return ACT_RUNTIME.resetNarrativeTensionInternal(); }
@@ -690,8 +692,8 @@
   function adjustClockPressureInternal(delta) { return ACT_RUNTIME.adjustClockPressureInternal(delta); }
   function setClockPressureInternal(value) { return ACT_RUNTIME.setClockPressureInternal(value); }
   function resetClockPressureInternal() { return ACT_RUNTIME.resetClockPressureInternal(); }
-  function commitCurrentPhasePackUsage(actState, config) { return ACT_RUNTIME.commitCurrentPhasePackUsage(actState, config); }
   function deriveWorldTimeFromAct(actState) { return ACT_RUNTIME.deriveWorldTimeFromAct(actState); }
+  function buildEncounterContextFromEraVars(eraVars) { return ACT_RUNTIME.buildEncounterContextFromEraVars(eraVars); }
   async function resolvePendingActAdvance(eraVars) { return await ACT_RUNTIME.resolvePendingActAdvance(eraVars); }
   async function applyFloorProgressDelta(messageId, message) { return await ACT_RUNTIME.applyFloorProgressDelta(messageId, message); }
   async function advanceWorldClock(steps) { return await ACT_RUNTIME.advanceWorldClock(steps); }
@@ -849,6 +851,7 @@
           // 不会再 push 新 first_meet prompt；若这里不 uninject 旧注入，
           // 酒馆会保留上轮的 first_meet 记录形成幽灵残留。
           ACT_FIRST_MEET_INJECT_ID,
+          ACT_PRE_SIGNAL_INJECT_ID,
           WORLD_CONTEXT_INJECT_ID,
           LOCATION_DOC_INJECT_ID,
           ...Object.values(CHAR_DOC_INJECT_IDS),
@@ -892,23 +895,40 @@
             eraVars.world.act.pendingFirstMeet = {};
           }
         }
+        if (
+          currentChatLen >= 0 &&
+          lastPreSignalInjectChatLen >= 0 &&
+          currentChatLen > lastPreSignalInjectChatLen &&
+          eraVars?.world?.act?.pendingPreSignal &&
+          Object.keys(eraVars.world.act.pendingPreSignal).length > 0
+        ) {
+          await updateEraVars({ world: { act: { pendingPreSignal: {} } } });
+          if (eraVars.world && eraVars.world.act) {
+            eraVars.world.act.pendingPreSignal = {};
+          }
+        }
       } catch (_) { /* chat 不可取时降级：保留 pending */ }
 
       const firstMeetHintsForTurn = (eraVars?.world?.act?.pendingFirstMeet && typeof eraVars.world.act.pendingFirstMeet === 'object')
         ? eraVars.world.act.pendingFirstMeet
         : {};
       const firstMeetKeysForTurn = Object.keys(firstMeetHintsForTurn);
+      const preSignalHintsForTurn = (eraVars?.world?.act?.pendingPreSignal && typeof eraVars.world.act.pendingPreSignal === 'object')
+        ? eraVars.world.act.pendingPreSignal
+        : {};
+      const preSignalKeysForTurn = Object.keys(preSignalHintsForTurn);
 
       // 记录本次注入时的 chat.length，供下一次 prompt 构造比对。
-      if (firstMeetKeysForTurn.length > 0) {
+      if (firstMeetKeysForTurn.length > 0 || preSignalKeysForTurn.length > 0) {
         try {
           const ctx = (typeof getContext === 'function') ? getContext() : null;
           const currentChatLen = Array.isArray(ctx?.chat) ? ctx.chat.length : -1;
-          if (currentChatLen >= 0) lastFirstMeetInjectChatLen = currentChatLen;
+          if (currentChatLen >= 0 && firstMeetKeysForTurn.length > 0) lastFirstMeetInjectChatLen = currentChatLen;
+          if (currentChatLen >= 0 && preSignalKeysForTurn.length > 0) lastPreSignalInjectChatLen = currentChatLen;
         } catch (_) {}
       }
       const charDocPrompts = await buildCharacterPromptInjections(eraVars, firstMeetKeysForTurn);
-      const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived, firstMeetHintsForTurn);
+      const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived, firstMeetHintsForTurn, preSignalHintsForTurn);
       const expansionPrompts = buildExpansionPromptInjections(eraVars);
       const prompts = [];
       const primaryContextContent = [
@@ -1082,6 +1102,7 @@
     isProcessing = false;
     pendingActBaselineSnapshot = null;
     lastFirstMeetInjectChatLen = -1;
+    lastPreSignalInjectChatLen = -1;
     if (ACT_RUNTIME && typeof ACT_RUNTIME.resetState === 'function') ACT_RUNTIME.resetState();
   }
 
@@ -1235,7 +1256,7 @@
       if (actState.route_history.length < actState.nodeIndex + 1) {
         actState.route_history.push(targetNodeId);
       }
-      const advanced = advanceActToNextNode(actState, config);
+      const advanced = advanceActToNextNode(actState, config, eraVars.hero || {}, buildEncounterContextFromEraVars(eraVars));
       if (!advanced) {
         // advanceActToNextNode 在 route_history 长度不够时会返回 false —— 上面已补，理论上不该到
         return { ok: false, reason: 'advance_failed' };
@@ -1243,11 +1264,11 @@
       if (isJumpRoute) {
         actState.vision = normalizeActVisionState(actState.vision);
         actState.vision.jumpReady = false;
-        actState.vision.bonusSight = 0;
         actState.vision.pendingReplace = null;
       }
       // 节点切换 = 坐标变化，上一节点遗留的首见帧进入历史。清空避免污染下一节点 prompt。
       actState.pendingFirstMeet = {};
+      actState.pendingPreSignal = {};
 
       await updateEraVars({ world: { act: actState } });
       return {

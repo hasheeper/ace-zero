@@ -1095,7 +1095,7 @@
         if (!isCurseHand && text && (text.indexOf('小吉') >= 0 || text.indexOf('大吉') >= 0 || text.indexOf('天命') >= 0)) {
           return card;
         }
-        if (isPsycheHand && text && (text.indexOf('折射') >= 0 || text.indexOf('真理') >= 0 || text.indexOf('澄澈') >= 0)) {
+        if (isPsycheHand && text && (text.indexOf('解析') >= 0 || text.indexOf('预兆') >= 0 || text.indexOf('折射') >= 0)) {
           return card;
         }
       }
@@ -1773,14 +1773,14 @@
       var skillKey = data.skillKey || '';
       if (!skillKey && this._isCurrentExpertHand('psyche-convert')) {
         if (data.skill === '折射') skillKey = 'refraction';
-        else if (data.skill === '真理') skillKey = 'axiom';
-        else if (data.skill === '澄澈') skillKey = 'clarity';
+        else if (data.skill === '解析') skillKey = 'analysis';
+        else if (data.skill === '预兆') skillKey = 'premonition';
       }
       if (!skillKey) return;
       var validSkillKeys = this._isCurrentExpertHand('curse-pressure')
         ? ['hex', 'havoc', 'catastrophe']
         : this._isCurrentExpertHand('psyche-convert')
-          ? ['refraction', 'axiom', 'clarity']
+          ? ['refraction', 'analysis', 'premonition']
           : ['minor_wish', 'grand_wish', 'divine_order'];
       if (validSkillKeys.indexOf(skillKey) < 0) return;
       if (this.hasUsedExpertSkill) return;

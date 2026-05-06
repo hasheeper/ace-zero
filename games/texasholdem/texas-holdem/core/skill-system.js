@@ -34,36 +34,32 @@
   const EFFECT = {
     FORTUNE:     'fortune',       // Moirai: 概率偏斜，让自己赢
     CURSE:       'curse',         // Chaos:  概率污蚀，让目标输
-    CLARITY:     'clarity',       // Psyche T3: 胜率感知 + 消除敌方 T3/T2 Curse
-    REFRACTION:  'refraction',    // Psyche T2: 透视手牌 + 消除敌方 T3/T2 Curse + 50%转化
-    REVERSAL:    'reversal',      // Psyche T1: 胜率+透视 + 湮灭所有 Curse(含T1) + 100%转化
-    NULL_FIELD:  'null_field',    // Void T3:   阻断侦查
-    VOID_SHIELD: 'void_shield',   // Void T2:   Moirai/Chaos 效果减半
-    PURGE_ALL:   'purge_all',      // Void T1:   清除所有非 Void 技能
+    PSYCHE:      'psyche',        // Psyche: 生成 Psyche值，按矩阵分配信息/防守/转化
+    VOID:        'void',          // Void: KAZU 专属现实干涉
     // --- 角色专属 ---
-    ROYAL_DECREE:'royal_decree',   // Rino T0:   超强天命（fortune power=70）
-    HEART_READ:  'heart_read',     // Rino Psyche: 读心（信息+消除T3 curse）
-    COOLER:      'cooler',         // SIA T2:    冤家牌标记（做局）
-    SKILL_SEAL:  'skill_seal',     // SIA T2:    冻结令
-    CLAIRVOYANCE:'clairvoyance',   // VV T2:     估价建仓（目标/档位/方向）
-    BUBBLE_LIQUIDATION:'bubble_liquidation', // VV T0: 偏离清算（指定目标投资轮）
-    MIRACLE:     'miracle',        // POPPY T0:  命大（绝境被动触发）
-    LUCKY_FIND:  'lucky_find',     // POPPY T2:  捡到了（街末被动判定）
+    ROYAL_DECREE:'royal_decree',   // Rino:   超强天命（fortune power=70）
+    HEART_READ:  'heart_read',     // Rino Psyche: 读心（信息+少量防守 Psyche）
+    COOLER:      'cooler',         // SIA:    冤家牌标记（做局）
+    SKILL_SEAL:  'skill_seal',     // SIA:    冻结令
+    CLAIRVOYANCE:'clairvoyance',   // VV:     估价建仓（目标/档位/方向）
+    BUBBLE_LIQUIDATION:'bubble_liquidation', // VV: 偏离清算（指定目标投资轮）
+    MIRACLE:     'miracle',        // POPPY:  命大（绝境被动触发）
+    LUCKY_FIND:  'lucky_find',     // POPPY:  捡到了（街末被动判定）
     // --- Trixie (鬼牌) ---
-    RULE_REWRITE:'rule_rewrite',    // Trixie T2: 规则篡改（消耗鬼牌改写为 fortune / curse，后续由 Runtime 面板实现）
-    BLIND_BOX:   'blind_box',       // Trixie T0: 盲盒派对（消耗整张鬼牌发动账户篡位，后续由 Runtime 实现）
+    RULE_REWRITE:'rule_rewrite',    // Trixie: 规则篡改（消耗鬼牌改写为 fortune / curse，后续由 Runtime 面板实现）
+    BLIND_BOX:   'blind_box',       // Trixie: 盲盒派对（消耗整张鬼牌发动账户篡位，后续由 Runtime 实现）
     // --- Cota (可塔) ---
-    DEAL_CARD:   'deal_card',       // Cota T2:  发牌（Runtime 牌列系统）
-    GATHER_OR_SPREAD: 'gather_or_spread', // Cota T2: 收牌/铺牌（Runtime 牌槽调度）
+    DEAL_CARD:   'deal_card',       // Cota:  发牌（Runtime 牌列系统）
+    GATHER_OR_SPREAD: 'gather_or_spread', // Cota: 收牌/铺牌（Runtime 牌槽调度）
     // --- Eulalia (尤拉莉亚) ---
-    ABSOLUTION:  'absolution',      // Eulalia T0: 赦免（三街承灾合同，第三街末平分爆出）
-    BENEDICTION: 'benediction',     // Eulalia T2: 祝福（对非自身目标施加 fortune，并吸取相关 curse 记为承灾）
+    ABSOLUTION:  'absolution',      // Eulalia: 赦免（三街承灾合同，第三街末平分爆出）
+    BENEDICTION: 'benediction',     // Eulalia: 祝福（对非自身目标施加 fortune，并吸取相关 curse 记为承灾）
     // --- Kako (司伽子) ---
-    RECLASSIFICATION:'reclassification', // Kako T2: 改判（发牌前单目标裁定）
-    GENERAL_RULING:'general_ruling',     // Kako T1: 总务裁定（发牌前全场统一裁定）
+    RECLASSIFICATION:'reclassification', // Kako: 改判（发牌前单目标裁定）
+    GENERAL_RULING:'general_ruling',     // Kako: 总务裁定（发牌前全场统一裁定）
     // --- Kuzuha (久世九叶) ---
-    HOUSE_EDGE:  'house_edge',      // Kuzuha T2: 抽水（单体 curse + debt rot）
-    DEBT_CALL:   'debt_call',       // Kuzuha T1: 催收（立即结算 debt rot）
+    HOUSE_EDGE:  'house_edge',      // Kuzuha: 抽水（单体 curse + debt rot）
+    DEBT_CALL:   'debt_call',       // Kuzuha: 催收（立即结算 debt rot）
     // --- 心理战技能 ---
     PSYCH_PRESSURE: 'psych_pressure', // 心理压制（压场/挑衅/试探）
     PSYCH_PROBE:    'psych_probe',    // 心理试探（附带信息）
@@ -79,97 +75,279 @@
     showdown: 4
   };
   const RIVER_INFO_EFFECTS = {
-    clarity: 1,
-    refraction: 1,
-    reversal: 1,
+    psyche: 1,
     heart_read: 1,
     clairvoyance: 1
   };
-  const VV_CLAIRVOYANCE_TIER_EXTRA_COST = {
+  const VV_CLAIRVOYANCE_ENTRY_SIZE_EXTRA_COST = {
     1: 20,
     2: 36,
     3: 50
   };
 
-  // ========== 通用技能目录 ==========
-  // 4属性 × 3等级 (T3=基础 T2=进阶 T1=终极)
-  // threshold = 需要的单项属性值才能习得
-  // power = 固定力量值（MoZ 引擎消费）
-  // suppressTiers / suppressAttr / suppressAll = 阶级压制规则
-
-  const UNIVERSAL_SKILLS = {
-    // ===== Moirai (天命) =====
-    minor_wish:   { attr: 'moirai', tier: 3, threshold: 20, effect: 'fortune',     activation: 'active',  manaCost: 10, cooldown: 0, power: 15, icon: 'round-star.svg', description: '小吉 — 概率偏斜' },
-    grand_wish:   { attr: 'moirai', tier: 2, threshold: 40, effect: 'fortune',     activation: 'active',  manaCost: 20, cooldown: 0, power: 30, icon: 'stars-stack.svg', description: '大吉 — 疯狂强运' },
-    divine_order: { attr: 'moirai', tier: 1, threshold: 60, effect: 'fortune',     activation: 'active',  manaCost: 40, cooldown: 3, power: 50, suppressTiers: [2, 3], icon: 'star-formation.svg', description: '天命 — 绝对既定' },
-
-    // ===== Chaos (狂厄) =====
-    hex:          { attr: 'chaos',  tier: 3, threshold: 20, effect: 'curse',       activation: 'active',  manaCost: 8,  cooldown: 0, power: 18, icon: 'bleeding-eye.svg', description: '小凶 — 概率污蚀' },
-    havoc:        { attr: 'chaos',  tier: 2, threshold: 40, effect: 'curse',       activation: 'active',  manaCost: 15, cooldown: 0, power: 35, icon: 'skull-crack.svg', description: '大凶 — 恶意筛除' },
-    catastrophe:  { attr: 'chaos',  tier: 1, threshold: 60, effect: 'curse',       activation: 'active',  manaCost: 30, cooldown: 3, power: 55, suppressTiers: [2, 3], icon: 'reaper-scythe.svg', description: '灾变 — 痛苦锁死' },
-
-    // ===== Psyche (灵视) — 裁定者 The Arbiter =====
-    // 每阶都有双重效果: 信息效果(必定触发) + 反制效果(仅对敌方Chaos生效)
-    clarity:      { attr: 'psyche', tier: 3, threshold: 20, effect: 'clarity',     activation: 'active',  manaCost: 10, cooldown: 0, power: 0,  icon: 'magnifying-glass.svg', description: '澄澈 — 胜率感知 + 消除敌方T3/T2 Curse' },
-    refraction:   { attr: 'psyche', tier: 2, threshold: 40, effect: 'refraction',  activation: 'active',  manaCost: 25, cooldown: 0, power: 0,  icon: 'octogonal-eye.svg', description: '折射 — 透视手牌 + 消除敌方T3/T2 Curse并50%转化' },
-    axiom:        { attr: 'psyche', tier: 1, threshold: 60, effect: 'reversal',    activation: 'active',  manaCost: 50, cooldown: 3, power: 0,  suppressAttr: 'chaos', icon: 'cursed-star.svg', description: '真理 — 胜率+透视 + 湮灭所有Curse并100%转化' },
-
-    // ===== Void (虚无) — 反魔法系，零 Mana 消耗，代价是策略成本 =====
-    static_field: { attr: 'void',   tier: 3, threshold: 20, effect: 'null_field',  activation: 'passive', manaCost: 0,  cooldown: 0, power: 8,  icon: 'magic-palm.svg', description: '屏蔽 — 反侦察：敌方信息类技能对己方失效' },
-    insulation:   { attr: 'void',   tier: 2, threshold: 40, effect: 'void_shield', activation: 'toggle',  manaCost: 0,  cooldown: 0, power: 15, icon: 'dice-shield.svg', description: '绝缘 — 不对称抑制：我方fortune-15%/curse-35%，敌方fortune-35%/curse-15%' },
-    reality:      { attr: 'void',   tier: 1, threshold: 60, effect: 'purge_all',   activation: 'active',  manaCost: 0,  cooldown: 0, power: 0,  suppressAll: true, usesPerGame: 1, icon: 'ace.svg', description: '现实 — 物理回滚（每手限1次）' },
-
-    // ===== 角色专属技能 =====
-    // --- Rino (♥ 天宫理乃) ---
-    royal_decree: { attr: 'moirai', tier: 0, threshold: 80, effect: 'royal_decree', activation: 'active', manaCost: 25, cooldown: 0, power: 70, suppressTiers: [1, 2, 3], usesPerGame: 1, icon: 'barbed-star.svg', description: '敕令 — 绝对天命，超强概率偏斜(P70)（每手限1次）' },
-    heart_read:   { attr: 'psyche', tier: 2, threshold: 20, effect: 'heart_read',  activation: 'active', manaCost: 15, cooldown: 1, power: 0,  icon: 'chained-heart.svg', description: '命运感知 — 读取对手意图 + 消除敌方T3/T2 Curse' },
-
-    // --- Sia (♠ 夜伽希亚) ---
-    cooler:       { attr: 'chaos',  tier: 2, threshold: 40, effect: 'cooler',      activation: 'active', manaCost: 18, cooldown: 2, power: 0,  icon: 'spade-skull.svg', description: '冤家牌 — 为目标附加冤家牌标记，本手后续更偏向形成被更大成手压死的牌局' },
-    skill_seal:   { attr: 'chaos',  tier: 2, threshold: 40, effect: 'skill_seal',  activation: 'active', manaCost: 20, cooldown: 3, power: 0,  icon: 'crossed-chains.svg', description: '冻结令 — 冻结目标主动技能2回合；若目标带有冤家牌标记，额外延长1回合' },
-
-    // --- VV (♦ 薇布伦·凡恩) ---
-    clairvoyance: { attr: 'psyche', tier: 2, threshold: 40, effect: 'clairvoyance', activation: 'active', manaCost: 12, cooldown: 0, usesPerStreet: 1, power: 0, icon: 'star-pupil.svg', description: '估价眼 — 选择目标、建仓档位与隐藏清算方向，记录投资轮基准并注入泡沫头寸（每街1次）' },
-    bubble_liquidation: { attr: 'psyche', tier: 0, threshold: 80, effect: 'bubble_liquidation', activation: 'active', manaCost: 16, cooldown: 0, power: 0, suppressTiers: [1, 2, 3], usesPerGame: 1, icon: 'shiny-purse.svg', description: '泡沫清算 — 对指定目标当前投资轮执行偏离清算（整局1次）' },
-
-    // --- POPPY (♣ 波比·希德) ---
-    miracle:      { attr: 'moirai', tier: 0, threshold: 0,  effect: 'miracle',      activation: 'trigger', manaCost: 0, cooldown: 0, power: 0, suppressTiers: [1, 2, 3], usesPerGame: 1, trigger: { condition: 'runtime_only', value: 0 }, triggerThreshold: 0.25, convertRate: 1.5, durationStreets: 3, handCard: false, showAsPassiveCard: true, icon: 'poppy1.svg', description: '命大 — 全场仅1次；首次进入25%血线后，于下一手开始时抽空全部 mana，按 1.5x 转为持续3街的 fortune' },
-    lucky_find:   { attr: 'moirai', tier: 2, threshold: 0,  effect: 'lucky_find',   activation: 'trigger', manaCost: 0, cooldown: 0, power: 20, trigger: { condition: 'runtime_only', value: 0 }, handCard: false, showAsPassiveCard: true, icon: 'poppy2.svg', description: '捡到了！— 每街结算时按当前 mana 概率判定，成功则获得 fortune(P20) 并消耗 5 mana' },
-
-    // --- Trixie (🃏 鬼牌/缇克希) ---
-    rule_rewrite: { attr: 'chaos',  tier: 2, threshold: 40, effect: 'rule_rewrite', activation: 'active', manaCost: 10, cooldown: 1, power: 0, icon: 'jester-hat.svg', description: '规则篡改 — 消耗当前鬼牌，将其改写为自身 fortune(x1) 或指定敌方 curse(x0.66)，可附加延后一街、增加一街或改为场地' },
-    blind_box:    { attr: 'chaos',  tier: 0, threshold: 80, effect: 'blind_box',    activation: 'active', manaCost: 50, cooldown: 0, power: 0, suppressTiers: [1, 2, 3], usesPerGame: 1, icon: 'party-popper.svg', description: '盲盒派对 — 消耗整张鬼牌发动账户篡位，交换两名角色当前50%筹码与50% mana 的交换资源，持续3街后换回原主（整局1次）' },
-
-    // --- Cota (♦ 可塔·林特) ---
-    deal_card:    { attr: 'psyche', tier: 2, threshold: 20, effect: 'deal_card', activation: 'active', manaCost: 8, cooldown: 0, power: 0, usesPerStreet: 1, icon: '', description: '发牌 — 向空牌槽发入吉牌、厄牌或杂牌；牌列跨街跨手常驻，由 Runtime 接管' },
-    gather_or_spread: { attr: 'psyche', tier: 2, threshold: 40, effect: 'gather_or_spread', activation: 'active', manaCost: 10, cooldown: 0, power: 0, usesPerStreet: 1, icon: '', description: '收牌 / 铺牌 — 调整整列牌槽与全牌列数值；每街限一次，具体牌列修正由 Runtime 接管' },
-
-    // --- Eulalia (♥ 尤拉莉亚·帕瑞蒂) ---
-    absolution:   { attr: 'moirai', tier: 0, threshold: 70, effect: 'absolution',   activation: 'active', manaCost: 35, cooldown: 0, power: 0, suppressTiers: [1, 2, 3], usesPerGame: 1, icon: '', description: '赦免 — 启动三街承灾合同：吸取当前 curse，后续两街继续承灾，并在第三街结束时统一平分爆出' },
-    benediction:  { attr: 'moirai', tier: 2, threshold: 30, effect: 'benediction',  activation: 'active', manaCost: 15, cooldown: 1, power: 35, icon: '', description: '祝福 — 对非自身目标施加按名义厄运倍率放大的 fortune，并吸取目标相关 curse 记为本街承灾' },
-
-    // --- Kako (♠ 司伽子) ---
-    reclassification: { attr: 'psyche', tier: 2, threshold: 40, effect: 'reclassification', activation: 'active', manaCost: 16, cooldown: 1, power: 0, icon: 'fountain-pen.svg', description: '改判 — 在发牌前对目标本街新增值作出单次通过/不通过裁定' },
-    general_ruling:   { attr: 'psyche', tier: 1, threshold: 60, effect: 'general_ruling',   activation: 'active', manaCost: 36, cooldown: 0, power: 0, suppressTiers: [2, 3], usesPerGame: 1, icon: 'stamper.svg', description: '总务裁定 — 在发牌前对全场红章目标执行统一裁定' },
-
-    // --- Kuzuha (♣ 久世九叶) ---
-    house_edge:   { attr: 'chaos',  tier: 2, threshold: 40, effect: 'house_edge',   activation: 'active', manaCost: 18, cooldown: 1, power: 18, icon: 'fox-head.svg', description: '抽水 — 对指定敌方施加 curse(P18) 并附加 debt rot' },
-    debt_call:    { attr: 'chaos',  tier: 1, threshold: 70, effect: 'debt_call',    activation: 'active', manaCost: 34, cooldown: 3, power: 0,  icon: 'card-burn.svg', description: '催收 — 立即结算目标 debt rot，收一笔并留一尾' },
-
-    // ===== 心理战技能 (Mental Pressure) =====
-    presence:     { attr: 'moirai', tier: 1, threshold: 0, effect: 'psych_pressure', activation: 'active', manaCost: 15, cooldown: 2, basePower: 18, equityBias: -15, pressureType: 'presence', icon: '', description: '压场 — 让对方退缩、保守' },
-    taunt:        { attr: 'chaos',  tier: 1, threshold: 0, effect: 'psych_pressure', activation: 'active', manaCost: 15, cooldown: 2, basePower: 18, equityBias: 15, pressureType: 'taunt', icon: '', description: '挑衅 — 让对方上头、冒进' },
-    probe:        { attr: 'psyche', tier: 1, threshold: 0, effect: 'psych_probe',    activation: 'active', manaCost: 12, cooldown: 1, basePower: 15, confidenceDelta: -30, pressureType: 'probe', icon: '', description: '试探 — 让对方失准，读取心理状态' },
-    center_self:  { attr: 'void',   tier: 1, threshold: 0, effect: 'psych_recover',  activation: 'active', manaCost: 10, cooldown: 3, baseRecover: 20, confidenceDelta: 20, clearBias: true, icon: '', description: '定神 — 稳住自己，恢复定力' }
+  const SKILL_SYSTEM = {
+    MOIRAI: 'moirai',
+    CHAOS: 'chaos',
+    PSYCHE: 'psyche',
+    VOID: 'void'
   };
 
+  const SKILL_KIND = {
+    FORTUNE: 'fortune',
+    CURSE: 'curse',
+    PSYCHE: 'psyche',
+    VOID: 'void'
+  };
+
+  const UNIVERSAL_SKILL_LEVELS = {
+    minor_wish: {
+      system: SKILL_SYSTEM.MOIRAI,
+      kind: SKILL_KIND.FORTUNE,
+      targetMode: 'self',
+      icon: 'round-star.svg',
+      name: '小愿望',
+      description: '低费补运技，用于频繁修正局势。',
+      levels: {
+        1: { manaCost: 15, power: 15, cooldown: 1 },
+        2: { manaCost: 10, power: 15, cooldown: 1 },
+        3: { manaCost: 10, power: 20, cooldown: 1 },
+        4: { manaCost: 10, power: 20, cooldown: 0, special: { firstUseFreePerHand: true } }
+      }
+    },
+    grand_wish: {
+      system: SKILL_SYSTEM.MOIRAI,
+      kind: SKILL_KIND.FORTUNE,
+      targetMode: 'self',
+      icon: 'stars-stack.svg',
+      name: '大愿望',
+      description: '主力强运技，提供更高强度的 fortune。',
+      levels: {
+        1: { manaCost: 25, power: 30, cooldown: 2 },
+        2: { manaCost: 25, power: 40, cooldown: 2 },
+        3: { manaCost: 20, power: 40, cooldown: 1 },
+        4: { manaCost: 20, power: 40, cooldown: 1, special: { critChance: 0.25, critMultiplier: 1.5 } }
+      }
+    },
+    divine_order: {
+      system: SKILL_SYSTEM.MOIRAI,
+      kind: SKILL_KIND.FORTUNE,
+      targetMode: 'self',
+      icon: 'star-formation.svg',
+      name: '神谕',
+      description: '高阶天命技，用于关键街强行锁定命运。',
+      levels: {
+        1: { manaCost: 40, power: 50, cooldown: 3, lockChance: 0.22 },
+        2: { manaCost: 40, power: 53, cooldown: 3, lockChance: 0.44 },
+        3: { manaCost: 40, power: 56, cooldown: 3, lockChance: 0.66 },
+        4: { manaCost: 45, power: 60, cooldown: 3, lockChance: 0.99 }
+      }
+    },
+    hex: {
+      system: SKILL_SYSTEM.CHAOS,
+      kind: SKILL_KIND.CURSE,
+      targetMode: 'enemy',
+      icon: 'bleeding-eye.svg',
+      name: '咒蚀',
+      description: '低费骚扰技，用于频繁施加小额 curse。',
+      levels: {
+        1: { manaCost: 12, power: 15, cooldown: 1 },
+        2: { manaCost: 10, power: 16, cooldown: 1 },
+        3: { manaCost: 8, power: 18, cooldown: 0 },
+        4: { manaCost: 8, power: 20, cooldown: 0, special: { refundChance: 0.25 } }
+      }
+    },
+    havoc: {
+      system: SKILL_SYSTEM.CHAOS,
+      kind: SKILL_KIND.CURSE,
+      targetMode: 'enemy',
+      icon: 'skull-crack.svg',
+      name: '灾乱',
+      description: '主力厄运技，用于制造中等强度的持续压迫。',
+      levels: {
+        1: { manaCost: 20, power: 30, cooldown: 2 },
+        2: { manaCost: 18, power: 35, cooldown: 2 },
+        3: { manaCost: 18, power: 40, cooldown: 1 },
+        4: { manaCost: 16, power: 40, cooldown: 1, special: { splashChance: 0.33 } }
+      }
+    },
+    catastrophe: {
+      system: SKILL_SYSTEM.CHAOS,
+      kind: SKILL_KIND.CURSE,
+      targetMode: 'enemy',
+      icon: 'reaper-scythe.svg',
+      name: '灾厄',
+      description: '高阶厄运技，用于把目标强行拖入最差分支。',
+      levels: {
+        1: { manaCost: 40, power: 50, cooldown: 3, lockChance: 0.22 },
+        2: { manaCost: 35, power: 53, cooldown: 3, lockChance: 0.44 },
+        3: { manaCost: 35, power: 56, cooldown: 2, lockChance: 0.66 },
+        4: { manaCost: 35, power: 60, cooldown: 2, lockChance: 0.99 }
+      }
+    },
+    analysis: {
+      system: SKILL_SYSTEM.PSYCHE,
+      kind: SKILL_KIND.PSYCHE,
+      targetMode: 'enemy',
+      icon: 'magnifying-glass.svg',
+      name: '解析',
+      description: '读取侧技能，主要用于获得牌局、胜率倾向、下注意图与风险来源信息。',
+      levels: {
+        1: { manaCost: 20, power: 30, cooldown: 2, matrix: [0.65, 0.35, 0] },
+        2: { manaCost: 20, power: 35, cooldown: 2, matrix: [0.75, 0.25, 0] },
+        3: { manaCost: 20, power: 40, cooldown: 2, matrix: [0.85, 0.15, 0] },
+        4: { manaCost: 15, power: 43, cooldown: 2, matrix: [0.95, 0.05, 0] }
+      }
+    },
+    premonition: {
+      system: SKILL_SYSTEM.PSYCHE,
+      kind: SKILL_KIND.PSYCHE,
+      targetMode: 'self',
+      icon: 'octogonal-eye.svg',
+      name: '预兆',
+      description: '防守侧技能，提前感知厄运落点，并以 Psyche值抵消敌方 curse。',
+      levels: {
+        1: { manaCost: 20, power: 30, cooldown: 2, matrix: [0.35, 0.65, 0] },
+        2: { manaCost: 15, power: 35, cooldown: 2, matrix: [0.25, 0.75, 0] },
+        3: { manaCost: 15, power: 35, cooldown: 1, matrix: [0.15, 0.85, 0] },
+        4: { manaCost: 15, power: 40, cooldown: 1, matrix: [0.05, 0.95, 0] }
+      }
+    },
+    refraction: {
+      system: SKILL_SYSTEM.PSYCHE,
+      kind: SKILL_KIND.PSYCHE,
+      targetMode: 'self',
+      icon: 'octogonal-eye.svg',
+      name: '折射',
+      description: '转化侧大招，用于指定厄运来源与打击方向，将其折射为己方 fortune。',
+      levels: {
+        1: { manaCost: 40, power: 60, cooldown: 4, matrix: [0.33, 0.33, 0.34] },
+        2: { manaCost: 40, power: 65, cooldown: 4, matrix: [0.25, 0.35, 0.4] },
+        3: { manaCost: 35, power: 70, cooldown: 4, matrix: [0.15, 0.45, 0.4] },
+        4: { manaCost: 30, power: 75, cooldown: 4, matrix: [0, 0.5, 0.5] }
+      }
+    },
+    insulation: {
+      system: SKILL_SYSTEM.VOID,
+      kind: SKILL_KIND.VOID,
+      targetMode: 'self',
+      icon: 'dice-shield.svg',
+      name: '绝缘',
+      description: 'KAZU 主动防守技，当前街内降低魔运干涉。',
+      levels: {
+        1: { manaCost: 15, power: 0, cooldown: 2, special: { enemyCurse: -0.3, enemyFortune: -0.2, allyFortune: -0.15 } },
+        2: { manaCost: 12, power: 0, cooldown: 2, special: { enemyCurse: -0.4, enemyFortune: -0.25, allyFortune: -0.12 } },
+        3: { manaCost: 10, power: 0, cooldown: 1, special: { enemyCurse: -0.5, enemyFortune: -0.3, allyFortune: -0.1 } },
+        4: { manaCost: 10, power: 0, cooldown: 1, special: { enemyCurse: -0.6, enemyFortune: -0.35, allyFortune: -0.08 } }
+      }
+    },
+    reality: {
+      system: SKILL_SYSTEM.VOID,
+      kind: SKILL_KIND.VOID,
+      targetMode: 'none',
+      icon: 'ace.svg',
+      name: '现实还原',
+      description: 'KAZU / Void 系大招。Reality I 清力，Reality II 清力并清临时角色标记。',
+      levels: {
+        1: { manaCost: 0, power: 0, cooldown: 0, usesPerGame: 1, special: { clearForces: true, clearTemporaryMarks: false } },
+        2: { manaCost: 0, power: 0, cooldown: 0, usesPerGame: 1, special: { clearForces: true, clearTemporaryMarks: true } }
+      }
+    }
+  };
+
+  const ROLE_SKILLS = {
+    royal_decree: { system: 'moirai', kind: 'fortune', effect: 'royal_decree', activation: 'active', manaCost: 25, cooldown: 0, power: 70, level: 0, usesPerGame: 1, icon: 'barbed-star.svg', description: '敕令 — 绝对天命，超强概率偏斜(P70)（每手限1次）' },
+    heart_read: { system: 'psyche', kind: 'psyche', effect: 'heart_read', activation: 'active', manaCost: 15, cooldown: 1, power: 20, level: 2, matrix: [0.8, 0.2, 0], icon: 'chained-heart.svg', description: '命运感知 — 读取对手意图，并生成少量防守 Psyche值。' },
+    cooler: { system: 'chaos', kind: 'marker', effect: 'cooler', activation: 'active', manaCost: 18, cooldown: 2, power: 0, level: 2, icon: 'spade-skull.svg', description: '冤家牌 — 为目标附加冤家牌标记。' },
+    skill_seal: { system: 'chaos', kind: 'control', effect: 'skill_seal', activation: 'active', manaCost: 20, cooldown: 3, power: 0, level: 2, icon: 'crossed-chains.svg', description: '冻结令 — 冻结目标主动技能。' },
+    clairvoyance: { system: 'psyche', kind: 'runtime', effect: 'clairvoyance', activation: 'active', manaCost: 12, cooldown: 0, usesPerStreet: 1, power: 0, level: 2, icon: 'star-pupil.svg', description: '估价眼 — 选择目标、建仓档位与隐藏清算方向，记录投资轮基准并注入泡沫头寸（每街1次）' },
+    bubble_liquidation: { system: 'psyche', kind: 'runtime', effect: 'bubble_liquidation', activation: 'active', manaCost: 16, cooldown: 0, power: 0, level: 0, usesPerGame: 1, icon: 'shiny-purse.svg', description: '泡沫清算 — 对指定目标当前投资轮执行偏离清算（整局1次）' },
+    miracle: { system: 'moirai', kind: 'fortune', effect: 'miracle', activation: 'trigger', manaCost: 0, cooldown: 0, power: 0, level: 0, usesPerGame: 1, trigger: { condition: 'runtime_only', value: 0 }, triggerThreshold: 0.25, convertRate: 1.5, durationStreets: 3, handCard: false, showAsPassiveCard: true, icon: 'poppy1.svg', description: '命大 — 全场仅1次；首次进入25%血线后，于下一手开始时抽空全部 mana，按 1.5x 转为持续3街的 fortune' },
+    lucky_find: { system: 'moirai', kind: 'fortune', effect: 'lucky_find', activation: 'trigger', manaCost: 0, cooldown: 0, power: 20, level: 2, trigger: { condition: 'runtime_only', value: 0 }, handCard: false, showAsPassiveCard: true, icon: 'poppy2.svg', description: '捡到了！— 每街结算时按当前 mana 概率判定，成功则获得 fortune(P20) 并消耗 5 mana' },
+    rule_rewrite: { system: 'chaos', kind: 'runtime', effect: 'rule_rewrite', activation: 'active', manaCost: 10, cooldown: 1, power: 0, level: 2, icon: 'jester-hat.svg', description: '规则篡改 — 消耗当前鬼牌，将其改写为自身 fortune 或指定敌方 curse。' },
+    blind_box: { system: 'chaos', kind: 'runtime', effect: 'blind_box', activation: 'active', manaCost: 50, cooldown: 0, power: 0, level: 0, usesPerGame: 1, icon: 'party-popper.svg', description: '盲盒派对 — 消耗整张鬼牌发动账户篡位，持续3街后换回原主（整局1次）' },
+    deal_card: { system: 'psyche', kind: 'runtime', effect: 'deal_card', activation: 'active', manaCost: 8, cooldown: 0, power: 0, level: 2, usesPerStreet: 1, icon: '', description: '发牌 — 向空牌槽发入吉牌、厄牌或杂牌；牌列由 Runtime 接管。' },
+    gather_or_spread: { system: 'psyche', kind: 'runtime', effect: 'gather_or_spread', activation: 'active', manaCost: 10, cooldown: 0, power: 0, level: 2, usesPerStreet: 1, icon: '', description: '收牌 / 铺牌 — 调整整列牌槽与全牌列数值。' },
+    absolution: { system: 'moirai', kind: 'runtime', effect: 'absolution', activation: 'active', manaCost: 35, cooldown: 0, power: 0, level: 0, usesPerGame: 1, icon: '', description: '赦免 — 启动三街承灾合同。' },
+    benediction: { system: 'moirai', kind: 'fortune', effect: 'benediction', activation: 'active', manaCost: 15, cooldown: 1, power: 35, level: 2, icon: '', description: '祝福 — 对非自身目标施加 fortune，并吸取相关 curse 记为本街承灾。' },
+    reclassification: { system: 'psyche', kind: 'runtime', effect: 'reclassification', activation: 'active', manaCost: 16, cooldown: 1, power: 0, level: 2, icon: 'fountain-pen.svg', description: '改判 — 在发牌前对目标本街新增值作出单次通过/不通过裁定。' },
+    general_ruling: { system: 'psyche', kind: 'runtime', effect: 'general_ruling', activation: 'active', manaCost: 36, cooldown: 0, power: 0, level: 3, usesPerGame: 1, icon: 'stamper.svg', description: '总务裁定 — 在发牌前对全场红章目标执行统一裁定。' },
+    house_edge: { system: 'chaos', kind: 'curse', effect: 'house_edge', activation: 'active', manaCost: 18, cooldown: 1, power: 18, level: 2, icon: 'fox-head.svg', description: '抽水 — 对指定敌方施加 curse(P18) 并附加 debt rot。' },
+    debt_call: { system: 'chaos', kind: 'runtime', effect: 'debt_call', activation: 'active', manaCost: 34, cooldown: 3, power: 0, level: 3, icon: 'card-burn.svg', description: '催收 — 立即结算目标 debt rot。' },
+    presence: { system: 'moirai', kind: 'mental', effect: 'psych_pressure', activation: 'active', manaCost: 15, cooldown: 2, level: 1, basePower: 18, equityBias: -15, pressureType: 'presence', icon: '', description: '压场 — 让对方退缩、保守' },
+    taunt: { system: 'chaos', kind: 'mental', effect: 'psych_pressure', activation: 'active', manaCost: 15, cooldown: 2, level: 1, basePower: 18, equityBias: 15, pressureType: 'taunt', icon: '', description: '挑衅 — 让对方上头、冒进' },
+    probe: { system: 'psyche', kind: 'mental', effect: 'psych_probe', activation: 'active', manaCost: 12, cooldown: 1, level: 1, basePower: 15, confidenceDelta: -30, pressureType: 'probe', icon: '', description: '试探 — 让对方失准，读取心理状态' },
+    center_self: { system: 'void', kind: 'mental', effect: 'psych_recover', activation: 'active', manaCost: 10, cooldown: 3, level: 1, baseRecover: 20, confidenceDelta: 20, clearBias: true, icon: '', description: '定神 — 稳住自己，恢复定力' }
+  };
+
+  function clampSkillLevel(rawLevel, maxLevel) {
+    const fallback = maxLevel || 1;
+    const level = Math.round(Number(rawLevel != null ? rawLevel : fallback) || fallback);
+    return Math.max(1, Math.min(Math.max(1, fallback), level));
+  }
+
+  function buildLeveledSkillDefinition(skillKey, rawLevel) {
+    const key = String(skillKey || '').trim();
+    const base = UNIVERSAL_SKILL_LEVELS[key];
+    if (!base) return null;
+    const maxLevel = Math.max.apply(null, Object.keys(base.levels).map(function(level) { return Number(level); }));
+    const level = clampSkillLevel(rawLevel, maxLevel);
+    const levelDef = base.levels[level] || base.levels[maxLevel] || {};
+    const system = base.system;
+    const kind = base.kind;
+    return Object.assign({}, base, levelDef, {
+      key: key,
+      skillKey: key,
+      system: system,
+      kind: kind,
+      effect: kind,
+      level: level,
+      maxLevel: maxLevel,
+      activation: base.activation || levelDef.activation || ACTIVATION.ACTIVE,
+      manaCost: Math.max(0, Number(levelDef.manaCost || 0)),
+      power: Math.max(0, Number(levelDef.power || 0)),
+      cooldown: Math.max(0, Number(levelDef.cooldown || 0)),
+      usesPerGame: Math.max(0, Number(levelDef.usesPerGame != null ? levelDef.usesPerGame : base.usesPerGame || 0)),
+      usesPerStreet: Math.max(0, Number(levelDef.usesPerStreet != null ? levelDef.usesPerStreet : base.usesPerStreet || 0)),
+      lockChance: Math.max(0, Math.min(1, Number(levelDef.lockChance || 0))),
+      matrix: Array.isArray(levelDef.matrix) ? levelDef.matrix.slice(0, 3) : null,
+      special: Object.assign({}, base.special || {}, levelDef.special || {})
+    });
+  }
+
+  function normalizeRoleSkillDefinition(skillKey, source, rawLevel) {
+    if (!source) return null;
+    const system = source.system || null;
+    const level = rawLevel != null
+      ? Math.max(0, Math.round(Number(rawLevel) || 0))
+      : Math.max(0, Math.round(Number(source.level || 0)));
+    return Object.assign({}, source, {
+      key: skillKey,
+      skillKey: skillKey,
+      system: system,
+      kind: source.kind || source.effect,
+      level: level,
+      maxLevel: source.maxLevel || level || null,
+      manaCost: Math.max(0, Number(source.manaCost || 0)),
+      power: Math.max(0, Number(source.power || 0)),
+      cooldown: Math.max(0, Number(source.cooldown || 0)),
+      lockChance: Math.max(0, Math.min(1, Number(source.lockChance || 0))),
+      matrix: Array.isArray(source.matrix) ? source.matrix.slice(0, 3) : null,
+      special: Object.assign({}, source.special || {})
+    });
+  }
+
   /**
-   * 查找技能定义
-   * @param {string} skillKey - UNIVERSAL_SKILLS 中的 key
+   * 查找技能定义。通用技能使用 `{ key, level }`；角色专属技能使用 ROLE_SKILLS。
+   * @param {string} skillKey
+   * @param {number} [level]
    * @returns {object|null}
    */
-  function lookupSkill(skillKey) {
-    return UNIVERSAL_SKILLS[skillKey] || null;
+  function lookupSkill(skillKey, level) {
+    const key = String(skillKey || '').trim();
+    if (!key) return null;
+    const leveled = buildLeveledSkillDefinition(key, level);
+    if (leveled) return leveled;
+    return normalizeRoleSkillDefinition(key, ROLE_SKILLS[key], level);
   }
 
   // ========== 技能槽位计算 ==========
@@ -190,13 +368,16 @@
 
   /**
    * 深度：单项属性值决定能否学会某技能
-   * @param {object} skillDef - 技能定义（需要 attr + threshold）
+   * @param {object} skillDef - 技能定义
    * @param {object} attrs - 角色属性面板
    * @returns {boolean}
    */
   function canLearnSkill(skillDef, attrs) {
-    if (!skillDef.attr || !skillDef.threshold) return true; // 无门槛限制
-    return (attrs[skillDef.attr] || 0) >= skillDef.threshold;
+    if (!skillDef.system) return true;
+    const system = skillDef.system;
+    const minValue = Number(skillDef.requiredValue || skillDef.minValue || 0);
+    if (!minValue) return true;
+    return (attrs[system] || 0) >= minValue;
   }
 
   /**
@@ -207,18 +388,19 @@
    */
   function deriveSkillsFromAttrs(attrs, maxSlots) {
     const available = [];
-    for (const key in UNIVERSAL_SKILLS) {
-      const def = UNIVERSAL_SKILLS[key];
-      if (!def.attr) continue;
-      if (canLearnSkill(def, attrs)) {
-        available.push({ key: key, ...def });
-      }
+    for (const key in UNIVERSAL_SKILL_LEVELS) {
+      const base = UNIVERSAL_SKILL_LEVELS[key];
+      const attrValue = attrs && base.system ? Math.max(0, Number(attrs[base.system] || 0)) : 0;
+      const maxLevel = Math.max.apply(null, Object.keys(base.levels).map(function(level) { return Number(level); }));
+      const level = Math.max(1, Math.min(maxLevel, Math.ceil(attrValue / 20) || 1));
+      const def = lookupSkill(key, level);
+      if (def) available.push({ key: key, ...def });
     }
-    // 同属性内高阶优先（T1 > T2 > T3），跨属性按属性值高的优先
+    // 同体系内等级高优先，跨体系按属性值高的优先。
     available.sort(function (a, b) {
-      if (a.tier !== b.tier) return a.tier - b.tier; // T1=1 最高优先
-      const aVal = attrs[a.attr] || 0;
-      const bVal = attrs[b.attr] || 0;
+      if (a.level !== b.level) return b.level - a.level;
+      const aVal = attrs[a.system] || 0;
+      const bVal = attrs[b.system] || 0;
       return bVal - aVal; // 属性值高的优先
     });
     return available.slice(0, maxSlots);
@@ -272,6 +454,12 @@
       // 特质修正回调（由外部注入）
       this.traitCostFn = null;
       this.traitRegenFn = null;
+
+      // AssetDeck is compiled outside of SkillSystem. This class only consumes
+      // the resolved modifiers so long-term deck truth stays in MVU/runtime.
+      this.assetDeckAdapter = global.AssetDeckAdapter || null;
+      this.assetModifiers = null;
+      this._assetPassiveState = { handId: 0, used: {} };
 
       // Hook 事件系统
       this._hooks = {};
@@ -336,6 +524,93 @@
       const ownerIds = Array.from(this.statusMarks.keys());
       this.statusMarks.clear();
       this.emit('status:clear_all', { ownerIds: ownerIds });
+    }
+
+    setAssetModifiers(modifiers, adapter) {
+      this.assetDeckAdapter = adapter || this.assetDeckAdapter || global.AssetDeckAdapter || null;
+      this.assetModifiers = modifiers || null;
+    }
+
+    _resetAssetPassiveHandState() {
+      this._assetPassiveState = {
+        handId: (this._assetPassiveState && this._assetPassiveState.handId || 0) + 1,
+        used: {}
+      };
+    }
+
+    _markAssetPassiveUsed(runtimeKey, payload) {
+      if (!runtimeKey) return;
+      if (!this._assetPassiveState) this._resetAssetPassiveHandState();
+      if (!this._assetPassiveState.used) this._assetPassiveState.used = {};
+      this._assetPassiveState.used[runtimeKey] = Object.assign({ used: true }, payload || {});
+    }
+
+    _emitAssetPassiveTriggered(event) {
+      if (!event) return;
+      this._log('ASSET_PASSIVE_TRIGGERED', {
+        cardId: event.cardId || null,
+        trigger: event.trigger || null,
+        value: event.value,
+        ownerId: event.ownerId
+      });
+      this.emit('asset:passive', Object.assign({}, event));
+    }
+
+    _applyAssetPassiveTriggers(trigger, context) {
+      if (!this.assetDeckAdapter || typeof this.assetDeckAdapter.resolvePassiveTriggers !== 'function') return [];
+      var events = this.assetDeckAdapter.resolvePassiveTriggers(this.assetModifiers, trigger, Object.assign({
+        heroId: this._heroId != null ? this._heroId : 0,
+        passiveState: this._assetPassiveState
+      }, context || {}));
+      if (!Array.isArray(events) || !events.length) return [];
+
+      for (var i = 0; i < events.length; i++) {
+        var event = events[i];
+        if (!event) continue;
+        if (event.trigger === 'street_start_mana_gain') {
+          var before = this.getMana(event.ownerId).current;
+          this.regenMana(event.ownerId, Math.max(0, Number(event.value || 0)), 'asset_passive:street_start_mana_gain');
+          var after = this.getMana(event.ownerId).current;
+          event.actualValue = Math.max(0, after - before);
+          this._emitAssetPassiveTriggered(event);
+        } else if (event.trigger === 'once_per_hand_fortune_flat') {
+          var force = this._queuePendingForce({
+            ownerId: event.ownerId,
+            type: 'fortune',
+            system: 'moirai',
+            skillKey: 'asset_passive',
+            source: 'asset',
+            power: Math.max(0, Number(event.value || 0)),
+            _assetPassive: true,
+            _assetSourceCardId: event.cardId
+          }, { reason: 'asset_passive', cardId: event.cardId, trigger: event.trigger });
+          event.forceId = force && force._runtimeId || null;
+          this._markAssetPassiveUsed(event.runtimeKey, event);
+          this._emitAssetPassiveTriggered(event);
+        }
+      }
+      return events;
+    }
+
+    _consumeAssetCostPassives(skill) {
+      var triggers = skill && skill._assetCost && Array.isArray(skill._assetCost.passiveTriggers)
+        ? skill._assetCost.passiveTriggers
+        : [];
+      for (var i = 0; i < triggers.length; i++) {
+        var event = triggers[i];
+        this._markAssetPassiveUsed(event.runtimeKey, event);
+        this._emitAssetPassiveTriggered(event);
+      }
+    }
+
+    _getAssetSkillLevelEntries(skillKey) {
+      var normalizedKey = String(skillKey || '').trim().toLowerCase();
+      var entries = this.assetModifiers && Array.isArray(this.assetModifiers.skillLevelEntries)
+        ? this.assetModifiers.skillLevelEntries
+        : [];
+      return entries.filter(function(entry) {
+        return String(entry && entry.skillKey || '').trim().toLowerCase() === normalizedKey;
+      });
     }
 
     hasStatusMark(ownerId, key) {
@@ -501,14 +776,10 @@
     }
 
     _isSelfProtectEffect(effect) {
-      return effect === EFFECT.CLARITY ||
-        effect === EFFECT.REFRACTION ||
-        effect === EFFECT.REVERSAL ||
+      return effect === EFFECT.PSYCHE ||
+        effect === EFFECT.VOID ||
         effect === EFFECT.HEART_READ ||
-        effect === EFFECT.CLAIRVOYANCE ||
-        effect === EFFECT.PRE_DECOLOR ||
-        effect === EFFECT.NULL_READ ||
-        effect === EFFECT.AUDIT;
+        effect === EFFECT.CLAIRVOYANCE;
     }
 
     _defaultSelectSkillTarget(input) {
@@ -664,6 +935,12 @@
           };
         }
       }
+      if (skill.effect === EFFECT.VOID && skill.skillKey === 'reality') {
+        var realityScopeKey = 'skill:' + String(skill.ownerId) + ':reality:match_once';
+        if (typeof this.isMatchScopedUsed === 'function' && this.isMatchScopedUsed(realityScopeKey)) {
+          return { ok: false, reason: 'MATCH_SCOPED_USED', scopeKey: realityScopeKey };
+        }
+      }
       if (skill.effect === EFFECT.DEBT_CALL) {
         var targetId = finalOptions.targetId != null ? finalOptions.targetId : null;
         if (targetId == null) {
@@ -725,9 +1002,9 @@
         if (vvTargetId == null) {
           return { ok: false, reason: 'NO_VV_TARGET' };
         }
-        var vvTier = Math.max(0, Number(finalOptions.tier != null ? finalOptions.tier : 0) || 0);
-        if (vvTier < 1 || vvTier > 3) {
-          return { ok: false, reason: 'INVALID_VV_TIER', tier: finalOptions.tier };
+        var vvEntrySize = Math.max(0, Number(finalOptions.entrySize != null ? finalOptions.entrySize : 0) || 0);
+        if (vvEntrySize < 1 || vvEntrySize > 3) {
+          return { ok: false, reason: 'INVALID_VV_ENTRY_SIZE', entrySize: finalOptions.entrySize };
         }
         var vvDirection = String(finalOptions.direction || '').toLowerCase();
         if (vvDirection !== 'bullish' && vvDirection !== 'bearish') {
@@ -789,8 +1066,8 @@
       if (!skill) return 0;
       var cost = Math.max(0, Number(skill.manaCost || 0));
       if (skill.effect === EFFECT.CLAIRVOYANCE) {
-        var vvTier = Math.max(1, Math.min(3, Number(finalOptions && finalOptions.tier != null ? finalOptions.tier : 1) || 1));
-        cost += Number(VV_CLAIRVOYANCE_TIER_EXTRA_COST[vvTier] || 0);
+        var vvEntrySize = Math.max(1, Math.min(3, Number(finalOptions && finalOptions.entrySize != null ? finalOptions.entrySize : 1) || 1));
+        cost += Number(VV_CLAIRVOYANCE_ENTRY_SIZE_EXTRA_COST[vvEntrySize] || 0);
       }
       return cost;
     }
@@ -800,7 +1077,20 @@
       if (actualCost > 0 && this.traitCostFn) {
         actualCost = this.traitCostFn(skill.ownerId, actualCost);
       }
+      if (this.assetDeckAdapter && typeof this.assetDeckAdapter.resolveSkillCost === 'function') {
+        var resolvedCost = this.assetDeckAdapter.resolveSkillCost(this.assetModifiers, skill, actualCost, {
+          passiveState: this._assetPassiveState
+        });
+        if (resolvedCost && resolvedCost.finalCost != null) {
+          actualCost = resolvedCost.finalCost;
+          if (skill) skill._assetCost = resolvedCost;
+        }
+      }
       return Math.max(0, Number(actualCost || 0));
+    }
+
+    getSkillActualManaCost(skill, finalOptions) {
+      return this._getSkillActualManaCost(skill, finalOptions || {});
     }
 
     // ========== 技能注册（从 config 加载） ==========
@@ -808,7 +1098,7 @@
     /**
      * 从 game-config 注册所有技能
      * 统一接口：每个角色都有 vanguard/rearguard/skills/attrs
-     * skills key 必须是 UNIVERSAL_SKILLS 中的 key
+     * skills key 必须是 UNIVERSAL_SKILL_LEVELS 或 ROLE_SKILLS 中的 key
      * mana 由 max(vanguard.level, rearguard.level) 推导
      */
     /**
@@ -820,6 +1110,7 @@
     registerFromConfig(config, playerIdMap) {
       this.skills.clear();
       this.manaPools.clear();
+      this.setAssetModifiers(config && config.assetModifiers ? config.assetModifiers : null);
 
       // 解析玩家ID映射
       const idMap = playerIdMap || {};
@@ -925,10 +1216,17 @@
      */
     _registerManaPool(ownerId, manaConfig) {
       if (manaConfig) {
+        var resolvedMana = this.assetDeckAdapter && typeof this.assetDeckAdapter.resolveManaMax === 'function'
+          ? this.assetDeckAdapter.resolveManaMax(this.assetModifiers, ownerId, manaConfig.max)
+          : null;
+        var maxMana = resolvedMana && resolvedMana.max != null ? resolvedMana.max : manaConfig.max;
+        var currentMana = (manaConfig.current != null) ? manaConfig.current : maxMana;
         this.manaPools.set(ownerId, {
-          current: (manaConfig.current != null) ? manaConfig.current : manaConfig.max,
-          max: manaConfig.max,
-          regen: (manaConfig.regen != null) ? manaConfig.regen : 1
+          current: Math.min(currentMana, maxMana),
+          max: maxMana,
+          regen: (manaConfig.regen != null) ? manaConfig.regen : 1,
+          baseMax: manaConfig.max,
+          assetMax: resolvedMana || null
         });
       }
     }
@@ -938,12 +1236,10 @@
      * @private
      */
     _registerSkillList(ownerId, ownerName, ownerType, skillList, casterName) {
-      const keys = Array.isArray(skillList)
-        ? skillList
-        : Object.keys(skillList || {});
+      const entries = this._normalizeSkillEntries(skillList);
 
-      for (const skillKey of keys) {
-        this._registerSingleSkill(ownerId, ownerName, ownerType, skillKey, casterName);
+      for (const entry of entries) {
+        this._registerSingleSkill(ownerId, ownerName, ownerType, entry.key, casterName, entry);
       }
     }
 
@@ -955,27 +1251,50 @@
       // Mana 池
       this._registerManaPool(ownerId, manaConfig);
 
-      // 展开技能（skillList 是 key 数组，如 ["grand_wish", "refraction"]）
-      // 兼容旧格式 { key: level } → 忽略 level 值，只取 key
-      const keys = Array.isArray(skillList)
-        ? skillList
-        : Object.keys(skillList || {});
+      // 展开技能，支持 ["grand_wish"]、{ grand_wish: 2 }、[{ key, level }]
+      const entries = this._normalizeSkillEntries(skillList);
 
-      for (const skillKey of keys) {
-        this._registerSingleSkill(ownerId, ownerName, ownerType, skillKey, ownerName);
+      for (const entry of entries) {
+        this._registerSingleSkill(ownerId, ownerName, ownerType, entry.key, ownerName, entry);
       }
+    }
+
+    _normalizeSkillEntries(skillList) {
+      if (Array.isArray(skillList)) {
+        return skillList.map(function(entry) {
+          if (entry && typeof entry === 'object') {
+            return {
+              key: String(entry.key || entry.skillKey || '').trim(),
+              level: entry.level != null ? entry.level : entry.rank
+            };
+          }
+          return { key: String(entry || '').trim(), level: null };
+        }).filter(function(entry) { return entry.key; });
+      }
+      return Object.keys(skillList || {}).map(function(key) {
+        const value = skillList[key];
+        if (value && typeof value === 'object') {
+          return {
+            key: String(value.key || value.skillKey || key).trim(),
+            level: value.level != null ? value.level : value.rank
+          };
+        }
+        return { key: String(key || '').trim(), level: value };
+      }).filter(function(entry) { return entry.key; });
     }
 
     /**
      * 注册单个技能
      * @private
      */
-    _registerSingleSkill(ownerId, ownerName, ownerType, skillKey, casterName) {
-      const catalog = lookupSkill(skillKey);
+    _registerSingleSkill(ownerId, ownerName, ownerType, skillKey, casterName, entry) {
+      const requestedLevel = entry && entry.level != null ? entry.level : null;
+      const catalog = lookupSkill(skillKey, requestedLevel);
       if (!catalog) {
         console.warn('[SkillSystem] 未知技能 key:', skillKey, '(owner:', ownerName, ')');
         return;
       }
+      const canonicalSkillKey = catalog.skillKey || catalog.key || skillKey;
 
       const activation = catalog.activation || ACTIVATION.PASSIVE;
       const initialActive = (activation === ACTIVATION.PASSIVE);
@@ -983,7 +1302,7 @@
       const casterRole = this._getRoleMetaFromName(casterName || ownerName);
 
       const skill = {
-        uniqueId: ownerId + '_' + skillKey,
+        uniqueId: ownerId + '_' + canonicalSkillKey,
         ownerId: ownerId,
         ownerName: ownerName,
         ownerType: ownerType,
@@ -992,11 +1311,20 @@
         roleVariant: ownerRole.roleVariant,
         casterRoleId: casterRole.roleId,
         casterRoleVariant: casterRole.roleVariant,
-        skillKey: skillKey,
+        skillKey: canonicalSkillKey,
         icon: catalog.icon || null,
         effect: catalog.effect,
+        system: catalog.system || null,
+        kind: catalog.kind || catalog.effect,
+        level: catalog.level || null,
+        maxLevel: catalog.maxLevel || null,
+        targetMode: catalog.targetMode || null,
+        matrix: Array.isArray(catalog.matrix) ? catalog.matrix.slice(0, 3) : null,
+        lockChance: catalog.lockChance || 0,
+        special: Object.assign({}, catalog.special || {}),
         activation: activation,
         manaCost: catalog.manaCost || 0,
+        baseManaCost: catalog.manaCost || 0,
         power: catalog.power || 0,
         active: initialActive,
         description: catalog.description || '',
@@ -1004,13 +1332,6 @@
         trigger: catalog.trigger || null,
         cooldown: catalog.cooldown || 0,
         currentCooldown: 0,
-        // 阶级压制元数据
-        tier: catalog.tier != null ? catalog.tier : 3,
-        attr: catalog.attr || null,
-        suppressTiers: catalog.suppressTiers || null,
-        suppressAttr: catalog.suppressAttr || null,
-        suppressAll: catalog.suppressAll || false,
-        cannotAffect: catalog.cannotAffect || null,
         handCard: catalog.handCard !== false,
         showAsPassiveCard: catalog.showAsPassiveCard === true,
         pendingImplementation: catalog.pendingImplementation === true,
@@ -1020,10 +1341,23 @@
         usesPerStreet: catalog.usesPerStreet || 0
       };
 
+      var assetLevelEntries = this._getAssetSkillLevelEntries(canonicalSkillKey);
+      if (assetLevelEntries.length) {
+        skill.assetCards = assetLevelEntries.map(function(entry) {
+          return {
+            cardId: entry.cardId || null,
+            skillKey: entry.skillKey || canonicalSkillKey,
+            level: entry.level || skill.level || null,
+            type: 'skill_level'
+          };
+        });
+        skill._assetLevelSource = skill.assetCards;
+      }
+
       this.skills.set(skill.uniqueId, skill);
       this._log('SKILL_REGISTERED', {
-        owner: ownerName, caster: casterName, key: skillKey, effect: skill.effect,
-        activation: activation, tier: skill.tier, power: skill.power
+        owner: ownerName, caster: casterName, key: canonicalSkillKey, effect: skill.effect,
+        activation: activation, level: skill.level, system: skill.system, kind: skill.kind, power: skill.power
       });
     }
 
@@ -1296,10 +1630,26 @@
           }
         }
       }
+      var realityScopeKey = null;
+      if (skill.effect === EFFECT.VOID && skill.skillKey === 'reality') {
+        realityScopeKey = 'skill:' + String(skill.ownerId) + ':reality:match_once';
+        if (typeof this.consumeMatchScopedUse === 'function') {
+          var realityConsumed = this.consumeMatchScopedUse(realityScopeKey, {
+            ownerId: skill.ownerId,
+            ownerName: skill.ownerName,
+            skillKey: skill.skillKey,
+            effect: skill.effect
+          });
+          if (!realityConsumed) {
+            return { success: false, reason: 'MATCH_SCOPED_USED', scopeKey: realityScopeKey };
+          }
+        }
+      }
 
       if (actualCost > 0 && !this.spendMana(skill.ownerId, actualCost)) {
         return { success: false, reason: 'INSUFFICIENT_MANA', cost: actualCost };
       }
+      this._consumeAssetCostPassives(skill);
 
       this._activationSerial += 1;
       skill._activationId = 'skill_act_' + this._activationSerial + '_' + Date.now();
@@ -1316,42 +1666,32 @@
       }
 
       // 根据 effect 类型处理
-      // Psyche 技能都是双重效果: 信息(必定) + 反制(vs Chaos)
       var _activateExtra = {};
       switch (skill.effect) {
-        case EFFECT.CLARITY: {
-          // 澄澈: 信息=胜率显示, 反制=消除敌方 T3/T2 Curse
-          var cForce = this._skillToForce(skill);
-          if (protectOverride != null) cForce.protectId = protectOverride;
-          this._queuePendingForce(cForce, { reason: 'skill_activate', effect: skill.effect });
-          this._emitSkillActivated({ skill: skill, type: 'clarity' }, finalOptions);
+        case EFFECT.PSYCHE: {
+          var typedForce = this._skillToForce(skill);
+          if (protectOverride != null) typedForce.protectId = protectOverride;
+          if (targetOverride != null) typedForce.targetId = targetOverride;
+          if (finalOptions.curseSourceId != null) typedForce.curseSourceId = finalOptions.curseSourceId;
+          if (finalOptions.curseDirection != null) typedForce.curseDirection = finalOptions.curseDirection;
+          this._queuePendingForce(typedForce, { reason: 'skill_activate', effect: skill.effect });
+          this._emitSkillActivated({ skill: skill, type: skill.effect }, finalOptions);
           break;
         }
-        case EFFECT.REFRACTION: {
-          // 折射: 信息=透视手牌, 反制=消除敌方 T3/T2 Curse + 50%转化
-          var rForce = this._skillToForce(skill);
-          if (protectOverride != null) rForce.protectId = protectOverride;
-          this._queuePendingForce(rForce, { reason: 'skill_activate', effect: skill.effect });
-          this._emitSkillActivated({ skill: skill, type: 'refraction' }, finalOptions);
+        case EFFECT.VOID: {
+          if (skill.skillKey === 'reality') {
+            var realityResult = this._applyReality(skill, finalOptions);
+            _activateExtra = { reality: realityResult };
+            this._emitSkillActivated({ skill: skill, type: 'void', reality: realityResult }, finalOptions);
+            break;
+          }
+          var voidForce = this._skillToForce(skill);
+          if (protectOverride != null) voidForce.protectId = protectOverride;
+          if (targetOverride != null) voidForce.targetId = targetOverride;
+          this._queuePendingForce(voidForce, { reason: 'skill_activate', effect: skill.effect });
+          this._emitSkillActivated({ skill: skill, type: skill.effect }, finalOptions);
           break;
         }
-        case EFFECT.REVERSAL: {
-          // 真理: 信息=胜率+透视(继承), 反制=湮灭所有 Curse + 100%转化
-          var aForce = this._skillToForce(skill);
-          if (protectOverride != null) aForce.protectId = protectOverride;
-          this._queuePendingForce(aForce, { reason: 'skill_activate', effect: skill.effect });
-          this._emitSkillActivated({ skill: skill, type: 'reversal' }, finalOptions);
-          break;
-        }
-        case EFFECT.PURGE_ALL:
-          // 现实：清除所有非 Void pendingForces，自身加入
-          this._removePendingForces(function(f) { return f && f.attr !== 'void'; }, {
-            reason: 'purge_all',
-            skillKey: skill.skillKey
-          });
-          this._queuePendingForce(this._skillToForce(skill), { reason: 'skill_activate', effect: skill.effect });
-          this._emitSkillActivated({ skill: skill, type: 'purge_all' }, finalOptions);
-          break;
         case EFFECT.ROYAL_DECREE:
           // 敕令：超强 fortune，直接加入 pendingForces
           this._queuePendingForce(this._skillToForce(skill), { reason: 'skill_activate', effect: skill.effect });
@@ -1509,7 +1849,7 @@
         }
 
         default: {
-          // fortune / curse / null_field / void_shield → 加入 pendingForces
+          // fortune / curse / psyche / void → 加入 pendingForces
           var force = this._skillToForce(skill);
           if (targetOverride != null && force.type === 'curse') force.targetId = targetOverride;
           this._queuePendingForce(force, { reason: 'skill_activate', effect: skill.effect });
@@ -1626,11 +1966,12 @@
      * @returns {Array} skillRecords
      */
     /**
-     * @param {string} [timing] — 'pre-bet': 灵视类(betting前), 'post-bet': 攻击/增益类(betting后)
+     * @param {string} [timing] — 'pre-bet': 灵视类(betting前), 'post-bet': 攻击/增益类(betting后), 'reactive-defense': 被诅咒后的即时防御
      */
     npcDecideSkillsForPlayer(playerId, gameContext, timing) {
       if (!this._turnSkillUsed) this._turnSkillUsed = {};
-      var usedKey = playerId + '_street_' + String((gameContext && gameContext.phase) || 'unknown');
+      var timingKey = timing || 'any';
+      var usedKey = playerId + '_street_' + String((gameContext && gameContext.phase) || 'unknown') + '_' + timingKey;
       if (this._turnSkillUsed[usedKey]) return [];
 
       const MAX_TURN_SKILLS = 1; // 每阶段最多用1个技能
@@ -1640,17 +1981,20 @@
 
       // pre-bet: 灵视/防御类（影响 betting 决策）
       // post-bet: 攻击/增益类（根据投入筹码决定）
+      // reactive-defense: 新 curse/chaos 进入 pending 后，目标 NPC 的即时防御窗口
       var PRE_BET = [
-        EFFECT.CLARITY, EFFECT.REFRACTION, EFFECT.REVERSAL, EFFECT.HEART_READ, EFFECT.CLAIRVOYANCE,
-        EFFECT.DEAL_CARD, EFFECT.GATHER_OR_SPREAD,
-        EFFECT.PRE_DECOLOR, EFFECT.NULL_READ
+        EFFECT.PSYCHE, EFFECT.VOID, EFFECT.HEART_READ, EFFECT.CLAIRVOYANCE,
+        EFFECT.DEAL_CARD, EFFECT.GATHER_OR_SPREAD
       ];
       var POST_BET = [
         EFFECT.FORTUNE, EFFECT.CURSE, EFFECT.COOLER, EFFECT.ROYAL_DECREE, EFFECT.BUBBLE_LIQUIDATION,
-        EFFECT.PURGE_ALL, EFFECT.SKILL_SEAL, EFFECT.RULE_REWRITE, EFFECT.BLIND_BOX,
-        EFFECT.HOUSE_EDGE, EFFECT.DEBT_CALL, EFFECT.TABLE_FLIP, EFFECT.ABSOLUTION, EFFECT.BENEDICTION,
+        EFFECT.VOID, EFFECT.SKILL_SEAL, EFFECT.RULE_REWRITE, EFFECT.BLIND_BOX,
+        EFFECT.HOUSE_EDGE, EFFECT.DEBT_CALL, EFFECT.ABSOLUTION, EFFECT.BENEDICTION,
         EFFECT.RECLASSIFICATION, EFFECT.GENERAL_RULING,
         EFFECT.DEAL_CARD, EFFECT.GATHER_OR_SPREAD
+      ];
+      var REACTIVE_DEFENSE = [
+        EFFECT.PSYCHE, EFFECT.VOID, EFFECT.HEART_READ
       ];
 
       var passes;
@@ -1658,6 +2002,8 @@
         passes = [PRE_BET];
       } else if (timing === 'post-bet') {
         passes = [POST_BET];
+      } else if (timing === 'reactive-defense') {
+        passes = [REACTIVE_DEFENSE];
       } else {
         passes = [POST_BET, PRE_BET]; // 兼容旧调用
       }
@@ -1665,6 +2011,7 @@
       for (var pass = 0; pass < passes.length; pass++) {
         var allowed = passes[pass];
         if (skillRecords.length >= MAX_TURN_SKILLS) break;
+        var candidates = [];
 
         for (const [, skill] of this.skills) {
           if (skill.ownerId !== playerId) continue;
@@ -1676,12 +2023,18 @@
           if (skill.usesPerGame > 0 && skill.gameUsesRemaining <= 0) continue;
           if (skill.usesPerStreet > 0 && this._getStreetScopedUseCount(skill) >= skill.usesPerStreet) continue;
           if (gameContext.phase === 'river' && !RIVER_INFO_EFFECTS[skill.effect]) continue;
-          if (skillRecords.length >= MAX_TURN_SKILLS) break;
+          candidates.push(skill);
+        }
 
+        candidates.sort(this._compareNpcSkillPriority.bind(this, owner, gameContext, timing));
+
+        for (var ci = 0; ci < candidates.length; ci++) {
+          var skill = candidates[ci];
+          if (skillRecords.length >= MAX_TURN_SKILLS) break;
           var shouldUse = this._npcShouldUseSkill(skill, owner, gameContext);
           this._log('NPC_SKILL_CONSIDER', {
             owner: skill.ownerName, key: skill.skillKey, effect: skill.effect,
-            phase: gameContext.phase, shouldUse: shouldUse, pass: pass, timing: 'turn'
+            phase: gameContext.phase, shouldUse: shouldUse, pass: pass, timing: timingKey
           });
           if (!shouldUse) continue;
 
@@ -1700,8 +2053,8 @@
 
           this._log('NPC_SKILL_USED', {
             owner: skill.ownerName, key: skill.skillKey,
-            effect: skill.effect, tier: skill.tier,
-            targetId: record.targetId, targetName: record.targetName, timing: 'turn'
+            effect: skill.effect, level: skill.level, system: skill.system,
+            targetId: record.targetId, targetName: record.targetName, timing: timingKey
           });
 
           this.emit('npc:skill_used', record);
@@ -1712,6 +2065,55 @@
 	      if (skillRecords.length > 0) this._turnSkillUsed[usedKey] = true;
 	      return skillRecords;
 	    }
+
+    _compareNpcSkillPriority(owner, gameContext, timing, a, b) {
+      return this._getNpcSkillPriorityScore(b, owner, gameContext, timing) -
+        this._getNpcSkillPriorityScore(a, owner, gameContext, timing);
+    }
+
+    _getNpcSkillPriorityScore(skill, owner, gameContext, timing) {
+      if (!skill) return 0;
+      var score = 0;
+      var ownerId = owner && owner.id;
+      var hasTargetedCurse = false;
+      var threatPower = 0;
+      var pending = Array.isArray(this.pendingForces) ? this.pendingForces : [];
+      for (var i = 0; i < pending.length; i++) {
+        var force = pending[i];
+        if (!force || force.ownerId === ownerId) continue;
+        var isChaos = force.system === SKILL_SYSTEM.CHAOS || force.type === EFFECT.CURSE;
+        if (!isChaos) continue;
+        var targetsOwner = force.targetId == null || force.targetId === ownerId;
+        if (!targetsOwner) continue;
+        hasTargetedCurse = true;
+        threatPower += Math.max(0, Number(force.power || force.effectivePower || 0));
+      }
+
+      if (timing === 'reactive-defense') score += 100;
+      if (hasTargetedCurse) score += 50 + Math.min(50, threatPower);
+
+      if (skill.effect === EFFECT.PSYCHE || skill.effect === EFFECT.HEART_READ) {
+        var matrix = Array.isArray(skill.matrix) ? skill.matrix : [0, 0, 0];
+        var defending = hasTargetedCurse || timing === 'reactive-defense';
+        if (defending) {
+          score += 20 + Math.round((matrix[1] || 0) * 60) + Math.round((matrix[2] || 0) * 80);
+          if (skill.skillKey === 'premonition') score += 35;
+          if (skill.skillKey === 'refraction') score += 30;
+          if (skill.skillKey === 'analysis') score -= 18;
+        } else {
+          score += 20 + Math.round((matrix[0] || 0) * 70);
+          if (skill.skillKey === 'analysis') score += 25;
+          if (skill.skillKey === 'premonition') score -= 10;
+        }
+      }
+      if (skill.effect === EFFECT.VOID) {
+        if (skill.skillKey === 'insulation') score += hasTargetedCurse ? 40 : 10;
+        if (skill.skillKey === 'reality') score += threatPower >= 45 ? 35 : 0;
+      }
+
+      score += Math.max(0, Number(skill.level || 0));
+      return score;
+    }
 
 	    _captureNpcScoutIntel(skill, owner, gameContext) {
 	      if (!owner || !owner.ai || typeof owner.ai.rememberScoutIntel !== 'function') return;
@@ -1730,7 +2132,7 @@
 	      );
 	      if (opponents.length === 0) return [];
 
-	      const singleTargetEffects = { refraction: 1, reversal: 1 };
+	      const singleTargetEffects = { psyche: 1 };
 	      const allTargetEffects = { clairvoyance: 1, heart_read: 1 };
 	      const targets = singleTargetEffects[effect]
 	        ? [this._selectNpcScoutTarget(owner, opponents)]
@@ -1795,7 +2197,7 @@
 
 	        var level = 'analysis';
 	        var confidence = 0.72;
-	        if (effect === 'clairvoyance' || effect === 'reversal') {
+	        if (effect === 'clairvoyance' || skill.skillKey === 'refraction') {
 	          level = 'perfect';
 	          confidence = effect === 'clairvoyance' ? 0.98 : 0.92;
 	        }
@@ -2019,7 +2421,7 @@
 
         default:
           force = this._skillToForce(skill, gameContext);
-          var psycheEffects = ['clarity', 'refraction', 'reversal', 'heart_read', 'clairvoyance'];
+          var psycheEffects = ['psyche', 'heart_read', 'clairvoyance'];
           if (protectOverride != null) {
             force.protectId = protectOverride;
           } else if (psycheEffects.indexOf(skill.effect) >= 0 && force.protectId == null) {
@@ -2040,7 +2442,9 @@
         ownerId: skill.ownerId,
         skillKey: skill.skillKey,
         effect: skill.effect,
-        tier: skill.tier,
+        level: skill.level,
+        system: skill.system,
+        kind: skill.kind,
         targetId: force ? force.targetId : null,
         targetName: targetName,
         protectId: force ? force.protectId : null,
@@ -2052,12 +2456,8 @@
       const names = {
         fortune:     '天命·幸运',
         curse:       '狂厄·凶',
-        clarity:     '灵视·澄澈',
-        refraction:  '灵视·折射',
-        reversal:    '灵视·真理',
-        null_field:  '虚无·屏蔽',
-        void_shield: '虚无·绝缘',
-        purge_all:   '虚无·现实',
+        psyche:      '灵视·Psyche',
+        void:        '虚无·Void',
         royal_decree:'天命·敕令',
         heart_read:  '灵视·读心',
         cooler:      '狂厄·冤家牌',
@@ -2214,23 +2614,24 @@
     _skillToForce(skill, gameContext) {
       // fortune 类专属技能 → fortune type (MoZ 只认 fortune/curse)
       const FORTUNE_EFFECTS = ['royal_decree', 'miracle', 'lucky_find', 'absolution', 'benediction'];
-      const forceType = FORTUNE_EFFECTS.indexOf(skill.effect) >= 0 ? 'fortune' : skill.effect;
+      const forceType = skill.kind || (FORTUNE_EFFECTS.indexOf(skill.effect) >= 0 ? 'fortune' : skill.effect);
       const force = {
         ownerId: skill.ownerId,
         ownerName: skill.ownerName,
         type: forceType,
+        system: skill.system || null,
+        kind: skill.kind || forceType,
         power: skill.power || 0,
+        effectivePower: skill.power || 0,
+        level: skill.level || null,
+        maxLevel: skill.maxLevel || null,
+        matrix: Array.isArray(skill.matrix) ? skill.matrix.slice(0, 3) : null,
+        lockChance: skill.lockChance || 0,
+        special: Object.assign({}, skill.special || {}),
         activationId: skill._activationId || null,
         activation: skill.activation,
         source: skill.activation,
-        // 阶级压制元数据（供 MoZ 使用）
-        tier: skill.tier != null ? skill.tier : 3,
-        attr: skill.attr || null,
-        skillKey: skill.skillKey,
-        suppressTiers: skill.suppressTiers || null,
-        suppressAttr: skill.suppressAttr || null,
-        suppressAll: skill.suppressAll || false,
-        cannotAffect: skill.cannotAffect || null
+        skillKey: skill.skillKey
       };
 
       // Curse 单体指向：委托外部 AI 选目标
@@ -2240,6 +2641,143 @@
       }
 
       return force;
+    }
+
+    _isVoidForce(force) {
+      return !!(force && (force.type === EFFECT.VOID || force.system === SKILL_SYSTEM.VOID));
+    }
+
+    _isRealityTemporaryAssetKey(key) {
+      const value = String(key || '');
+      if (!value) return false;
+      const exactKeys = {
+        vv_positions: true,
+        bubble_fortune: true,
+        bubble_chaos: true,
+        bubble_mana: true,
+        vv_bubble_mark: true,
+        trixie_wild_card: true,
+        trixie_rewrite_queue: true,
+        trixie_rewrite_delay: true,
+        trixie_rewrite_extend: true,
+        trixie_blind_box: true,
+        trixie_street_fortune: true,
+        trixie_street_curse: true,
+        trixie_street_raw_fortune: true,
+        trixie_street_raw_curse: true,
+        trixie_street_bonus: true,
+        cota_cards: true,
+        cota_slot_count: true,
+        cota_empty_slots: true,
+        cota_good_cards: true,
+        cota_bad_cards: true,
+        cota_misc_cards: true,
+        cota_fault_state: true,
+        cota_self_curse_pressure: true,
+        cota_new_card_cost_delta: true,
+        cota_first_bust_bonus: true,
+        kako_red_seal: true,
+        kako_ruling_pending: true,
+        kako_street_fortune: true,
+        kako_street_curse: true,
+        kako_last_mana_delta: true,
+        kako_used_t0: true,
+        kako_ruling_contract: true,
+        kako_redline_rate: true,
+        poppy_miracle_mark: true,
+        poppy_miracle_pending: true,
+        poppy_miracle_packs: true,
+        poppy_miracle_flag: true,
+        poppy_street_total_mana_spent: true,
+        poppy_street_psyche_chaos: true,
+        poppy_last_mana: true,
+        poppy_mana_track: true,
+        poppy_lucky_find_phase: true,
+        trixie_street_taken_fortune: true,
+        trixie_street_taken_curse: true,
+        trixie_street_taken_fortune_raw: true,
+        trixie_street_taken_curse_raw: true,
+        trixie_blind_box_contract: true,
+        cota_bust_rate: true,
+        cota_good_base_value: true,
+        cota_bad_base_value: true,
+        cota_misc_base_value: true,
+        cota_first_bust_bonus_used: true,
+        kako_street_added_fortune: true,
+        kako_street_added_curse: true,
+        kako_used_t0_this_street: true
+      };
+      if (exactKeys[value]) return true;
+      return value.indexOf('kuzuha_debt_rot') === 0 ||
+        value.indexOf('kuzuha_called') === 0 ||
+        value.indexOf('eulalia_') === 0 ||
+        value.indexOf('poppy_miracle') === 0;
+    }
+
+    _clearRealityTemporaryMarks() {
+      const cleared = [];
+      const ownerIds = Array.from(this.statusMarks.keys());
+      for (let i = 0; i < ownerIds.length; i++) {
+        const ownerId = ownerIds[i];
+        const marks = this.statusMarks.get(ownerId) || {};
+        const keys = Object.keys(marks);
+        for (let j = 0; j < keys.length; j++) {
+          const key = keys[j];
+          if (key === 'backlash_state') continue;
+          this.clearStatusMark(ownerId, key);
+          cleared.push({ ownerId: ownerId, key: key });
+        }
+      }
+      return cleared;
+    }
+
+    _clearRealityTemporaryAssets() {
+      const ledger = this.assetLedger;
+      if (!ledger || typeof ledger.snapshot !== 'function' || typeof ledger.clearAsset !== 'function') return [];
+      const snapshot = ledger.snapshot() || {};
+      const cleared = [];
+      const ownerIds = Object.keys(snapshot);
+      for (let i = 0; i < ownerIds.length; i++) {
+        const ownerKey = ownerIds[i];
+        const assets = snapshot[ownerKey] || {};
+        const keys = Object.keys(assets);
+        for (let j = 0; j < keys.length; j++) {
+          const key = keys[j];
+          if (!this._isRealityTemporaryAssetKey(key)) continue;
+          ledger.clearAsset(ownerKey, key);
+          const numericOwnerId = Number(ownerKey);
+          if (Number.isFinite(numericOwnerId)) ledger.clearAsset(numericOwnerId, key);
+          cleared.push({ ownerId: ownerKey, key: key });
+        }
+      }
+      return cleared;
+    }
+
+    _applyReality(skill, finalOptions) {
+      const level = Math.max(1, Number(skill && skill.level || 1));
+      const clearTemporaryMarks = !!(skill && skill.special && skill.special.clearTemporaryMarks) || level >= 2;
+      const removed = this._removePendingForces(function(force) {
+        return force && !this._isVoidForce(force);
+      }.bind(this), {
+        reason: 'void_reality',
+        skillKey: skill.skillKey,
+        level: level
+      });
+      const result = {
+        ownerId: skill.ownerId,
+        ownerName: skill.ownerName,
+        skillKey: skill.skillKey,
+        level: level,
+        clearForces: true,
+        clearTemporaryMarks: clearTemporaryMarks,
+        removedForces: removed.map(this._snapshotForce.bind(this)),
+        clearedMarks: clearTemporaryMarks ? this._clearRealityTemporaryMarks() : [],
+        clearedAssets: clearTemporaryMarks ? this._clearRealityTemporaryAssets() : [],
+        phase: finalOptions && finalOptions.gameContext ? finalOptions.gameContext.phase : null
+      };
+      this.emit('void:reality', result);
+      this._log('VOID_REALITY', result);
+      return result;
     }
 
     /**
@@ -2345,7 +2883,7 @@
       // 筛选可篡改的 force（排除 void/meta 类型和自己的 force）
       const candidates = this.pendingForces.filter(f =>
         f.ownerId !== skill.ownerId &&
-        f.type !== 'null_field' && f.type !== 'void_shield' && f.type !== 'purge_all'
+        f.type !== 'backlash' && f.system !== 'void' && f.type !== 'void'
       );
 
       if (candidates.length === 0) {
@@ -2436,7 +2974,7 @@
       var shuffleable = [];
       for (var i = 0; i < this.pendingForces.length; i++) {
         var f = this.pendingForces[i];
-        if (f.attr === 'void' || f.type === 'null_field' || f.type === 'void_shield' || f.type === 'purge_all') {
+        if (f.system === 'void' || f.type === 'void') {
           preserved.push(f);
         } else {
           shuffleable.push(f);
@@ -2586,6 +3124,7 @@
      * 新一手牌开始
      */
     onNewHand() {
+      this._resetAssetPassiveHandState();
       var preservedForces = Array.isArray(this.pendingForces)
         ? this.pendingForces.filter(function(force) {
             return !!(force && force._persistAcrossHandStart);
@@ -2611,6 +3150,8 @@
 
       this._advanceBacklashStreet('preflop');
       this.emit('hand:start', {});
+      this._applyAssetPassiveTriggers('hand_start', { phase: 'preflop' });
+      this._applyAssetPassiveTriggers('street_start', { phase: 'preflop' });
     }
 
     /**
@@ -2624,6 +3165,7 @@
       this.emit('street:start', {
         phase: phase || null
       });
+      this._applyAssetPassiveTriggers('street_start', { phase: phase || null });
     }
 
     /**
@@ -2638,6 +3180,7 @@
       }
       this.clearMatchScopedUses();
       this._clearStreetScopedUses();
+      this._resetAssetPassiveHandState();
 
       for (const [, pool] of this.manaPools) {
         pool.current = pool.max;
@@ -2665,7 +3208,7 @@
         rinoMana: rinoMana.current,
         rinoManaMax: rinoMana.max,
         pendingForces: this.pendingForces.map(f => ({
-          owner: f.ownerName, type: f.type, tier: f.tier, power: f.power
+          owner: f.ownerName, type: f.type, level: f.level, system: f.system, power: f.power
         })),
         skills: Array.from(this.skills.values()).map(s => ({
           uniqueId: s.uniqueId,
@@ -2673,10 +3216,15 @@
           ownerId: s.ownerId,
           key: s.skillKey,
           effect: s.effect,
-          tier: s.tier,
+          level: s.level,
+          system: s.system,
+          kind: s.kind,
           activation: s.activation,
           active: s.active,
-          manaCost: s.manaCost,
+          manaCost: this._getSkillActualManaCost(s, {}),
+          baseManaCost: s.baseManaCost != null ? s.baseManaCost : s.manaCost,
+          assetCost: s._assetCost || null,
+          assetCards: Array.isArray(s.assetCards) ? s.assetCards.slice() : [],
           cooldown: s.currentCooldown,
           usesPerGame: s.usesPerGame || 0,
           gameUsesRemaining: s.gameUsesRemaining != null ? s.gameUsesRemaining : 0,
@@ -2701,7 +3249,7 @@
         if (!skill.active) continue;
         if (skill.activation !== ACTIVATION.PASSIVE) continue;
 
-        const entry = { name: skill.ownerName, type: skill.effect, tier: skill.tier, power: skill.power };
+        const entry = { name: skill.ownerName, type: skill.effect, level: skill.level, power: skill.power };
         const hid4 = this._heroId != null ? this._heroId : 0;
         if (skill.ownerId === hid4) {
           summary.allies.push(entry);
@@ -2714,8 +3262,8 @@
 
       // pending forces
       for (const f of this.pendingForces) {
-        if (f.type === 'purge_all') continue;
-        const entry = { name: f.ownerName, type: f.type, tier: f.tier, power: f.power };
+        if (f.type === 'void' && f.skillKey === 'reality') continue;
+        const entry = { name: f.ownerName, type: f.type, level: f.level, power: f.power };
         const hid5 = this._heroId != null ? this._heroId : 0;
         if (f.ownerId === hid5) {
           summary.allies.push(entry);
@@ -2737,13 +3285,10 @@
     }
 
     /**
-     * 检查是否有清场技能 (purge_all / reversal) 在 pending
+     * Reality 现在是即时清场，不再作为 pending force 留给 MoZ 消费。
      */
     hasPurgeActive() {
-      return this.pendingForces.some(f =>
-        f.type === 'purge_all' || f.type === 'reversal' ||
-        f.type === 'clarity' || f.type === 'refraction'
-      );
+      return false;
     }
 
     // ========== 日志 ==========
@@ -2758,7 +3303,11 @@
   global.SkillSystem = SkillSystem;
   global.SkillSystem.ACTIVATION = ACTIVATION;
   global.SkillSystem.EFFECT = EFFECT;
-  global.SkillSystem.UNIVERSAL_SKILLS = UNIVERSAL_SKILLS;
+  global.SkillSystem.SKILL_SYSTEM = SKILL_SYSTEM;
+  global.SkillSystem.SKILL_KIND = SKILL_KIND;
+  global.SkillSystem.UNIVERSAL_SKILL_LEVELS = UNIVERSAL_SKILL_LEVELS;
+  global.SkillSystem.UNIVERSAL_SKILLS = UNIVERSAL_SKILL_LEVELS;
+  global.SkillSystem.ROLE_SKILLS = ROLE_SKILLS;
   global.SkillSystem.MANA_BY_LEVEL = MANA_BY_LEVEL;
   global.SkillSystem.lookupSkill = lookupSkill;
   global.SkillSystem.calculateSlots = calculateSlots;

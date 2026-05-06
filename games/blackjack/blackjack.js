@@ -153,6 +153,29 @@
     return (cfg() && cfg().blackjack) || DEFAULT_CONFIG.blackjack;
   }
 
+  function getAssetModifiers() {
+    return cfg() && cfg().assetModifiers && typeof cfg().assetModifiers === 'object'
+      ? cfg().assetModifiers
+      : null;
+  }
+
+  function resolveAssetValue(bucketName, key, baseValue) {
+    if (!window.MiniGameBase || typeof MiniGameBase.resolveAssetValue !== 'function') {
+      return { value: baseValue, baseValue: baseValue, flatDelta: 0, pctDelta: 0, sources: [] };
+    }
+    return MiniGameBase.resolveAssetValue(getAssetModifiers(), bucketName, key, baseValue);
+  }
+
+  function applyAssetDeckAndRenderConfig(nextConfig) {
+    var compiled = window.MiniGameBase && typeof MiniGameBase.applyAssetDeckToMiniGameConfig === 'function'
+      ? MiniGameBase.applyAssetDeckToMiniGameConfig(nextConfig, 'blackjack')
+      : nextConfig;
+    if (window.MiniGameBase && typeof MiniGameBase.renderAssetStatus === 'function') {
+      MiniGameBase.renderAssetStatus(compiled);
+    }
+    return compiled;
+  }
+
   function heroName() {
     var h = cfg().hero;
     if (h && h.vanguard && h.vanguard.name) return h.vanguard.name;
@@ -741,6 +764,12 @@
       msg = label + '负。';
     }
 
+    if (payout > bet) {
+      var rewardKey = isBlackjack ? 'blackjack' : 'win';
+      var profit = payout - bet;
+      payout = bet + Math.floor(resolveAssetValue('reward', rewardKey, profit).value);
+    }
+
     return { payout: payout, msg: msg, won: payout > bet };
   }
 
@@ -1102,7 +1131,7 @@
 
   function applyExternalConfig(nextConfig) {
     if (!nextConfig || externalConfigApplied) return;
-    config = nextConfig;
+    config = applyAssetDeckAndRenderConfig(nextConfig);
     externalConfigApplied = true;
     initStateFromConfig();
   }
@@ -1117,13 +1146,14 @@
       try {
         var resp = await fetch(paths[i]);
         if (resp.ok) {
-          config = await resp.json();
+          var loaded = await resp.json();
+          config = applyAssetDeckAndRenderConfig(loaded);
           initStateFromConfig();
           return;
         }
       } catch (e) { /* try next */ }
     }
-    config = DEFAULT_CONFIG;
+    config = applyAssetDeckAndRenderConfig(DEFAULT_CONFIG);
     initStateFromConfig();
   }
 
@@ -1144,7 +1174,7 @@
     state.chips = Math.max(0, Number(bcfg.startingChips) || Number(cfg().chips) || defBJ.startingChips);
     state.allowDouble = bcfg.allowDoubleDown !== false;
     state.allowSplit = bcfg.allowSplit !== false;
-    state.bjPayout = Number(bcfg.blackjackPayout) || defBJ.blackjackPayout;
+    state.bjPayout = resolveAssetValue('payout', 'blackjack', Number(bcfg.blackjackPayout) || defBJ.blackjackPayout).value;
     state.standOnSoft17 = bcfg.dealerStandOnSoft17 !== false;
 
     // Mana
@@ -1157,6 +1187,9 @@
     var dealerCfg = bcfg.dealer || defBJ.dealer;
     state.dealerStrategy = (dealerCfg && dealerCfg.strategy) || (dealerCfg && dealerCfg.rpsStrategy) || 'random';
     if (forceEngine) {
+      if (window.MiniGameBase && typeof MiniGameBase.applyAssetModifiersToForceEngine === 'function') {
+        MiniGameBase.applyAssetModifiersToForceEngine(forceEngine, getAssetModifiers());
+      }
       forceEngine.setDealerStrategy(state.dealerStrategy);
     }
 
@@ -1231,7 +1264,7 @@
     await loadConfig();
     requestConfigFromEngine();
     if (!config) {
-      config = DEFAULT_CONFIG;
+      config = applyAssetDeckAndRenderConfig(DEFAULT_CONFIG);
       initStateFromConfig();
     }
   })();

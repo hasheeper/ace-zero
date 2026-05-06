@@ -103,7 +103,12 @@
         "heroOverride": {
           "vanguard": { "name": "SIA", "level": 4, "trait": "arcane_charm" },
           "attrs": { "moirai": 80, "chaos": 45, "psyche": 40, "void": 0 },
-          "vanguardSkills": ["minor_wish", "grand_wish", "hex", "havoc"],
+          "vanguardSkills": [
+            { "key": "minor_wish", "level": 3 },
+            { "key": "grand_wish", "level": 3 },
+            { "key": "hex", "level": 3 },
+            { "key": "havoc", "level": 2 }
+          ],
           "rearguardSkills": [],
           "mana": 80,
           "maxMana": 80,
@@ -152,7 +157,11 @@
         "heroOverride": {
           "vanguard": { "name": "RINO", "level": 4, "trait": "crimson_crown" },
           "attrs": { "moirai": 80, "chaos": 18, "psyche": 46, "void": 0 },
-          "vanguardSkills": ["minor_wish", "grand_wish", "refraction"],
+          "vanguardSkills": [
+            { "key": "minor_wish", "level": 3 },
+            { "key": "grand_wish", "level": 3 },
+            { "key": "refraction", "level": 2 }
+          ],
           "rearguardSkills": [],
           "mana": 80,
           "maxMana": 80,
@@ -171,7 +180,10 @@
             "difficulty": "regular",
             "emotion": "calm",
             "attrs": { "moirai": 18, "chaos": 52, "psyche": 20, "void": 0 },
-            "skills": ["hex", "havoc"],
+            "skills": [
+              { "key": "hex", "level": 3 },
+              { "key": "havoc", "level": 2 }
+            ],
             "mana": 80,
             "maxMana": 80,
             "mental": {
@@ -231,7 +243,10 @@
   "hero": {
     "vanguard": { "name": "RINO", "level": 4, "trait": "crimson_crown" },
     "attrs": { "moirai": 80, "chaos": 18, "psyche": 40, "void": 0 },
-    "vanguardSkills": ["minor_wish", "grand_wish"],
+    "vanguardSkills": [
+      { "key": "minor_wish", "level": 3 },
+      { "key": "grand_wish", "level": 3 }
+    ],
     "rearguardSkills": [],
     "mana": 80,
     "maxMana": 80,
@@ -250,7 +265,10 @@
       "difficulty": "regular",
       "emotion": "calm",
       "attrs": { "moirai": 20, "chaos": 24, "psyche": 18, "void": 55 },
-      "skills": ["clarity", "insulation"],
+      "skills": [
+        { "key": "analysis", "level": 2 },
+        { "key": "insulation", "level": 2 }
+      ],
       "mana": 60,
       "maxMana": 60,
       "mental": {

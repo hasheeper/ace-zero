@@ -8,7 +8,12 @@
     "vanguard": { "name": "RINO", "level": 5, "trait": "crimson_crown" },
     "rearguard": { "name": "RINO_REAR", "level": 4, "trait": "obsessive_love" },
     "attrs": { "moirai": 80, "chaos": 20, "psyche": 30, "void": 0 },
-    "vanguardSkills": ["royal_decree", "grand_wish", "minor_wish", "heart_read"],
+    "vanguardSkills": [
+      { "key": "grand_wish", "level": 4 },
+      { "key": "minor_wish", "level": 4 },
+      { "key": "analysis", "level": 3 },
+      { "key": "premonition", "level": 2 }
+    ],
     "rearguardSkills": [],
     "mana": 100,
     "maxMana": 100,
@@ -25,7 +30,12 @@
       "difficulty": "cota",
       "emotion": "confident",
       "attrs": { "moirai": 18, "chaos": 18, "psyche": 84, "void": 0 },
-      "skills": ["deal_card", "gather_or_spread", "clarity"],
+      "skills": [
+        { "key": "premonition", "level": 3 },
+        { "key": "hex", "level": 2 },
+        { "key": "refraction", "level": 2 },
+        { "key": "analysis", "level": 2 }
+      ],
       "mana": 90,
       "maxMana": 90,
       "mental": { "discipline": 62, "composureMax": 100, "resistProbe": 14, "resistPresence": 12, "resistTaunt": 12 }
@@ -37,11 +47,15 @@
       "difficulty": "vv",
       "emotion": "calm",
       "attrs": { "moirai": 18, "chaos": 18, "psyche": 84, "void": 0 },
-      "skills": ["clairvoyance", "bubble_liquidation", "clarity"],
+      "skills": [
+        { "key": "hex", "level": 3 },
+        { "key": "havoc", "level": 2 },
+        { "key": "premonition", "level": 3 },
+        { "key": "analysis", "level": 3 }
+      ],
       "mana": 90,
       "maxMana": 90,
       "mental": { "discipline": 70, "composureMax": 100, "resistProbe": 18, "resistPresence": 14, "resistTaunt": 14 }
     }
   }
 }
-

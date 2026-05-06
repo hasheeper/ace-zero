@@ -11,6 +11,8 @@
   global.__ACE0_ACT_PLUGIN_ENTRY_LOADED__ = true;
 
   const files = [
+    './asset/data.js',
+    './asset/runtime.js',
     './act/data.js',
     './act/generated-data.js',
     './act/generated-runtime.js',

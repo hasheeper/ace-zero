@@ -69,6 +69,7 @@
       lastEvaluatedNodeIndex: 0,
       reasonCodes: [],
       firstMeetHint: '',
+      preSignalHint: '',
       debugLabel: normalizeTrimmedString(charKey, '').toUpperCase()
     };
   }
@@ -96,6 +97,7 @@
       lastEvaluatedNodeIndex: Math.max(0, Math.round(Number(source.lastEvaluatedNodeIndex) || 0)),
       reasonCodes: normalizeEncounterReasonCodes(source.reasonCodes),
       firstMeetHint: normalizeTrimmedString(source.firstMeetHint || source.hint || source.summary, ''),
+      preSignalHint: normalizeTrimmedString(source.preSignalHint || source.signalHint, ''),
       debugLabel: normalizeTrimmedString(source.debugLabel || source.label, normalizedCharKey)
     };
     if (state.firstMeetDone && state.status === 'locked') state.status = 'introduced';
@@ -121,9 +123,11 @@
       createdNodeIndex: Math.max(0, Math.round(Number(rawItem.createdNodeIndex) || 0)),
       expiresNodeIndex: Math.max(0, Math.round(Number(rawItem.expiresNodeIndex) || 0)),
       priority: Math.round(Number(rawItem.priority) || 0),
+      spentScore: Math.max(0, Math.round(Number(rawItem.spentScore) || 0)),
       reasonCodes: normalizeEncounterReasonCodes(rawItem.reasonCodes),
       debugLabel: normalizeTrimmedString(rawItem.debugLabel || rawItem.label, charKey),
-      firstMeetHint: normalizeTrimmedString(rawItem.firstMeetHint || rawItem.hint || rawItem.summary, '')
+      firstMeetHint: normalizeTrimmedString(rawItem.firstMeetHint || rawItem.hint || rawItem.summary, ''),
+      preSignalHint: normalizeTrimmedString(rawItem.preSignalHint || rawItem.signalHint, '')
     };
   }
 
@@ -183,6 +187,66 @@
     }, 0);
   }
 
+  function compareEncounterPriority(left, right) {
+    const leftSpent = Math.max(0, Math.round(Number(left?.spentScore) || 0));
+    const rightSpent = Math.max(0, Math.round(Number(right?.spentScore) || 0));
+    if (leftSpent !== rightSpent) return rightSpent - leftSpent;
+    const leftPriority = Math.round(Number(left?.priority) || 0);
+    const rightPriority = Math.round(Number(right?.priority) || 0);
+    if (leftPriority !== rightPriority) return rightPriority - leftPriority;
+    return ENCOUNTER_CHARACTER_KEYS.indexOf(left?.charKey) - ENCOUNTER_CHARACTER_KEYS.indexOf(right?.charKey);
+  }
+
+  function getEncounterFinalNodeIndex(configInput) {
+    const config = configInput && typeof configInput === 'object' ? configInput : {};
+    return Math.max(1, Math.round(Number(config.totalNodes || config.meta?.totalNodes) || 1));
+  }
+
+  function isEncounterFinalNode(configInput, nodeIdInput, nodeRuntimeInput = null) {
+    const nodeId = normalizeTrimmedString(nodeIdInput, '');
+    const nodeRuntime = nodeRuntimeInput || getNodeRuntime(configInput, nodeId);
+    const nodeIndex = Math.max(1, Math.round(Number(nodeRuntime?.nodeIndex) || 1));
+    if (nodeIndex >= getEncounterFinalNodeIndex(configInput)) return true;
+    const role = normalizeTrimmedString(nodeRuntime?.role || nodeRuntime?.ui?.role || nodeRuntime?.ui?.variant, '').toLowerCase();
+    return role === 'finale' || nodeId.includes('finale');
+  }
+
+  function normalizeEncounterGeoList(value) {
+    const raw = Array.isArray(value) ? value : (value ? [value] : []);
+    return raw
+      .map((entry) => normalizeTrimmedString(entry, '').toUpperCase())
+      .filter((entry, index, list) => entry && list.indexOf(entry) === index);
+  }
+
+  function normalizeEncounterLaneAlias(value) {
+    const lane = normalizeTrimmedString(value, '').toLowerCase();
+    const aliases = {
+      high: 'white',
+      mid_high: 'blue',
+      midlow: 'orange',
+      mid_low: 'orange',
+      low: 'red'
+    };
+    return aliases[lane] || lane;
+  }
+
+  function getEncounterNodeLaneKey(configInput, nodeIdInput) {
+    const node = getNodeRuntime(configInput, nodeIdInput);
+    const lane = normalizeTrimmedString(node?.lane || node?.ui?.lane, '').toLowerCase();
+    if (lane) return lane;
+    const lanes = Array.isArray(node?.mainlineLanes) ? node.mainlineLanes : [];
+    return normalizeTrimmedString(lanes[0], '').toLowerCase();
+  }
+
+  function getEncounterLanePreferenceScore(ruleInput, laneInput) {
+    const lane = normalizeEncounterLaneAlias(laneInput);
+    const weights = Array.isArray(ruleInput?.laneWeights) ? ruleInput.laneWeights : [];
+    const normalizedWeights = weights.map(normalizeEncounterLaneAlias);
+    const index = normalizedWeights.indexOf(lane);
+    if (index < 0) return 0;
+    return Math.max(0, normalizedWeights.length - index) * 4;
+  }
+
   function getEncounterRuntimeDay(contextInput) {
     const context = contextInput && typeof contextInput === 'object' ? contextInput : {};
     const candidates = [
@@ -223,10 +287,14 @@
       if (text) tags.push(text);
     };
     const context = contextInput && typeof contextInput === 'object' ? contextInput : {};
+    const storyFlags = context.storyFlags && typeof context.storyFlags === 'object' && !Array.isArray(context.storyFlags)
+      ? context.storyFlags
+      : {};
     [
       ...(Array.isArray(context.tags) ? context.tags : []),
       ...(Array.isArray(context.location?.tags) ? context.location.tags : []),
-      ...(Array.isArray(context.flags) ? context.flags : [])
+      ...(Array.isArray(context.flags) ? context.flags : []),
+      ...Object.entries(storyFlags).filter(([, enabled]) => enabled === true).map(([key]) => key)
     ].forEach(pushTag);
     pushTag(context.sceneTag);
     pushTag(context.nodeTag);
@@ -247,7 +315,7 @@
     return tags;
   }
 
-  function isEncounterCharacterIntroduced(actStateInput, heroStateInput, charKeyInput) {
+  function isEncounterCharacterIntroduced(actStateInput, heroStateInput, charKeyInput, contextInput = {}) {
     const charKey = normalizeTrimmedString(charKeyInput, '').toUpperCase();
     if (!ENCOUNTER_CHARACTER_KEYS.includes(charKey)) return false;
     const encounter = normalizeCharacterEncounterState(actStateInput?.characterEncounter);
@@ -256,9 +324,54 @@
     const hero = heroStateInput && typeof heroStateInput === 'object' ? heroStateInput : {};
     const heroCast = hero.cast && typeof hero.cast === 'object' ? hero.cast : {};
     const heroRoster = hero.roster && typeof hero.roster === 'object' ? hero.roster : {};
-    return heroCast[charKey]?.introduced === true
-      || heroCast[charKey]?.activated === true
+    const context = contextInput && typeof contextInput === 'object' ? contextInput : {};
+    const storyFlags = context.storyFlags && typeof context.storyFlags === 'object' && !Array.isArray(context.storyFlags)
+      ? context.storyFlags
+      : {};
+    const introducedCharacters = Array.isArray(context.introducedCharacters)
+      ? context.introducedCharacters.map((value) => normalizeTrimmedString(value, '').toUpperCase())
+      : [];
+    const lowerKey = charKey.toLowerCase();
+    return storyFlags[`${lowerKey}_introduced`] === true
+      || storyFlags[`${lowerKey}_met`] === true
+      || introducedCharacters.includes(charKey)
+      || heroCast[charKey]?.introduced === true
       || heroRoster[charKey]?.introduced === true;
+  }
+
+  function evaluateEncounterConditionGroup(groupInput, context) {
+    const group = groupInput && typeof groupInput === 'object' ? groupInput : {};
+    const reasons = [];
+    const minCrisis = Number(group.minCrisis ?? group.crisisMin);
+    if (minCrisis > 0 && context.crisis < minCrisis) reasons.push('crisis');
+    const minFunds = Number(group.minFunds);
+    if (minFunds > 0 && context.funds < minFunds) reasons.push('funds');
+    const requiredFlags = Array.isArray(group.requiredFlags) ? group.requiredFlags : [];
+    requiredFlags.forEach((flag) => {
+      const normalizedFlag = normalizeTrimmedString(flag, '').toLowerCase();
+      const flagEnabled = context.storyFlags[flag] === true
+        || context.storyFlags[normalizedFlag] === true
+        || context.contextFlags.includes(normalizedFlag);
+      if (!flagEnabled) reasons.push(`missing_flag_${normalizedFlag || 'unknown'}`);
+    });
+    const requiredCharacters = Array.isArray(group.requiredCharacters)
+      ? group.requiredCharacters
+      : (Array.isArray(group.requiredIntroduced) ? group.requiredIntroduced : []);
+    requiredCharacters.forEach((requiredCharKey) => {
+      if (!isEncounterCharacterIntroduced(context.act, context.hero, requiredCharKey, context.contextInput)) {
+        reasons.push(`requires_${normalizeTrimmedString(requiredCharKey, '').toLowerCase()}`);
+      }
+    });
+    return {
+      passed: reasons.length === 0,
+      reasons,
+      summary: {
+        minCrisis: Math.max(0, Math.round(minCrisis || 0)),
+        minFunds: Math.max(0, Math.round(minFunds || 0)),
+        requiredFlags,
+        requiredCharacters
+      }
+    };
   }
 
   function hasActiveEncounterForCharacter(encounterInput, charKeyInput) {
@@ -275,12 +388,19 @@
     const act = normalizeActState(actStateInput);
     const config = getChapter(act.id);
     const currentNodeId = getCurrentActNodeId(act);
+    const currentLane = getEncounterNodeLaneKey(config, currentNodeId);
     const day = getEncounterRuntimeDay(contextInput);
     const geo = getEncounterRuntimeGeo(contextInput);
     const tags = collectEncounterRuntimeTags(contextInput, config, currentNodeId);
     const hero = heroStateInput && typeof heroStateInput === 'object' ? heroStateInput : {};
-    const funds = Math.max(0, Number(hero.funds ?? hero.assets ?? hero.money) || 0);
-    const crisis = Math.max(0, Math.round(Number(act.crisis) || 0));
+    const funds = Math.max(0, Number(contextInput?.funds ?? hero.funds ?? hero.money) || 0);
+    const crisis = Math.max(0, Math.round(Number(contextInput?.crisis ?? act.crisis) || 0));
+    const contextFlags = Array.isArray(contextInput?.flags)
+      ? contextInput.flags.map((flag) => normalizeTrimmedString(flag, '').toLowerCase()).filter(Boolean)
+      : [];
+    const storyFlags = contextInput?.storyFlags && typeof contextInput.storyFlags === 'object' && !Array.isArray(contextInput.storyFlags)
+      ? contextInput.storyFlags
+      : {};
     const encounter = normalizeCharacterEncounterState(act.characterEncounter);
     const eligible = [];
     const blocked = [];
@@ -295,43 +415,100 @@
         else if (day < Number(rule.minDay)) reasons.push('day');
       }
       if (Number(rule?.minNodeIndex) > 0 && act.nodeIndex < Number(rule.minNodeIndex)) reasons.push('node_index');
-      if (Number(rule?.crisisMin) > 0 && crisis < Number(rule.crisisMin)) reasons.push('crisis');
+      const minCrisis = Number(rule?.minCrisis ?? rule?.crisisMin);
+      if (minCrisis > 0 && crisis < minCrisis) reasons.push('crisis');
       if (Number(rule?.minFunds) > 0 && funds < Number(rule.minFunds)) reasons.push('funds');
       if (rule?.requiredGeo) {
         if (!geo) reasons.push('missing_geo');
         else if (geo !== normalizeTrimmedString(rule.requiredGeo, '').toUpperCase()) reasons.push('geo');
       }
+      const optionalGeo = normalizeEncounterGeoList(rule?.optionalGeo);
+      const geoScore = optionalGeo.length && optionalGeo.includes(geo) ? 6 : 0;
       const requiredTags = Array.isArray(rule?.requiredTags) ? rule.requiredTags : [];
       if (requiredTags.length && !requiredTags.some((tag) => tags.some((runtimeTag) => runtimeTag.includes(normalizeTrimmedString(tag, '').toLowerCase())))) {
         reasons.push(tags.length ? 'tag' : 'missing_tags');
       }
-      const requiredIntroduced = Array.isArray(rule?.requiredIntroduced) ? rule.requiredIntroduced : [];
+      const requiredFlags = Array.isArray(rule?.requiredFlags) ? rule.requiredFlags : [];
+      requiredFlags.forEach((flag) => {
+        const normalizedFlag = normalizeTrimmedString(flag, '').toLowerCase();
+        const flagEnabled = storyFlags[flag] === true
+          || storyFlags[normalizedFlag] === true
+          || contextFlags.includes(normalizedFlag);
+        if (!flagEnabled) reasons.push(`missing_flag_${normalizedFlag || 'unknown'}`);
+      });
+      const requiredIntroduced = Array.isArray(rule?.requiredCharacters)
+        ? rule.requiredCharacters
+        : (Array.isArray(rule?.requiredIntroduced) ? rule.requiredIntroduced : []);
       requiredIntroduced.forEach((requiredCharKey) => {
-        if (!isEncounterCharacterIntroduced(act, hero, requiredCharKey)) reasons.push(`requires_${normalizeTrimmedString(requiredCharKey, '').toLowerCase()}`);
+        if (!isEncounterCharacterIntroduced(act, hero, requiredCharKey, contextInput)) reasons.push(`requires_${normalizeTrimmedString(requiredCharKey, '').toLowerCase()}`);
       });
       if (rule?.requiresChurchEvent) {
         const hasChurchEvent = contextInput?.churchEvent === true
-          || (Array.isArray(contextInput?.flags) && contextInput.flags.some((flag) => normalizeTrimmedString(flag, '').toLowerCase().includes('church')));
+          || storyFlags.church_event_triggered === true
+          || storyFlags.church === true
+          || contextFlags.some((flag) => flag.includes('church'))
+          || tags.some((tag) => tag.includes('church'));
         if (!hasChurchEvent) reasons.push('missing_church_event');
       }
+      const requiredAny = Array.isArray(rule?.requiredAny) ? rule.requiredAny : [];
+      const anyResults = requiredAny.map((group) => evaluateEncounterConditionGroup(group, {
+        act,
+        hero,
+        contextInput,
+        storyFlags,
+        contextFlags,
+        funds,
+        crisis
+      }));
+      if (anyResults.length && !anyResults.some((result) => result.passed)) reasons.push('requires_any');
 
       const spentScore = calculateEncounterSpentScore(act, rule?.spentWeights);
       if (Number(rule?.minSpentScore) > 0 && spentScore < Number(rule.minSpentScore)) reasons.push('spent_score');
+      const laneScore = getEncounterLanePreferenceScore(rule, currentLane);
+      const basePriority = Math.round(Number(rule?.priority) || 0);
+      const rarity = Number(rule?.rarity) || 3;
 
       const result = {
         charKey,
         eligible: reasons.length === 0,
         reasonCodes: reasons,
-        priority: Math.round((spentScore * 2) + (crisis * 1.5) + (act.nodeIndex * 3) + (10 - (Number(rule?.rarity) || 3))),
+        priority: Math.round(basePriority + (spentScore * 2) + (crisis * 1.5) + (act.nodeIndex * 3) + laneScore + geoScore + (10 - rarity)),
         spentScore,
+        requirements: {
+          day,
+          minDay: Math.max(0, Math.round(Number(rule?.minDay) || 0)),
+          nodeIndex: Math.max(1, Math.round(Number(act.nodeIndex) || 1)),
+          minNodeIndex: Math.max(0, Math.round(Number(rule?.minNodeIndex) || 0)),
+          funds,
+          minFunds: Math.max(0, Math.round(Number(rule?.minFunds) || 0)),
+          crisis,
+          minCrisis: Math.max(0, Math.round(minCrisis || 0)),
+          geo,
+          requiredGeo: normalizeTrimmedString(rule?.requiredGeo, '').toUpperCase(),
+          optionalGeo,
+          tags,
+          requiredTags,
+          requiredFlags,
+          requiredCharacters: requiredIntroduced,
+          requiredAny: anyResults.map((result) => result.summary),
+          spentScore,
+          minSpentScore: Math.max(0, Math.round(Number(rule?.minSpentScore) || 0)),
+          lane: currentLane,
+          laneScore,
+          geoScore,
+          rarity,
+          basePriority
+        },
         debugLabel: normalizeTrimmedString(rule?.debugLabel, charKey),
+        preSignalPreferred: rule?.preSignalPreferred === true,
+        preSignalHint: normalizeTrimmedString(rule?.preSignalHint, ''),
         firstMeetHint: normalizeTrimmedString(rule?.firstMeetHint, '')
       };
       if (result.eligible) eligible.push(result);
       else blocked.push(result);
     });
 
-    eligible.sort((left, right) => right.priority - left.priority || ENCOUNTER_CHARACTER_KEYS.indexOf(left.charKey) - ENCOUNTER_CHARACTER_KEYS.indexOf(right.charKey));
+    eligible.sort(compareEncounterPriority);
     return { eligible, blocked, context: { day, geo, tags, currentNodeId, funds, crisis } };
   }
 
@@ -394,6 +571,7 @@
         if (!nodeId || seen.has(nodeId) || pastNodes.has(nodeId) || activeTargets.has(nodeId)) return;
         const nodeRuntime = getNodeRuntime(config, nodeId);
         const targetNodeIndex = Math.max(1, Math.round(Number(nodeRuntime?.nodeIndex) || nodeIndex));
+        if (isEncounterFinalNode(config, nodeId, nodeRuntime)) return;
         if (targetNodeIndex <= currentIndex || targetNodeIndex > currentIndex + distance) return;
         seen.add(nodeId);
         candidates.push({ nodeId, nodeIndex: targetNodeIndex, distance: step, weight: 1 });
@@ -407,6 +585,7 @@
       for (let nodeIndex = currentIndex + 1; nodeIndex <= currentIndex + distance; nodeIndex += 1) {
         getNodeIdsAtIndex(config, nodeIndex).forEach((nodeId) => {
           if (!nodeId || seen.has(nodeId) || pastNodes.has(nodeId) || activeTargets.has(nodeId)) return;
+          if (isEncounterFinalNode(config, nodeId)) return;
           seen.add(nodeId);
           candidates.push({ nodeId, nodeIndex, distance: nodeIndex - currentIndex, weight: 1 });
         });
@@ -435,25 +614,41 @@
     const act = normalizeActState(actStateInput);
     const encounter = normalizeCharacterEncounterState(act.characterEncounter);
     const currentNodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
+    const requestedCharKey = normalizeTrimmedString(options.charKey || options.requestCharKey || options.forceCharKey, '').toUpperCase();
+    const requestedType = normalizeTrimmedString(options.type || options.requestType, '').toLowerCase();
+    const hasActivePlacedRequest = encounter.queue.some((item) => (
+      ['first_meet', 'pre_signal'].includes(item.type)
+      && item.status === 'placed'
+      && item.targetNodeId
+    ));
+    if (hasActivePlacedRequest) {
+      act.characterEncounter = encounter;
+      return { actState: act, placed: null, reason: 'active_placement' };
+    }
+    const pendingRequests = encounter.queue
+      .filter((item) => (
+        ['first_meet', 'pre_signal'].includes(item.type)
+        && item.status === 'queued'
+        && (!requestedCharKey || item.charKey === requestedCharKey)
+        && (!requestedType || item.type === requestedType)
+      ))
+      .sort((left, right) => compareEncounterPriority(left, right) || left.createdNodeIndex - right.createdNodeIndex);
+    const request = pendingRequests[0] || null;
+    if (!request) {
+      act.characterEncounter = encounter;
+      return {
+        actState: act,
+        placed: null,
+        reason: 'empty_queue'
+      };
+    }
     if (
-      encounter.meta.lastFirstMeetNodeIndex > 0
-      && currentNodeIndex <= encounter.meta.lastFirstMeetNodeIndex + Math.max(1, Math.round(Number(options.cooldownNodes) || 1))
+      options.ignoreCooldown !== true
+      && encounter.meta.lastFirstMeetNodeIndex > 0
+      && currentNodeIndex < encounter.meta.lastFirstMeetNodeIndex + Math.max(1, Math.round(Number(options.cooldownNodes) || 1))
     ) {
       act.characterEncounter = encounter;
       return { actState: act, placed: null, reason: 'cooldown' };
-    }
-
-    const requestedCharKey = normalizeTrimmedString(options.charKey || options.requestCharKey || options.forceCharKey, '').toUpperCase();
-    const request = encounter.queue
-      .filter((item) => (
-        item.type === 'first_meet'
-        && item.status === 'queued'
-        && (!requestedCharKey || item.charKey === requestedCharKey)
-      ))
-      .sort((left, right) => right.priority - left.priority || left.createdNodeIndex - right.createdNodeIndex)[0];
-    if (!request) {
-      act.characterEncounter = encounter;
-      return { actState: act, placed: null, reason: 'empty_queue' };
     }
 
     const candidates = findEncounterPlacementCandidates({ ...act, characterEncounter: encounter }, configInput, options);
@@ -481,16 +676,81 @@
     const charState = encounter.characters[request.charKey] || createDefaultEncounterCharacterState(request.charKey);
     encounter.characters[request.charKey] = {
       ...charState,
-      status: 'queued',
+      status: request.type === 'pre_signal' ? 'pre_signal' : 'queued',
       queuedRequestId: placed.id,
       placedNodeId: placed.targetNodeId,
       lastEvaluatedNodeIndex: currentNodeIndex,
       reasonCodes: deepClone(placed.reasonCodes),
       firstMeetHint: placed.firstMeetHint || charState.firstMeetHint,
+      preSignalHint: placed.preSignalHint || charState.preSignalHint,
       debugLabel: placed.debugLabel || charState.debugLabel
     };
     act.characterEncounter = encounter;
     return { actState: act, placed };
+  }
+
+  function queueFirstMeetAfterPreSignal(actStateInput, requestInput, ruleInput, configInput, options = {}) {
+    const act = normalizeActState(actStateInput);
+    const encounter = normalizeCharacterEncounterState(act.characterEncounter);
+    const request = requestInput || {};
+    const charKey = normalizeTrimmedString(request.charKey, '').toUpperCase();
+    if (!ENCOUNTER_CHARACTER_KEYS.includes(charKey)) {
+      act.characterEncounter = encounter;
+      return { actState: act, queued: null, placed: null, reason: 'unknown_character' };
+    }
+    const existingActive = encounter.queue.find((item) => (
+      item.charKey === charKey &&
+      item.type === 'first_meet' &&
+      !ENCOUNTER_TERMINAL_QUEUE_STATUSES.includes(item.status)
+    ));
+    if (existingActive) {
+      act.characterEncounter = encounter;
+      return { actState: act, queued: existingActive, placed: existingActive.status === 'placed' ? existingActive : null, reason: 'existing_followup' };
+    }
+
+    const currentNodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
+    const rule = ruleInput || ENCOUNTER_RULES[charKey] || {};
+    const firstMeetHint = normalizeTrimmedString(request.firstMeetHint || rule.firstMeetHint, '');
+    const followUpRequest = {
+      id: buildEncounterRequestId(act, charKey, 'first_meet', encounter.queue.length),
+      charKey,
+      type: 'first_meet',
+      status: 'queued',
+      targetNodeId: '',
+      targetNodeIndex: 0,
+      targetPhaseIndex: 0,
+      createdNodeIndex: currentNodeIndex,
+      expiresNodeIndex: 0,
+      priority: Math.max(999, Math.round(Number(request.priority) || 0) + 50),
+      spentScore: Math.max(0, Math.round(Number(request.spentScore) || 0)),
+      reasonCodes: ['pre_signal_followup'],
+      debugLabel: normalizeTrimmedString(request.debugLabel || rule.debugLabel, charKey),
+      preSignalHint: normalizeTrimmedString(request.preSignalHint || rule.preSignalHint, ''),
+      firstMeetHint
+    };
+    encounter.queue.push(followUpRequest);
+    encounter.characters[charKey] = {
+      ...(encounter.characters[charKey] || createDefaultEncounterCharacterState(charKey)),
+      status: 'queued',
+      preSignalDone: true,
+      queuedRequestId: followUpRequest.id,
+      placedNodeId: '',
+      lastEvaluatedNodeIndex: currentNodeIndex,
+      reasonCodes: deepClone(followUpRequest.reasonCodes),
+      preSignalHint: followUpRequest.preSignalHint,
+      firstMeetHint: followUpRequest.firstMeetHint,
+      debugLabel: followUpRequest.debugLabel
+    };
+    act.characterEncounter = encounter;
+    const placedResult = placeNextCharacterEncounter(act, configInput, {
+      ...options,
+      requestCharKey: charKey,
+      requestType: 'first_meet',
+      distance: 1
+    });
+    const placed = placedResult.placed || null;
+    const queued = placed || followUpRequest;
+    return { actState: placedResult.actState, queued, placed };
   }
 
   function enqueueEligibleCharacterEncounters(actStateInput, heroStateInput = {}, options = {}) {
@@ -499,38 +759,47 @@
     const evaluated = options.eligibility || evaluateCharacterEncounterEligibility({ ...act, characterEncounter: encounter }, heroStateInput, options.context || {});
     const limit = Math.max(1, Math.round(Number(options.limit) || 1));
     const queued = [];
-    evaluated.eligible.slice(0, limit).forEach((candidate) => {
+    evaluated.eligible.forEach((candidate) => {
+      if (queued.length >= limit) return;
       if (hasActiveEncounterForCharacter(encounter, candidate.charKey)) return;
+      const charState = encounter.characters[candidate.charKey] || createDefaultEncounterCharacterState(candidate.charKey);
+      const shouldPreSignal = options.disablePreSignal !== true
+        && candidate.preSignalPreferred === true
+        && charState.preSignalDone !== true;
+      const requestType = shouldPreSignal ? 'pre_signal' : 'first_meet';
       const request = {
-        id: buildEncounterRequestId(act, candidate.charKey, 'first_meet', encounter.queue.length + queued.length),
+        id: buildEncounterRequestId(act, candidate.charKey, requestType, encounter.queue.length + queued.length),
         charKey: candidate.charKey,
-        type: 'first_meet',
+        type: requestType,
         status: 'queued',
         targetNodeId: '',
         targetNodeIndex: 0,
         targetPhaseIndex: 0,
         createdNodeIndex: Math.max(1, Math.round(Number(act.nodeIndex) || 1)),
         expiresNodeIndex: 0,
-        priority: candidate.priority,
+        priority: shouldPreSignal ? candidate.priority + 25 : (charState.preSignalDone === true ? candidate.priority + 18 : candidate.priority),
+        spentScore: Math.max(0, Math.round(Number(candidate.spentScore) || 0)),
         reasonCodes: deepClone(candidate.reasonCodes),
         debugLabel: candidate.debugLabel,
+        preSignalHint: candidate.preSignalHint,
         firstMeetHint: candidate.firstMeetHint
       };
       encounter.queue.push(request);
       encounter.characters[candidate.charKey] = {
-        ...(encounter.characters[candidate.charKey] || createDefaultEncounterCharacterState(candidate.charKey)),
-        status: 'queued',
+        ...charState,
+        status: shouldPreSignal ? 'pre_signal' : 'queued',
         queuedRequestId: request.id,
         placedNodeId: '',
         lastEvaluatedNodeIndex: Math.max(1, Math.round(Number(act.nodeIndex) || 1)),
         reasonCodes: deepClone(request.reasonCodes),
+        preSignalHint: request.preSignalHint,
         firstMeetHint: request.firstMeetHint,
         debugLabel: request.debugLabel
       };
       queued.push(request);
     });
     act.characterEncounter = encounter;
-    if (options.place === false || queued.length === 0) return { actState: act, queued, placed: null, evaluated };
+    if (options.place !== true) return { actState: act, queued, placed: null, evaluated };
     const placedResult = placeNextCharacterEncounter(act, options.config || getChapter(act.id), options);
     return { actState: placedResult.actState, queued, placed: placedResult.placed, evaluated };
   }
@@ -543,7 +812,7 @@
       ? Math.max(0, Math.min(3, Math.round(Number(options.phaseIndex) || 0)))
       : null;
     const request = encounter.queue.find((item) => (
-      item.type === 'first_meet'
+      ['first_meet', 'pre_signal'].includes(item.type)
       && item.status === 'placed'
       && item.targetNodeId === nodeId
       && (phaseIndex === null || item.targetPhaseIndex === phaseIndex)
@@ -555,6 +824,41 @@
 
     const currentNodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
     const rule = ENCOUNTER_RULES[request.charKey] || {};
+    if (request.type === 'pre_signal') {
+      const preSignalHint = normalizeTrimmedString(request.preSignalHint || rule.preSignalHint, '');
+      const consumed = {
+        ...request,
+        status: 'triggered',
+        triggeredNodeId: nodeId,
+        triggeredNodeIndex: currentNodeIndex,
+        triggeredPhaseIndex: phaseIndex === null ? request.targetPhaseIndex : phaseIndex
+      };
+      encounter.queue = encounter.queue.map((item) => item.id === request.id ? consumed : item);
+      encounter.characters[request.charKey] = {
+        ...(encounter.characters[request.charKey] || createDefaultEncounterCharacterState(request.charKey)),
+        status: 'locked',
+        preSignalDone: true,
+        queuedRequestId: '',
+        placedNodeId: '',
+        lastEvaluatedNodeIndex: currentNodeIndex,
+        reasonCodes: deepClone(request.reasonCodes),
+        preSignalHint,
+        firstMeetHint: normalizeTrimmedString(request.firstMeetHint || rule.firstMeetHint, ''),
+        debugLabel: normalizeTrimmedString(request.debugLabel || rule.debugLabel, request.charKey)
+      };
+      act.characterEncounter = encounter;
+      act.pendingPreSignal = {
+        ...normalizePendingFirstMeet(act.pendingPreSignal),
+        ...(preSignalHint ? { [request.charKey]: preSignalHint } : {})
+      };
+      const followUp = queueFirstMeetAfterPreSignal(act, request, rule, options.config || getChapter(act.id), options);
+      return {
+        actState: followUp.actState,
+        consumed,
+        queued: followUp.queued,
+        placed: followUp.placed
+      };
+    }
     const firstMeetHint = normalizeTrimmedString(request.firstMeetHint || rule.firstMeetHint, '');
     const consumed = {
       ...request,
@@ -592,14 +896,16 @@
     const enqueueResult = enqueueEligibleCharacterEncounters(act, heroStateInput, {
       context: contextInput,
       config,
-      limit: 1,
-      place: true
+      limit: ENCOUNTER_CHARACTER_KEYS.length,
+      place: false
     });
+    const placedResult = placeNextCharacterEncounter(enqueueResult.actState, config);
     return {
-      actState: enqueueResult.actState,
+      actState: placedResult.actState,
       consumed: null,
       queued: enqueueResult.queued,
-      placed: enqueueResult.placed,
+      placed: placedResult.placed,
+      reason: placedResult.reason || null,
       evaluated: enqueueResult.evaluated
     };
   }
@@ -619,6 +925,11 @@
       return { actState: act, applied: false, reason: 'already_introduced' };
     }
     const active = encounter.queue.find((item) => item.charKey === charKey && !ENCOUNTER_TERMINAL_QUEUE_STATUSES.includes(item.status));
+    let rollbackRequestId = active?.status === 'queued'
+      && Array.isArray(active.reasonCodes)
+      && active.reasonCodes.includes('debug_force')
+      ? active.id
+      : '';
     if (active?.status === 'placed') {
       act.characterEncounter = encounter;
       return {
@@ -641,11 +952,13 @@
         createdNodeIndex: Math.max(1, Math.round(Number(act.nodeIndex) || 1)),
         expiresNodeIndex: 0,
         priority: 999,
+        spentScore: Math.max(0, calculateEncounterSpentScore(act, rule.spentWeights)),
         reasonCodes: ['debug_force'],
         debugLabel: normalizeTrimmedString(rule.debugLabel, charKey),
         firstMeetHint: normalizeTrimmedString(rule.firstMeetHint, '')
       };
       encounter.queue.push(request);
+      rollbackRequestId = request.id;
       encounter.characters[charKey] = {
         ...(encounter.characters[charKey] || createDefaultEncounterCharacterState(charKey)),
         status: 'queued',
@@ -660,12 +973,30 @@
     act.characterEncounter = encounter;
     const placedResult = placeNextCharacterEncounter(act, config, {
       ...options,
+      distance: Math.max(1, Math.round(Number(options.distance) || 1)),
+      ignoreCooldown: options.ignoreCooldown === true,
       forceCharKey: charKey
     });
+    const nextActiveRequest = placedResult.actState.characterEncounter.queue.find((item) => (
+      item.charKey === charKey
+      && !ENCOUNTER_TERMINAL_QUEUE_STATUSES.includes(item.status)
+    )) || null;
+    const applied = Boolean(placedResult.placed || nextActiveRequest);
+    if (!applied && rollbackRequestId) {
+      const nextEncounter = normalizeCharacterEncounterState(placedResult.actState.characterEncounter);
+      nextEncounter.queue = nextEncounter.queue.filter((item) => item.id !== rollbackRequestId);
+      nextEncounter.characters[charKey] = {
+        ...createDefaultEncounterCharacterState(charKey),
+        reasonCodes: [placedResult.reason || 'not_placed'],
+        firstMeetHint: normalizeTrimmedString(rule.firstMeetHint, ''),
+        debugLabel: normalizeTrimmedString(rule.debugLabel, charKey)
+      };
+      placedResult.actState.characterEncounter = nextEncounter;
+    }
     return {
       actState: placedResult.actState,
-      applied: true,
-      request: placedResult.actState.characterEncounter.queue.find((item) => item.charKey === charKey && !ENCOUNTER_TERMINAL_QUEUE_STATUSES.includes(item.status)) || null,
+      applied,
+      request: nextActiveRequest,
       placed: placedResult.placed,
       reason: placedResult.reason || ''
     };

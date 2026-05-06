@@ -676,19 +676,22 @@
     });
   }
 
-  function generateLaneBackboneCounts(seed) {
+  function generateLaneBackboneCounts(seed, layerCountInput = 10) {
     const rng = mulberry32(hashStringToSeed(`${seed}|lane-backbone-counts`));
+    const layerCount = Math.max(1, Math.round(Number(layerCountInput) || 1));
+    if (layerCount === 1) return [4];
     const counts = [4];
     let previousCount = 4;
     let repeatRun = 1;
-    for (let step = 0; step < 8; step += 1) {
-      const remainingSteps = 7 - step;
+    const middleSteps = Math.max(0, layerCount - 2);
+    for (let step = 0; step < middleSteps; step += 1) {
+      const remainingSteps = Math.max(0, middleSteps - 1 - step);
       const candidates = [3, 4, 5].filter((candidate) => Math.abs(candidate - previousCount) <= 1);
       const weighted = candidates.map((candidate) => {
         let weight = 1;
         if (candidate === previousCount) weight *= repeatRun >= 2 ? 0.12 : 0.45;
         if (candidate === 4) weight *= 0.85;
-        if ((step <= 1 || step >= 6) && candidate === 5) weight *= 0.55;
+        if ((step <= 1 || remainingSteps <= 1) && candidate === 5) weight *= 0.55;
         if (remainingSteps <= 1 && candidate !== 4) weight *= 0.7;
         return { candidate, weight };
       });
@@ -837,23 +840,29 @@
   function buildLaneBackboneChapterTail(chapterConfig, generatedTail) {
     const totalNodes = Math.max(chapterConfig.totalNodes || 1, generatedTail.totalNodes || 1);
     const chapterSeed = normalizeTrimmedString(chapterConfig?.runtime?.seed, DEFAULT_WORLD_ACT.seed);
-    const collapseIndex = 15;
-    const finaleIndex = 16;
-    const backboneCounts = generateLaneBackboneCounts(chapterSeed);
+    const laneNodeIndex = generatedTail.laneNodeIndex && typeof generatedTail.laneNodeIndex === 'object'
+      ? generatedTail.laneNodeIndex
+      : {};
+    const openingIndex = Math.max(generatedTail.startNodeIndex || 4, Math.min(totalNodes, Math.round(Number(laneNodeIndex.opening) || generatedTail.startNodeIndex || 4)));
+    const fullLaneStart = Math.max(openingIndex + 1, Math.min(totalNodes, Math.round(Number(laneNodeIndex.fullLaneStart) || openingIndex + 1)));
+    const finaleIndex = Math.max(fullLaneStart, Math.min(totalNodes, Math.round(Number(laneNodeIndex.finale) || totalNodes)));
+    const collapseIndex = Math.max(fullLaneStart, Math.min(finaleIndex - 1, Math.round(Number(laneNodeIndex.collapse) || Math.max(fullLaneStart, finaleIndex - 1))));
+    const fullLaneEnd = Math.max(fullLaneStart, Math.min(collapseIndex - 1, Math.round(Number(laneNodeIndex.fullLaneEnd) || Math.max(fullLaneStart, collapseIndex - 1))));
+    const backboneCounts = generateLaneBackboneCounts(chapterSeed, Math.max(1, fullLaneEnd - fullLaneStart + 1));
     const laneLayout = new Map([
-      [4, [
+      [openingIndex, [
         { lane: 'blue', subtitle: 'UPPER LINE', title: 'BLUE LINE', mainlineLanes: ['blue'] },
         { lane: 'orange', subtitle: 'LOWER LINE', title: 'ORANGE LINE', mainlineLanes: ['orange'] }
       ]],
-      [5, createFourLaneLayerSpecs()]
+      [fullLaneStart, createFourLaneLayerSpecs()]
     ]);
-    for (let nodeIndex = 6; nodeIndex <= 14; nodeIndex += 1) {
-      laneLayout.set(nodeIndex, createLaneLayerSpecsForCount(chapterSeed, nodeIndex, backboneCounts[nodeIndex - 5] || 4));
+    for (let nodeIndex = fullLaneStart + 1; nodeIndex <= fullLaneEnd; nodeIndex += 1) {
+      laneLayout.set(nodeIndex, createLaneLayerSpecsForCount(chapterSeed, nodeIndex, backboneCounts[nodeIndex - fullLaneStart] || 4));
     }
     const transitionMap = new Map([
-      ['4->5', [[0, 1], [2, 3]]]
+      [`${openingIndex}->${fullLaneStart}`, [[0, 1], [2, 3]]]
     ]);
-    for (let nodeIndex = 5; nodeIndex < 14; nodeIndex += 1) {
+    for (let nodeIndex = fullLaneStart; nodeIndex < fullLaneEnd; nodeIndex += 1) {
       const currentCount = (laneLayout.get(nodeIndex) || []).length;
       const nextCount = (laneLayout.get(nodeIndex + 1) || []).length;
       transitionMap.set(`${nodeIndex}->${nodeIndex + 1}`, buildAdjacentTransitionPattern(chapterSeed, nodeIndex, currentCount, nextCount));
@@ -872,8 +881,8 @@
     layers.set(collapseIndex, buildLaneLayer(chapterConfig.nodes, collapseIndex, collapsePair));
     layers.set(finaleIndex, buildLaneLayer(chapterConfig.nodes, finaleIndex, ['white'], true));
 
-    const openingLayer = layers.get(4) || [];
-    const firstFullLane = layers.get(5) || [];
+    const openingLayer = layers.get(openingIndex) || [];
+    const firstFullLane = layers.get(fullLaneStart) || [];
     const openingByLane = getLaneEntryMap(openingLayer);
     const firstFullByLane = getLaneEntryMap(firstFullLane);
     if (openingByLane.get('blue')) {
@@ -889,7 +898,7 @@
       ]);
     }
 
-    for (let nodeIndex = 5; nodeIndex < 14; nodeIndex += 1) {
+    for (let nodeIndex = fullLaneStart; nodeIndex < fullLaneEnd; nodeIndex += 1) {
       const transition = transitionMap.get(`${nodeIndex}->${nodeIndex + 1}`);
       const currentLayer = layers.get(nodeIndex) || [];
       const nextLayer = layers.get(nodeIndex + 1) || [];
@@ -929,7 +938,7 @@
     const collapseByLane = getLaneEntryMap(collapseLayer);
     const finalLayer = layers.get(finaleIndex) || [];
     const finalNodeId = finalLayer[0]?.id || '';
-    (layers.get(14) || []).forEach((entry) => {
+    (layers.get(fullLaneEnd) || []).forEach((entry) => {
       const targetLane = getNearestLaneTarget(entry.lane, collapsePair);
       assignNodeNext(entry.node, [collapseByLane.get(targetLane)?.id || '']);
     });

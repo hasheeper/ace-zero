@@ -17,8 +17,9 @@ const ENCOUNTER_RULES = {
       minDay: 3,
       minNodeIndex: 5,
       spentWeights: { combat: 2, rest: 1, asset: 1, vision: 2 },
-      minSpentScore: 15,
+      minSpentScore: 9,
       laneWeights: ['mid_low', 'low', 'mid_high', 'high'],
+      priority: 20,
       rarity: 2,
       debugLabel: 'SIA / anomaly audit',
       firstMeetHint: 'SIA 首次在主角视野里具象化。她不是旧识，也不是熟络同伴；她带着管理局式的冷静，把当前异常行动纳入审视。'
@@ -28,9 +29,10 @@ const ENCOUNTER_RULES = {
       minDay: 3,
       minNodeIndex: 7,
       spentWeights: { combat: 5, rest: 0, asset: 0, vision: 1 },
-      minSpentScore: 35,
-      crisisMin: 26,
+      minSpentScore: 22,
+      minCrisis: 26,
       laneWeights: ['low', 'mid_low', 'mid_high', 'high'],
+      priority: 30,
       rarity: 4,
       debugLabel: 'TRIXIE / crisis noise',
       firstMeetHint: 'TRIXIE 首次在主角视野里出现。她像从混乱规则的缝里钻出来，不要写成早已认识的玩笑伙伴。'
@@ -41,6 +43,7 @@ const ENCOUNTER_RULES = {
       minFunds: 51,
       requiredGeo: 'THE_RUST',
       laneWeights: ['mid_low', 'low', 'mid_high', 'high'],
+      priority: 40,
       rarity: 1,
       debugLabel: 'POPPY / rust contact',
       firstMeetHint: 'POPPY 首次在主角视野里出现。她属于底层生态，不是旧识；她的出现应像玩家踩进了她的活动范围。'
@@ -48,8 +51,10 @@ const ENCOUNTER_RULES = {
     COTA: {
       category: 'geo',
       minNodeIndex: 4,
-      requiredTags: ['赌场', 'casino', 'gambling hall', '赌桌', '荷官'],
+      optionalGeo: ['THE_EXCHANGE', 'THE_COURT', 'THE_STREET'],
+      requiredTags: ['赌场', 'casino', 'gambling hall', 'gambling_hall', '赌桌', 'card_table', '荷官', 'dealer'],
       laneWeights: ['mid_high', 'high', 'low', 'mid_low'],
+      priority: 38,
       rarity: 1,
       debugLabel: 'COTA / table contact',
       firstMeetHint: 'COTA 首次在主角视野里出现。她依附赌场、赌桌或荷官场景，不要写成已经熟悉的联系人。'
@@ -60,12 +65,14 @@ const ENCOUNTER_RULES = {
       minNodeIndex: 9,
       minFunds: 2501,
       spentWeights: { combat: 1, rest: 2, asset: 3, vision: 2 },
-      minSpentScore: 45,
-      crisisMin: 26,
+      minSpentScore: 28,
+      minCrisis: 26,
       laneWeights: ['mid_high', 'high', 'mid_low', 'low'],
       preSignalPreferred: true,
+      priority: 25,
       rarity: 3,
       debugLabel: 'VV / asset signal',
+      preSignalHint: 'VV 的估值信号先出现：有人开始从资产、赔率和风险角度观察主角，但这还不是正式会面。',
       firstMeetHint: 'VV 首次在主角视野里出现。她以估值、套利与风险的方式看人，不要写成旧交或熟络商谈。'
     },
     KUZUHA: {
@@ -73,10 +80,11 @@ const ENCOUNTER_RULES = {
       minDay: 3,
       minNodeIndex: 7,
       requiredGeo: 'THE_RUST',
-      requiredIntroduced: ['POPPY'],
+      requiredCharacters: ['POPPY'],
       spentWeights: { combat: 2, rest: 2, asset: 1, vision: 2 },
-      minSpentScore: 30,
+      minSpentScore: 18,
       laneWeights: ['mid_low', 'low', 'high', 'mid_high'],
+      priority: 28,
       rarity: 3,
       debugLabel: 'KUZUHA / rust order',
       firstMeetHint: 'KUZUHA 首次在主角视野里出现。她代表底层秩序与地盘规矩，不要写成已加入队伍的熟人。'
@@ -85,13 +93,16 @@ const ENCOUNTER_RULES = {
       category: 'hybrid',
       minDay: 4,
       minNodeIndex: 10,
-      requiredIntroduced: ['SIA'],
+      requiredCharacters: ['SIA'],
       spentWeights: { combat: 4, rest: 1, asset: 1, vision: 3 },
-      minSpentScore: 50,
-      crisisMin: 36,
+      minSpentScore: 32,
+      minCrisis: 36,
       laneWeights: ['mid_low', 'mid_high', 'high', 'low'],
+      priority: 26,
       rarity: 4,
       debugLabel: 'KAKO / audit escalation',
+      preSignalPreferred: true,
+      preSignalHint: 'KAKO 的审计前兆出现：管理局视线升级，但她本人尚未正式进入主角关系网。',
       firstMeetHint: 'KAKO 首次在主角视野里出现。她是管理局审计升级的具象化，不要写成 SIA 之外的既有熟人。'
     },
     EULALIA: {
@@ -99,11 +110,18 @@ const ENCOUNTER_RULES = {
       minDay: 5,
       minNodeIndex: 11,
       spentWeights: { combat: 1, rest: 4, asset: 1, vision: 2 },
-      minSpentScore: 60,
-      requiresChurchEvent: true,
+      minSpentScore: 36,
+      requiredFlags: ['church_event_triggered'],
+      requiredAny: [
+        { requiredCharacters: ['VV'] },
+        { minCrisis: 51 }
+      ],
       laneWeights: ['high', 'mid_high', 'mid_low', 'low'],
+      priority: 22,
       rarity: 5,
       debugLabel: 'EULALIA / church signal',
+      preSignalPreferred: true,
+      preSignalHint: 'EULALIA 的教廷前置信号出现：像是仪式、委托或凝视先抵达，不要直接写成正式相识。',
       firstMeetHint: 'EULALIA 首次在主角视野里出现。她必须带着教廷事件的包裹感，不要裸刷成普通路人。'
     }
   };
@@ -113,8 +131,6 @@ const DEFAULT_WORLD_ACT = {
     seed: 'AUTO',
     // 节点序列索引（1..totalNodes）——与世界时钟 world.current_time 无关
     nodeIndex: 1,
-    // 随机池消耗记录：{ [nodeId]: { [phaseIndex]: candidateId } }
-    pickedPacks: {},
     route_history: [],
     limited: {
       combat: 0,
@@ -167,7 +183,9 @@ const DEFAULT_WORLD_ACT = {
     },
     characterEncounter: {},
     pendingFirstMeet: {},
+    pendingPreSignal: {},
     pendingResolutions: [],
+    pendingAssetDeckCommands: [],
     resolutionHistory: [],
     narrativeTension: 0
   };
@@ -176,7 +194,7 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
   id: 'chapter0_exchange',
   meta: {
     title: '命运 · FATE SPREAD',
-    totalNodes: 16
+    totalNodes: 24
   },
 
   runtime: {
@@ -195,13 +213,13 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       mode: 'lane_backbone',
       attachFromNodeIds: ['node3-descent'],
       startNodeIndex: 4,
-      totalNodes: 16,
+      totalNodes: 24,
       laneNodeIndex: {
         opening: 4,
         fullLaneStart: 5,
-        fullLaneEnd: 14,
-        collapse: 15,
-        finale: 16
+        fullLaneEnd: 22,
+        collapse: 23,
+        finale: 24
       }
     },
     reserveGrowthByNode: [],
@@ -458,105 +476,7 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
     stageGuides: {
       executing: '按 [命运事件] 写这一段。RINO 得一直在场。只有当事情真的有进展，比如真的赢了钱、真的弄清了花费、真的定了去哪，才推进进度；如果只是瞎聊或者没变化，就不要推进，继续写。到了结局就果断收尾，不往下多写。',
       route: '初章前半段在第二节点进入赌场路线分支；后半段会进入由种子生成的后续路径。若进入 route，只在当前节点给出的候选路径里选定一路继续写。',
-      complete: '初章完成时，必须收在整条 16 节点路线的最终收束点上。'
-    },
-
-    phaseGuides: {
-      combat: {
-        summary: '德州段',
-        candidates: [
-          {
-            id: 'combat_exchange_clerks',
-            weight: 2,
-            direction: '中市职员桌：对面是刚下班的交易员或柜台经理。写清楚赌场环境，接着按 <ACE0_BATTLE> 开打。',
-            mustEnd: '让 {{user}} 在这张桌上顺利赢到钱。'
-          },
-          {
-            id: 'combat_courier_shift',
-            weight: 1,
-            direction: '杂鱼桌：跑腿或者小掮客在休息。RINO 觉得好打，直接让 {{user}} 上，接着按 <ACE0_BATTLE> 开打。',
-            mustEnd: '钱变多了，也让 RINO 的眼光得到验证。'
-          },
-          {
-            id: 'combat_salon_side_table',
-            weight: 1,
-            direction: '常客桌：几个中市的常客在玩。RINO 把 {{user}} 推上桌，接着按 <ACE0_BATTLE> 开打。',
-            mustEnd: '赢得很爽，也很干脆。'
-          }
-        ]
-      },
-
-      asset: {
-        summary: '结算段',
-        candidates: [
-          {
-            id: 'asset_room_extension',
-            weight: 2,
-            direction: '柜台账单：写服务员来确认相关的费用，让两人的花销直接标上数字。',
-            mustEnd: '讲清楚继续留在这层有多贵。'
-          },
-          {
-            id: 'asset_chip_hold',
-            weight: 1,
-            direction: '窗口手续：写换筹码要交的手续费或保证金，让 RINO 发现继续留在这层会一直掉钱。',
-            mustEnd: '把花销的规矩落到眼前。'
-          },
-          {
-            id: 'asset_day_pass',
-            weight: 1,
-            direction: '通行证规定：给他们看一份中市的短期停留规矩，说明待在这里条件很苛刻。',
-            mustEnd: '讲明白中市待不下去的具体原因。'
-          }
-        ]
-      },
-
-      rest: {
-        summary: '喘息段',
-        candidates: [
-          {
-            id: 'rest_staff_coffee',
-            weight: 2,
-            direction: '咖啡机旁休息：站着喝口水。RINO 趁这个时间算算刚才赢了多少，下一步还差多少钱。',
-            mustEnd: '喘口气，顺便清点一下钱。'
-          },
-          {
-            id: 'rest_counting_corner',
-            weight: 1,
-            direction: '靠墙数钱：清点赢来的筹码和票据，讨论接下来拿这笔钱去哪。',
-            mustEnd: '把钱和接下来的打算讲清楚。'
-          },
-          {
-            id: 'rest_afterglow_walk',
-            weight: 1,
-            direction: '走廊休息：刚赢完有点放松，一边往外走，一边准备算接下来的账。',
-            mustEnd: '给算账和离开做铺垫。'
-          }
-        ]
-      },
-
-      vision: {
-        summary: '小游戏段',
-        candidates: [
-          {
-            id: 'vision_dice_lane',
-            weight: 2,
-            direction: '小游戏区：去玩玩骰子、轮盘或者机器。玩法要爽，来钱要快。',
-            mustEnd: '换换节奏，用小游戏快速赢一笔。'
-          },
-          {
-            id: 'vision_bonus_machine',
-            weight: 1,
-            direction: '选机器：RINO 专门挑来钱快的机器让 {{user}} 玩。',
-            mustEnd: '把 RINO 会看机器会挑选这一点写出来。'
-          },
-          {
-            id: 'vision_crowd_heat',
-            weight: 1,
-            direction: '人多的热闹玩法：围观的多，赢的也快。让两人在人堆里赚一笔。',
-            mustEnd: '把赌场热闹的部分和赢钱的感觉一起写出来。'
-          }
-        ]
-      }
+      complete: '初章完成时，必须收在整条 24 节点路线的最终收束点上。'
     }
   }
 };

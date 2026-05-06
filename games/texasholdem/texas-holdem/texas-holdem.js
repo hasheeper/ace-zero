@@ -96,7 +96,47 @@
     var effective = Object.assign({}, base);
     effective.hero = getEffectiveHeroConfig();
     effective.seats = getEffectiveSeatsConfig();
+    effective = applyAssetDeckToTexasConfig(effective);
     return effective;
+  }
+
+  function getConfigAssetDeck(config) {
+    return (config && config.assetDeck)
+      || (config && config.world && config.world.assetDeck)
+      || null;
+  }
+
+  function applyAssetDeckToTexasConfig(config) {
+    var adapter = window.AssetDeckAdapter;
+    if (!adapter || typeof adapter.compile !== 'function') return config;
+    var assetDeck = getConfigAssetDeck(config);
+    if (!assetDeck) return config;
+
+    var compiled = adapter.compile({
+      assetDeck: assetDeck,
+      config: config,
+      gameId: 'texas-holdem'
+    });
+    var nextConfig = Object.assign({}, config, { assetModifiers: compiled });
+    var summaryModule = window.ACE0Modules && window.ACE0Modules.assetSummary;
+    if (!summaryModule && window.ACE0AssetDeckSummary && typeof window.ACE0AssetDeckSummary.create === 'function') {
+      summaryModule = window.ACE0AssetDeckSummary.create({
+        adapter: adapter,
+        data: window.ACE0AssetDeckData || {}
+      });
+    }
+    if (summaryModule && typeof summaryModule.buildAssetDeckSummary === 'function') {
+      nextConfig.assetSummary = summaryModule.buildAssetDeckSummary(assetDeck, {
+        gameId: 'texas-holdem',
+        mode: 'host',
+        adapter: adapter,
+        compiledModifiers: compiled
+      });
+    }
+    if (typeof adapter.applySkillLevelsToConfig === 'function') {
+      nextConfig = adapter.applySkillLevelsToConfig(nextConfig, compiled);
+    }
+    return nextConfig;
   }
   function hasTutorialScript() {
     return !!getTutorialScript();
@@ -435,7 +475,7 @@
         owner: selectedSkill.ownerName,
         key: selectedSkill.skillKey,
         effect: selectedSkill.effect,
-        tier: selectedSkill.tier,
+        level: selectedSkill.level,
         targetId: record.targetId,
         targetName: record.targetName,
         timing: 'tutorial_script'
@@ -1136,6 +1176,25 @@
     }
   });
 
+  skillSystem.on('void:reality', function(data) {
+    if (!data) return;
+    var removedCount = Array.isArray(data.removedForces) ? data.removedForces.length : 0;
+    var markCount = Array.isArray(data.clearedMarks) ? data.clearedMarks.length : 0;
+    var assetCount = Array.isArray(data.clearedAssets) ? data.clearedAssets.length : 0;
+    var suffix = data.clearTemporaryMarks
+      ? '，临时标记/资产清除 ' + (markCount + assetCount)
+      : '';
+    updateMsg('[Reality] 非 Void 力量清除 ' + removedCount + suffix);
+    logEvent('VOID_REALITY', {
+      ownerId: data.ownerId,
+      ownerName: data.ownerName,
+      level: data.level,
+      removedForces: removedCount,
+      clearedMarks: markCount,
+      clearedAssets: assetCount
+    });
+  });
+
   skillSystem.on('poppy:lucky_find_roll', function(data) {
     if (!data) return;
     var ownerName = data.ownerName || 'POPPY';
@@ -1398,7 +1457,7 @@
     }
     var pack = Array.isArray(data.packDetails) && data.packDetails.length ? data.packDetails[0] : null;
     var packText = pack
-      ? (' T' + Math.max(1, Number(pack.tier || 1)) +
+      ? (' ' + Math.max(1, Number(pack.entrySize || 1)) + '档' +
         ' / ' + (pack.direction === 'bearish' ? '看跌' : '看涨') +
         ' / 偏离L' + Math.max(0, Number(pack.level || 0)))
       : '';
@@ -1758,8 +1817,7 @@
   }
 
   var _SKILL_CN = {
-    fortune: '幸运', curse: '凶咒', clarity: '澄澈', refraction: '折射',
-    reversal: '真理', null_field: '屏蔽', void_shield: '绝缘', purge_all: '现实',
+    fortune: '幸运', curse: '凶咒', psyche: 'Psyche', void: 'Void', refraction: '折射',
     royal_decree: '敕令', heart_read: '命运感知', cooler: '冤家牌', skill_seal: '冻结令',
     clairvoyance: '估价眼', bubble_liquidation: '泡沫清算', miracle: '命大', lucky_find: '捡到了',
     deal_card: '发牌', gather_or_spread: '理牌', factory_malfunction: '故障切换', absolution: '赦免', benediction: '祝福',
@@ -2566,7 +2624,7 @@
     
     // 计算该 AI 的最高魔运等级（影响弃牌倾向）
     const playerSkills = skillSystem.getPlayerSkills(player.id);
-    const maxMagicLevel = playerSkills.reduce((max, s) => Math.max(max, s.tier != null ? (4 - s.tier) : 0, 0), 0);
+    const maxMagicLevel = playerSkills.reduce((max, s) => Math.max(max, Number(s.level || 0)), 0);
 
     // 计算净魔运力量（己方 fortune - 敌方 curse）用于 pro/boss 魔运感知
     // 合并 passive forces + pendingForces（不调用 collectActiveForces 以避免 backlash 副作用）
@@ -2677,7 +2735,7 @@
         typeof skillSystem !== 'undefined' && skillSystem.npcDecideSkillsForPlayer) {
       turnGameCtx = {
         players: gameState.players, pot: gameState.pot + gameState.players.reduce(function(s,p){return s+p.currentBet},0),
-        phase: gameState.phase, board: gameState.board, blinds: getBigBlind()
+        phase: gameState.phase, board: gameState.board, blinds: getBigBlind(), toCall: toCall
       };
       preSkills = skillSystem.npcDecideSkillsForPlayer(player.id, turnGameCtx, 'pre-bet');
       if (preSkills.length > 0) {
@@ -2702,6 +2760,51 @@
     updateMsg('⚡ ' + player.name + ' 使用了 ' + skillMsg);
   }
 
+  function _runReactiveDefenseForNewForces(sourcePlayer, newForces, baseCtx) {
+    if (!Array.isArray(newForces) || newForces.length === 0 || !baseCtx) return [];
+    if (shouldDisableTutorialAISkills() ||
+        typeof skillSystem === 'undefined' ||
+        !skillSystem.npcDecideSkillsForPlayer) {
+      return [];
+    }
+
+    var sourceId = sourcePlayer && sourcePlayer.id;
+    var targetIds = [];
+    for (var i = 0; i < newForces.length; i++) {
+      var force = newForces[i];
+      var isCurse = force && (force.type === 'curse' || force.system === 'chaos');
+      if (!isCurse || (force.ownerId === sourceId && force.targetId === sourceId)) continue;
+      if (force.targetId != null) {
+        if (targetIds.indexOf(force.targetId) < 0) targetIds.push(force.targetId);
+      } else {
+        for (var pi = 0; pi < gameState.players.length; pi++) {
+          var player = gameState.players[pi];
+          if (!player || player.id === sourceId || player.type === 'human' || player.folded || player.isActive === false) continue;
+          if (targetIds.indexOf(player.id) < 0) targetIds.push(player.id);
+        }
+      }
+    }
+
+    var records = [];
+    for (var ti = 0; ti < targetIds.length; ti++) {
+      var target = gameState.players.find(function(player) { return player && player.id === targetIds[ti]; });
+      if (!target || target.type === 'human' || target.folded || target.isActive === false) continue;
+      var reactiveCtx = Object.assign({}, baseCtx, {
+        reactiveReason: 'incoming_curse',
+        reactiveSourceId: sourceId,
+        toCall: Math.max(0, Number(baseCtx.toCall || 0)),
+        plannedAction: 'reactive-defense',
+        plannedAmount: 0
+      });
+      var defense = skillSystem.npcDecideSkillsForPlayer(target.id, reactiveCtx, 'reactive-defense') || [];
+      if (defense.length > 0) {
+        _showTurnSkillMsg(target, defense);
+        for (var di = 0; di < defense.length; di++) records.push(defense[di]);
+      }
+    }
+    return records;
+  }
+
   function _aiDoBetThenPostSkill(player, context, turnGameCtx, scriptedDecision) {
     // ── Phase 2: Betting 决策 ──
     var decision = scriptedDecision ? {
@@ -2715,7 +2818,28 @@
     if (!shouldDisableTutorialAISkills() &&
         decision.action !== PokerAI.ACTIONS.FOLD && turnGameCtx &&
         typeof skillSystem !== 'undefined' && skillSystem.npcDecideSkillsForPlayer) {
-      postSkills = skillSystem.npcDecideSkillsForPlayer(player.id, turnGameCtx, 'post-bet');
+      var pendingBeforePostSkill = Array.isArray(skillSystem.pendingForces) ? skillSystem.pendingForces.length : 0;
+      var plannedAmount = 0;
+      if (decision.action === PokerAI.ACTIONS.CALL) {
+        plannedAmount = Math.max(0, Number(context && context.toCall || 0));
+      } else if (decision.action === PokerAI.ACTIONS.RAISE) {
+        plannedAmount = Math.max(0, Number(context && context.toCall || 0)) +
+          Math.max(0, Number(decision.amount || 0));
+      }
+      var postSkillCtx = Object.assign({}, turnGameCtx, {
+        toCall: Math.max(0, Number(context && context.toCall || 0)),
+        plannedAction: decision.action,
+        plannedAmount: plannedAmount
+      });
+      postSkills = skillSystem.npcDecideSkillsForPlayer(player.id, postSkillCtx, 'post-bet');
+      var pendingAfterPostSkill = Array.isArray(skillSystem.pendingForces) ? skillSystem.pendingForces.length : pendingBeforePostSkill;
+      var newForces = pendingAfterPostSkill > pendingBeforePostSkill
+        ? skillSystem.pendingForces.slice(pendingBeforePostSkill, pendingAfterPostSkill)
+        : [];
+      var reactiveSkills = _runReactiveDefenseForNewForces(player, newForces, postSkillCtx);
+      if (reactiveSkills.length > 0) {
+        postSkills = postSkills.concat(reactiveSkills);
+      }
       if (postSkills.length > 0) {
         skillUI.updateDisplay();
         skillUI.updateButtons();
@@ -3038,12 +3162,9 @@
     fortune:  '<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M8 1l2.2 4.5L15 6.3l-3.5 3.4.8 4.8L8 12.3 3.7 14.5l.8-4.8L1 6.3l4.8-.8z" fill="#9B59B6"/></svg>',
     curse:    '<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M8 1C5.2 1 3 3.7 3 7c0 2.2 1 4 2.5 5h5C12 11 13 9.2 13 7c0-3.3-2.2-6-5-6zM6 12v1c0 .6.9 1 2 1s2-.4 2-1v-1H6z" fill="#e74c3c"/></svg>',
     backlash: '<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M9 1L4 8h3l-2 7 7-8H9l2-6z" fill="#f39c12"/></svg>',
-    clarity:  '<svg class="fpk-icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="none" stroke="#74b9ff" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="#74b9ff"/></svg>',
+    psyche:   '<svg class="fpk-icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="none" stroke="#74b9ff" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="#74b9ff"/></svg>',
     refraction:'<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M3 13L8 3l5 10" fill="none" stroke="#a29bfe" stroke-width="1.5"/><line x1="5" y1="9" x2="11" y2="9" stroke="#a29bfe" stroke-width="1.2"/></svg>',
-    reversal: '<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M2 5h9l-3-3h2l4 4-4 4h-2l3-3H2V5zm12 6H5l3 3H6l-4-4 4-4h2L5 9h9v2z" fill="#1abc9c"/></svg>',
-    null_field:'<svg class="fpk-icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="#95a5a6" stroke-width="1.5"/><line x1="4" y1="12" x2="12" y2="4" stroke="#95a5a6" stroke-width="1.5"/></svg>',
-    void_shield:'<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M8 1L2 4v4c0 3.3 2.6 6.4 6 7 3.4-.6 6-3.7 6-7V4L8 1z" fill="none" stroke="#7f8c8d" stroke-width="1.5"/></svg>',
-    purge_all:'<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M8 2L3 8l5 6 5-6-5-6z" fill="none" stroke="#bdc3c7" stroke-width="1.5"/></svg>',
+    void:     '<svg class="fpk-icon" viewBox="0 0 16 16"><path d="M8 2L3 8l5 6 5-6-5-6z" fill="none" stroke="#bdc3c7" stroke-width="1.5"/></svg>',
     bolt:     '<svg class="fpk-icon fpk-icon-title" viewBox="0 0 16 16"><path d="M9 1L4 8h3l-2 7 7-8H9l2-6z" fill="currentColor"/></svg>',
     arrow:    '<svg class="fpk-icon fpk-icon-arrow" viewBox="0 0 16 16"><path d="M2 8h10l-3-3 1.4-1.4L15 8l-4.6 4.4L9 11l3-3H2V8z" fill="currentColor"/></svg>',
     debug:    '<svg class="fpk-icon fpk-icon-title" viewBox="0 0 16 16"><path d="M11 1l-1 2H6L5 1H3l1.3 2.6C3 4.5 2 6.1 2 8h2v2H2c.2 1.2.7 2.3 1.4 3.1L2 14.5 3.5 16l1.2-1.2c.8.5 1.7.7 2.6.8V9h1.4v6.6c.9-.1 1.8-.3 2.6-.8L12.5 16 14 14.5l-1.4-1.4C13.3 12.3 13.8 11.2 14 10h-2V8h2c0-1.9-1-3.5-2.3-4.4L13 1h-2z" fill="currentColor"/></svg>',
@@ -3068,8 +3189,7 @@
 
     const TYPE_CN = {
       fortune: '幸运', curse: '凶', backlash: '反噬',
-      clarity: '澄澈', refraction: '折射', reversal: '真理',
-      null_field: '屏蔽', void_shield: '绝缘', purge_all: '现实'
+      psyche: 'Psyche', refraction: '折射', void: 'Void'
     };
     const SKILL_CN = {
       minor_wish: '小吉',
@@ -3078,12 +3198,11 @@
       hex: '小凶',
       havoc: '大凶',
       catastrophe: '灾变',
-      clarity: '澄澈',
+      analysis: '解析',
+      premonition: '预兆',
       refraction: '折射',
-      reversal: '真理',
-      null_field: '屏蔽',
-      void_shield: '绝缘',
-      purge_all: '现实',
+      insulation: '绝缘',
+      reality: '现实',
       royal_decree: '敕令',
       heart_read: '命运感知',
       cooler: '冤家牌',
@@ -3107,7 +3226,7 @@
 
     // 力量三分类：favorable(对玩家有利) / hostile(对玩家不利) / neutral(中立)
     var HERO_ID = skillUI.humanPlayerId != null ? skillUI.humanPlayerId : 0;
-    var BENEFICIAL_TYPES = { fortune: 1, clarity: 1, refraction: 1, reversal: 1, null_field: 1, void_shield: 1, purge_all: 1 };
+    var BENEFICIAL_TYPES = { fortune: 1, psyche: 1, refraction: 1, void: 1 };
     var HARMFUL_TYPES = { curse: 1, backlash: 1 };
 
     function _classifyForce(f) {
@@ -3146,6 +3265,7 @@
           targetId: gp.id,
           targetName: gp.name || 'EULALIA',
           type: 'fortune',
+          kind: 'fortune',
           power: streetBurden,
           effectivePower: streetBurden,
           skillKey: 'absolution',
@@ -3171,15 +3291,15 @@
         ? vvEntry.packDetails[0]
         : null;
       var packTag = primaryPack
-        ? ('T' + Math.max(1, Number(primaryPack.tier || 1)) +
+        ? (Math.max(1, Number(primaryPack.entrySize || 1)) + '档' +
           '·' + (primaryPack.direction === 'bearish' ? '看跌' : '看涨') +
           '·L' + Math.max(0, Number(primaryPack.level || 0)))
-        : 'T?·L?';
+        : '?档·L?';
       var detail = Array.isArray(vvEntry.packDetails) && vvEntry.packDetails.length
         ? vvEntry.packDetails.map(function(pack, idx) {
             var directionLabel = pack.direction === 'bearish' ? '看跌' : '看涨';
             return '#' + (idx + 1) +
-              ' T' + Math.max(1, Number(pack.tier || 1)) +
+              ' ' + Math.max(1, Number(pack.entrySize || 1)) + '档' +
               ' / ' + directionLabel +
               ' / 偏离L' + Math.max(0, Number(pack.level || 0)) +
               ' / 份额 ' + Math.round(Math.max(0, Number(pack.baselineShare || 0)) * 100) + '%→' + Math.round(Math.max(0, Number(pack.currentShare || 0)) * 100) + '%' +
@@ -3194,6 +3314,7 @@
           targetId: vvEntry.targetId,
           targetName: vvEntry.targetName || 'TARGET',
           type: 'fortune',
+          kind: 'fortune',
           power: Math.max(0, Number(vvEntry.targetFortuneBurst || 0)),
           effectivePower: Math.max(0, Number(vvEntry.targetFortuneBurst || 0)),
           skillKey: 'bubble_liquidation',
@@ -3212,6 +3333,7 @@
           targetId: vvEntry.targetId,
           targetName: vvEntry.targetName || 'TARGET',
           type: 'curse',
+          kind: 'curse',
           power: Math.max(0, Number(vvEntry.targetChaosBurst || 0)),
           effectivePower: Math.max(0, Number(vvEntry.targetChaosBurst || 0)),
           skillKey: 'bubble_liquidation',
@@ -3419,7 +3541,7 @@
             for (const c of (step.data.countered || [])) {
               html += c.owner + '.' + c.type + ' EP=' + c.effectivePower;
               if (c.counterBonus) html += ' [C>M+10%]';
-              if (c.clarityReduced) html += ' [P>C-clarity]';
+              if (c.psycheReduced) html += ' [P>C-psyche]';
               html += ' ';
             }
             break;
@@ -3479,26 +3601,26 @@
     }
     var TYPE_CN = {
       fortune: '幸运', curse: '凶', backlash: '反噬',
-      clarity: '澄澈', refraction: '折射', reversal: '真理',
-      null_field: '屏蔽', void_shield: '绝缘', purge_all: '现实',
+      psyche: 'Psyche', refraction: '折射', void: 'Void',
       clairvoyance: '估价眼', heart_read: '命运感知',
       deal_card: '发牌', gather_or_spread: '理牌', factory_malfunction: '故障切换'
     };
     var SKILL_CN = {
       cooler: '冤家牌', bubble_liquidation: '泡沫清算', royal_decree: '敕令',
       miracle: '命大', lucky_find: '捡到了', skill_seal: '冻结令',
+      analysis: '解析', premonition: '预兆', refraction: '折射', insulation: '绝缘', reality: '现实',
       deal_card: '发牌', gather_or_spread: '理牌', factory_malfunction: '故障切换', absolution: '赦免', benediction: '祝福',
       reclassification: '改判', general_ruling: '总务裁定', house_edge: '抽水', debt_call: '催收',
       eulalia_absolution_burden: '承灾',
       eulalia_absolution_burst: '爆账'
     };
-    // attr → CSS class 映射
-    var ATTR_CLS = {
+    // force type → CSS class 映射
+    var FORCE_TYPE_CLS = {
       fortune: 'fpk-attr-moirai', curse: 'fpk-attr-chaos', backlash: 'fpk-attr-chaos',
-      clarity: 'fpk-attr-psyche', refraction: 'fpk-attr-psyche', reversal: 'fpk-attr-psyche',
+      psyche: 'fpk-attr-psyche', refraction: 'fpk-attr-psyche',
       clairvoyance: 'fpk-attr-psyche', heart_read: 'fpk-attr-psyche',
       deal_card: 'fpk-attr-psyche', gather_or_spread: 'fpk-attr-psyche', factory_malfunction: 'fpk-attr-psyche',
-      null_field: 'fpk-attr-void', void_shield: 'fpk-attr-void', purge_all: 'fpk-attr-void'
+      void: 'fpk-attr-void'
     };
     var isHarmful = f && (f.type === 'curse' || f.type === 'backlash');
     var isBeneficial = f && f.type === 'fortune';
@@ -3522,7 +3644,7 @@
     var typeCn = f._displayTypeLabel || TYPE_CN[f.type] || f.type;
     var power = Math.max(0, Number(f.power || 0));
     var effectivePower = Math.max(0, Number(f.effectivePower != null ? f.effectivePower : power));
-    var attrCls = ATTR_CLS[f.type] || 'fpk-attr-void';
+    var attrCls = FORCE_TYPE_CLS[f.type] || 'fpk-attr-void';
     var suppCls = f.suppressed ? ' fpk-chip-suppressed' : '';
     var h = '<div class="fpk-chip ' + attrCls + suppCls + '">';
     h += '<span class="fpk-chip-owner">' + _escapeChipHtml(ownerCn) + '</span>';
@@ -3557,12 +3679,6 @@
     return h;
   }
 
-  // Tier 标签
-  function _tierLabel(tier) {
-    var labels = { 1: 'I', 2: 'II', 3: 'III' };
-    return labels[tier] || '';
-  }
-
   // 牌面字符串 → 可视化显示
   function _cardToDisplay(cardStr) {
     if (!cardStr || cardStr.length < 2) return cardStr || '?';
@@ -3578,15 +3694,15 @@
   // Psyche 拦截事件 → 游戏消息（让玩家看到技能生效）
   function _showPsycheMessages(events) {
     if (!events || events.length === 0) return;
-    const TYPE_CN = { clarity: '澄澈', refraction: '折射', reversal: '真理', curse: '凶' };
+    const TYPE_CN = { psyche: 'Psyche', heart_read: '命运感知', curse: '凶' };
     for (const ev of events) {
       const arbiterCn = TYPE_CN[ev.arbiterType] || ev.arbiterType;
       if (ev.action === 'convert') {
         updateMsg('[' + arbiterCn + '] 转化 ' + ev.targetOwner + ' 的诅咒');
-        logEvent('PSYCHE_INTERCEPT', { arbiter: arbiterCn, target: ev.targetOwner, action: 'convert', power: ev.convertedPower });
-      } else if (ev.action === 'nullify') {
-        updateMsg('[' + arbiterCn + '] 消除 ' + ev.targetOwner + ' 的诅咒');
-        logEvent('PSYCHE_INTERCEPT', { arbiter: arbiterCn, target: ev.targetOwner, action: 'nullify' });
+        logEvent('PSYCHE_INTERCEPT', { arbiter: arbiterCn, target: ev.targetOwner, action: 'convert', defend: ev.defenseBlockedPower, power: ev.convertedPower });
+      } else if (ev.action === 'defend') {
+        updateMsg('[' + arbiterCn + '] 卸掉 ' + ev.targetOwner + ' 的诅咒');
+        logEvent('PSYCHE_INTERCEPT', { arbiter: arbiterCn, target: ev.targetOwner, action: 'defend', power: ev.defenseBlockedPower });
       } else if (ev.action === 'whiff') {
         updateMsg('[' + arbiterCn + '] 落空');
         logEvent('PSYCHE_INTERCEPT', { arbiter: arbiterCn, action: 'whiff' });

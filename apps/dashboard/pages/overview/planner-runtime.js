@@ -166,11 +166,15 @@
     }
 
     function consumeInventoryToken(ctx, type) {
-        const key = type.toLowerCase();
+        const key = typeof ctx.normalizeResourceKey === 'function'
+            ? ctx.normalizeResourceKey(type, '')
+            : String(type || '').trim().toLowerCase();
+        if (!key || !ctx.resourceKeys.includes(key)) return null;
         const source = getPreferredSourceForKey(ctx, key);
         if (!source) return null;
         ctx.appState.inventory[key][source] -= 1;
-        return { key, type, source, amount: 1, sources: [source] };
+        const displayType = ctx.resourceTypeMap?.[key] || key.toUpperCase();
+        return { key, type: displayType, source, amount: 1, sources: [source] };
     }
 
     function restoreTokenToInventory(ctx, token) {

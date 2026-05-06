@@ -1,0 +1,2261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACE ZERO · Plan Drawer Frontend Extract</title>
+  <style>
+#dashboard-page-overview {
+            --bg-void: #050608;
+            --bg-panel: #0a0c11;
+            --border-panel: #2a313d;
+
+            --gray-ash: #2a313d;
+            --brass-dim: #7a6e35;
+            --gold-main: #CFB53B;
+            --gold-glow: rgba(207, 181, 59, 0.4);
+
+            --future-pale: #b0b4ba;
+            --lane-white: #d9dde7;
+            --lane-blue: #6fa3ff;
+            --lane-orange: #d99a46;
+            --lane-red: #cf5d5d;
+
+            --danger-blood: #8b2525;
+            --warn-red: #e85555;
+            --flow-up: #3aebc8;
+            --sediment-down: #8b3a3a;
+            --warn: #f0ac59;
+            --dlc-purple: #9B59B6;
+
+            --text-main: #c5c6c7;
+            --text-dim: #5c677d;
+            --text-brass: #b39c68;
+
+            --font-ui: "JetBrains Mono", monospace;
+            --font-title: "Cinzel", serif;
+            --font-display: "Cinzel", serif;
+            --font-cn: "Noto Serif SC", serif;
+        }
+
+#dashboard-page-overview *,
+        #dashboard-page-overview *::before,
+        #dashboard-page-overview *::after {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+body.is-home-page {
+            overflow: hidden;
+        }
+
+body.is-home-page .dashboard-pages {
+            width: 100%;
+            height: 100vh;
+            min-height: 100vh;
+        }
+
+#dashboard-page-overview.is-active {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            min-height: 100vh;
+        }
+
+#dashboard-page-overview .terminal-container {
+            flex: 1;
+        }
+
+.terminal-container {
+            width: 100%; max-width: 100%; height: 100vh;
+            background: var(--bg-panel); border: 1px solid var(--border-panel);
+            display: flex; flex-direction: column; position: relative;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.95), inset 0 0 30px rgba(207, 181, 59, 0.05);
+        }
+
+.sys-topbar {
+            width: 100%;
+            height: 48px;
+            background: linear-gradient(90deg, rgba(8, 10, 14, 0.95) 0%, rgba(16, 18, 23, 0.6) 50%, rgba(8, 10, 14, 0.95) 100%);
+            backdrop-filter: blur(24px) saturate(120%);
+            -webkit-backdrop-filter: blur(24px) saturate(120%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 32px rgba(0, 0, 0, 0.9), inset 0 -1px 0 rgba(207, 181, 59, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+            padding: 0 18px;
+            position: relative;
+            z-index: 100;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+.sys-topbar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(207, 181, 59, 0.6), rgba(255,255,255,0.3), rgba(207, 181, 59, 0.6), transparent);
+            box-shadow: 0 0 10px rgba(207, 181, 59, 0.4);
+        }
+
+.main-layout { display: flex; flex: 1; overflow: hidden; }
+
+.center-board { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; background: var(--bg-void); }
+
+.magic-core {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.4s ease;
+        }
+
+.magic-core::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            transform-origin: 50% 50%;
+        }
+
+.planner-drawer {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 140px;
+            height: 160px;
+            background: linear-gradient(180deg, rgba(8, 10, 14, 0.98) 0%, rgba(5, 6, 8, 0.95) 100%);
+            border-top: 1px solid rgba(207, 181, 59, 0.15);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            flex-direction: column;
+            transform: translateY(100%);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+            box-shadow: 0 0 50px rgba(0,0,0,0.8), inset 0 20px 30px rgba(0,0,0,0.5);
+            background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 4px);
+            z-index: 45;
+        }
+
+.planner-drawer.is-open {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+.planner-drawer[data-active-tab="asset"] {
+            height: min(420px, calc(100vh - 260px));
+        }
+
+.planner-drawer[data-planner-page="planner"] {
+            height: min(240px, calc(100vh - 260px));
+        }
+
+.planner-drawer[data-active-tab="resource"] {
+            height: min(360px, calc(100vh - 250px));
+        }
+
+.planner-panel-header {
+            padding: 8px 30px;
+            background: transparent;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            color: var(--text-dim);
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 38px;
+        }
+
+.planner-panel-header::before {
+            content: '';
+            display: block;
+            width: 2px;
+            height: 10px;
+            background: var(--gold-main);
+            box-shadow: 0 0 8px var(--gold-main);
+        }
+
+.planner-panel-title {
+            white-space: nowrap;
+        }
+
+.planner-drawer-tabs {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 10px;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+
+.planner-drawer-tabs button {
+            min-height: 26px;
+            padding: 3px 10px 2px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.035);
+            color: rgba(255,255,255,0.48);
+            font-family: var(--font-ui);
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 1.2px;
+            cursor: pointer;
+            display: grid;
+            gap: 1px;
+            text-align: left;
+        }
+
+.planner-drawer-tabs button span,
+        .planner-drawer-tabs button em {
+            font-style: normal;
+            white-space: nowrap;
+            line-height: 1;
+        }
+
+.planner-drawer-tabs button em {
+            color: rgba(255,255,255,0.34);
+            font-size: 7px;
+            letter-spacing: 1px;
+        }
+
+.planner-drawer-tabs button.is-active {
+            border-color: rgba(207,181,59,0.62);
+            background: rgba(207,181,59,0.16);
+            color: rgba(255,244,190,0.94);
+            box-shadow: 0 0 18px rgba(207,181,59,0.14);
+        }
+
+.planner-drawer-tabs button.is-active em {
+            color: rgba(255,244,190,0.62);
+        }
+
+.planner-tab-view {
+            display: none;
+            flex: 1;
+            min-height: 0;
+        }
+
+.planner-tab-view.is-active {
+            display: flex;
+        }
+
+.inventory-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 60px;
+        }
+
+.resource-page-view {
+            flex-direction: row;
+            gap: 28px;
+            padding: 24px 34px 28px;
+            overflow: hidden;
+        }
+
+.resource-page-side {
+            flex: 0 0 220px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 16px;
+            border-right: 1px solid rgba(255,255,255,0.055);
+            padding-right: 24px;
+        }
+
+.resource-page-main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 18px;
+        }
+
+.resource-page-main header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 18px;
+            color: rgba(255,255,255,0.92);
+            font-family: var(--font-display);
+            letter-spacing: 3px;
+        }
+
+.resource-page-main header span {
+            color: var(--text-dim);
+            font-family: var(--font-ui);
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+.resource-page-main header strong {
+            color: rgba(255,255,255,0.9);
+            font-size: 22px;
+        }
+
+.resource-page-meter {
+            display: grid;
+            gap: 8px;
+        }
+
+.resource-page-meter span,
+        .resource-page-note {
+            color: var(--text-dim);
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 2px;
+        }
+
+.resource-page-meter strong {
+            color: rgba(255,255,255,0.95);
+            font-family: var(--font-display);
+            font-size: 42px;
+            letter-spacing: 3px;
+        }
+
+.resource-page-meter strong em {
+            margin: 0 8px 0 3px;
+            color: rgba(255,255,255,0.32);
+            font-family: var(--font-ui);
+            font-size: 12px;
+            font-style: normal;
+        }
+
+.resource-page-meter small {
+            color: rgba(255,255,255,0.42);
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1.6px;
+        }
+
+.resource-rule-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+.resource-rule-grid div {
+            min-height: 104px;
+            padding: 18px;
+            border: 1px solid rgba(255,255,255,0.075);
+            background: linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015));
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 10px);
+        }
+
+.resource-rule-grid span {
+            color: var(--gold-main);
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 2px;
+        }
+
+.resource-rule-grid strong {
+            display: block;
+            margin-top: 10px;
+            color: rgba(255,255,255,0.9);
+            font-family: var(--font-display);
+            font-size: 18px;
+            letter-spacing: 1.4px;
+        }
+
+.resource-rule-grid em {
+            display: block;
+            margin-top: 8px;
+            color: rgba(255,255,255,0.45);
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-style: normal;
+            font-weight: 800;
+            letter-spacing: 1px;
+            line-height: 1.55;
+        }
+
+.resource-inline-actions {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+.resource-page-view .rest-tint-btn {
+            height: auto;
+            min-height: 58px;
+            padding: 8px;
+            display: grid;
+            gap: 3px;
+            align-content: center;
+            text-align: left;
+        }
+
+.resource-page-view .rest-tint-btn strong,
+        .resource-page-view .rest-tint-btn span,
+        .resource-page-view .rest-tint-btn em {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-style: normal;
+        }
+
+.resource-page-view .rest-tint-btn strong {
+            color: rgba(255,255,255,0.86);
+            font-size: 9px;
+            letter-spacing: 1.2px;
+        }
+
+.resource-page-view .rest-tint-btn span {
+            color: var(--gold-main);
+            font-size: 7px;
+            letter-spacing: 0.8px;
+        }
+
+.resource-page-view .rest-tint-btn em {
+            color: rgba(255,255,255,0.38);
+            font-size: 7px;
+            letter-spacing: 0.5px;
+        }
+
+.resource-next-step {
+            display: grid;
+            gap: 6px;
+            padding: 12px;
+            border: 1px solid rgba(207,181,59,0.16);
+            background: radial-gradient(circle at 20% 0%, rgba(207,181,59,0.12), transparent 62%), rgba(255,255,255,0.025);
+            clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%, 0 9px);
+        }
+
+.resource-next-step span,
+        .resource-next-step em {
+            color: rgba(255,255,255,0.48);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 1.2px;
+        }
+
+.resource-next-step strong {
+            color: rgba(255,244,190,0.92);
+            font-family: var(--font-display);
+            font-size: 20px;
+            letter-spacing: 2px;
+        }
+
+.resource-next-step em {
+            font-style: normal;
+            line-height: 1.55;
+            letter-spacing: 0.8px;
+        }
+
+.resource-schedule-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            min-height: 0;
+        }
+
+.resource-schedule-grid section {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            min-width: 0;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255,255,255,0.025);
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 8px);
+        }
+
+.resource-schedule-grid section > span {
+            color: var(--text-dim);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 1.8px;
+        }
+
+.resource-schedule-row {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr) 42px;
+            gap: 8px;
+            align-items: center;
+            min-height: 28px;
+            padding: 6px 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+            background: rgba(0,0,0,0.18);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 0.8px;
+        }
+
+.resource-schedule-row span {
+            color: rgba(255,255,255,0.42);
+        }
+
+.resource-schedule-row strong {
+            min-width: 0;
+            color: rgba(255,255,255,0.8);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+.resource-schedule-row em {
+            color: var(--gold-main);
+            font-style: normal;
+            text-align: right;
+        }
+
+.resource-schedule-row.is-current {
+            border-color: rgba(207,181,59,0.24);
+            box-shadow: inset 2px 0 0 rgba(207,181,59,0.72);
+        }
+
+.resource-schedule-row.is-empty {
+            opacity: 0.58;
+        }
+
+.resource-schedule-row.combat-request-row,
+        .resource-schedule-row.type-combat {
+            border-color: rgba(232,85,85,0.18);
+            background:
+                linear-gradient(120deg, rgba(232,85,85,0.075), rgba(0,0,0,0.18)),
+                rgba(232,85,85,0.025);
+        }
+
+.resource-schedule-row.type-combat em {
+            color: var(--warn-red);
+        }
+
+.asset-drawer-view {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            padding: 8px 18px 14px;
+            gap: 8px;
+            overflow: auto;
+        }
+
+.asset-actions button,
+        .asset-action-btn,
+        .asset-choice-actions button {
+            min-height: 24px;
+            border: 1px solid rgba(207,181,59,0.25);
+            background: rgba(207,181,59,0.12);
+            color: rgba(255,238,166,0.92);
+            font-family: var(--font-ui);
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+
+.asset-actions button:hover,
+        .asset-action-btn:hover,
+        .asset-choice-actions button:hover {
+            border-color: rgba(255,238,166,0.76);
+            background: rgba(207,181,59,0.22);
+        }
+
+.asset-column {
+            min-width: 0;
+            padding: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0.08));
+        }
+
+.asset-column header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            color: rgba(255,255,255,0.52);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 1.5px;
+        }
+
+.asset-column header strong {
+            color: rgba(255,244,190,0.9);
+        }
+
+.asset-offer-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+.asset-offer-choice {
+            min-width: 0;
+        }
+
+.asset-choice-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+.asset-choice-actions button {
+            flex: 1;
+        }
+
+.asset-slot-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+.asset-void-header {
+            margin-top: 8px;
+        }
+
+.asset-void-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+.asset-slot {
+            min-width: 0;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(0,0,0,0.18);
+            padding: 5px;
+        }
+
+.asset-slot-label {
+            margin-bottom: 4px;
+            color: rgba(255,255,255,0.35);
+            font-family: var(--font-ui);
+            font-size: 7px;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+
+.asset-card {
+            width: 100%;
+            min-height: 92px;
+            padding: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: radial-gradient(circle at 85% 0%, rgba(207,181,59,0.13), transparent 42%), rgba(10,12,16,0.88);
+            color: rgba(255,255,255,0.88);
+            text-align: left;
+            font-family: var(--font-ui);
+        }
+
+.asset-card.is-empty {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            opacity: 0.42;
+        }
+
+.asset-card-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            color: rgba(255,255,255,0.42);
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+
+.asset-card-top strong {
+            color: rgba(255,244,190,0.88);
+            white-space: nowrap;
+        }
+
+.asset-card-name {
+            margin-top: 8px;
+            color: rgba(255,255,255,0.94);
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 0.6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+.asset-card-meta {
+            margin-top: 4px;
+            color: rgba(255,255,255,0.5);
+            font-size: 8px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+.asset-card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            margin-top: 6px;
+        }
+
+.asset-card-tags span {
+            padding: 2px 4px;
+            border: 1px solid rgba(255,255,255,0.09);
+            color: rgba(255,255,255,0.48);
+            font-size: 7px;
+            letter-spacing: 0.5px;
+        }
+
+.asset-card.rarity-silver { border-color: rgba(180,194,205,0.38); }
+
+.asset-card.rarity-rainbow { border-color: rgba(126,220,255,0.55); box-shadow: inset 0 0 24px rgba(126,220,255,0.08); }
+
+@media (max-width: 820px) {
+.planner-drawer[data-active-tab="asset"] {
+                height: min(520px, calc(100vh - 190px));
+            }
+
+.asset-offer-grid,
+            .asset-slot-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+}
+
+.planner-drawer[data-active-tab="asset"] {
+            height: min(420px, calc(100vh - 230px));
+            background: linear-gradient(180deg, rgba(10, 12, 17, 0.58) 0%, rgba(5, 6, 8, 0.36) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(207,181,59,0.2);
+            box-shadow: 0 -15px 50px rgba(0,0,0,0.45), inset 0 20px 30px rgba(0,0,0,0.18);
+            overflow: hidden;
+        }
+
+.planner-drawer[data-active-tab="asset"] .planner-panel-header {
+            min-height: 38px;
+            padding: 8px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.045);
+            box-shadow: inset 0 -5px 15px rgba(0,0,0,0.12);
+        }
+
+.planner-drawer[data-active-tab="asset"] .planner-panel-header::before {
+            display: block;
+        }
+
+.planner-drawer[data-active-tab="asset"] .planner-drawer-tabs {
+            gap: 6px;
+            margin-left: 10px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .planner-drawer-tabs button {
+            height: 24px;
+            padding: 0 10px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.035);
+            color: rgba(255,255,255,0.48);
+            font-family: var(--font-ui);
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 1.2px;
+            box-shadow: none;
+        }
+
+.planner-drawer[data-active-tab="asset"] .planner-drawer-tabs button.is-active {
+            border-color: rgba(207,181,59,0.62);
+            background: rgba(207,181,59,0.16);
+            color: rgba(255,244,190,0.94);
+            text-shadow: none;
+            box-shadow: 0 0 18px rgba(207,181,59,0.14);
+        }
+
+.planner-drawer:not([data-planner-page="planner"]) .rest-control-panel,
+        .planner-drawer[data-active-tab="asset"] .rest-control-panel {
+            display: none;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-drawer-view {
+            padding: 24px 40px 30px;
+            gap: 18px;
+            animation: assetSlideUp 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-summary div,
+        .planner-drawer[data-active-tab="asset"] .asset-action-btn {
+            position: relative;
+            min-width: 0;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(14,15,20,0.32);
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+            box-shadow: inset 0 8px 18px rgba(0,0,0,0.28);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-action-btn {
+            color: rgba(255,255,255,0.86);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            border-color: rgba(207,181,59,0.28);
+            background: rgba(207,181,59,0.08);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-actions button,
+        .planner-drawer[data-active-tab="asset"] .asset-choice-actions button {
+            min-height: 30px;
+            padding: 0 12px;
+            border: 1px solid rgba(207,181,59,0.28);
+            background: rgba(207,181,59,0.08);
+            color: rgba(255,255,255,0.82);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 1.4px;
+            clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-actions button:hover,
+        .planner-drawer[data-active-tab="asset"] .asset-choice-actions button:hover,
+        .planner-drawer[data-active-tab="asset"] .asset-action-btn:hover {
+            border-color: var(--gold-main);
+            background: rgba(207,181,59,0.2);
+            color: #fff;
+            box-shadow: 0 0 14px var(--gold-glow);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-column {
+            min-height: 0;
+            padding: 0;
+            border: none;
+            background: transparent;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-column header {
+            margin-bottom: 10px;
+            color: var(--text-dim);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 2px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-column header strong {
+            color: var(--gold-main);
+            text-shadow: 0 0 10px var(--gold-glow);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-offer-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
+            height: calc(100% - 24px);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-offer-choice {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card {
+            --card-accent: #b0b4ba;
+            position: relative;
+            min-height: 130px;
+            padding: 20px 22px;
+            border: none;
+            background: transparent;
+            color: rgba(255,255,255,0.9);
+            clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+            isolation: isolate;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.25s ease;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: -2;
+            clip-path: inherit;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.01) 100%);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card::after {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            z-index: -1;
+            clip-path: polygon(13.5px 0, 100% 0, 100% calc(100% - 13.5px), calc(100% - 13.5px) 100%, 0 100%, 0 13.5px);
+            background: linear-gradient(160deg, rgba(22,24,30,0.72) 0%, rgba(10,11,14,0.46) 100%);
+            box-shadow: inset 0 20px 40px rgba(0,0,0,0.36);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card:hover {
+            transform: translateY(-4px);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card.rarity-silver { --card-accent: #b4c2cd; }
+
+.planner-drawer[data-active-tab="asset"] .asset-card.rarity-rainbow { --card-accent: #7edcff; }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-top {
+            position: relative;
+            z-index: 2;
+            color: rgba(255,255,255,0.38);
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-top::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            right: -22px;
+            top: -18px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--card-accent), transparent);
+            opacity: 0.8;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-top strong {
+            color: var(--card-accent);
+            font-size: 11px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-name {
+            position: relative;
+            z-index: 2;
+            margin-top: 12px;
+            color: #fff;
+            font-family: var(--font-cn);
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 8px rgba(0,0,0,0.8);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-meta {
+            position: relative;
+            z-index: 2;
+            margin-top: 8px;
+            color: rgba(220,220,220,0.6);
+            font-family: var(--font-cn);
+            font-size: 11px;
+            line-height: 1.6;
+            letter-spacing: 0.5px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-tags {
+            position: relative;
+            z-index: 2;
+            margin-top: auto;
+            padding-top: 10px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-tags span {
+            border-color: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.32);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            max-height: 170px;
+            overflow: auto;
+            padding-right: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot-grid::-webkit-scrollbar {
+            width: 4px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot-grid::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot {
+            position: relative;
+            min-height: 58px;
+            padding: 0;
+            border: none;
+            background: transparent;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot-label {
+            display: none;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card {
+            min-height: 56px;
+            padding: 10px 14px 9px 16px;
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card::after {
+            clip-path: polygon(7.5px 0, 100% 0, 100% calc(100% - 7.5px), calc(100% - 7.5px) 100%, 0 100%, 0 7.5px);
+            background: linear-gradient(160deg, rgba(24,26,32,0.62), rgba(10,11,14,0.38));
+            box-shadow: inset 0 2px 2px rgba(255,255,255,0.02), inset 0 10px 20px rgba(0,0,0,0.5);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card::before {
+            content: '';
+            position: absolute;
+            left: 1px;
+            top: 6px;
+            bottom: 6px;
+            width: 3px;
+            background: var(--card-accent);
+            box-shadow: 0 0 8px var(--card-accent);
+            z-index: 10;
+            border-radius: 1.5px;
+            clip-path: none;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card:hover {
+            transform: translateX(4px);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card-top,
+        .planner-drawer[data-active-tab="asset"] .asset-slot .asset-card-tags {
+            display: none;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card-name {
+            margin-top: 0;
+            margin-left: 2px;
+            font-size: 14px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card-meta {
+            margin: 3px 0 0 2px;
+            color: var(--card-accent);
+            font-family: var(--font-ui);
+            font-size: 8px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card.is-empty,
+        .planner-drawer[data-active-tab="asset"] .asset-slot.is-locked {
+            min-height: 56px;
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+            background: rgba(0,0,0,0.24);
+            box-shadow: inset 0 5px 15px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.03);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-void-header {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-void-header span {
+            color: var(--semantic-void, #b5c0d8);
+            text-shadow: 0 0 10px rgba(181,192,216,0.22);
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-void-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            max-height: none;
+            overflow: visible;
+        }
+
+@media (max-width: 820px) {
+.planner-drawer[data-active-tab="asset"] {
+                height: min(540px, calc(100vh - 170px));
+            }
+
+.planner-drawer[data-active-tab="asset"] .planner-panel-header {
+                padding: 0 18px;
+            }
+
+.planner-drawer[data-active-tab="asset"] .asset-drawer-view {
+                padding: 18px;
+            }
+
+.planner-drawer[data-active-tab="asset"] .asset-summary {
+                grid-template-columns: 1fr;
+            }
+
+.planner-drawer[data-active-tab="asset"] .asset-offer-grid {
+                grid-template-columns: 1fr;
+            }
+}
+
+.planner-drawer[data-active-tab="asset"] {
+            height: min(360px, calc(100vh - 250px));
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-drawer-view {
+            padding: 18px 34px 22px;
+            gap: 12px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-drawer-view {
+            display: grid;
+            grid-template-columns: 210px 1fr;
+            grid-template-rows: auto 1fr;
+            column-gap: 24px;
+            row-gap: 12px;
+        }
+
+.asset-resource-side {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            position: relative;
+            padding-right: 18px;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+
+.asset-resource-side::-webkit-scrollbar {
+            width: 4px;
+        }
+
+.asset-resource-side::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+        }
+
+.asset-resource-side > * {
+            flex-shrink: 0;
+        }
+
+.asset-resource-side::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 5%;
+            bottom: 5%;
+            width: 1px;
+            background: linear-gradient(180deg, transparent, rgba(255,255,255,0.08), transparent);
+        }
+
+.asset-detect-label {
+            font-family: var(--font-ui);
+            font-size: 8px;
+            color: var(--text-dim);
+            font-weight: 900;
+            letter-spacing: 1.8px;
+        }
+
+.asset-detect-target {
+            color: #fff;
+            font-family: var(--font-title);
+            font-size: 16px;
+            font-weight: 900;
+            letter-spacing: 1.8px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-summary div,
+        .planner-drawer[data-active-tab="asset"] .asset-action-btn {
+            padding: 8px 11px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-actions button,
+        .planner-drawer[data-active-tab="asset"] .asset-choice-actions button,
+        .planner-drawer[data-active-tab="asset"] .asset-action-btn {
+            min-height: 26px;
+            padding: 0 10px;
+            font-size: 8px;
+            letter-spacing: 1.2px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-column-deck {
+            grid-column: 2;
+            min-height: 0;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-offer-grid {
+            height: auto;
+            gap: 12px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card {
+            min-height: 112px;
+            padding: 16px 18px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-name {
+            font-size: 15px;
+            margin-top: 9px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-meta {
+            font-size: 9px;
+            margin-top: 5px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-tags {
+            padding-top: 7px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-card-tags span {
+            font-size: 6px;
+            padding: 1px 4px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            max-height: 132px;
+            gap: 9px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card,
+        .planner-drawer[data-active-tab="asset"] .asset-card.is-empty,
+        .planner-drawer[data-active-tab="asset"] .asset-slot.is-locked {
+            min-height: 48px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot .asset-card-name {
+            font-size: 12px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-void-header {
+            margin-top: 12px;
+            padding-top: 12px;
+        }
+
+.planner-drawer[data-active-tab="asset"] .asset-void-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+@media (max-width: 820px) {
+.planner-drawer[data-active-tab="asset"] {
+                height: min(520px, calc(100vh - 170px));
+            }
+
+.planner-drawer[data-asset-page="deck"] .asset-drawer-view {
+                display: flex;
+                flex-direction: column;
+            }
+
+.planner-drawer[data-active-tab="asset"] .asset-slot-grid,
+            .planner-drawer[data-active-tab="asset"] .asset-offer-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+}
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-view {
+            position: relative;
+            display: flex;
+            flex-direction: row;
+            gap: 30px;
+            padding: 25px 40px 30px;
+            overflow: hidden;
+        }
+
+.planner-drawer[data-active-tab="asset"][data-asset-page="deck"] {
+            height: min(300px, calc(100vh - 270px));
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-side {
+            flex: 0 0 180px;
+            padding-right: 25px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-side .asset-detect-target {
+            font-size: 26px;
+            margin-bottom: 2px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-side .asset-detect-target span {
+            color: var(--text-dim);
+            font-size: 16px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-stat {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            width: 100%;
+            padding: 7px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.045);
+            font-family: var(--font-ui);
+            letter-spacing: 1.4px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-stat span {
+            color: var(--text-dim);
+            font-size: 9px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-stat strong {
+            color: rgba(255,255,255,0.78);
+            font-size: 11px;
+            font-weight: 900;
+            text-shadow: 0 0 10px rgba(207,181,59,0.12);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-scroll {
+            flex: 1;
+            min-width: 0;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 20px;
+            margin-right: -10px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-deck-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-column-deck {
+            padding: 0;
+            border: 0;
+            background: transparent;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-slot-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            max-height: none;
+            overflow: visible;
+            padding-right: 0;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-slot {
+            min-height: 56px;
+            padding: 0;
+            border: 0;
+            background: transparent;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-slot .asset-card,
+        .planner-drawer[data-asset-page="deck"] .asset-card.is-empty,
+        .planner-drawer[data-asset-page="deck"] .asset-slot.is-locked {
+            min-height: 56px;
+            height: 56px;
+            padding: 0 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-slot .asset-card::after {
+            clip-path: polygon(7.5px 0, 100% 0, 100% calc(100% - 7.5px), calc(100% - 7.5px) 100%, 0 100%, 0 7.5px);
+            background: linear-gradient(160deg, rgba(24,26,32,0.62), rgba(10,11,14,0.38));
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-slot .asset-card::before {
+            left: 1px;
+            top: 6px;
+            bottom: 6px;
+            width: 3px;
+            right: auto;
+            background: var(--card-accent);
+            box-shadow: 0 0 8px var(--card-accent);
+            clip-path: none;
+            z-index: 3;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-void-header {
+            margin-top: 18px;
+            padding-top: 25px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-details-panel {
+            flex: 0 0 230px;
+            height: 100%;
+            min-height: 0;
+            position: relative;
+            overflow: hidden;
+            padding: 25px 22px;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 6px;
+            background: rgba(14,15,20,0.36);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+.asset-details-bg {
+            position: absolute;
+            right: -15px;
+            bottom: -20px;
+            font-family: var(--font-title);
+            font-size: 160px;
+            font-weight: 900;
+            color: rgba(255,255,255,0.08);
+            opacity: 0.18;
+            font-style: italic;
+            pointer-events: none;
+            line-height: 1;
+        }
+
+.asset-details-type,
+        .asset-details-level,
+        .asset-details-note {
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: rgba(255,255,255,0.42);
+        }
+
+.asset-details-name-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 16px;
+            margin: 12px 0 14px;
+            position: relative;
+            z-index: 2;
+        }
+
+.asset-details-name {
+            font-family: var(--font-cn);
+            font-size: 19px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(0,0,0,0.9);
+        }
+
+.asset-details-divider {
+            height: 1px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.1), transparent);
+            margin-bottom: 18px;
+        }
+
+.asset-details-desc {
+            position: relative;
+            z-index: 2;
+            color: rgba(220,220,220,0.78);
+            font-family: var(--font-cn);
+            font-size: 12px;
+            line-height: 1.7;
+            letter-spacing: 0.5px;
+        }
+
+.asset-details-action {
+            position: absolute;
+            left: 22px;
+            right: 22px;
+            bottom: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+.asset-details-panel.is-idle::after {
+            content: 'TARGET EMPTY SLOT';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255,255,255,0.2);
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 2px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-overlay {
+            position: absolute;
+            inset: 14px 26px 16px;
+            z-index: 40;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-backdrop {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(207,181,59,0.16), transparent 38%),
+                linear-gradient(180deg, rgba(4,5,7,0.32), rgba(4,5,7,0.58));
+            backdrop-filter: blur(7px);
+            -webkit-backdrop-filter: blur(7px);
+            border: 1px solid rgba(207,181,59,0.12);
+            box-shadow: inset 0 0 32px rgba(0,0,0,0.44);
+            clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel {
+            position: relative;
+            z-index: 1;
+            width: min(760px, 100%);
+            max-height: 100%;
+            padding: 18px 20px 16px;
+            pointer-events: auto;
+            border: 1px solid rgba(207,181,59,0.26);
+            background:
+                linear-gradient(120deg, rgba(255,255,255,0.055), rgba(255,255,255,0.012)),
+                rgba(9,10,13,0.58);
+            box-shadow: 0 18px 48px rgba(0,0,0,0.42), 0 0 28px rgba(207,181,59,0.12);
+            clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel header,
+        .planner-drawer[data-asset-page="deck"] .asset-offer-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            font-family: var(--font-ui);
+            font-weight: 900;
+            letter-spacing: 2px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel header {
+            margin-bottom: 12px;
+            font-size: 9px;
+            color: var(--text-dim);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel header strong {
+            color: var(--gold-main);
+            text-shadow: 0 0 12px var(--gold-glow);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel .asset-offer-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 13px;
+            height: auto;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel .asset-offer-choice {
+            display: grid;
+            grid-template-rows: 126px 26px;
+            min-width: 0;
+            gap: 8px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel .asset-offer-choice .asset-card {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            max-height: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 16px 18px;
+            text-align: left;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel .asset-offer-choice .asset-card-name,
+        .planner-drawer[data-asset-page="deck"] .asset-offer-panel .asset-offer-choice .asset-card-meta {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel .asset-choice-actions {
+            display: flex;
+            gap: 6px;
+            height: 26px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-panel .asset-choice-actions button {
+            height: 26px;
+            min-height: 26px;
+            background: rgba(0,0,0,0.28);
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-footer {
+            margin-top: 12px;
+            color: rgba(255,255,255,0.48);
+            font-size: 8px;
+        }
+
+.planner-drawer[data-asset-page="deck"] .asset-offer-footer .asset-action-btn {
+            min-height: 26px;
+        }
+
+.rest-control-panel {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: translateY(-2px);
+            transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s ease;
+        }
+
+.rest-control-panel.is-visible {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+.rest-control-label {
+            color: rgba(255,255,255,0.48);
+            font-family: var(--font-ui);
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            white-space: nowrap;
+        }
+
+.rest-control-options {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+.rest-tint-btn {
+            min-width: 34px;
+            height: 22px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(8, 10, 14, 0.78);
+            color: rgba(255,255,255,0.68);
+            font-family: var(--font-ui);
+            font-size: 7px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+            transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
+        }
+
+.rest-tint-btn.tint-combat { color: var(--warn-red); }
+
+.rest-tint-btn.tint-rest { color: var(--future-pale); }
+
+.rest-tint-btn.tint-asset { color: var(--gold-main); }
+
+.rest-tint-btn.tint-vision { color: var(--flow-up); }
+
+.rest-tint-btn:hover:not(:disabled),
+        .rest-tint-btn.is-active {
+            border-color: currentColor;
+            background: rgba(255,255,255,0.08);
+            box-shadow: 0 0 10px currentColor;
+        }
+
+.token-dispenser {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            position: relative;
+            z-index: 100;
+            pointer-events: auto;
+            transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+.token-dispenser:hover { transform: translateY(-4px); }
+
+.token-dispenser:active { transform: translateY(0) scale(0.95); }
+
+.token-dispenser.is-empty { pointer-events: none; filter: grayscale(1) opacity(0.3); }
+
+.token-dispenser.is-selected {
+            transform: translateY(-4px);
+            filter: drop-shadow(0 0 12px rgba(207, 181, 59, 0.45));
+        }
+
+.badge-count {
+            position: absolute;
+            top: -5px;
+            right: -18px;
+            color: currentColor;
+            font-family: var(--font-ui);
+            font-size: 11px;
+            font-weight: 700;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+.badge-count::before {
+            content: '';
+            width: 4px;
+            height: 4px;
+            background: currentColor;
+            box-shadow: 0 0 5px currentColor;
+            display: inline-block;
+        }
+
+.token-dispenser.is-empty .badge-count {
+            color: var(--gray-ash);
+        }
+
+.token-dispenser.is-empty .badge-count::before { background: transparent; border: 1px solid var(--gray-ash); box-shadow: none; }
+
+.token-label {
+            font-family: var(--font-cn);
+            font-size: 11px;
+            color: rgba(255,255,255,0.85);
+            font-weight: 700;
+            letter-spacing: 2px;
+            transition: 0.3s;
+        }
+
+.token-sub {
+            font-family: var(--font-ui);
+            font-size: 8px;
+            color: var(--text-dim);
+            letter-spacing: 3px;
+        }
+
+.token-dispenser:hover .token-label { color: #fff; text-shadow: 0 0 8px rgba(255,255,255,0.4); }
+
+.magic-core {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px currentColor;
+        }
+
+.magic-core::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(20, 25, 35, 0.9) 0%, rgba(5, 6, 8, 1) 100%);
+            z-index: 1;
+        }
+
+.magic-core::before {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: currentColor;
+            box-shadow: 0 0 8px currentColor;
+            z-index: 2;
+            border-radius: 50%;
+            opacity: 0.5;
+            transition: 0.3s;
+        }
+
+.token-dispenser:hover .magic-core::before { transform: scale(1.5); opacity: 1; }
+
+.token-dispenser:hover .magic-core { filter: brightness(1.3) drop-shadow(0 0 8px currentColor); }
+
+.token-dispenser.type-asset,
+        .mounted-token.type-asset { color: var(--gold-main); }
+
+.token-dispenser.type-vision,
+        .mounted-token.type-vision { color: var(--flow-up); }
+
+.token-dispenser.type-combat,
+        .mounted-token.type-combat { color: var(--warn-red); }
+
+.token-dispenser.type-rest,
+        .mounted-token.type-rest { color: var(--future-pale); }
+
+.token-dispenser.type-asset .magic-core,
+        .mounted-token.type-asset .magic-core {
+            width: 34px;
+            height: 34px;
+            clip-path: polygon(25% 0%, 75% 0%, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0% 75%, 0% 25%);
+            background: currentColor;
+        }
+
+.token-dispenser.type-asset .magic-core::after,
+        .mounted-token.type-asset .magic-core::after {
+            clip-path: polygon(25% 0%, 75% 0%, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0% 75%, 0% 25%);
+            transform: scale(0.9);
+        }
+
+.token-dispenser.type-vision .magic-core,
+        .mounted-token.type-vision .magic-core {
+            width: 33px;
+            height: 38px;
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            background: currentColor;
+        }
+
+.token-dispenser.type-vision .magic-core::after,
+        .mounted-token.type-vision .magic-core::after {
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            transform: scale(0.88);
+        }
+
+.token-dispenser.type-combat .magic-core,
+        .mounted-token.type-combat .magic-core {
+            width: 36px;
+            height: 36px;
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            background: currentColor;
+            animation: core-pulse 2s infinite alternate;
+        }
+
+.token-dispenser.type-combat .magic-core::after,
+        .mounted-token.type-combat .magic-core::after {
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            transform: scale(0.88);
+        }
+
+.token-dispenser.type-combat .magic-core::before,
+        .mounted-token.type-combat .magic-core::before {
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            border-radius: 0;
+        }
+
+.token-dispenser.type-rest .magic-core,
+        .mounted-token.type-rest .magic-core {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+.token-dispenser.type-rest .magic-core::after,
+        .mounted-token.type-rest .magic-core::after {
+            border-radius: 50%;
+            transform: scale(0.9);
+        }
+
+.planner-drawer.is-host-readonly {
+            pointer-events: auto;
+        }
+
+.inventory-area.is-host-readonly {
+            min-height: 116px;
+            pointer-events: none;
+        }
+
+.planner-drawer {
+            border-top: 1px solid rgba(207, 181, 59, 0.2);
+            box-shadow: 0 0 50px rgba(0,0,0,0.8), inset 0 20px 30px rgba(0,0,0,0.6);
+        }
+
+.planner-panel-header::before { box-shadow: none; }
+
+.token-dispenser {
+            gap: 12px;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+.token-dispenser:hover { transform: translateY(-4px); }
+
+.token-dispenser.is-selected {
+            transform: translateY(-4px);
+            filter: none;
+        }
+
+.token-dispenser.is-selected .magic-core {
+            filter: drop-shadow(0 0 10px currentColor);
+        }
+
+.token-dispenser.is-selected .magic-core::before {
+            transform: scale(1.2);
+            opacity: 1;
+        }
+
+.token-dispenser.is-selected .magic-core::after {
+            box-shadow: 0 0 0 1px currentColor;
+        }
+
+.token-dispenser.is-selected .token-label {
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.28);
+        }
+
+.token-dispenser.is-selected .badge-count {
+            color: #fff;
+            text-shadow: 0 0 8px currentColor;
+        }
+
+.badge-count::before { box-shadow: none; }
+
+.token-dispenser .magic-core,
+        .mounted-token .magic-core {
+            box-shadow: none;
+        }
+
+.token-dispenser .magic-core::after,
+        .mounted-token .magic-core::after {
+            background: rgba(5,6,8,0.9);
+        }
+
+.token-dispenser .magic-core::before,
+        .mounted-token .magic-core::before {
+            box-shadow: none;
+            opacity: 0.6;
+        }
+
+.token-dispenser .magic-core {
+            width: 38px;
+            height: 38px;
+            flex-shrink: 0;
+        }
+
+.token-dispenser.type-vision .magic-core { width: 34px; height: 39px; }
+
+.type-asset .magic-core::after { transform: scale(0.82); }
+
+.type-vision .magic-core::after { transform: scale(0.8); }
+
+.type-combat .magic-core::after { transform: scale(0.8); }
+
+.type-rest .magic-core::after { transform: scale(0.82); }
+
+@media (max-width: 820px) {
+html, body { overflow: auto; }
+
+body.is-home-page { overflow: auto; }
+
+body.is-home-page .dashboard-pages {
+                width: 100%;
+                height: auto;
+                min-height: 100vh;
+            }
+
+#dashboard-page-overview.is-active {
+                display: flex;
+                width: 100%;
+                height: auto;
+                min-height: 100vh;
+                flex-direction: column;
+            }
+
+#dashboard-page-overview .terminal-container {
+                height: auto;
+                min-height: 100vh;
+                flex: 1;
+            }
+
+.sys-topbar {
+                position: sticky;
+                top: 0;
+                height: auto;
+                min-height: 44px;
+                flex-wrap: wrap;
+                padding: 6px 10px;
+                gap: 6px;
+                z-index: 120;
+            }
+
+.main-layout {
+                flex-direction: column;
+                overflow: visible;
+                height: auto;
+            }
+
+.center-board {
+                order: 2;
+                flex: 1 1 auto;
+                min-height: 78vh;
+                height: 78vh;
+                overflow: hidden;
+            }
+}
+
+@media (max-width: 480px) {
+.center-board { min-height: 72vh; height: 72vh; }
+
+.sys-topbar { padding: 4px 8px; }
+}
+
+
+
+
+/* docx static preview shell: minimal rules not from runtime data. */
+body.plan-drawer-doc { margin: 0; background: #050608; }
+body.plan-drawer-doc .doc-map-placeholder { position: absolute; inset: 48px 0 0; background: radial-gradient(circle at 48% 38%, rgba(207,181,59,0.16), transparent 28%), linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.014) 1px, transparent 1px), #06080b; background-size: auto, 54px 54px, 54px 54px, auto; }
+body.plan-drawer-doc .doc-map-placeholder::before { content: ''; position: absolute; left: 12%; right: 12%; top: 34%; height: 2px; border-top: 2px dashed rgba(207,181,59,0.32); transform: rotate(-8deg); }
+body.plan-drawer-doc .doc-node { position: absolute; width: 38px; height: 38px; border: 1px solid rgba(207,181,59,0.8); border-radius: 50%; background: rgba(207,181,59,0.09); box-shadow: 0 0 22px rgba(207,181,59,0.24); }
+body.plan-drawer-doc .doc-node:nth-child(1) { left: 18%; top: 42%; }
+body.plan-drawer-doc .doc-node:nth-child(2) { left: 38%; top: 32%; }
+body.plan-drawer-doc .doc-node:nth-child(3) { left: 58%; top: 27%; }
+body.plan-drawer-doc .doc-node:nth-child(4) { left: 78%; top: 18%; }
+body.plan-drawer-doc .planner-drawer { transform: translateY(0); opacity: 1; pointer-events: auto; }
+body.plan-drawer-doc .planner-tab-view { display: none; }
+body.plan-drawer-doc .planner-tab-view.is-active { display: flex; }
+body.plan-drawer-doc .asset-offer-overlay[hidden] { display: none !important; }
+body.plan-drawer-doc .planner-drawer[data-asset-page="deck"] .asset-slot.is-locked {
+  color: rgba(255,255,255,0.42);
+  text-shadow: 0 0 10px rgba(207,181,59,0.14);
+}
+body.plan-drawer-doc .planner-drawer[data-asset-page="deck"] .asset-slot.is-locked span,
+body.plan-drawer-doc .planner-drawer[data-asset-page="deck"] .asset-slot.is-locked strong {
+  color: rgba(255,255,255,0.46);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.6px;
+}
+  </style>
+</head>
+<body class="is-home-page plan-drawer-doc">
+  <div class="dashboard-pages">
+    <section id="dashboard-page-overview" class="dashboard-page is-active">
+      <div class="terminal-container">
+        <header class="sys-topbar">
+          <div class="brand-block">
+            <span class="brand-kicker">ACE ZERO</span>
+            <strong>PLAN DRAWER</strong>
+          </div>
+          <div class="sys-status">FRONTEND EXTRACT · STATIC HTML</div>
+        </header>
+        <main class="main-layout">
+          <section class="center-board">
+            <div class="doc-map-placeholder" aria-hidden="true">
+              <i class="doc-node"></i><i class="doc-node"></i><i class="doc-node"></i><i class="doc-node"></i>
+            </div>
+
+            <div class="planner-drawer is-open" id="planner-drawer" data-active-tab="asset" data-planner-page="asset" data-asset-page="deck">
+              <div class="planner-panel-header">
+                <span class="planner-panel-title">PHASE PLANNER</span>
+                <div class="planner-drawer-tabs">
+                  <button type="button" data-planner-tab="planner"><span>PHASE PLANNER</span><em>MAIN</em></button>
+                  <button type="button" data-planner-tab="combat"><span>COMBAT</span><em>接口</em></button>
+                  <button type="button" data-planner-tab="rest"><span>REST</span><em>休整</em></button>
+                  <button class="is-active" type="button" data-planner-tab="asset"><span>ASSET</span><em>契约</em></button>
+                  <button type="button" data-planner-tab="vision"><span>VISION</span><em>情报</em></button>
+                </div>
+                <div class="rest-control-panel" id="rest-control-panel">
+                  <div class="rest-control-label">REST CONTROL</div>
+                  <div class="rest-control-options">
+                    <button class="rest-tint-btn tint-neutral" type="button">N</button>
+                    <button class="rest-tint-btn tint-combat" type="button">C</button>
+                    <button class="rest-tint-btn tint-rest" type="button">R</button>
+                    <button class="rest-tint-btn tint-asset" type="button">A</button>
+                    <button class="rest-tint-btn tint-vision" type="button">V</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="planner-tab-view" data-planner-view="planner">
+                <div class="inventory-area" id="inventory">
+                  <div class="token-dispenser type-combat"><span class="badge-count">×2</span><div class="magic-core"></div><div class="token-label">交锋点</div><div class="token-sub">L0 / R2</div></div>
+                  <div class="token-dispenser type-rest"><span class="badge-count">×3</span><div class="magic-core"></div><div class="token-label">休整点</div><div class="token-sub">L1 / R3</div></div>
+                  <div class="token-dispenser type-asset"><span class="badge-count">×2</span><div class="magic-core"></div><div class="token-label">契点</div><div class="token-sub">L0 / R2</div></div>
+                  <div class="token-dispenser type-vision"><span class="badge-count">×1</span><div class="magic-core"></div><div class="token-label">情报点</div><div class="token-sub">L0 / R1</div></div>
+                </div>
+              </div>
+
+              <div class="planner-tab-view" data-planner-view="combat">
+                <div class="asset-drawer-view resource-page-view resource-page-combat">
+                  <aside class="resource-page-side">
+                    <div class="resource-page-meter type-combat"><span>交锋点</span><strong>2<em>/</em>2</strong><small>COMBAT</small></div>
+                    <div class="resource-page-note">COMBAT ADAPTER PENDING</div>
+                    <div class="resource-page-note">只生成外部结算请求</div>
+                  </aside>
+                  <section class="resource-page-main">
+                    <header>
+                      <span>交锋点 / COMBAT</span>
+                      <strong>接口预留</strong>
+                    </header>
+                    <div class="resource-rule-grid">
+                      <div><span>I</span><strong>小游戏 / 低端德州</strong><em>当前只生成外部结算接口。</em></div>
+                      <div><span>II</span><strong>精英德州</strong><em>等待 Combat adapter 接入。</em></div>
+                      <div><span>III</span><strong>Boss 德州</strong><em>不在 Dashboard 内伪造收益。</em></div>
+                    </div>
+                    <div class="resource-schedule-grid">
+                      <section>
+                        <span>COMBAT PHASES</span>
+                        <div class="resource-schedule-row type-combat"><strong>IV</strong><span>NODE 12 · 外部请求</span><em>REQ</em></div>
+                        <div class="resource-schedule-row is-empty"><strong>-</strong><span>没有更多交锋点</span><em>EMPTY</em></div>
+                      </section>
+                      <section>
+                        <span>EXTERNAL REQUESTS</span>
+                        <div class="resource-schedule-row combat-request-row"><strong>LOW</strong><span>等待小游戏 adapter 返回正式结果</span><em>PENDING</em></div>
+                        <div class="resource-schedule-row is-empty"><strong>-</strong><span>不生成假收益</span><em>LOCK</em></div>
+                      </section>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <div class="planner-tab-view" data-planner-view="rest">
+                <div class="asset-drawer-view resource-page-view resource-page-rest">
+                  <aside class="resource-page-side">
+                    <div class="resource-page-meter type-rest"><span>休整点</span><strong>3<em>/</em>3</strong><small>REST</small></div>
+                    <div class="resource-page-note">REST x2 · NEUTRAL</div>
+                    <div class="resource-page-note">当前不额外消耗点数</div>
+                  </aside>
+                  <section class="resource-page-main">
+                    <header>
+                      <span>休整点 / REST</span>
+                      <strong>回复 · 染色 · 营收</strong>
+                    </header>
+                    <div class="resource-rule-grid">
+                      <div><span>I</span><strong>回复 25% Mana</strong><em>可追加节点染色。</em></div>
+                      <div><span>II</span><strong>回复 66% Mana</strong><em>固定营收 +0.25。</em></div>
+                      <div><span>III</span><strong>回复 100% Mana</strong><em>固定营收 +0.40。</em></div>
+                    </div>
+                    <div class="resource-inline-actions">
+                      <button class="rest-tint-btn tint-neutral" type="button"><strong>NEUTRAL</strong><span>默认</span><em>0</em></button>
+                      <button class="rest-tint-btn tint-rest" type="button"><strong>RECOVER</strong><span>恢复</span><em>1</em></button>
+                      <button class="rest-tint-btn tint-vision" type="button"><strong>FOCUS</strong><span>情报</span><em>1</em></button>
+                      <button class="rest-tint-btn tint-asset" type="button"><strong>ASSET</strong><span>契约</span><em>1</em></button>
+                      <button class="rest-tint-btn tint-combat" type="button"><strong>COMBAT</strong><span>交锋</span><em>1</em></button>
+                    </div>
+                    <div class="resource-schedule-grid">
+                      <section>
+                        <span>REST PHASES</span>
+                        <div class="resource-schedule-row is-current"><strong>I</strong><span>NODE 11 · 回复与控制</span><em>NOW</em></div>
+                        <div class="resource-schedule-row"><strong>III</strong><span>NODE 13 · 深度休整</span><em>LOCK</em></div>
+                      </section>
+                      <section>
+                        <span>CONTROLLED NODES</span>
+                        <div class="resource-schedule-row"><strong>R</strong><span>NODE 10 · REST tint</span><em>+0.25</em></div>
+                        <div class="resource-schedule-row is-empty"><strong>-</strong><span>没有更多控制节点</span><em>EMPTY</em></div>
+                      </section>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <div class="planner-tab-view is-active" data-planner-view="asset">
+                <div class="asset-drawer-view asset-view-shell asset-deck-view has-offer-overlay">
+                  <div class="asset-resource-side asset-deck-side">
+                    <span class="asset-detect-label">CAPACITY LIMIT</span>
+                    <span class="asset-detect-target">2<span> / 4</span></span>
+                    <div class="asset-deck-stat"><span>VOID ISOLATION</span><strong>0/2</strong></div>
+                    <div class="asset-deck-stat"><span>DECK POINTS</span><strong>2</strong></div>
+                    <button class="asset-action-btn" type="button" data-asset-action="unlock-slot">EXPAND</button>
+                  </div>
+
+                  <div class="asset-deck-scroll">
+                    <section class="asset-column asset-column-deck">
+                      <header><span>ASSET DECK</span><strong>4/8</strong></header>
+                      <div class="asset-slot-grid">
+                        <div class="asset-slot"><div class="asset-slot-label">GENERAL 1</div><button class="asset-card rarity-silver is-compact" type="button"><div class="asset-card-top"><span>SILVER</span><strong>LV 2</strong></div><div class="asset-card-name">小吉 II</div><div class="asset-card-meta">SKILL · MINOR_WISH</div><div class="asset-card-tags"><span>FORTUNE</span><span>GENERAL</span></div></button></div>
+                        <div class="asset-slot"><div class="asset-slot-label">GENERAL 2</div><button class="asset-card rarity-silver is-compact" type="button"><div class="asset-card-top"><span>SILVER</span><strong>LV 2</strong></div><div class="asset-card-name">绝缘 II</div><div class="asset-card-meta">SKILL · INSULATION</div><div class="asset-card-tags"><span>VOID</span><span>GENERAL</span></div></button></div>
+                        <div class="asset-slot"><div class="asset-slot-label">GENERAL 3</div><div class="asset-card is-empty"><div class="asset-card-name">EMPTY SLOT</div><div class="asset-card-meta">AVAILABLE</div></div></div>
+                        <div class="asset-slot"><div class="asset-slot-label">GENERAL 4</div><div class="asset-card is-empty"><div class="asset-card-name">EMPTY SLOT</div><div class="asset-card-meta">AVAILABLE</div></div></div>
+                        <div class="asset-slot is-locked"><span>GENERAL 5</span><strong>LOCKED</strong></div>
+                        <div class="asset-slot is-locked"><span>GENERAL 6</span><strong>LOCKED</strong></div>
+                        <div class="asset-slot is-locked"><span>GENERAL 7</span><strong>LOCKED</strong></div>
+                        <div class="asset-slot is-locked"><span>GENERAL 8</span><strong>LOCKED</strong></div>
+                      </div>
+                      <header class="asset-void-header"><span>VOID ISOLATION</span><strong>2/2</strong></header>
+                      <div class="asset-slot-grid asset-void-grid">
+                        <div class="asset-slot"><div class="asset-slot-label">VOID 1</div><div class="asset-card is-empty"><div class="asset-card-name">EMPTY SLOT</div><div class="asset-card-meta">AVAILABLE</div></div></div>
+                        <div class="asset-slot"><div class="asset-slot-label">VOID 2</div><div class="asset-card is-empty"><div class="asset-card-name">EMPTY SLOT</div><div class="asset-card-meta">AVAILABLE</div></div></div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <aside class="asset-details-panel">
+                    <div class="asset-details-bg">F</div>
+                    <div class="asset-details-type">FORTUNE / SILVER</div>
+                    <div class="asset-details-name-row">
+                      <div class="asset-details-name">小吉 II</div>
+                      <div class="asset-details-level">LV 2</div>
+                    </div>
+                    <div class="asset-details-divider"></div>
+                    <div class="asset-details-desc">SKILL · MINOR_WISH。局内技能等级同步到当前 deck，静态样张仅展示前端状态。</div>
+                    <div class="asset-details-action">
+                      <div class="asset-details-note">[ STATUS: ACTIVE ]</div>
+                      <button class="asset-action-btn" type="button" disabled>REPLACE & DESTROY OLD CARD</button>
+                    </div>
+                  </aside>
+
+                  <div class="asset-offer-overlay" role="dialog" aria-label="Contract Extract">
+                    <div class="asset-offer-backdrop"></div>
+                    <section class="asset-offer-panel">
+                      <header><span>CONTRACT EXTRACT</span><strong>HIGH</strong></header>
+                      <div class="asset-offer-grid">
+                        <div class="asset-offer-choice"><button class="asset-card rarity-silver is-compact" type="button"><div class="asset-card-top"><span>SILVER</span><strong>LV 2</strong></div><div class="asset-card-name">绝缘 II</div><div class="asset-card-meta">SKILL · INSULATION</div><div class="asset-card-tags"><span>SILVER</span><span>VOID</span><span>TEXAS-HOLDEM</span></div></button><div class="asset-choice-actions"><button type="button" data-asset-action="choose-card">GENERAL</button><button type="button" data-asset-action="choose-card">VOID</button></div></div>
+                        <div class="asset-offer-choice"><button class="asset-card rarity-silver is-compact" type="button"><div class="asset-card-top"><span>SILVER</span><strong>LV 2</strong></div><div class="asset-card-name">小吉 II</div><div class="asset-card-meta">SKILL · MINOR_WISH</div><div class="asset-card-tags"><span>SILVER</span><span>FORTUNE</span><span>TEXAS-HOLDEM</span></div></button><div class="asset-choice-actions"><button type="button" data-asset-action="choose-card">GENERAL</button></div></div>
+                        <div class="asset-offer-choice"><button class="asset-card rarity-rainbow is-compact" type="button"><div class="asset-card-top"><span>RAINBOW</span><strong>GOD</strong></div><div class="asset-card-name">彩虹契约</div><div class="asset-card-meta">GOD</div><div class="asset-card-tags"><span>RAINBOW</span><span>ANY</span><span>GENERAL</span></div></button><div class="asset-choice-actions"><button type="button" data-asset-action="choose-card">GENERAL</button></div></div>
+                      </div>
+                      <div class="asset-offer-footer"><span>DECK POINTS · 2</span><button class="asset-action-btn" type="button" data-asset-action="refresh-offer">REROLL POOL</button></div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+
+              <div class="planner-tab-view" data-planner-view="vision">
+                <div class="asset-drawer-view resource-page-view resource-page-vision">
+                  <aside class="resource-page-side">
+                    <div class="resource-page-meter type-vision"><span>情报点</span><strong>1<em>/</em>1</strong><small>VISION</small></div>
+                    <div class="resource-page-note">SIGHT 3</div>
+                    <div class="resource-next-step">
+                      <span>跃迁</span>
+                      <strong>READY</strong>
+                      <em>抵达 route 阶段后可跨线选择。</em>
+                    </div>
+                  </aside>
+                  <section class="resource-page-main">
+                    <header>
+                      <span>情报点 / VISION</span>
+                      <strong>视野 · 替换 · 跃迁</strong>
+                    </header>
+                    <div class="resource-rule-grid">
+                      <div><span>I</span><strong>探路</strong><em>当前视野 +2。</em></div>
+                      <div><span>II</span><strong>固定相位替换</strong><em>状态：READY。</em></div>
+                      <div><span>III</span><strong>跃迁</strong><em>显示连续路径线。</em></div>
+                    </div>
+                    <div class="resource-schedule-grid">
+                      <section>
+                        <span>VISION PHASES</span>
+                        <div class="resource-schedule-row"><strong>I</strong><span>NODE 12 · 临时点亮视野</span><em>SIGHT</em></div>
+                        <div class="resource-schedule-row"><strong>III</strong><span>NODE 13 · 跃迁路径</span><em>JUMP</em></div>
+                      </section>
+                      <section>
+                        <span>VISION STATE</span>
+                        <div class="resource-schedule-row"><strong>FOG</strong><span>未来路径超过视野隐藏</span><em>ON</em></div>
+                        <div class="resource-schedule-row"><strong>PATH</strong><span>过去节点与已探明视野保留</span><em>KEEP</em></div>
+                      </section>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const drawer = document.getElementById('planner-drawer');
+    const tabs = [...document.querySelectorAll('[data-planner-tab]')];
+    const views = [...document.querySelectorAll('[data-planner-view]')];
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      const key = tab.dataset.plannerTab;
+      tabs.forEach((item) => item.classList.toggle('is-active', item === tab));
+      views.forEach((view) => view.classList.toggle('is-active', view.dataset.plannerView === key));
+      drawer.dataset.plannerPage = key;
+      drawer.dataset.activeTab = key === 'planner' ? 'planner' : (key === 'asset' ? 'asset' : 'resource');
+      drawer.dataset.assetPage = key === 'asset' ? 'deck' : key;
+    }));
+    const offerOverlay = document.querySelector('.asset-offer-overlay');
+    document.querySelectorAll('[data-asset-action="choose-card"], [data-asset-action="refresh-offer"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (offerOverlay) offerOverlay.hidden = true;
+      });
+    });
+  </script>
+</body>
+</html>

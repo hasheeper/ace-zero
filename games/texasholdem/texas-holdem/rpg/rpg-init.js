@@ -15,7 +15,7 @@
  * 届时本模块已经执行完毕。
  */
 
-import { AttributeSystem, ATTR, COUNTER_MAP, EFFECT_TO_ATTR, ADVANTAGE_MULT, DISADVANTAGE_MULT } from './attribute-system.js';
+import { AttributeSystem, ATTR, EFFECT_TO_ATTR } from './attribute-system.js';
 import { SwitchSystem, POSITION, MODE, SWITCH_COOLDOWN, SWITCH_SANITY_COST } from './switch-system.js';
 import { CombatFormula } from './combat-formula.js';
 import { SurvivalEconomy, SIPHON_BASE, EPIC_WIN_REWARDS, TRICKLE_AMOUNT, BACKLASH_POWER, BACKLASH_DURATION } from './survival-economy.js';
@@ -31,10 +31,7 @@ window.TraitSystem = TraitSystem;
 
 // 常量也挂到类上，保持向后兼容
 AttributeSystem.ATTR = ATTR;
-AttributeSystem.COUNTER_MAP = COUNTER_MAP;
 AttributeSystem.EFFECT_TO_ATTR = EFFECT_TO_ATTR;
-AttributeSystem.ADVANTAGE_MULT = ADVANTAGE_MULT;
-AttributeSystem.DISADVANTAGE_MULT = DISADVANTAGE_MULT;
 
 SwitchSystem.POSITION = POSITION;
 SwitchSystem.MODE = MODE;

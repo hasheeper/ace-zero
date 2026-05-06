@@ -35,16 +35,13 @@
   var SVG_PATHS = {
     fortune:    '<path d="M8 1l2.2 4.5L15 6.3l-3.5 3.4.8 4.8L8 12.3 3.7 14.5l.8-4.8L1 6.3l4.8-.8z"/>',
     curse:      '<path d="M8 1C5.2 1 3 3.7 3 7c0 2.2 1 4 2.5 5h5C12 11 13 9.2 13 7c0-3.3-2.2-6-5-6zM6 12v1c0 .6.9 1 2 1s2-.4 2-1v-1H6z"/>',
-    clarity:    '<path d="M8 1.5l1.5 3 3.5.5-2.5 2.5.5 3.5L8 9.5 4.5 11l.5-3.5L2.5 5l3.5-.5z"/><line x1="3" y1="13" x2="13" y2="13" stroke-width="1.5"/>',
+    psyche:     '<path d="M8 1.5l1.5 3 3.5.5-2.5 2.5.5 3.5L8 9.5 4.5 11l.5-3.5L2.5 5l3.5-.5z"/><line x1="3" y1="13" x2="13" y2="13" stroke-width="1.5"/>',
     refraction: '<path d="M4 3c2 3 6-1 8 2s-4 5-2 8"/><path d="M12 3c-2 3-6-1-8 2s4 5 2 8"/>',
-    reversal:   '<path d="M2 5h9l-3-3h2l4 4-4 4h-2l3-3H2V5zm12 6H5l3 3H6l-4-4 4-4h2L5 9h9v2z"/>',
-    null_field:  '<circle cx="8" cy="8" r="6"/><line x1="4" y1="12" x2="12" y2="4"/>',
-    void_shield: '<path d="M8 1L2 4v4c0 3.3 2.6 6.4 6 7 3.4-.6 6-3.7 6-7V4L8 1z"/>',
-    purge_all:   '<path d="M8 2L3 8l5 6 5-6-5-6z"/>'
+    void:       '<path d="M8 2L3 8l5 6 5-6-5-6z"/>'
   };
 
-  // attr → hero-card skin class
-  var ATTR_TO_SKIN = {
+  // system → hero-card skin class
+  var SYSTEM_TO_SKIN = {
     moirai: 'skin-moirai',
     chaos:  'skin-chaos',
     psyche: 'skin-psyche',
@@ -81,6 +78,15 @@
   var COTA_HAZARD_ICON = SVG_BASE_PATH + 'hazard-sign.svg';
   var VV_MARK_ICON = SVG_BASE_PATH + 'star-pupil.svg';
   var VV_LIQUIDATION_ICON = SVG_BASE_PATH + 'shiny-purse.svg';
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
   var VV_BULLISH_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' fill='%23d96565' viewBox='0 0 256 256'%3E%3Cpath d='M236,208a12,12,0,0,1-12,12H32a12,12,0,0,1-12-12V48a12,12,0,0,1,24,0v99l43.51-43.52a12,12,0,0,1,17,0L128,127l43-43H160a12,12,0,0,1,0-24h40a12,12,0,0,1,12,12v40a12,12,0,0,1-24,0V101l-51.51,51.52a12,12,0,0,1-17,0L96,129,44,181v15H224A12,12,0,0,1,236,208Z'%3E%3C/path%3E%3C/svg%3E";
   var VV_BEARISH_ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' fill='%2361c58c' viewBox='0 0 256 256'%3E%3Cpath d='M236,208a12,12,0,0,1-12,12H32a12,12,0,0,1-12-12V48a12,12,0,0,1,24,0V59l52,52,23.51-23.52a12,12,0,0,1,17,0L188,139V128a12,12,0,0,1,24,0v40q0,.6-.06,1.2c0,.16-.05.33-.07.49s-.06.45-.1.67-.09.38-.14.56-.09.39-.15.58l-.19.54c-.07.19-.13.38-.21.56s-.15.34-.23.5-.17.38-.27.57-.18.3-.27.45-.21.38-.33.56-.24.32-.36.47-.22.32-.34.47-.46.53-.71.78l-.08.1-.1.08c-.25.25-.51.48-.78.71l-.46.34c-.16.12-.32.25-.48.36s-.37.22-.55.33-.3.19-.46.27-.37.18-.56.27-.33.16-.51.23l-.54.21-.57.19a4.92,4.92,0,0,1-.55.14l-.58.15-.64.09-.53.08A11.51,11.51,0,0,1,200,180H160a12,12,0,0,1,0-24h11l-43-43-23.51,23.52a12,12,0,0,1-17,0L44,93V196H224A12,12,0,0,1,236,208Z'%3E%3C/path%3E%3C/svg%3E";
 
@@ -155,10 +161,9 @@
     hex:          'bleeding-eye.svg',
     havoc:        'skull-crack.svg',
     catastrophe:  'reaper-scythe.svg',
-    clarity:      'magnifying-glass.svg',
+    analysis:     'magnifying-glass.svg',
+    premonition:  'octogonal-eye.svg',
     refraction:   'octogonal-eye.svg',
-    axiom:        'cursed-star.svg',
-    static_field: 'magic-palm.svg',
     insulation:   'dice-shield.svg',
     reality:      'ace.svg',
     royal_decree: 'barbed-star.svg',
@@ -180,44 +185,38 @@
     general_ruling:  'stamper.svg'
   };
 
-  // Legacy inline SVG paths (fallback when no SVG file available)
+  // Inline SVG paths (fallback when no SVG file available)
   var BG_SVG_PATHS = {
     fortune:    '<path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"/>',
     curse:      '<path d="M12 2C8.1 2 5 6 5 10.5c0 3 1.5 5.5 3.5 7h7c2-1.5 3.5-4 3.5-7C19 6 15.9 2 12 2zM9 19v1.5c0 .8 1.3 1.5 3 1.5s3-.7 3-1.5V19H9z"/>',
-    clarity:    '<path d="M12 2l2 5 5.5 1-4 4 1 5.5L12 15l-4.5 2.5 1-5.5-4-4 5.5-1z"/><line x1="4" y1="21" x2="20" y2="21" stroke-width="2"/>',
+    psyche:     '<path d="M12 2l2 5 5.5 1-4 4 1 5.5L12 15l-4.5 2.5 1-5.5-4-4 5.5-1z"/><line x1="4" y1="21" x2="20" y2="21" stroke-width="2"/>',
     refraction: '<path d="M5 4c3 5 9-2 12 3s-6 8-3 13"/><path d="M19 4c-3 5-9-2-12 3s6 8 3 13"/>',
-    reversal:   '<path d="M3 7h13l-4-4h3l5 5.5-5 5.5h-3l4-4H3V7zm18 10H8l4 4H9l-5-5.5L9 10h3l-4 4h13v3z"/>',
-    purge_all:  '<path d="M12 2L2 12l10 10 10-10L12 2z"/>',
-    null_field:  '<circle cx="12" cy="12" r="9"/><line x1="6" y1="18" x2="18" y2="6"/>',
-    void_shield: '<path d="M12 1L3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5L12 1z"/>'
+    void:       '<path d="M12 2L2 12l10 10 10-10L12 2z"/>'
   };
 
   var EFFECT_VISUALS = {
-    fortune:     { icon: _svg(SVG_PATHS.fortune, '#9B59B6'),   cssClass: 'moirai-skill', color: '#9B59B6', attr: 'moirai' },
-    curse:       { icon: _svg(SVG_PATHS.curse, '#e74c3c'),     cssClass: 'chaos-skill',  color: '#e74c3c', attr: 'chaos' },
-    clarity:     { icon: _svgS(SVG_PATHS.clarity, '#74b9ff'),  cssClass: 'psyche-skill', color: '#74b9ff', attr: 'psyche' },
-    refraction:  { icon: _svgS(SVG_PATHS.refraction, '#a29bfe'), cssClass: 'psyche-skill', color: '#a29bfe', attr: 'psyche' },
-    reversal:    { icon: _svg(SVG_PATHS.reversal, '#1abc9c'),  cssClass: 'psyche-skill', color: '#1abc9c', attr: 'psyche' },
-    null_field:  { icon: _svgS(SVG_PATHS.null_field, '#95a5a6'), cssClass: 'void-skill', color: '#95a5a6', attr: 'void' },
-    void_shield: { icon: _svgS(SVG_PATHS.void_shield, '#7f8c8d'), cssClass: 'void-skill', color: '#7f8c8d', attr: 'void' },
-    purge_all:     { icon: _svgS(SVG_PATHS.purge_all, '#bdc3c7'), cssClass: 'void-skill',   color: '#bdc3c7', attr: 'void' },
-    royal_decree:  { icon: _svg(SVG_PATHS.fortune, '#D4AF37'),    cssClass: 'moirai-skill', color: '#D4AF37', attr: 'moirai' },
-    heart_read:    { icon: _svg(SVG_PATHS.clarity, '#FF69B4'),    cssClass: 'psyche-skill', color: '#FF69B4', attr: 'psyche' },
-    cooler:        { icon: _svg(SVG_PATHS.curse, '#4A0E0E'),      cssClass: 'chaos-skill',  color: '#4A0E0E', attr: 'chaos' },
-    skill_seal:    { icon: _svgS(SVG_PATHS.void_shield, '#8B0000'), cssClass: 'chaos-skill', color: '#8B0000', attr: 'chaos' },
-    clairvoyance:  { icon: _svgS(SVG_PATHS.clairvoyance, '#E0B0FF'), cssClass: 'psyche-skill', color: '#E0B0FF', attr: 'psyche' },
-    bubble_liquidation: { icon: _svg(SVG_PATHS.bubble_liquidation, '#F0B44C'), cssClass: 'psyche-skill', color: '#F0B44C', attr: 'psyche' },
-    miracle:       { icon: _svg(SVG_PATHS.miracle, '#50C878'),       cssClass: 'moirai-skill', color: '#50C878', attr: 'moirai' },
-    lucky_find:    { icon: _svg(SVG_PATHS.lucky_find, '#90EE90'),    cssClass: 'moirai-skill', color: '#90EE90', attr: 'moirai' },
-    deal_card:       { icon: _svgS(SVG_PATHS.purge_all, '#FF9BC2'),      cssClass: 'psyche-skill', color: '#FF9BC2', attr: 'psyche' },
-    gather_or_spread:{ icon: _svgS(SVG_PATHS.refraction, '#FF9BC2'),     cssClass: 'psyche-skill', color: '#FF9BC2', attr: 'psyche' },
-    factory_malfunction:{ icon: _svgS(SVG_PATHS.void_shield, '#FF9BC2'), cssClass: 'psyche-skill', color: '#FF9BC2', attr: 'psyche' },
-    absolution:      { icon: _svg(SVG_PATHS.fortune, '#E0FFFF'),       cssClass: 'moirai-skill', color: '#E0FFFF', attr: 'moirai' },
-    benediction:     { icon: _svg(SVG_PATHS.fortune, '#E0FFFF'),       cssClass: 'moirai-skill', color: '#E0FFFF', attr: 'moirai' },
-    reclassification:{ icon: _svgS(SVG_PATHS.refraction, '#DC143C'),   cssClass: 'psyche-skill', color: '#DC143C', attr: 'psyche' },
-    general_ruling:  { icon: _svgS(SVG_PATHS.reversal, '#DC143C'),     cssClass: 'psyche-skill', color: '#DC143C', attr: 'psyche' },
-    house_edge:      { icon: _svg(SVG_PATHS.curse, '#8B0000'),         cssClass: 'chaos-skill',  color: '#8B0000', attr: 'chaos' },
-    debt_call:       { icon: _svg(SVG_PATHS.curse, '#8B0000'),         cssClass: 'chaos-skill',  color: '#8B0000', attr: 'chaos' }
+    fortune:     { icon: _svg(SVG_PATHS.fortune, '#9B59B6'),   cssClass: 'moirai-skill', color: '#9B59B6', system: 'moirai' },
+    curse:       { icon: _svg(SVG_PATHS.curse, '#e74c3c'),     cssClass: 'chaos-skill',  color: '#e74c3c', system: 'chaos' },
+    psyche:      { icon: _svgS(SVG_PATHS.refraction, '#74b9ff'), cssClass: 'psyche-skill', color: '#74b9ff', system: 'psyche' },
+    void:        { icon: _svgS(SVG_PATHS.void, '#bdc3c7'), cssClass: 'void-skill', color: '#bdc3c7', system: 'void' },
+    refraction:  { icon: _svgS(SVG_PATHS.refraction, '#a29bfe'), cssClass: 'psyche-skill', color: '#a29bfe', system: 'psyche' },
+    royal_decree:  { icon: _svg(SVG_PATHS.fortune, '#D4AF37'),    cssClass: 'moirai-skill', color: '#D4AF37', system: 'moirai' },
+    heart_read:    { icon: _svg(SVG_PATHS.psyche, '#FF69B4'),     cssClass: 'psyche-skill', color: '#FF69B4', system: 'psyche' },
+    cooler:        { icon: _svg(SVG_PATHS.curse, '#4A0E0E'),      cssClass: 'chaos-skill',  color: '#4A0E0E', system: 'chaos' },
+    skill_seal:    { icon: _svgS(SVG_PATHS.void, '#8B0000'),      cssClass: 'chaos-skill', color: '#8B0000', system: 'chaos' },
+    clairvoyance:  { icon: _svgS(SVG_PATHS.clairvoyance, '#E0B0FF'), cssClass: 'psyche-skill', color: '#E0B0FF', system: 'psyche' },
+    bubble_liquidation: { icon: _svg(SVG_PATHS.bubble_liquidation, '#F0B44C'), cssClass: 'psyche-skill', color: '#F0B44C', system: 'psyche' },
+    miracle:       { icon: _svg(SVG_PATHS.miracle, '#50C878'),       cssClass: 'moirai-skill', color: '#50C878', system: 'moirai' },
+    lucky_find:    { icon: _svg(SVG_PATHS.lucky_find, '#90EE90'),    cssClass: 'moirai-skill', color: '#90EE90', system: 'moirai' },
+    deal_card:       { icon: _svgS(SVG_PATHS.void, '#FF9BC2'),           cssClass: 'psyche-skill', color: '#FF9BC2', system: 'psyche' },
+    gather_or_spread:{ icon: _svgS(SVG_PATHS.refraction, '#FF9BC2'),     cssClass: 'psyche-skill', color: '#FF9BC2', system: 'psyche' },
+    factory_malfunction:{ icon: _svgS(SVG_PATHS.void, '#FF9BC2'),        cssClass: 'psyche-skill', color: '#FF9BC2', system: 'psyche' },
+    absolution:      { icon: _svg(SVG_PATHS.fortune, '#E0FFFF'),       cssClass: 'moirai-skill', color: '#E0FFFF', system: 'moirai' },
+    benediction:     { icon: _svg(SVG_PATHS.fortune, '#E0FFFF'),       cssClass: 'moirai-skill', color: '#E0FFFF', system: 'moirai' },
+    reclassification:{ icon: _svgS(SVG_PATHS.refraction, '#DC143C'),   cssClass: 'psyche-skill', color: '#DC143C', system: 'psyche' },
+    general_ruling:  { icon: _svgS(SVG_PATHS.psyche, '#DC143C'),       cssClass: 'psyche-skill', color: '#DC143C', system: 'psyche' },
+    house_edge:      { icon: _svg(SVG_PATHS.curse, '#8B0000'),         cssClass: 'chaos-skill',  color: '#8B0000', system: 'chaos' },
+    debt_call:       { icon: _svg(SVG_PATHS.curse, '#8B0000'),         cssClass: 'chaos-skill',  color: '#8B0000', system: 'chaos' }
   };
 
   // 技能显示名（skillKey → 中文名）
@@ -228,10 +227,9 @@
     hex:          '小凶',
     havoc:        '大凶',
     catastrophe:  '灾变',
-    clarity:      '澄澈',
+    analysis:     '解析',
+    premonition:  '预兆',
     refraction:   '折射',
-    axiom:        '真理',
-    static_field: '屏蔽',
     insulation:   '绝缘',
     reality:      '现实',
     royal_decree: '敕令',
@@ -261,13 +259,13 @@
 
   // 行为分类（决定按钮逻辑和 UI 交互方式）
   const BEHAVIOR = {
-    FORCE:   'force',    // 影响发牌的力量型技能 (fortune, purge_all)
+    FORCE:   'force',    // 影响发牌的力量型技能
     CURSE:   'curse',    // 需要选目标的诅咒/冻结/标记技能 (curse, skill_seal, cooler)
     LOCK:    'lock',     // VV 锁定型技能 (clairvoyance — 选择建仓目标)
-    PSYCHE:  'psyche',   // Psyche 双重效果技能 (clarity, refraction, reversal — 信息+反制)
+    PSYCHE:  'psyche',   // Psyche 技能
     MENTAL:  'mental',   // 心理战技能 (presence, taunt, probe — 需选目标; center_self — 自己)
-    TOGGLE:  'toggle',   // 开关型技能 (void_shield 绝缘 — 0 mana, 手动切换)
-    PASSIVE: 'passive'   // 被动技能 (null_field — 不生成按钮)
+    TOGGLE:  'toggle',
+    PASSIVE: 'passive'
   };
 
   // effect → behavior 映射
@@ -278,8 +276,7 @@
     if (effect === 'psych_pressure' || effect === 'psych_probe' || effect === 'psych_recover') return BEHAVIOR.MENTAL;
     // VV 选择建仓目标
     if (effect === 'clairvoyance') return BEHAVIOR.LOCK;
-    // Psyche 技能: 双重效果 (信息必定触发 + 反制vs Chaos)
-    if (effect === 'clarity' || effect === 'refraction' || effect === 'reversal' || effect === 'heart_read') return BEHAVIOR.PSYCHE;
+    if (effect === 'psyche' || effect === 'heart_read') return BEHAVIOR.PSYCHE;
     // 需要选目标的诅咒/封印/标记/债蚀/定向祝福技能
     if (effect === 'curse' || effect === 'skill_seal' || effect === 'cooler' || effect === 'house_edge' || effect === 'debt_call' || effect === 'benediction' || effect === 'reclassification') return BEHAVIOR.CURSE;
     // 改判 / 总务裁定 / 赦免 等阶段型技能先归入 FORCE 通道。
@@ -310,6 +307,7 @@
 
       // 玩家ID（人类玩家）
       this.humanPlayerId = 0;
+      this.assetSummary = null;
 
       // 回调
       this.onLog = null;         // (type, data) → void
@@ -348,7 +346,7 @@
         skillSystem.curseTargetFn = function(casterId, players) {
           // players 可能来自 _skillToForce 的 gameContext，也可能为 null
           var pList = (players || (self._gameCtx && self._gameCtx.players) || []).filter(function(p) {
-            return p && p.isActive !== false;
+            return p && p.isActive !== false && !p.folded;
           });
           // 查找施法者的 difficulty
           var caster = pList.find(function(p) { return p.id === casterId; });
@@ -384,6 +382,7 @@
      */
     registerFromConfig(playerConfigs, playerIdMap) {
       if (!this.skillSystem) return;
+      this.assetSummary = playerConfigs && playerConfigs.assetSummary ? playerConfigs.assetSummary : null;
       // 同步 humanPlayerId
       if (playerIdMap && playerIdMap.heroId != null) {
         this.humanPlayerId = playerIdMap.heroId;
@@ -418,6 +417,8 @@
             switchSystem: switchSys,
             traitSystem: traitSys,
             skillSystem: this.skillSystem,
+            assetModifiers: playerConfigs && playerConfigs.assetModifiers,
+            assetDeckAdapter: window.AssetDeckAdapter || null,
             heroId: heroId,
             onTraitManaGain: function(ownerId, amount) {
               if (amount > 0) self.skillSystem.regenMana(ownerId, amount);
@@ -607,7 +608,21 @@
       }
 
       if (this.containers.manaText) {
-        this.containers.manaText.textContent = 'MP ' + mana.current + '/' + mana.max;
+        var manaAsset = mana.assetMax && Number(mana.assetMax.flatDelta || 0);
+        var summaryManaEntries = Array.isArray(this._getAssetSummaryGameplay().mana)
+          ? this._getAssetSummaryGameplay().mana
+          : [];
+        var summaryManaText = summaryManaEntries.map(function(entry) {
+          var flat = Number(entry && entry.flat || 0);
+          if (!flat) return '';
+          return (entry.scope === 'owner' && entry.key ? 'Owner ' + entry.key + ' ' : '') + (flat > 0 ? '+' : '') + flat + ' MP';
+        }).filter(Boolean).join(', ');
+        this.containers.manaText.textContent = 'MP ' + mana.current + '/' + mana.max + (manaAsset ? ' · ASSET +' + manaAsset : '');
+        this.containers.manaText.title = summaryManaText
+          ? 'Asset mana modifiers: ' + summaryManaText
+          : manaAsset
+          ? 'Base MP ' + (mana.baseMax || (mana.max - manaAsset)) + ' + Asset ' + manaAsset
+          : '';
       }
 
       // 反噬指示器
@@ -736,7 +751,7 @@
             btn.classList.toggle('skill-active', !!queuedEffects[liveSkill.effect]);
             break;
           case BEHAVIOR.TOGGLE:
-            // Toggle 型（绝缘）：无 mana 消耗，在下注阶段可随时切换
+            // 兼容旧 toggle 行为；当前 Void 绝缘已改为主动技能。
             disabled = !isBettingPhase;
             btn.classList.toggle('skill-active', !!skill.active);
             btn.classList.toggle('toggle-on', !!skill.active);
@@ -753,8 +768,8 @@
           if (costBadge && !liveSkill.showAsPassiveCard) costBadge.textContent = '🔒' + liveSkill._sealed;
         } else {
           var costBadge2 = btn.querySelector('.cost-badge');
-          if (costBadge2 && !liveSkill.showAsPassiveCard && costBadge2.textContent.indexOf('🔒') === 0) {
-            costBadge2.textContent = (liveSkill.manaCost || 0) + ' MP';
+          if (costBadge2 && !liveSkill.showAsPassiveCard && !costBadge2.classList.contains('uses-badge') && !costBadge2.classList.contains('toggle-badge')) {
+            costBadge2.textContent = cost + ' MP';
           }
         }
 
@@ -801,8 +816,7 @@
     }
 
     /**
-     * Toggle 型技能切换（绝缘）
-     * 零 Mana 消耗，手动切换开/关
+     * 兼容旧 toggle 技能切换。当前通用 Void 不再依赖 toggle。
      */
     _activateToggle(skill) {
       var result = this.skillSystem.activatePlayerSkill(skill.uniqueId);
@@ -820,7 +834,7 @@
     }
 
     /**
-     * 力量型技能激活（fortune, curse, reversal, purge_all）
+     * 力量型技能激活
      * 统一走 skillSystem.activatePlayerSkill()
      */
     _activateForce(skill) {
@@ -892,7 +906,8 @@
         skill: name,
         skillKey: skill.skillKey,
         caster: caster,
-        tier: skill.tier,
+        level: skill.level,
+        system: skill.system,
         manaRemaining: this.skillSystem.getMana(this.humanPlayerId).current
       });
     }
@@ -993,7 +1008,8 @@
         skill: name,
         skillKey: skill.skillKey,
         caster: caster,
-        tier: skill.tier,
+        level: skill.level,
+        system: skill.system,
         target: target.name,
         targetId: target.id,
         manaRemaining: this.skillSystem.getMana(this.humanPlayerId).current
@@ -1180,12 +1196,9 @@
     }
 
     /**
-     * Psyche 双重效果技能激活
-     * 每个 Psyche 技能都有: 信息效果(必定触发) + 反制效果(注入 pendingForces 供 MoZ 处理)
-     *
-     * T3 Clarity 澄澈: 信息=胜率显示, 反制=消除敌方 T3/T2 Curse
-     * T2 Refraction 折射: 信息=透视手牌(需选目标), 反制=消除+50%转化
-     * T1 Axiom 真理: 信息=胜率+透视(继承), 反制=湮灭所有Curse+100%转化
+     * Psyche 技能激活。
+     * analysis / heart_read 先选读取目标；premonition 选守护目标；
+     * refraction 先选守护目标，再指定厄运来源与读取目标。
      */
     _activatePsyche(skill) {
       var self = this;
@@ -1197,7 +1210,12 @@
         return;
       }
 
-      // 所有 Psyche 技能先选保护目标（自己 + 所有未弃牌玩家）
+      if (skill.skillKey === 'analysis' || skill.effect === 'heart_read') {
+        self._activatePsychePeek(skill, self.humanPlayerId);
+        return;
+      }
+
+      // premonition / refraction 先选保护目标（自己 + 所有未弃牌玩家）
       var ctx = this._gameCtx;
       var allPlayers = (ctx.players || []).filter(function (p) {
         return p.isActive !== false && !p.folded;
@@ -1253,19 +1271,20 @@
       var protectId = protectTarget.id;
       var protectName = protectTarget.name || ('ID:' + protectId);
 
-      if (effect === 'clarity') {
-        var result = this.skillSystem.activatePlayerSkill(skill.uniqueId, { protectId: protectId });
-        if (!result.success) { this._showSkillError(result); return; }
-        this._showWinRate(skill);
-        var sn = SKILL_NAMES[skill.skillKey] || skill.skillKey;
-        if (this.onMessage) this.onMessage('[' + sn + '] 守护 ' + protectName);
+      if (skill.skillKey === 'analysis') {
+        this._activatePsychePeek(skill, protectId);
+      } else if (skill.skillKey === 'premonition') {
+        var preResult = this.skillSystem.activatePlayerSkill(skill.uniqueId, { protectId: protectId, gameContext: this._gameCtx });
+        if (!preResult.success) { this._showSkillError(preResult); return; }
+        var preName = SKILL_NAMES[skill.skillKey] || skill.skillKey;
+        if (this.onMessage) this.onMessage('[' + preName + '] 防灾 ' + protectName);
       } else if (effect === 'heart_read') {
-        var result2 = this.skillSystem.activatePlayerSkill(skill.uniqueId, { protectId: protectId });
+        var result2 = this.skillSystem.activatePlayerSkill(skill.uniqueId, { protectId: protectId, gameContext: this._gameCtx });
         if (!result2.success) { this._showSkillError(result2); return; }
         this._showHeartRead();
         if (this.onMessage) this.onMessage('[命感] 看穿 ' + protectName);
       } else {
-        // T2 折射 / T1 真理: 需要选透视目标 + 保护目标已选定
+        // 折射：需要选透视目标 + 保护目标已选定
         this._activatePsychePeek(skill, protectId);
       }
     }
@@ -1289,8 +1308,8 @@
     }
 
     /**
-     * Psyche T2/T1 透视选目标流程
-     * 选中目标后: 扣mana + 注入反制力 + 执行透视 + (T1额外显示胜率)
+     * Psyche 透视选目标流程
+     * 选中目标后: 扣 mana + 注入 Psyche 力 + 执行透视
      */
     _activatePsychePeek(skill, protectId) {
       var self = this;
@@ -1311,7 +1330,7 @@
         return;
       }
 
-      var tier = skill.tier || 3;
+      var level = Math.max(1, Number(skill.level || 1));
       self._peekCleanup();
 
       var name = SKILL_NAMES[skill.skillKey] || skill.skillKey;
@@ -1329,19 +1348,21 @@
             self._peekCleanup();
             // 通过 skillSystem 统一激活（扣 mana + 注入反制力到 pendingForces）
             // protectId 从保护目标选择步骤传入
-            var opts = {};
+            var opts = { gameContext: self._gameCtx };
             if (protectId != null) opts.protectId = protectId;
+            opts.targetId = target.id;
+            if (skill.skillKey === 'refraction') {
+              opts.curseSourceId = target.id;
+              opts.curseDirection = 'self_loss';
+            }
             var result = self.skillSystem.activatePlayerSkill(skill.uniqueId, opts);
             if (!result.success) {
               self._showSkillError(result);
               return;
             }
-            // 信息效果: 执行透视
-            self._executePeek(skill, target, tier);
-            // T1 真理额外继承: 胜率显示
-            if (skill.effect === 'reversal') {
-              self._showWinRate(skill);
-            }
+            if (skill.skillKey === 'analysis') self._showWinRate(skill);
+            if (skill.effect === 'heart_read') self._showHeartRead();
+            self._executePeek(skill, target, level);
             if (self.onMessage) self.onMessage('[' + name + '] 透视 ' + target.name);
           };
           seatEl.addEventListener('click', handler);
@@ -1616,7 +1637,7 @@
         var positionSize = 0;
         for (var i = 0; i < packs.length; i++) {
           var pack = packs[i] || {};
-          var entrySize = Math.max(1, Number(pack.entrySize != null ? pack.entrySize : (pack.tier != null ? pack.tier : 1)) || 1);
+          var entrySize = Math.max(1, Number(pack.entrySize != null ? pack.entrySize : 1) || 1);
           var direction = pack.direction === 'bearish' ? 'bearish'
             : pack.direction === 'bullish' ? 'bullish'
             : 'hidden';
@@ -1741,7 +1762,7 @@
           resolution = '错向清算';
         }
 
-        resolutions.push('[' + (pack.direction === 'bullish' ? '看涨' : '看跌') + ' ' + (pack.tier || pack.entrySize || 1) + '档] ' + resolution);
+        resolutions.push('[' + (pack.direction === 'bullish' ? '看涨' : '看跌') + ' ' + (pack.entrySize || 1) + '档] ' + resolution);
         if (shouldReplaceDominant || (preview.dominantLevel <= 0 && preview.dominantResolution === '0级偏离')) {
           preview.dominantResolution = resolution;
           preview.baselineShare = state.baselineShare;
@@ -1871,7 +1892,7 @@
       overlay.className = 'trixie-rewrite-overlay vv-position-overlay';
       var self = this;
       var state = {
-        tier: 1,
+        entrySize: 1,
         direction: 'bullish'
       };
 
@@ -1890,15 +1911,15 @@
         html += self._renderPeekDataHtml(peekResult.cardData, 'intel');
         html += '</div>';
         html += '<div class="intel-section intel-section-terminal">';
-        html += '<div class="intel-section-title">POSITION.SYS // TIER & DIRECTION</div>';
+        html += '<div class="intel-section-title">POSITION.SYS // ENTRY SIZE & DIRECTION</div>';
         html += '<div class="vv-tier-group">';
-        html += '<button class="vv-tier-chip' + (state.tier === 1 ? ' is-selected' : '') + '" type="button" data-vv-tier="1">1档</button>';
-        html += '<button class="vv-tier-chip' + (state.tier === 2 ? ' is-selected' : '') + '" type="button" data-vv-tier="2">2档</button>';
-        html += '<button class="vv-tier-chip' + (state.tier === 3 ? ' is-selected' : '') + '" type="button" data-vv-tier="3">3档</button>';
+        html += '<button class="vv-tier-chip' + (state.entrySize === 1 ? ' is-selected' : '') + '" type="button" data-vv-entry-size="1">1档</button>';
+        html += '<button class="vv-tier-chip' + (state.entrySize === 2 ? ' is-selected' : '') + '" type="button" data-vv-entry-size="2">2档</button>';
+        html += '<button class="vv-tier-chip' + (state.entrySize === 3 ? ' is-selected' : '') + '" type="button" data-vv-entry-size="3">3档</button>';
         html += '</div>';
         html += '<div class="vv-direction-group">';
-        html += '<button class="vv-direction-chip bullish' + (state.direction === 'bullish' ? ' is-selected' : '') + '" type="button" data-vv-direction="bullish">' + self._renderVvDirectionIcon('bullish', state.tier, false) + '<span>看涨</span></button>';
-        html += '<button class="vv-direction-chip bearish' + (state.direction === 'bearish' ? ' is-selected' : '') + '" type="button" data-vv-direction="bearish">' + self._renderVvDirectionIcon('bearish', state.tier, false) + '<span>看跌</span></button>';
+        html += '<button class="vv-direction-chip bullish' + (state.direction === 'bullish' ? ' is-selected' : '') + '" type="button" data-vv-direction="bullish">' + self._renderVvDirectionIcon('bullish', state.entrySize, false) + '<span>看涨</span></button>';
+        html += '<button class="vv-direction-chip bearish' + (state.direction === 'bearish' ? ' is-selected' : '') + '" type="button" data-vv-direction="bearish">' + self._renderVvDirectionIcon('bearish', state.entrySize, false) + '<span>看跌</span></button>';
         html += '</div>';
         html += '</div>';
         if (intelLines && intelLines.length > 0) {
@@ -1919,9 +1940,9 @@
         html += '</div>';
         overlay.innerHTML = html;
 
-        Array.prototype.forEach.call(overlay.querySelectorAll('[data-vv-tier]'), function(btn) {
+        Array.prototype.forEach.call(overlay.querySelectorAll('[data-vv-entry-size]'), function(btn) {
           btn.addEventListener('click', function() {
-            state.tier = Math.max(1, Math.min(3, Number(btn.getAttribute('data-vv-tier') || 1)));
+            state.entrySize = Math.max(1, Math.min(3, Number(btn.getAttribute('data-vv-entry-size') || 1)));
             render();
           });
         });
@@ -1940,7 +1961,7 @@
           confirmBtn.addEventListener('click', function() {
             var result = self.skillSystem.activatePlayerSkill(skill.uniqueId, {
               targetId: target.id,
-              tier: state.tier,
+              entrySize: state.entrySize,
               direction: state.direction,
               gameContext: self._gameCtx
             });
@@ -1950,13 +1971,13 @@
             }
             self._closeVvOverlay(overlay);
             var name = SKILL_NAMES[skill.skillKey] || skill.skillKey;
-            if (self.onMessage) self.onMessage('[' + name + '] 对 ' + target.name + ' 建立' + state.tier + '档' + (state.direction === 'bullish' ? '看涨' : '看跌') + '头寸');
+            if (self.onMessage) self.onMessage('[' + name + '] 对 ' + target.name + ' 建立' + state.entrySize + '档' + (state.direction === 'bullish' ? '看涨' : '看跌') + '头寸');
             if (self.onLog) self.onLog('SKILL_USE', {
               skill: name,
               skillKey: skill.skillKey,
               target: target.name,
               targetId: target.id,
-              tier: state.tier,
+              entrySize: state.entrySize,
               direction: state.direction,
               manaRemaining: self.skillSystem.getMana(self.humanPlayerId).current
             });
@@ -2865,7 +2886,7 @@
       });
       if (opponents.length === 0) return;
 
-      // 同时显示己方胜率（继承 clarity 的信息效果）
+      // 同时显示己方胜率
       var heroWinRate = null;
       var heroPlayer = (ctx.players || []).find(function (p) { return p.type !== 'ai'; });
       if (heroPlayer && heroPlayer.cards && heroPlayer.cards.length >= 2) {
@@ -2910,7 +2931,7 @@
         html += lines[j];
       }
       html += '</div>';
-      html += '<div class="panel-footer">CLICK TO DISMISS | T3/T2 CURSE DISRUPTED</div>';
+      html += '<div class="panel-footer">CLICK TO DISMISS | CURSE DISRUPTED</div>';
       html += '</div>';
       overlay.innerHTML = html;
       overlay.addEventListener('click', function () {
@@ -3160,8 +3181,8 @@
       var overlay = document.createElement('div');
       overlay.className = 'psyche-winrate-overlay';
 
-      var isTruthMode = skill && skill.effect === 'reversal';
-      var label = isTruthMode ? 'TRUTH // NAKED EQUITY' : 'PSYCHE // NAKED EQUITY';
+      var isTruthMode = skill && skill.skillKey === 'refraction';
+      var label = isTruthMode ? 'REFRACTION // NAKED EQUITY' : 'PSYCHE // NAKED EQUITY';
 
       overlay.innerHTML =
         '<div class="hud-winrate' + (isTruthMode ? ' truth-mode' : '') + '">' +
@@ -3204,62 +3225,50 @@
 
     /**
      * 构建透视数据（不显示 overlay）
-     * @returns {{ target, cardData, mode, tier }} 或 null（被屏蔽时）
+     * @returns {{ target, cardData, mode, level }} 或 null
      */
-    _buildPeekData(skill, target, tier) {
+    _buildPeekData(skill, target, level) {
       var RANK_NAMES = { 1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: 'T', 11: 'J', 12: 'Q', 13: 'K' };
 
-      // ---- Void T3 反侦察：null_field 阻断透视信息效果 ----
-      if (this.skillSystem) {
-        var targetSkills = this.skillSystem.getPlayerSkills(target.id);
-        var hasNullField = targetSkills.some(function(s) {
-          return s.effect === 'null_field' && s.active;
-        });
-        if (hasNullField) {
-          if (this.onMessage) this.onMessage('[屏蔽] ' + target.name + ' 阻断透视');
-          return null;
-        }
-      }
-
       // ---- Moirai > Psyche 克制：幸运迷雾降低透视精度 ----
-      var effectiveTier = tier;
+      var matrix = Array.isArray(skill.matrix) ? skill.matrix : [0.35, 0.45, 0.2];
+      var infoValue = Math.max(0, Number(skill.power || 0)) * Math.max(0, Number(matrix[0] || 0));
+      var noise = 0;
       if (this.skillSystem) {
         var targetFortunePower = (this.skillSystem.pendingForces || [])
-          .filter(function (f) { return f.ownerId === target.id && f.type === 'fortune'; })
+          .filter(function (f) { return f.ownerId === target.id && (f.type === 'fortune' || f.system === 'moirai'); })
           .reduce(function (sum, f) { return sum + (f.power || 0); }, 0);
-        if (targetFortunePower >= 30) {
-          effectiveTier = Math.min(3, tier + 2);
-          if (this.onMessage) this.onMessage('[幸运迷雾] ' + target.name + ' 干扰透视');
-        } else if (targetFortunePower >= 15) {
-          effectiveTier = Math.min(3, tier + 1);
+        noise = targetFortunePower * 0.3 * 1.25;
+        if (noise > 0 && this.onMessage) {
           if (this.onMessage) this.onMessage('[幸运迷雾] ' + target.name + ' 干扰透视');
         }
       }
-      tier = effectiveTier;
+      var effectiveInfo = Math.max(0, Math.round((infoValue - noise) * 10) / 10);
 
       var cardData, mode;
-      if (tier <= 1) {
-        // T1/T0: 完美透视 — 翻开座位上的牌
-        target.cards.forEach(function (c) {
-          if (c.$el && !c.$el.classList.contains('peek-revealed')) {
-            c.setSide('front');
-            c.$el.classList.add('peek-revealed');
-          }
-        });
-        if (this.skillSystem) this.skillSystem.emit('peek:reveal', { targetId: target.id, targetName: target.name });
-        cardData = target.cards;
-        mode = 'perfect';
-      } else if (tier <= 2) {
-        // T2: 范围占卜，不直接给半明牌
+      if (effectiveInfo >= 31) {
+        cardData = this._buildPeekRangeIntel(target, 'precise');
+        mode = 'precise';
+      } else if (effectiveInfo >= 21) {
         cardData = this._buildPeekRangeIntel(target, 'analysis');
         mode = 'analysis';
+      } else if (effectiveInfo >= 11) {
+        cardData = this._buildPeekRangeIntel(target, 'sketch');
+        mode = 'sketch';
       } else {
-        // T3: 模糊轮廓，只给大方向
         cardData = this._buildPeekRangeIntel(target, 'vague');
         mode = 'vague';
       }
 
-      return { target: target, cardData: cardData, mode: mode, tier: tier };
+      return {
+        target: target,
+        cardData: cardData,
+        mode: mode,
+        level: level,
+        infoValue: Math.round(infoValue * 10) / 10,
+        noise: Math.round(noise * 10) / 10,
+        effectiveInfo: effectiveInfo
+      };
     }
 
     _buildPeekRangeIntel(target, detailMode) {
@@ -3287,7 +3296,7 @@
       }
 
       var drawInfo = this._detectPeekDrawProfile(cards, board);
-      if (detailMode === 'analysis') {
+      if (detailMode === 'precise' || detailMode === 'analysis') {
         var shapeText = '对手更像是宽范围入局。';
         if (pocket && high >= 10) shapeText = '对手大概率拿着高口袋对子。';
         else if (pocket) shapeText = '对手大概率拿着口袋对子。';
@@ -3320,9 +3329,21 @@
         else if (boardInfo && boardInfo.rank >= 5) excludeText = '这手不像虚张声势。';
         else if (drawInfo.drawText) excludeText = '这手不像纯坚果慢打。';
 
-        labels.push({ value: shapeText, confidence: 'high' });
+        labels.push({ value: shapeText, confidence: detailMode === 'precise' ? 'high' : 'mid' });
         labels.push({ value: madeText, confidence: boardInfo && boardInfo.rank >= 3 ? 'high' : 'mid' });
-        labels.push({ value: excludeText, confidence: 'mid' });
+        labels.push({ value: excludeText, confidence: detailMode === 'precise' ? 'high' : 'mid' });
+        if (detailMode === 'precise') {
+          var rankBand = high >= 13 ? '高张压力很重。' : high >= 10 ? '中高张结构明显。' : '高张压力有限。';
+          labels.push({ value: rankBand, confidence: 'high' });
+        }
+      } else if (detailMode === 'sketch') {
+        var sketch = '能读到大致牌型轮廓，但仍有命运噪声。';
+        if (pocket) sketch = '大致能确认对子结构。';
+        else if (suited && connected) sketch = '大致能确认连张同花结构。';
+        else if (suited) sketch = '大致能确认同花潜力。';
+        else if (connected) sketch = '大致能确认连张潜力。';
+        labels.push({ value: sketch, confidence: 'low' });
+        if (drawInfo.drawText) labels.push({ value: drawInfo.drawText, confidence: 'low' });
       } else {
         var silhouette = '他像是宽范围在继续。';
         if (pocket) silhouette = high >= 10 ? '他像是拿着一手不小的对子。' : '他像是口袋对子。';
@@ -3392,28 +3413,27 @@
     }
 
     /**
-     * 执行单目标透视（refraction / axiom 用）
+     * 执行单目标透视
      * 构建数据 + 显示单人 overlay + 消息
      */
-    _executePeek(skill, target, tier) {
-      var result = this._buildPeekData(skill, target, tier);
+    _executePeek(skill, target, level) {
+      var result = this._buildPeekData(skill, target, level);
       if (!result) return;
 
       this._showPeekCards(result.target, result.cardData, result.mode);
 
-      if (result.mode === 'perfect') {
-        if (this.onMessage) this.onMessage('[透视] ' + target.name);
-      } else if (result.mode === 'analysis') {
-        if (this.onMessage) this.onMessage('[透视] ' + target.name);
-      } else {
-        if (this.onMessage) this.onMessage('[透视] ' + target.name);
+      if (this.onMessage) {
+        this.onMessage('[透视] ' + target.name + ' 信息值 ' + result.effectiveInfo + (result.noise > 0 ? ' / 噪声 ' + result.noise : ''));
       }
 
       if (this.onLog) this.onLog('SKILL_USE', {
         skillKey: skill.skillKey,
         skill: SKILL_NAMES[skill.skillKey] || '透视',
         target: target.name,
-        tier: result.tier,
+        level: result.level,
+        infoValue: result.infoValue,
+        noise: result.noise,
+        effectiveInfo: result.effectiveInfo,
         manaRemaining: this.skillSystem.getMana(this.humanPlayerId).current
       });
     }
@@ -3470,8 +3490,9 @@
       var html = '<div class="terminal-panel peek-result-panel">';
       html += '<div class="panel-header">';
       html += '<div class="panel-title">CLAIRVOYANCE LOCK</div>';
-      if (mode === 'perfect') html += '<div class="panel-sub">LOCKED TARGET: ' + target.name + ' // PERFECT READ</div>';
+      if (mode === 'precise') html += '<div class="panel-sub">LOCKED TARGET: ' + target.name + ' // PRECISE READ</div>';
       else if (mode === 'analysis') html += '<div class="panel-sub">LOCKED TARGET: ' + target.name + ' // RANGE READ</div>';
+      else if (mode === 'sketch') html += '<div class="panel-sub">LOCKED TARGET: ' + target.name + ' // SKETCH READ</div>';
       else html += '<div class="panel-sub">LOCKED TARGET: ' + target.name + ' // VAGUE READ</div>';
       html += '</div>';
       html += '<div class="peek-result-body">';
@@ -3534,7 +3555,7 @@
       var bearishSize = 0;
       for (var p = 0; p < packs.length; p++) {
         var pack = packs[p] || {};
-        var entrySize = Math.max(1, Number(pack.entrySize != null ? pack.entrySize : (pack.tier != null ? pack.tier : 1)) || 1);
+        var entrySize = Math.max(1, Number(pack.entrySize != null ? pack.entrySize : 1) || 1);
         if (pack.direction === 'bearish') bearishSize += entrySize;
         else bullishSize += entrySize;
       }
@@ -3591,7 +3612,7 @@
         : ((this.skillSystem.pendingForces || []).slice());
       if (!Array.isArray(forces) || forces.length === 0) return [];
 
-      if (!this.moz || !this.moz.combatFormula || typeof this.moz._resolveForceOpposition !== 'function') {
+      if (!this.moz || !this.moz.combatFormula || typeof this.moz.resolveForceOpposition !== 'function') {
         return forces.map(function(force) {
           return Object.assign({}, force, {
             effectivePower: force && force.effectivePower != null ? force.effectivePower : force.power || 0
@@ -3613,7 +3634,7 @@
       try {
         cf.onTraitManaGain = null;
         var enhanced = cf.enhanceForces(forces, { players: (this._gameCtx && this._gameCtx.players) || [] });
-        return this.moz._resolveForceOpposition(enhanced);
+        return this.moz.resolveForceOpposition(enhanced, { players: (this._gameCtx && this._gameCtx.players) || [] });
       } catch (e) {
         return forces.map(function(force) {
           return Object.assign({}, force, {
@@ -3636,11 +3657,11 @@
       var CONF_LABELS = { high: 'LOCKED', mid: 'LIKELY', low: 'UNSTABLE', vague: 'HAZY' };
       var CONF_CLASSES = { high: 'peek-conf-high', mid: 'peek-conf-mid', low: 'peek-conf-low', vague: 'peek-conf-vague' };
       var html = '';
-      if (mode === 'analysis' || mode === 'vague' || mode === 'intel') {
+      if (mode === 'precise' || mode === 'analysis' || mode === 'sketch' || mode === 'vague' || mode === 'intel') {
         html += '<div class="cli-list">';
         for (var i = 0; i < cardData.length; i++) {
           var intel = cardData[i];
-          var intelConf = intel.confidence || (mode === 'analysis' || mode === 'intel' ? 'mid' : 'vague');
+          var intelConf = intel.confidence || (mode === 'precise' ? 'high' : (mode === 'analysis' || mode === 'intel' ? 'mid' : 'vague'));
           var intelLabel = mode === 'vague'
             ? '模糊'
             : ((intelConf === 'high') ? '大概率' : '可能');
@@ -3691,16 +3712,17 @@
 
       var humanSkills = this.skillSystem.getPlayerSkills(this.humanPlayerId);
 
-      // 按属性分组排序：moirai → chaos → psyche → void，同属性内按 tier 升序 (T1 优先)
-      var attrOrder = { moirai: 0, chaos: 1, psyche: 2, void: 3 };
+      // 按体系分组排序：moirai → chaos → psyche → void，同体系内按 level 降序。
+      var systemOrder = { moirai: 0, chaos: 1, psyche: 2, void: 3 };
       humanSkills.sort(function (a, b) {
-        var ao = attrOrder[a.attr] != null ? attrOrder[a.attr] : 99;
-        var bo = attrOrder[b.attr] != null ? attrOrder[b.attr] : 99;
+        var ao = systemOrder[a.system] != null ? systemOrder[a.system] : 99;
+        var bo = systemOrder[b.system] != null ? systemOrder[b.system] : 99;
         if (ao !== bo) return ao - bo;
-        return a.tier - b.tier;
+        if ((a.level || 0) !== (b.level || 0)) return (b.level || 0) - (a.level || 0);
+        return String(a.skillKey || '').localeCompare(String(b.skillKey || ''));
       });
 
-      var lastAttr = null;
+      var lastSystem = null;
 
       for (var i = 0; i < humanSkills.length; i++) {
         var skill = humanSkills[i];
@@ -3716,18 +3738,19 @@
         if (showPassiveCard) behavior = BEHAVIOR.PASSIVE;
 
         // 属性分组分隔线
-        if (lastAttr && skill.attr !== lastAttr) {
+        var skillSystem = skill.system || 'moirai';
+        if (lastSystem && skillSystem !== lastSystem) {
           var divider = document.createElement('div');
           divider.className = 'skill-divider';
           this.containers.skillPanel.appendChild(divider);
         }
-        lastAttr = skill.attr;
+        lastSystem = skillSystem;
 
         var visual = EFFECT_VISUALS[skill.effect] || EFFECT_VISUALS.fortune;
         var name = SKILL_NAMES[skill.skillKey] || skill.skillKey;
 
         this._createButton(skill, behavior, {
-          icon: visual.icon, name: name, cost: skill.manaCost || null
+          icon: visual.icon, name: name, cost: this._getRenderedManaCost(skill)
         });
       }
 
@@ -3749,24 +3772,151 @@
       }
     }
 
+    _getRenderedManaCost(skill) {
+      if (!skill) return null;
+      if (this.skillSystem && typeof this.skillSystem.getSkillActualManaCost === 'function') {
+        return this.skillSystem.getSkillActualManaCost(skill, {});
+      }
+      return skill.manaCost || null;
+    }
+
+    _getAssetSummaryGameplay() {
+      return this.assetSummary && this.assetSummary.gameplay && typeof this.assetSummary.gameplay === 'object'
+        ? this.assetSummary.gameplay
+        : {};
+    }
+
+    _summaryEntryMatchesSkill(entry, skill) {
+      if (!entry || !skill) return false;
+      var skillKey = String(skill.skillKey || skill.key || '').toLowerCase();
+      var system = String(skill.system || skill.kind || '').toLowerCase();
+      var ownerId = skill.ownerId != null ? String(skill.ownerId) : '';
+      if (entry.scope === 'global') return true;
+      if (entry.scope === 'skill' && String(entry.key || '').toLowerCase() === skillKey) return true;
+      if (entry.scope === 'system' && String(entry.key || '').toLowerCase() === system) return true;
+      if (entry.scope === 'owner' && String(entry.key || '') === ownerId) return true;
+      return false;
+    }
+
+    _formatAssetModifierParts(entry, unit) {
+      var parts = [];
+      var flat = Number(entry && entry.flat || 0);
+      var pct = Number(entry && entry.pct || 0);
+      if (flat) parts.push((flat > 0 ? '+' : '') + flat + (unit || ''));
+      if (pct) parts.push((pct > 0 ? '+' : '') + Math.round(pct * 100) + '%');
+      return parts;
+    }
+
+    _pushUniqueAssetSources(target, sources) {
+      if (!Array.isArray(sources)) return;
+      sources.forEach(function(source) {
+        var cardId = typeof source === 'string' ? source : (source && source.cardId);
+        if (cardId && target.indexOf(cardId) < 0) target.push(cardId);
+      });
+    }
+
+    _getAssetSkillMeta(skill) {
+      if (!skill) return { labels: [], titleLines: [], sources: [] };
+      var labels = [];
+      var titleLines = [];
+      var sources = [];
+      var gameplay = this._getAssetSummaryGameplay();
+
+      var summarySkillLevels = Array.isArray(gameplay.skillLevels)
+        ? gameplay.skillLevels.filter(function(entry) {
+            return entry && String(entry.skillKey || '').toLowerCase() === String(skill.skillKey || skill.key || '').toLowerCase();
+          })
+        : [];
+      var assetCards = summarySkillLevels.length ? summarySkillLevels : (Array.isArray(skill.assetCards) ? skill.assetCards : []);
+      if (assetCards.length) {
+        var levels = assetCards.map(function(card) { return Number(card.level || 0); }).filter(Boolean);
+        var maxLevel = levels.length ? Math.max.apply(Math, levels) : skill.level;
+        labels.push('ASSET LV' + maxLevel);
+        titleLines.push('Asset skill level: LV ' + maxLevel);
+        sources = sources.concat(assetCards.map(function(card) {
+          return card && card.cardId ? card.cardId : null;
+        }).filter(Boolean));
+      }
+
+      var summaryCostEntries = Array.isArray(gameplay.cost)
+        ? gameplay.cost.filter(function(entry) { return this._summaryEntryMatchesSkill(entry, skill); }, this)
+        : [];
+      var cost = skill.assetCost || skill._assetCost || null;
+      if (summaryCostEntries.length) {
+        var summaryCostParts = [];
+        summaryCostEntries.forEach(function(entry) {
+          summaryCostParts = summaryCostParts.concat(this._formatAssetModifierParts(entry, ' MP'));
+          this._pushUniqueAssetSources(sources, entry.sourceIds);
+        }, this);
+        if (summaryCostParts.length) {
+          labels.push(summaryCostParts.join(' '));
+          titleLines.push('Asset cost modifiers: ' + summaryCostParts.join(', '));
+        }
+      } else if (cost && (Number(cost.flatDelta || 0) !== 0 || Number(cost.pctDelta || 0) !== 0)) {
+        var costParts = this._formatAssetModifierParts({
+          flat: Number(cost.flatDelta || 0),
+          pct: Number(cost.pctDelta || 0)
+        }, ' MP');
+        labels.push(costParts.join(' '));
+        titleLines.push('Asset cost: base ' + cost.baseCost + ' -> ' + cost.finalCost + ' (' + costParts.join(', ') + ')');
+        if (Array.isArray(cost.sources)) {
+          sources = sources.concat(cost.sources.map(function(source) {
+            return source && source.cardId ? source.cardId : null;
+          }).filter(Boolean));
+        }
+      }
+
+      var summaryForceEntries = Array.isArray(gameplay.forcePower)
+        ? gameplay.forcePower.filter(function(entry) { return this._summaryEntryMatchesSkill(entry, skill); }, this)
+        : [];
+      if (summaryForceEntries.length) {
+        var forceParts = [];
+        summaryForceEntries.forEach(function(entry) {
+          forceParts = forceParts.concat(this._formatAssetModifierParts(entry, ' P'));
+          this._pushUniqueAssetSources(sources, entry.sourceIds);
+        }, this);
+        if (forceParts.length) {
+          labels.push('FORCE ' + forceParts.join(' '));
+          titleLines.push('Asset force modifiers: ' + forceParts.join(', '));
+        }
+      }
+
+      var uniqueSources = sources.filter(function(source, index, list) {
+        return source && list.indexOf(source) === index;
+      });
+      if (uniqueSources.length) {
+        titleLines.push('Asset cards: ' + uniqueSources.join(', '));
+      }
+      return { labels: labels, titleLines: titleLines, sources: uniqueSources };
+    }
+
+    _renderAssetSkillMeta(skill) {
+      var meta = this._getAssetSkillMeta(skill);
+      if (!meta.labels.length) return '';
+      return '<div class="asset-skill-tags">' + meta.labels.map(function(label) {
+        return '<span class="asset-skill-tag">' + escapeHtml(label) + '</span>';
+      }).join(' ') + '</div>';
+    }
+
     /**
      * 创建单个技能按钮 — hero-card Tilt Icon 风格
      */
     _createButton(skill, behavior, visual) {
       var btn = document.createElement('button');
       var ev = EFFECT_VISUALS[skill.effect] || EFFECT_VISUALS.fortune;
-      var skinClass = EFFECT_TO_SKIN[skill.effect] || ATTR_TO_SKIN[ev.attr] || 'skin-moirai';
+      var skillSystem = skill.system || skill.kind || ev.system || 'moirai';
+      var skinClass = EFFECT_TO_SKIN[skill.effect] || SYSTEM_TO_SKIN[skillSystem] || 'skin-moirai';
       btn.className = 'hero-card ' + skinClass;
       btn.disabled = true;
 
       var title = (visual.name || skill.skillKey);
       if (visual.cost) title += ' (' + visual.cost + ' Mana)';
       if (skill.description) title += '\n' + skill.description;
+      var assetMeta = this._getAssetSkillMeta(skill);
+      if (assetMeta.titleLines.length) title += '\n' + assetMeta.titleLines.join('\n');
       btn.title = title;
 
-      // Tier label
-      var tierText = skill.tier ? 'Tier ' + skill.tier : '';
-      if (skill.tier === 1) tierText = 'ULTIMATE';
+      var levelText = skill.level ? 'LV ' + skill.level : '';
 
       // Background icon — prefer SVG file, fallback to inline path
       var iconFile = skill.icon || SKILL_ICON_MAP[skill.skillKey];
@@ -3776,7 +3926,7 @@
         bgSvg = '<span class="bg-icon-layer bg-icon-mask" style="-webkit-mask-image:url(\'' + iconUrl + '\');mask-image:url(\'' + iconUrl + '\');"></span>';
       } else {
         var bgPath = BG_SVG_PATHS[skill.effect] || BG_SVG_PATHS.fortune || '';
-        var bgFillOrStroke = (skill.effect === 'null_field' || skill.effect === 'void_shield' || skill.effect === 'purge_all')
+        var bgFillOrStroke = (skill.system === 'void' || skill.effect === 'void')
           ? 'fill="none" stroke="currentColor" stroke-width="1.5"'
           : 'fill="currentColor"';
         bgSvg = '<svg class="bg-icon-layer" viewBox="0 0 24 24" ' + bgFillOrStroke + '>' + bgPath + '</svg>';
@@ -3797,13 +3947,14 @@
       }
 
       var casterTag = skill.casterName ? '<span class="meta-caster">' + skill.casterName + '</span>' : '';
+      var levelBadge = levelText ? '<div class="level-badge">' + levelText + '</div>' : '<div></div>';
 
       btn.innerHTML =
         bgSvg +
-        '<div class="card-top">' + costHtml + '</div>' +
+        '<div class="card-top">' + levelBadge + costHtml + '</div>' +
+        this._renderAssetSkillMeta(skill) +
         '<div class="card-bot">' +
           casterTag +
-          '<span class="meta-tier">' + tierText + '</span>' +
           '<span class="meta-name">' + (visual.name || skill.skillKey) + '</span>' +
         '</div>';
 
@@ -3833,7 +3984,7 @@
         if (self.onLog) {
           self.onLog('NPC_SKILL', {
             owner: data.ownerName, skill: data.skillKey,
-            effect: data.effect, tier: data.tier,
+            effect: data.effect, level: data.level, system: data.system,
             targetId: data.targetId, targetName: data.targetName
           });
         }

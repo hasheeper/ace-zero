@@ -2078,10 +2078,13 @@ body.raise-open #btn-raise {
   z-index: 2;
   padding: 6px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 4px;
 }
 
-.hero-card .cost-badge {
+.hero-card .cost-badge,
+.hero-card .level-badge {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 800;
   font-size: 10px;
@@ -2091,9 +2094,56 @@ body.raise-open #btn-raise {
   border-radius: 2px;
   color: #777;
   transition: all 0.3s;
+  min-width: 40px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  line-height: 1;
+  box-sizing: border-box;
 }
 
-/* Bottom: name + tier */
+.hero-card .level-badge {
+  color: rgba(255,255,255,0.78);
+  border-color: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  letter-spacing: 0.6px;
+}
+
+.hero-card .asset-skill-tags {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: 36px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.hero-card .asset-skill-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 5px;
+  border: 1px solid rgba(240, 207, 115, 0.36);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(240, 207, 115, 0.18), rgba(255, 255, 255, 0.03));
+  color: rgba(255, 236, 164, 0.92);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: 0 0 12px rgba(240, 207, 115, 0.1);
+  backdrop-filter: blur(4px);
+}
+
+/* Bottom: name + level */
 .hero-card .card-bot {
   position: relative;
   z-index: 2;
@@ -2107,13 +2157,6 @@ body.raise-open #btn-raise {
 
 .hero-card:hover:not(:disabled) .card-bot {
   transform: translateY(-4px);
-}
-
-.hero-card .meta-tier {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 8px;
-  color: #555;
-  letter-spacing: 0.5px;
 }
 
 .hero-card .meta-caster {
@@ -2183,7 +2226,7 @@ body.raise-open #btn-raise {
   color: var(--magic-highlight);
   border-color: var(--magic-highlight);
 }
-.hero-card.skin-moirai .meta-tier { color: rgba(155, 89, 182, 0.7); }
+.hero-card.skin-moirai .level-badge { color: rgba(210, 142, 255, 0.9); border-color: rgba(155, 89, 182, 0.42); }
 
 /* Chaos (Red) */
 .hero-card.skin-chaos {
@@ -2197,7 +2240,7 @@ body.raise-open #btn-raise {
   color: #C0392B;
   border-color: #C0392B;
 }
-.hero-card.skin-chaos .meta-tier { color: rgba(192, 57, 43, 0.7); }
+.hero-card.skin-chaos .level-badge { color: rgba(255, 122, 122, 0.9); border-color: rgba(192, 57, 43, 0.42); }
 
 /* Psyche / Truth (Blue) */
 .hero-card.skin-psyche {
@@ -2211,7 +2254,7 @@ body.raise-open #btn-raise {
   color: #2980B9;
   border-color: #2980B9;
 }
-.hero-card.skin-psyche .meta-tier { color: rgba(41, 128, 185, 0.7); }
+.hero-card.skin-psyche .level-badge { color: rgba(116, 185, 255, 0.9); border-color: rgba(41, 128, 185, 0.42); }
 
 /* Void / Gold (Ultimate — black-gold) */
 .hero-card.skin-void {
@@ -2233,7 +2276,7 @@ body.raise-open #btn-raise {
   font-weight: 900;
   box-shadow: 0 0 10px #b89aff;
 }
-.hero-card.skin-void .meta-tier { color: rgba(184, 154, 255, 0.8); }
+.hero-card.skin-void .level-badge { color: rgba(184, 154, 255, 0.92); border-color: rgba(184, 154, 255, 0.45); }
 .hero-card.skin-void .meta-name {
   background: linear-gradient(135deg, #7f69c3, #b89aff, #f0e6ff);
   -webkit-background-clip: text;
@@ -2248,7 +2291,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #d28eff;
 }
 .hero-card.skin-signature-rino .bg-icon-layer { color: #d28eff; opacity: 0.2; }
-.hero-card.skin-signature-rino .meta-tier { color: rgba(210, 142, 255, 0.78); }
+.hero-card.skin-signature-rino .level-badge { color: rgba(210, 142, 255, 0.92); border-color: rgba(210, 142, 255, 0.45); }
 .hero-card.skin-signature-rino .meta-name {
   background: linear-gradient(135deg, #9f6bd5, #d28eff, #ffe3ff);
   -webkit-background-clip: text;
@@ -2262,7 +2305,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #ff7a7a;
 }
 .hero-card.skin-signature-sia .bg-icon-layer { color: #ff7a7a; opacity: 0.2; }
-.hero-card.skin-signature-sia .meta-tier { color: rgba(255, 122, 122, 0.78); }
+.hero-card.skin-signature-sia .level-badge { color: rgba(255, 122, 122, 0.92); border-color: rgba(255, 122, 122, 0.45); }
 .hero-card.skin-signature-sia .meta-name {
   background: linear-gradient(135deg, #b14f5a, #ff7a7a, #ffd2d2);
   -webkit-background-clip: text;
@@ -2276,7 +2319,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #f0cf73;
 }
 .hero-card.skin-signature-vv .bg-icon-layer { color: #f0cf73; opacity: 0.22; }
-.hero-card.skin-signature-vv .meta-tier { color: rgba(240, 207, 115, 0.85); }
+.hero-card.skin-signature-vv .level-badge { color: rgba(240, 207, 115, 0.94); border-color: rgba(240, 207, 115, 0.45); }
 .hero-card.skin-signature-vv .meta-name {
   background: linear-gradient(135deg, #b1882c, #f0cf73, #fff1c9);
   -webkit-background-clip: text;
@@ -2290,7 +2333,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #b7ef88;
 }
 .hero-card.skin-signature-poppy .bg-icon-layer { color: #b7ef88; opacity: 0.2; }
-.hero-card.skin-signature-poppy .meta-tier { color: rgba(183, 239, 136, 0.82); }
+.hero-card.skin-signature-poppy .level-badge { color: rgba(183, 239, 136, 0.94); border-color: rgba(183, 239, 136, 0.45); }
 .hero-card.skin-signature-poppy .meta-name {
   background: linear-gradient(135deg, #76a85b, #b7ef88, #e8ffd9);
   -webkit-background-clip: text;
@@ -2305,7 +2348,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #c44040;
 }
 .hero-card.skin-signature-kuzuha .bg-icon-layer { color: #c44040; opacity: 0.22; }
-.hero-card.skin-signature-kuzuha .meta-tier { color: rgba(196, 64, 64, 0.82); }
+.hero-card.skin-signature-kuzuha .level-badge { color: rgba(196, 64, 64, 0.94); border-color: rgba(196, 64, 64, 0.45); }
 .hero-card.skin-signature-kuzuha .meta-name {
   background: linear-gradient(135deg, #8B0000, #c44040, #ffa0a0);
   -webkit-background-clip: text;
@@ -2320,7 +2363,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #ffb6c1;
 }
 .hero-card.skin-signature-cota .bg-icon-layer { color: #ffb6c1; opacity: 0.2; }
-.hero-card.skin-signature-cota .meta-tier { color: rgba(255, 182, 193, 0.82); }
+.hero-card.skin-signature-cota .level-badge { color: rgba(255, 182, 193, 0.94); border-color: rgba(255, 182, 193, 0.45); }
 .hero-card.skin-signature-cota .meta-name {
   background: linear-gradient(135deg, #d48aa0, #ffb6c1, #fff0f3);
   -webkit-background-clip: text;
@@ -2335,7 +2378,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #b0e8f0;
 }
 .hero-card.skin-signature-eulalia .bg-icon-layer { color: #b0e8f0; opacity: 0.2; }
-.hero-card.skin-signature-eulalia .meta-tier { color: rgba(176, 232, 240, 0.85); }
+.hero-card.skin-signature-eulalia .level-badge { color: rgba(176, 232, 240, 0.94); border-color: rgba(176, 232, 240, 0.45); }
 .hero-card.skin-signature-eulalia .meta-name {
   background: linear-gradient(135deg, #80c8d8, #b0e8f0, #e0ffff);
   -webkit-background-clip: text;
@@ -2350,7 +2393,7 @@ body.raise-open #btn-raise {
   border-bottom: 3px solid #e84060;
 }
 .hero-card.skin-signature-kako .bg-icon-layer { color: #e84060; opacity: 0.22; }
-.hero-card.skin-signature-kako .meta-tier { color: rgba(232, 64, 96, 0.82); }
+.hero-card.skin-signature-kako .level-badge { color: rgba(232, 64, 96, 0.94); border-color: rgba(232, 64, 96, 0.45); }
 .hero-card.skin-signature-kako .meta-name {
   background: linear-gradient(135deg, #DC143C, #e84060, #ffb0c0);
   -webkit-background-clip: text;
@@ -2398,7 +2441,7 @@ body.raise-open #btn-raise {
   color: #f2b7ff;
   border-color: #d774ff;
 }
-.hero-card.skin-joker .meta-tier { color: rgba(215, 116, 255, 0.82); }
+.hero-card.skin-joker .level-badge { color: rgba(215, 116, 255, 0.94); border-color: rgba(215, 116, 255, 0.45); }
 .hero-card.skin-joker .meta-name {
   background: linear-gradient(120deg, #ff57d2, #8ef8ff, #ffe27a);
   -webkit-background-clip: text;
@@ -2865,8 +2908,8 @@ body.raise-open #btn-raise {
   border-radius: 999px;
 }
 
-/* Tier 标 */
-.fpk-tier-badge {
+/* Level 标 */
+.fpk-level-badge {
   font-size: 8px;
   opacity: 0.7;
   border: 1px solid currentColor;

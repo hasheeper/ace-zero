@@ -12,45 +12,53 @@ hero:
       present: true
       inParty: true
     SIA:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
     POPPY:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
     VV:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
     TRIXIE:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
     COTA:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
     EULALIA:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
     KAKO:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
     KUZUHA:
-      activated: false
+      activated: true
       introduced: false
       present: false
       inParty: false
+      miniKnown: false
   roster:
     KAZU:
       level: 3
@@ -128,6 +136,12 @@ world:
   location:
     layer: THE_EXCHANGE
     site: 中市短住点
+  tags: []
+  flags: []
+  storyFlags: {}
+  expansion_state:
+    activeMajor: ""
+    activeLight: []
   act:
     id: chapter0_exchange
     seed: PROLOGUE-EXCHANGE
@@ -167,7 +181,6 @@ world:
     phase_index: 0
     stage: executing
     phase_advance: 0
-    pickedPacks: {}
     controlledNodes: {}
     crisis: 0
     crisisSignals: []
@@ -182,6 +195,25 @@ world:
       asset: 0
       vision: 0
     characterEncounter: {}
+    pendingFirstMeet: {}
+    pendingPreSignal: {}
     pendingResolutions: []
+    pendingAssetDeckCommands: []
     resolutionHistory: []
     narrativeTension: 0
+    pendingTransitionTarget: ""
+    transitionRequestTarget: ""
+    pendingTransitionPrompt: ""
+  assetDeck:
+    version: 1
+    asset_count: 0
+    general_slots_unlocked: 4
+    void_slots_unlocked: 2
+    active_general_cards: []
+    active_void_cards: []
+    pending_offer: null
+    pending_offer_queue: []
+    pending_replace: null
+    history: []
+    debug: {}
+  expansions: {}

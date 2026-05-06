@@ -36,6 +36,46 @@ const ALL_CHAR_KEYS = ['KAZU', ...CAST_CHAR_KEYS];
 // 独立世界时钟的可选值（与 ACT 节点无关）
 const WORLD_PHASES = ['MORNING', 'NOON', 'AFTERNOON', 'NIGHT'];
 const WORLD_LAYERS = ['THE_COURT', 'THE_EXCHANGE', 'THE_STREET', 'THE_RUST'];
+const ASSET_DECK_INITIAL_GENERAL_SLOTS = 4;
+const ASSET_DECK_MAX_GENERAL_SLOTS = 8;
+const ASSET_DECK_VOID_SLOTS = 2;
+const ASSET_DECK_RARITIES = ['bronze', 'silver', 'gold', 'rainbow'];
+const ASSET_DECK_KINDS = ['numeric', 'passive', 'skill', 'god'];
+const ASSET_DECK_SLOT_TYPES = ['general', 'void'];
+const ASSET_DECK_CARD_SLOT_TAGS = {
+  asset_bootstrap_credit: ['general'],
+  asset_minor_guard: ['general'],
+  asset_clear_signal: ['general'],
+  asset_fast_recovery: ['general'],
+  asset_safe_route: ['general'],
+  asset_shared_reserve: ['general'],
+  asset_skill_minor_wish_l1: ['general'],
+  asset_skill_minor_wish_l2: ['general'],
+  asset_skill_minor_wish_l3: ['general'],
+  asset_skill_hex_l1: ['general'],
+  asset_skill_hex_l2: ['general'],
+  asset_skill_analysis_l1: ['general'],
+  asset_skill_analysis_l2: ['general'],
+  asset_psyche_refraction: ['general'],
+  asset_skill_insulation_l1: ['general', 'void'],
+  asset_skill_insulation_l2: ['general', 'void'],
+  asset_skill_reality_l2: ['general', 'void'],
+  asset_texas_mana_cell: ['general'],
+  asset_texas_mana_core: ['general'],
+  asset_texas_minor_discount: ['general'],
+  asset_texas_general_discount: ['general'],
+  asset_texas_moirai_lens: ['general'],
+  asset_texas_chaos_lens: ['general'],
+  asset_texas_psyche_lens: ['general'],
+  asset_texas_force_amplifier: ['general'],
+  asset_texas_street_mana: ['general'],
+  asset_texas_first_cast_discount: ['general'],
+  asset_texas_first_force_focus: ['general'],
+  asset_texas_opening_glimmer: ['general'],
+  asset_texas_opening_blessing: ['general'],
+  asset_void_anchor: ['general', 'void'],
+  asset_rainbow_contract: ['general']
+};
 function makeDefaultCastNode() {
   return {
     activated: true,
@@ -72,6 +112,30 @@ function normalizeTrimmedString(value, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
 
+function normalizeStringList(value, { lower = false, upper = false } = {}) {
+  const source = Array.isArray(value) ? value : [];
+  const out = [];
+  source.forEach(item => {
+    let normalized = normalizeTrimmedString(item, '');
+    if (!normalized) return;
+    if (lower) normalized = normalized.toLowerCase();
+    if (upper) normalized = normalized.toUpperCase();
+    if (!out.includes(normalized)) out.push(normalized);
+  });
+  return out;
+}
+
+function normalizeBooleanFlagMap(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const out = {};
+  Object.entries(source).forEach(([rawKey, rawValue]) => {
+    const key = normalizeTrimmedString(rawKey, '');
+    if (!key) return;
+    out[key] = rawValue === true;
+  });
+  return out;
+}
+
 function isHeroMacroToken(value) {
   return value === '{{user}}' || value === '<user>';
 }
@@ -97,6 +161,124 @@ function makeDefaultWorldLocation() {
   return {
     layer: 'THE_STREET',
     site: ''
+  };
+}
+
+function makeDefaultAssetDeckState() {
+  return {
+    version: 1,
+    asset_count: 0,
+    general_slots_unlocked: ASSET_DECK_INITIAL_GENERAL_SLOTS,
+    void_slots_unlocked: ASSET_DECK_VOID_SLOTS,
+    active_general_cards: [],
+    active_void_cards: [],
+    pending_offer: null,
+    pending_offer_queue: [],
+    pending_replace: null,
+    history: [],
+    debug: {}
+  };
+}
+
+function isKnownAssetDeckCard(cardId) {
+  return Object.prototype.hasOwnProperty.call(ASSET_DECK_CARD_SLOT_TAGS, normalizeTrimmedString(cardId, ''));
+}
+
+function normalizeAssetDeckSlotTags(value, cardId) {
+  const fallback = ASSET_DECK_CARD_SLOT_TAGS[normalizeTrimmedString(cardId, '')] || ['general'];
+  const normalized = normalizeStringList(value, { lower: true })
+    .filter(tag => ASSET_DECK_SLOT_TYPES.includes(tag));
+  return normalized.length ? normalized : fallback.slice();
+}
+
+function canAssetDeckCardUseSlot(card, slotType) {
+  const normalizedSlot = normalizeLowerEnumValue(slotType, ASSET_DECK_SLOT_TYPES, 'general');
+  const slotTags = normalizeAssetDeckSlotTags(card?.slotTags, card?.cardId);
+  return slotTags.includes(normalizedSlot);
+}
+
+function normalizeAssetDeckCardInstance(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const cardId = normalizeTrimmedString(source.cardId || source.id, '');
+  const addedAt = Math.max(0, Math.round(Number(source.addedAt) || 0));
+  const normalized = {
+    instanceId: normalizeTrimmedString(source.instanceId, `${cardId || 'asset_card'}:${addedAt}`),
+    cardId,
+    rarity: normalizeLowerEnumValue(source.rarity, ASSET_DECK_RARITIES, 'bronze'),
+    kind: normalizeLowerEnumValue(source.kind, ASSET_DECK_KINDS, 'numeric'),
+    system: normalizeTrimmedString(source.system, '').toLowerCase(),
+    skillKey: normalizeTrimmedString(source.skillKey, '').toLowerCase(),
+    level: Math.max(0, Math.min(4, Math.round(Number(source.level) || 0))),
+    targetTags: normalizeStringList(source.targetTags, {}),
+    gameTags: normalizeStringList(source.gameTags, { lower: true }),
+    slotTags: normalizeAssetDeckSlotTags(source.slotTags, cardId),
+    unique: source.unique === true,
+    modifiers: Array.isArray(source.modifiers) ? source.modifiers : [],
+    source: normalizeTrimmedString(source.source, 'runtime'),
+    addedAt
+  };
+  if (!isKnownAssetDeckCard(normalized.cardId)) return null;
+  return normalized;
+}
+
+function normalizeAssetDeckCardList(value, slotType, limit) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : [])
+    .map(item => normalizeAssetDeckCardInstance(item))
+    .filter(Boolean)
+    .filter(card => canAssetDeckCardUseSlot(card, slotType))
+    .filter(card => {
+      if (seen.has(card.instanceId)) return false;
+      seen.add(card.instanceId);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+function normalizeAssetDeckPendingOffer(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  if (!source) return null;
+  const pool = normalizeLowerEnumValue(source.pool, ['low', 'mid', 'high'], 'low');
+  const choices = (Array.isArray(source.choices) ? source.choices : [])
+    .map(item => normalizeAssetDeckCardInstance(item))
+    .filter(Boolean)
+    .slice(0, 3);
+  if (!choices.length) return null;
+  return {
+    id: normalizeTrimmedString(source.id, `offer:${pool}`),
+    pool,
+    cost: Math.max(0, Math.round(Number(source.cost) || 0)),
+    refreshCount: Math.max(0, Math.round(Number(source.refreshCount) || 0)),
+    freeRefreshUsed: Math.max(0, Math.round(Number(source.freeRefreshUsed) || 0)),
+    choices,
+    createdAt: Math.max(0, Math.round(Number(source.createdAt) || 0))
+  };
+}
+
+function normalizeAssetDeckPendingOfferQueue(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(item => normalizeAssetDeckPendingOffer(item))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function normalizeAssetDeckPendingReplace(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  if (!source) return null;
+  const card = normalizeAssetDeckCardInstance(source.card || source.candidate);
+  if (!card) return null;
+  const allowedSlots = normalizeStringList(source.allowedSlots, { lower: true })
+    .filter(slot => ASSET_DECK_SLOT_TYPES.includes(slot) && canAssetDeckCardUseSlot(card, slot));
+  return {
+    card,
+    allowedSlots: allowedSlots.length
+      ? allowedSlots
+      : ASSET_DECK_SLOT_TYPES.filter(slot => canAssetDeckCardUseSlot(card, slot)),
+    reason: normalizeTrimmedString(source.reason, 'slot_full'),
+    confirm_destroy: source.confirm_destroy === true,
+    confirm_target: source.confirm_target && typeof source.confirm_target === 'object' && !Array.isArray(source.confirm_target)
+      ? source.confirm_target
+      : null
   };
 }
 
@@ -318,7 +500,6 @@ function makeDefaultActState() {
     phase_index: 0,
     stage: 'executing',
     phase_advance: 0,
-    pickedPacks: {},
     controlledNodes: {},
     crisis: 0,
     crisisSignals: [],
@@ -326,7 +507,9 @@ function makeDefaultActState() {
     resourceSpent: makeDefaultActResourceCounts(0),
     characterEncounter: {},
     pendingFirstMeet: {},
+    pendingPreSignal: {},
     pendingResolutions: [],
+    pendingAssetDeckCommands: [],
     resolutionHistory: [],
     narrativeTension: 0,
     pendingTransitionTarget: '',
@@ -389,8 +572,6 @@ const WorldActSchema = z.object({
   phase_index: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
   stage: z.string().transform(v => normalizeLowerEnumValue(v, ACT_STAGE_VALUES, 'executing')).default('executing'),
   phase_advance: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
-  // 随机池消耗记录：{ [nodeId]: { [phaseIndex]: candidateId } }
-  pickedPacks: z.record(z.record(z.string())).default({}),
   controlledNodes: z.record(z.any()).default({}),
   crisis: z.coerce.number().transform(v => Math.max(0, Math.min(100, Math.round(v)))).default(0),
   crisisSignals: z.array(z.any()).default([]),
@@ -398,7 +579,9 @@ const WorldActSchema = z.object({
   resourceSpent: ActResourceCountsSchema,
   characterEncounter: z.record(z.any()).default({}),
   pendingFirstMeet: z.record(z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
+  pendingPreSignal: z.record(z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
   pendingResolutions: z.array(z.any()).default([]),
+  pendingAssetDeckCommands: z.array(z.any()).default([]),
   resolutionHistory: z.array(z.any()).default([]),
   // 情节张力（0-100）——服务于 prompt 软节奏提示，不流出给 LLM
   narrativeTension: z.coerce.number().transform(v => Math.max(0, Math.min(100, Math.round(v)))).default(0),
@@ -449,11 +632,6 @@ const WorldActSchema = z.object({
   });
   act.phase_slots = normalizedSlots;
 
-  // pickedPacks 兄式对象相依赖 zod 已假设为 object；空或非对象归零
-  if (!act.pickedPacks || typeof act.pickedPacks !== 'object' || Array.isArray(act.pickedPacks)) {
-    act.pickedPacks = {};
-  }
-
   // narrativeTension 夹到 [0, 100]
   act.narrativeTension = Math.max(0, Math.min(100, Math.round(Number(act.narrativeTension) || 0)));
   act.controlledNodes = act.controlledNodes && typeof act.controlledNodes === 'object' && !Array.isArray(act.controlledNodes)
@@ -466,8 +644,12 @@ const WorldActSchema = z.object({
     ? act.characterEncounter
     : {};
   act.pendingFirstMeet = normalizePendingFirstMeet(act.pendingFirstMeet);
+  act.pendingPreSignal = normalizePendingFirstMeet(act.pendingPreSignal);
   act.pendingResolutions = Array.isArray(act.pendingResolutions)
     ? act.pendingResolutions.filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    : [];
+  act.pendingAssetDeckCommands = Array.isArray(act.pendingAssetDeckCommands)
+    ? act.pendingAssetDeckCommands.filter(item => item && typeof item === 'object' && !Array.isArray(item))
     : [];
   act.crisisSignals = Array.isArray(act.crisisSignals)
     ? act.crisisSignals.filter(item => item && typeof item === 'object' && !Array.isArray(item))
@@ -482,22 +664,57 @@ const WorldActSchema = z.object({
   return act;
 });
 
+const WorldAssetDeckSchema = z.record(z.any())
+  .default(makeDefaultAssetDeckState())
+  .transform(value => {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const generalSlotsUnlocked = Math.max(
+      ASSET_DECK_INITIAL_GENERAL_SLOTS,
+      Math.min(ASSET_DECK_MAX_GENERAL_SLOTS, Math.round(Number(source.general_slots_unlocked ?? source.generalSlotsUnlocked) || ASSET_DECK_INITIAL_GENERAL_SLOTS))
+    );
+    const rawVoidSlots = source.void_slots_unlocked ?? source.voidSlotsUnlocked;
+    const voidSlotsUnlocked = rawVoidSlots == null
+      ? ASSET_DECK_VOID_SLOTS
+      : Math.max(0, Math.min(ASSET_DECK_VOID_SLOTS, Math.round(Number(rawVoidSlots) || 0)));
+    return {
+      version: Math.max(1, Math.round(Number(source.version) || 1)),
+      asset_count: Math.max(0, Math.round(Number(source.asset_count ?? source.assetCount) || 0)),
+      general_slots_unlocked: generalSlotsUnlocked,
+      void_slots_unlocked: voidSlotsUnlocked,
+      active_general_cards: normalizeAssetDeckCardList(source.active_general_cards || source.activeGeneralCards, 'general', generalSlotsUnlocked),
+      active_void_cards: normalizeAssetDeckCardList(source.active_void_cards || source.activeVoidCards, 'void', voidSlotsUnlocked),
+      pending_offer: normalizeAssetDeckPendingOffer(source.pending_offer || source.pendingOffer),
+      pending_offer_queue: normalizeAssetDeckPendingOfferQueue(source.pending_offer_queue || source.pendingOfferQueue),
+      pending_replace: normalizeAssetDeckPendingReplace(source.pending_replace || source.pendingReplace),
+      history: Array.isArray(source.history) ? source.history.slice(-50) : [],
+      debug: source.debug && typeof source.debug === 'object' && !Array.isArray(source.debug) ? source.debug : {}
+    };
+  });
+
 const WorldSchema = z.object({
   current_time: WorldTimeSchema,
   clockPressure: z.coerce.number().transform(v => Math.max(0, Math.min(100, Math.round(v)))).default(0),
   location: WorldLocationSchema,
+  tags: z.array(z.string()).default([]).transform(v => normalizeStringList(v, { lower: true })),
+  flags: z.array(z.string()).default([]).transform(v => normalizeStringList(v, { lower: true })),
+  storyFlags: z.record(z.any()).default({}).transform(v => normalizeBooleanFlagMap(v)),
   expansion_state: WorldExpansionStateSchema,
   act: WorldActSchema,
+  assetDeck: WorldAssetDeckSchema,
   expansions: z.record(z.any()).default({})
 }).default({
   current_time: makeDefaultWorldCurrentTime(),
   clockPressure: 0,
   location: makeDefaultWorldLocation(),
+  tags: [],
+  flags: [],
+  storyFlags: {},
   expansion_state: {
     activeMajor: '',
     activeLight: []
   },
   act: makeDefaultActState(),
+  assetDeck: makeDefaultAssetDeckState(),
   expansions: {}
 }).transform(world => {
   world.current_time = world.current_time && typeof world.current_time === 'object'
@@ -513,6 +730,9 @@ const WorldSchema = z.object({
   world.current_time.phase = normalizeEnumValue(world.current_time.phase, WORLD_PHASES, 'MORNING');
   world.location.layer = normalizeEnumValue(world.location.layer, WORLD_LAYERS, 'THE_STREET');
   world.location.site = normalizeTrimmedString(world.location.site, '');
+  world.tags = normalizeStringList(world.tags, { lower: true });
+  world.flags = normalizeStringList(world.flags, { lower: true });
+  world.storyFlags = normalizeBooleanFlagMap(world.storyFlags);
 
   world.expansion_state = world.expansion_state && typeof world.expansion_state === 'object'
     ? world.expansion_state
@@ -520,6 +740,9 @@ const WorldSchema = z.object({
   world.act = world.act && typeof world.act === 'object'
     ? world.act
     : makeDefaultActState();
+  world.assetDeck = world.assetDeck && typeof world.assetDeck === 'object'
+    ? world.assetDeck
+    : makeDefaultAssetDeckState();
   world.expansions = world.expansions && typeof world.expansions === 'object' && !Array.isArray(world.expansions)
     ? world.expansions
     : {};
@@ -532,6 +755,7 @@ const WorldSchema = z.object({
   ));
 
   world.act = WorldActSchema.parse(world.act);
+  world.assetDeck = WorldAssetDeckSchema.parse(world.assetDeck);
 
   return world;
 });
@@ -700,6 +924,7 @@ export const ACE0Schema = z.object({
       activeLight: []
     },
     act: makeDefaultActState(),
+    assetDeck: makeDefaultAssetDeckState(),
     expansions: {}
   })
 }).passthrough();

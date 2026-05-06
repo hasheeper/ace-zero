@@ -47,9 +47,7 @@
     showdown: 4
   };
   const RIVER_INFO_SKILL_EFFECTS = {
-    clarity: 1,
-    refraction: 1,
-    reversal: 1,
+    psyche: 1,
     heart_read: 1,
     clairvoyance: 1
   };
@@ -70,6 +68,11 @@
   function normalizeDifficultyType(type) {
     const raw = String(type || 'regular').trim().toLowerCase();
     return SPECIAL_DIFFICULTY_BASE[raw] || raw || 'regular';
+  }
+
+  function normalizeSkillAiDifficulty(type) {
+    const normalized = normalizeDifficultyType(type);
+    return DIFFICULTY_PROFILES && DIFFICULTY_PROFILES[normalized] ? normalized : 'regular';
   }
 
   function clampNumber(value, min, max) {
@@ -358,8 +361,7 @@
   };
 
   const INFO_SKILL_EFFECTS = {
-    clarity: 1,
-    refraction: 1,
+    psyche: 1,
     heart_read: 1,
     clairvoyance: 1
   };
@@ -2045,7 +2047,7 @@
      * NPC 是否应该使用某个主动技能
      *
      * @param {string} difficulty    - 'noob' | 'regular' | 'pro'
-     * @param {object} skill         - skill 注册对象 (effect, attr, tier, manaCost, ...)
+     * @param {object} skill         - skill 注册对象 (system, kind, level, matrix, lockChance, special, manaCost, ...)
      * @param {object} owner         - gameContext.players 中的 owner 对象
      * @param {object} ctx           - gameContext { phase, pot, players, board }
      * @param {Array}  pendingForces - skillSystem.pendingForces
@@ -2074,6 +2076,7 @@
     },
 
     _shouldUseSkillBase(difficulty, skill, owner, ctx, pendingForces, mana) {
+      difficulty = normalizeSkillAiDifficulty(difficulty);
       // Cota / Kuzuha 的这些技能当前不交给通用 AI 主动驱动
       if (skill.effect === 'deal_card')        return false;
       if (skill.effect === 'gather_or_spread') return false;
@@ -2102,7 +2105,7 @@
       if (skill.effect === 'absolution')     return SkillAI._decideAbsolution(difficulty, skill, owner, ctx, pendingForces, mana);
       if (skill.effect === 'benediction')    return SkillAI._decideBenediction(difficulty, skill, owner, ctx, pendingForces, mana);
 
-      switch (skill.attr) {
+      switch (skill.system) {
         case 'moirai': return SkillAI._decideMoirai(difficulty, skill, owner, ctx, pendingForces, mana);
         case 'chaos':  return SkillAI._decideChaos(difficulty, skill, owner, ctx, pendingForces, mana);
         case 'psyche': return SkillAI._decidePsyche(difficulty, skill, owner, ctx, pendingForces, mana);
@@ -2126,11 +2129,11 @@
         case 'regular': {
           // 底池+投入感知：投入多或底池大时积极
           if (pi === 0) {
-            if (skill.tier === 3) return Math.random() < 0.15;
-            if (skill.tier === 2) return Math.random() < 0.08;
+            if (Number(skill.level || 1) <= 1) return Math.random() < 0.15;
+            if (Number(skill.level || 1) <= 2) return Math.random() < 0.08;
             return false;
           }
-          if (mana && mana.current < mana.max * 0.3 && skill.tier !== 3) return false;
+          if (mana && mana.current < mana.max * 0.3 && Number(skill.level || 1) > 1) return false;
           var blinds = ctx.blinds || 20;
           var potFactor = Math.min(1, pot / (blinds * 15));
           // 投入占比是主要驱动力
@@ -2138,14 +2141,13 @@
         }
         case 'boss':
         case 'pro': {
-          if (mana && mana.current < skill.manaCost * 1.5 && skill.tier !== 1) return false;
+          if (mana && mana.current < skill.manaCost * 1.5 && Number(skill.level || 1) < 4) return false;
           var strength = SkillAI._getHandStrength(owner, ctx);
           var strengthMod = strength >= 50 ? 0.15 : 0;
           if (pi === 0) {
             // preflop→flop 是最关键的选牌：基于手牌强度决定
-            // T3(便宜) 更容易用，T1/T2 需要更强的手牌
-            var tierMod = skill.tier >= 3 ? 0.10 : 0;
-            var base = 0.12 + tierMod + commit * 0.40;
+            var levelMod = Number(skill.level || 1) <= 1 ? 0.10 : 0;
+            var base = 0.12 + levelMod + commit * 0.40;
             return Math.random() < (base + strengthMod);
           }
           return Math.random() < (0.08 + commit * 0.50 + strengthMod + pi * 0.08);
@@ -2160,42 +2162,48 @@
       var pi = PHASE_INDEX[ctx.phase] || 0;
       var pot = ctx.pot || 0;
       var commit = SkillAI._getCommitRatio(owner);
+      var plannedBoost = ctx && ctx.plannedAction === 'raise' ? 0.18
+        : ctx && ctx.plannedAction === 'call' ? 0.08
+          : 0;
+      if (ctx && Number(ctx.plannedAmount || 0) >= Math.max(1, Number(ctx.blinds || 20)) * 3) {
+        plannedBoost += 0.08;
+      }
 
       switch (difficulty) {
         case 'noob': {
           // 本能型：投入多时更积极
-          return Math.random() < (0.15 + commit * 0.25 + pi * 0.08);
+          return Math.random() < (0.15 + commit * 0.25 + pi * 0.08 + plannedBoost * 0.5);
         }
         case 'regular': {
-          if (pi === 0) return Math.random() < 0.08;
-          if (mana && mana.current < mana.max * 0.3 && skill.tier !== 3) return false;
+          if (pi === 0) return Math.random() < (0.08 + plannedBoost * 0.6);
+          if (mana && mana.current < mana.max * 0.3 && Number(skill.level || 1) > 1) return false;
           var blinds2 = ctx.blinds || 20;
           var potFactor = Math.min(1, pot / (blinds2 * 15));
-          return Math.random() < (0.10 + commit * 0.40 + potFactor * 0.20);
+          return Math.random() < (0.10 + commit * 0.40 + potFactor * 0.20 + plannedBoost);
         }
         case 'boss':
         case 'pro': {
-          if (mana && mana.current < skill.manaCost * 1.5 && skill.tier !== 1) return false;
+          if (mana && mana.current < skill.manaCost * 1.5 && Number(skill.level || 1) < 4) return false;
           var strength = SkillAI._getHandStrength(owner, ctx);
           if (strength > 80) return false; // 碾压局不浪费 mana
           if (pi === 0) {
             // preflop→flop：基于手牌强度诅咒对手
-            var tierMod2 = skill.tier >= 3 ? 0.08 : 0;
-            return Math.random() < (0.10 + tierMod2 + commit * 0.35);
+            var levelMod2 = Number(skill.level || 1) <= 1 ? 0.08 : 0;
+            return Math.random() < (0.10 + levelMod2 + commit * 0.35 + plannedBoost * 0.75);
           }
-          return Math.random() < (0.10 + commit * 0.45 + pi * 0.08);
+          return Math.random() < (0.10 + commit * 0.45 + pi * 0.08 + plannedBoost);
         }
         default: return false;
       }
     },
 
-    // ---- Psyche (灵视: clarity / refraction / reversal) ----
+    // ---- Psyche ----
     // 核心问题：什么时候反制？预防性使用还是反应性使用？
     _decidePsyche(difficulty, skill, owner, ctx, forces, mana) {
       var pi = PHASE_INDEX[ctx.phase] || 0;
       // 检测敌方 Chaos forces
       var enemyChaos = forces.filter(function(f) {
-        return f.attr === 'chaos' && f.ownerId !== owner.id;
+        return SkillAI._getForceSystem(f) === 'chaos' && f.ownerId !== owner.id;
       });
       var hasChaos = enemyChaos.length > 0;
       // 检测敌方 Chaos 总 power
@@ -2207,7 +2215,7 @@
           var force = forces[fi];
           if (force.ownerId === owner.id) continue;
           enemyThreatPower += (force.power || 0);
-          if (force.type === 'fortune' || force.attr === 'fortune') enemyFortunePower += (force.power || 0);
+          if (SkillAI._getForceSystem(force) === 'moirai') enemyFortunePower += (force.power || 0);
         }
       }
       var highThreat = Math.max(chaosPower, enemyFortunePower, enemyThreatPower * 0.75);
@@ -2227,50 +2235,46 @@
         }
         case 'regular': {
           // 反应式：检测到敌方 Chaos 才用
-          // 优先用低阶（澄澈省 mana），高阶留给大威胁
+          // 优先用低阶 Psyche 省 mana，高阶留给大威胁
           if (!hasScoutingNeed) return Math.random() < 0.08; // 无明显威胁时仅偶尔做信息侦查
-          // mana 紧张时只用 T3
-          if (mana && mana.current < mana.max * 0.3 && skill.tier !== 3) return false;
+          if (mana && mana.current < mana.max * 0.3 && Number(skill.level || 1) > 1) return false;
           // 敌方待结算威胁越大越积极
           var urgency = Math.min(1, highThreat / 30);
-          // T3 优先（省 mana），除非 Chaos 很强
-          if (skill.tier === 3) return Math.random() < (0.5 + urgency * 0.3);
-          if (skill.tier === 2) return Math.random() < (0.2 + urgency * 0.5);
-          // T1 只在 Chaos power 很高时用
+          if (Number(skill.level || 1) <= 1) return Math.random() < (0.5 + urgency * 0.3);
+          if (Number(skill.level || 1) <= 3) return Math.random() < (0.2 + urgency * 0.5);
           return Math.random() < (highThreat >= 25 ? 0.55 : 0.15);
         }
         case 'boss':
         case 'pro': {
           // 预判式：即使没 Chaos 也会在关键轮次预防性使用
-          // 优先高阶（折射/真理 > 澄澈，信息+反制双重价值）
+          // 优先高 level Psyche，信息+反制双重价值
           // mana 精细管理
           if (mana && mana.current < skill.manaCost * 1.2) return false;
 
           if (hasScoutingNeed) {
             // 有显著敌方威胁时：根据威胁等级选择对应技能
             var urgency2 = Math.min(1, highThreat / 40);
-            // 高威胁 → 用高阶技能
-            if (skill.tier === 1) return Math.random() < (highThreat >= 25 ? 0.7 : 0.2);
-            if (skill.tier === 2) return Math.random() < (0.3 + urgency2 * 0.4);
-            return Math.random() < (0.4 + urgency2 * 0.2); // T3 兜底
+            if (Number(skill.level || 1) >= 4) return Math.random() < (highThreat >= 25 ? 0.7 : 0.2);
+            if (Number(skill.level || 1) >= 2) return Math.random() < (0.3 + urgency2 * 0.4);
+            return Math.random() < (0.4 + urgency2 * 0.2); // 低级技能兜底
           }
 
           if (infoPressure && !hasRecentScout) {
-            if (skill.tier === 1) return Math.random() < (difficulty === 'boss' ? 0.28 : 0.20);
-            if (skill.tier === 2) return Math.random() < (difficulty === 'boss' ? 0.42 : 0.30);
+            if (Number(skill.level || 1) >= 4) return Math.random() < (difficulty === 'boss' ? 0.28 : 0.20);
+            if (Number(skill.level || 1) >= 2) return Math.random() < (difficulty === 'boss' ? 0.42 : 0.30);
             return Math.random() < (difficulty === 'boss' ? 0.20 : 0.14);
           }
 
           if (difficulty === 'pro') {
             // pro：无明显威胁时明显克制，只在关键街低概率做信息预判
             if (pi === 1 || pi === 2 || pi === 3) {
-              if (skill.tier === 2) return Math.random() < 0.08;
-              if (skill.tier === 1) return Math.random() < 0.05;
+              if (Number(skill.level || 1) >= 3) return Math.random() < 0.08;
+              if (Number(skill.level || 1) >= 4) return Math.random() < 0.05;
               return Math.random() < 0.04;
             }
             if (pi === 0) {
-              if (skill.tier === 2) return Math.random() < 0.03;
-              if (skill.tier === 1) return Math.random() < 0.02;
+              if (Number(skill.level || 1) >= 3) return Math.random() < 0.03;
+              if (Number(skill.level || 1) >= 4) return Math.random() < 0.02;
               return false;
             }
             return false;
@@ -2278,12 +2282,12 @@
 
           // boss：保留更强的预判式打法
           if (pi >= 1 && pi <= 2) {
-            if (skill.tier <= 2) return Math.random() < 0.2;
+            if (Number(skill.level || 1) >= 2) return Math.random() < 0.2;
             return Math.random() < 0.12;
           }
           if (pi === 0) {
-            if (skill.tier <= 1) return Math.random() < 0.15;
-            if (skill.tier === 2) return Math.random() < 0.18;
+            if (Number(skill.level || 1) >= 4) return Math.random() < 0.15;
+            if (Number(skill.level || 1) >= 2) return Math.random() < 0.18;
             return Math.random() < 0.10;
           }
           return false;
@@ -2292,37 +2296,46 @@
       }
     },
 
-    // ---- Void (虚无: null_field / void_shield / purge_all) ----
-    // null_field 和 void_shield 是 passive，不需要决策
-    // 只有 purge_all (现实) 是 active
+    // ---- Void ----
     _decideVoid(difficulty, skill, owner, ctx, forces, mana) {
-      // 只有 purge_all 需要决策（其他是 passive）
-      if (skill.effect !== 'purge_all') return false;
+      if (skill.effect !== 'void') return false;
+      if (skill.skillKey !== 'reality' && skill.skillKey !== 'insulation') return false;
 
-      var totalForces = forces.length;
+      var enemyForces = forces.filter(function(f) { return f.ownerId !== owner.id && SkillAI._getForceSystem(f) !== 'void'; });
+      var allyForces = forces.filter(function(f) { return f.ownerId === owner.id && SkillAI._getForceSystem(f) !== 'void'; });
+      var enemyPower = enemyForces.reduce(function(s, f) { return s + Math.max(0, Number(f.effectivePower != null ? f.effectivePower : f.power || 0)); }, 0);
+      var allyPower = allyForces.reduce(function(s, f) { return s + Math.max(0, Number(f.effectivePower != null ? f.effectivePower : f.power || 0)); }, 0);
+      var hasHighLevelEnemy = enemyForces.some(function(f) { return Number(f.level || 1) >= 4; });
+
+      if (skill.skillKey === 'insulation') {
+        if (enemyForces.length <= 0 || enemyPower <= 0) return false;
+        switch (difficulty) {
+          case 'noob':
+            return enemyPower >= 50 && Math.random() < 0.25;
+          case 'regular':
+            return enemyPower >= 35 && Math.random() < 0.45;
+          case 'boss':
+          case 'pro':
+            return enemyPower >= 25 && Math.random() < (hasHighLevelEnemy ? 0.85 : 0.65);
+          default:
+            return false;
+        }
+      }
+
+      var totalForces = enemyForces.length + allyForces.length;
+      if (enemyPower <= allyPower) return false;
 
       switch (difficulty) {
         case 'noob': {
-          // 不懂核弹级技能的价值，几乎不用
-          return totalForces >= 4 && Math.random() < 0.15;
+          // Reality 是整局级归零按钮，低难度几乎不会抓准时机。
+          return totalForces >= 5 && enemyPower >= allyPower + 80 && Math.random() < 0.08;
         }
         case 'regular': {
-          // 场上 force ≥ 3 时才用（核弹不乱扔）
-          return totalForces >= 3 && Math.random() < 0.35;
+          return totalForces >= 4 && enemyPower >= allyPower + 60 && Math.random() < 0.22;
         }
         case 'boss':
         case 'pro': {
-          // 精准时机：敌方刚释放 T1/T2 技能后立即清场
-          // 或者场上敌方 forces 对自己不利时
-          var enemyForces = forces.filter(function(f) { return f.ownerId !== owner.id; });
-          var allyForces = forces.filter(function(f) { return f.ownerId === owner.id; });
-          // 敌方力量远超己方时才用（净化对自己有利）
-          var enemyPower = enemyForces.reduce(function(s, f) { return s + (f.power || 0); }, 0);
-          var allyPower = allyForces.reduce(function(s, f) { return s + (f.power || 0); }, 0);
-          if (enemyPower <= allyPower) return false; // 己方优势不清场
-          // 敌方有 T1 技能时更积极
-          var hasEnemyT1 = enemyForces.some(function(f) { return f.tier === 1; });
-          return Math.random() < (hasEnemyT1 ? 0.6 : 0.3);
+          return totalForces >= 3 && enemyPower >= allyPower + 45 && Math.random() < (hasHighLevelEnemy ? 0.55 : 0.35);
         }
         default: return false;
       }
@@ -2335,7 +2348,7 @@
      * commit=0: 还没投入, commit=0.5: 投了一半, commit=1.0: 全押
      * 注意：totalBet 已包含 currentBet，不要重复计算
      */
-    // ---- 专属技能：royal_decree (T0, 1/game) ----
+    // ---- 专属技能：royal_decree（整局限1）----
     // 核心逻辑：整局只有一次，必须在关键时刻使用
     // 条件：turn/river + 高投入 或 flop + 极高投入
     _decideExclusive(difficulty, skill, owner, ctx, mana) {
@@ -2452,7 +2465,7 @@
         case 'noob':    return false;
         case 'regular': return pi >= 1 && Math.random() < 0.2;
         case 'pro': {
-          // preflop: 读心有信息价值 + 消除T3 curse
+          // preflop: 读心有信息价值 + 生成少量防守 Psyche
           if (pi === 0) return Math.random() < 0.15;
           return Math.random() < 0.3;
         }
@@ -2506,7 +2519,7 @@
       }
     },
 
-    // ---- rule_rewrite（规则篡改）：T0, 1/game — 纯混沌，越乱越想用 ----
+    // ---- rule_rewrite（规则篡改）：纯混沌，越乱越想用 ----
     // Trixie 的性格：不图赢，图好玩。场上 force 越多越兴奋
     _decideRuleRewrite(difficulty, skill, owner, ctx, pendingForces, mana) {
       var pi = PHASE_INDEX[ctx.phase] || 0;
@@ -2514,7 +2527,7 @@
       if (mana && mana.current < skill.manaCost) return false;
       // 需要有可篡改的对象
       var forceCount = pendingForces ? pendingForces.filter(function(f) {
-        return f.ownerId !== owner.id && f.type !== 'null_field' && f.type !== 'void_shield' && f.type !== 'purge_all';
+        return f.ownerId !== owner.id && SkillAI._getForceSystem(f) !== 'void';
       }).length : 0;
       if (forceCount === 0) return false;
 
@@ -2539,7 +2552,7 @@
       }
     },
 
-    // ---- blind_box（盲盒派对）：T1, CD3 — 全场 force 洗牌 ----
+    // ---- blind_box（盲盒派对）：全场 force 洗牌 ----
     // 核心逻辑：场上 force 对自己不利时（敌方 fortune 多 / 己方 curse 多），用来翻盘
     _decideBlindBox(difficulty, skill, owner, ctx, pendingForces, mana) {
       var pi = PHASE_INDEX[ctx.phase] || 0;
@@ -2547,7 +2560,7 @@
       if (mana && mana.current < skill.manaCost) return false;
       // 需要有足够的 force 才值得打碎重组
       var shuffleableCount = pendingForces ? pendingForces.filter(function(f) {
-        return f.attr !== 'void' && f.type !== 'null_field' && f.type !== 'void_shield' && f.type !== 'purge_all';
+        return SkillAI._getForceSystem(f) !== 'void';
       }).length : 0;
       if (shuffleableCount < 2) return false; // 少于2个没意义
 
@@ -2579,7 +2592,7 @@
       }
     },
 
-    // ---- absolution（赦免）：Eulalia T0, 整局限1 — 开启三街承灾合同 ----
+    // ---- absolution（赦免）：Eulalia 整局限1 — 开启三街承灾合同 ----
     // 核心逻辑：场上 curse 压力越高，越值得尽早开出并把后续两街也纳入承灾窗口
     _decideAbsolution(difficulty, skill, owner, ctx, pendingForces, mana) {
       if (ctx.phase === 'river') return false;
@@ -2606,7 +2619,7 @@
       }
     },
 
-    // ---- benediction（祝福）：Eulalia T2, CD1 — 对非自身目标施加 fortune，并吸取相关 curse 记为承灾 ----
+    // ---- benediction（祝福）：Eulalia CD1 — 对非自身目标施加 fortune，并吸取相关 curse 记为承灾 ----
     // 核心逻辑：后续需要按新版 Runtime 目标/吸取语义重做；当前保留 AI 骨架，避免继续扩散旧接口
     _decideBenediction(difficulty, skill, owner, ctx, pendingForces, mana) {
       var pi = PHASE_INDEX[ctx.phase] || 0;
@@ -2637,7 +2650,7 @@
       }
     },
 
-    // ---- house_edge（抽水）：Kuzuha T0, 整局限1 — fortune(P50)+群体curse(P15) ----
+    // ---- house_edge（抽水）：Kuzuha 整局限1 — fortune(P50)+群体curse(P15) ----
     // 核心逻辑：攻防一体的强技能，投入较大时或中后期使用
     _decideHouseEdge(difficulty, skill, owner, ctx, pendingForces, mana) {
       var pi = PHASE_INDEX[ctx.phase] || 0;
@@ -2651,14 +2664,14 @@
           return Math.random() < (0.12 + commit * 0.30 + pi * 0.08);
         case 'boss':
         case 'pro':
-          // T0整局限1: flop/turn中高投入时使用
+          // 整局限1: flop/turn 中高投入时使用
           if (pi === 0) return Math.random() < 0.06;
           return Math.random() < (0.15 + commit * 0.35 + pi * 0.08);
         default: return false;
       }
     },
 
-    // ---- debt_call（催收）：Kuzuha T1, CD3 — debt rot 催收（Runtime 接入后实现） ----
+    // ---- debt_call（催收）：Kuzuha CD3 — debt rot 催收（Runtime 接入后实现） ----
     // 核心逻辑：敌方fortune多时最有价值（相当于反转局势），己方fortune少时才用
     _decideTableFlip(difficulty, skill, owner, ctx, pendingForces, mana) {
       var pi = PHASE_INDEX[ctx.phase] || 0;
@@ -2698,7 +2711,8 @@
 
     _getSkillEconomyState(skill, owner, ctx, pendingForces, mana) {
       var bb = Math.max(1, Number(ctx && ctx.blinds || 20));
-      var pot = Math.max(0, Number(ctx && ctx.pot || 0));
+      var plannedAmount = Math.max(0, Number(ctx && ctx.plannedAmount || 0));
+      var pot = Math.max(0, Number(ctx && ctx.pot || 0)) + plannedAmount;
       var toCall = Math.max(0, Number(ctx && ctx.toCall || 0));
       var commit = SkillAI._getCommitRatio(owner);
       var ownerLiveStack = Math.max(1, Number((owner && owner.chips || 0) + (owner && owner.currentBet || 0)));
@@ -2715,7 +2729,8 @@
       var pressure = Math.max(
         commit,
         pot / effectiveStack,
-        toCall / ownerLiveStack
+        toCall / ownerLiveStack,
+        plannedAmount / ownerLiveStack
       );
       var hostilePressure = 0;
       if (Array.isArray(pendingForces)) {
@@ -2724,7 +2739,7 @@
           if (!force || force.ownerId === owner.id) continue;
           if (force.type === 'curse' && (force.targetId == null || force.targetId === owner.id)) {
             hostilePressure += Math.max(0, Number(force.power || 0));
-          } else if ((force.type === 'fortune' || force.attr === 'fortune') && Number(force.power || 0) >= 20) {
+          } else if (SkillAI._getForceSystem(force) === 'moirai' && Number(force.power || 0) >= 20) {
             hostilePressure += Math.max(0, Number(force.power || 0)) * 0.5;
           }
         }
@@ -2734,6 +2749,7 @@
         pot: pot,
         potBb: potBb,
         toCall: toCall,
+        plannedAmount: plannedAmount,
         commit: commit,
         effectiveStack: effectiveStack,
         pressure: pressure,
@@ -2746,10 +2762,12 @@
       if (!skill || !ctx || skill.activation !== 'active') return true;
       var state = SkillAI._getSkillEconomyState(skill, owner, ctx, pendingForces, mana);
       var isInfoSkill = !!INFO_SKILL_EFFECTS[skill.effect];
-      var isUltimate = (skill.tier != null && skill.tier <= 1) || !!skill.usesPerGame || (skill.manaCost || 0) >= 25;
-      var isMajor = !isUltimate && (((skill.manaCost || 0) >= 15) || skill.tier === 2);
+      var isUltimate = Number(skill.level || 1) >= 4 || !!skill.usesPerGame || (skill.manaCost || 0) >= 25;
+      var isMajor = !isUltimate && (((skill.manaCost || 0) >= 15) || Number(skill.level || 1) >= 2);
 
       if (state.hostilePressure >= 30) return true;
+      if (ctx.plannedAction === 'raise' && state.plannedAmount >= state.bb * 2) return true;
+      if (ctx.plannedAction === 'call' && state.toCall >= state.bb && state.potBb >= 3) return true;
 
       // 小锅且无人给压力时，不要在免费街面里白白砸高费技能。
       if (!isInfoSkill && state.toCall <= 0 && state.potBb < 10 && state.pressure < 0.12) {
@@ -2781,6 +2799,16 @@
         return false;
       }
       return true;
+    },
+
+    _getForceSystem(force) {
+      if (!force) return null;
+      if (force.system) return force.system;
+      if (force.type === 'fortune') return 'moirai';
+      if (force.type === 'curse') return 'chaos';
+      if (force.type === 'psyche') return 'psyche';
+      if (force.type === 'void') return 'void';
+      return null;
     },
 
     /**
@@ -2815,6 +2843,7 @@
      * @returns {number} targetId
      */
     pickCurseTarget(difficulty, casterId, players) {
+      difficulty = normalizeSkillAiDifficulty(difficulty);
       if (!players || !players.length) {
         return casterId === 0 ? 1 : 0;
       }

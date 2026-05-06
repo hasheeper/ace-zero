@@ -3,23 +3,21 @@
  * 《零之王牌》新力量对抗公式
  *
  * 核心公式：
- *   EffectivePower = SkillLevel × 10 × (1 + 主手属性/100) × 属性克制倍率
+ *   EffectivePower = Skill Power × (1 + 属性/100)
  *
  * 对抗流程：
- *   1. 计算每个 force 的 raw power（含属性加成 + 克制倍率）
- *   2. 同类型力量互相抵消（fortune vs fortune, curse vs curse）
- *   3. 主动压制被动（等级差额外削弱）
- *   4. 命运之锚 / 概率死角 被动效果
- *   5. Void 减伤（前台 Kazu 时，敌方所有效果 ÷ voidDivisor）
+ *   1. 计算每个 force 的属性面板加成
+ *   2. 注入特质修正
+ *   3. Void 减伤（前台 Kazu 时，敌方所有效果 ÷ voidDivisor）
  *
  * 依赖：
- *   - AttributeSystem（属性面板 + 克制关系）
+ *   - AttributeSystem（属性面板 + Void 除数）
  *   - SwitchSystem（前台/后台状态 + 属性路由）
  *   - TraitSystem（特质被动加成）
  *
  * 本模块不直接修改 monte-of-zero.js，而是提供一个
- * enhanceForces(forces) 方法，在 _resolveForceOpposition 之前调用，
- * 将属性加成和克制倍率注入到每个 force 的 power 中。
+ * enhanceForces(forces) 方法，在 resolveForceOpposition 之前调用，
+ * 将属性面板加成注入到每个 force 的 power 中。
  */
 
 // ========== CombatFormula 类 ==========
@@ -36,12 +34,19 @@ export class CombatFormula {
       this.switchSystem = opts.switchSystem || null;
       this.traitSystem = opts.traitSystem || null;
       this.skillSystem = opts.skillSystem || null;
+      this.assetDeckAdapter = opts.assetDeckAdapter || (typeof window !== 'undefined' ? window.AssetDeckAdapter : null);
+      this.assetModifiers = opts.assetModifiers || null;
       this.heroId = opts.heroId != null ? opts.heroId : 0;
       this.onTraitManaGain = typeof opts.onTraitManaGain === 'function' ? opts.onTraitManaGain : null;
       // gameContext 由外部每轮注入，供特质判断筹码等动态条件
       this.gameContext = null;
       this._phaseStateKey = null;
       this._phaseTraitState = {};
+    }
+
+    setAssetModifiers(modifiers, adapter) {
+      this.assetDeckAdapter = adapter || this.assetDeckAdapter || (typeof window !== 'undefined' ? window.AssetDeckAdapter : null);
+      this.assetModifiers = modifiers || null;
     }
 
     _isPlayerAvailable(player) {
@@ -94,8 +99,8 @@ export class CombatFormula {
     }
 
     /**
-     * 增强 forces 列表：为每个 force 注入属性加成和克制倍率
-     * 在 _resolveForceOpposition 之前调用
+     * 增强 forces 列表：为每个 force 注入属性面板加成
+     * 在 resolveForceOpposition 之前调用
      *
      * @param {Array} forces - 原始 forces 列表
      * @param {object} context - { players } 用于确定敌方属性
@@ -103,7 +108,10 @@ export class CombatFormula {
      */
     enhanceForces(forces, context) {
       if (!this.attributeSystem || !this.switchSystem) {
-        return forces; // 无属性系统时，保持原始行为
+        const basic = (forces || []).map(f => ({ ...f }));
+        this._applyAssetModifiers(basic, context);
+        for (const force of basic) this._syncEffectivePowerToPower(force);
+        return basic;
       }
 
       this._syncPhaseTraitState();
@@ -135,7 +143,7 @@ export class CombatFormula {
       // 特质被动力注入（obsessive_love 等产生的常驻 force）
       this._injectTraitForces(enhanced);
 
-      // 为 trait 注入的新 force 补算属性加成与克制倍率
+      // 为 trait 注入的新 force 补算属性面板加成
       for (const force of enhanced) {
         if (force._attrBonus !== undefined) continue;
         if (this._shouldKeepTraitInjectedBasePower(force)) {
@@ -155,7 +163,34 @@ export class CombatFormula {
       // 特质加成（在属性加成之后叠加）
       this._applyTraitBonuses(enhanced, context);
 
+      // Asset deck modifiers are the final persistent deck layer before MoZ
+      // opposition rewrites effectivePower.
+      this._applyAssetModifiers(enhanced, context);
+
+      // enhanceForces 是 MoZ 结算前的最后一层增幅，effectivePower 必须从增强后的
+      // power 起步；后续克制、防御、抵消再继续改写 EP。
+      for (const force of enhanced) {
+        this._syncEffectivePowerToPower(force);
+      }
+
       return enhanced;
+    }
+
+    _applyAssetModifiers(forces, context) {
+      if (!this.assetDeckAdapter || typeof this.assetDeckAdapter.enhanceForcePower !== 'function') return;
+      const passiveState = this.skillSystem && this.skillSystem._assetPassiveState
+        ? this.skillSystem._assetPassiveState
+        : null;
+      for (const force of forces || []) {
+        this.assetDeckAdapter.enhanceForcePower(this.assetModifiers, force, Object.assign({}, context || {}, {
+          passiveState: passiveState
+        }));
+      }
+    }
+
+    _syncEffectivePowerToPower(force) {
+      if (!force) return;
+      force.effectivePower = Math.max(0, Math.round(Number(force.power || 0) * 10) / 10);
     }
 
     /**
@@ -178,7 +213,8 @@ export class CombatFormula {
       for (const f of resolvedForces) {
         // Void 只减伤敌方对我方的效果
         if (f.ownerId === playerSide) continue; // 己方 force 不受影响
-        if (f.type === 'null_field' || f.type === 'void_shield' || f.type === 'reversal') continue; // meta 力不受影响
+        if (f.type === 'psyche' || f.type === 'void') continue; // meta 力不受影响
+        if (f._insulationReduced) continue; // 主动绝缘已处理同一效果，不与被动 Void 叠乘
 
         // 敌方 fortune（帮敌人赢）和 curse（害我方）都被削弱
         if (f.effectivePower > 0) {
@@ -218,44 +254,10 @@ export class CombatFormula {
       const attrValue = ownerAttrs[forceAttr] || 0;
       result.attrBonus = this.attributeSystem.getAttributeBonus(attrValue);
 
-      // 3. 克制倍率：需要找到对抗目标的主属性
-      const opponentAttr = this._getOpponentPrimaryAttr(force, allForces);
-      if (opponentAttr) {
-        result.counterMult = this.attributeSystem.getCounterMultiplier(forceAttr, opponentAttr);
-      }
-
-      // 4. 总倍率
+      // 克制倍率由 MoZ force resolution 按需求稿处理。
       result.totalMultiplier = result.attrBonus * result.counterMult;
 
       return result;
-    }
-
-    /**
-     * 推断对手的主属性
-     * 规则：找到与此 force 对抗的敌方 forces 中最强的那个的属性
-     * @private
-     */
-    _getOpponentPrimaryAttr(force, allForces) {
-      const hid = this.heroId != null ? this.heroId : 0;
-      const isPlayerForce = (force.ownerId === hid || force.ownerId === -2);
-
-      // 找到敌方的同类型 forces
-      const opponentForces = allForces.filter(f => {
-        const isOpponentPlayer = (f.ownerId === hid || f.ownerId === -2);
-        // 不同阵营
-        if (isPlayerForce === isOpponentPlayer) return false;
-        // 同类型对抗（fortune vs fortune, curse vs curse）
-        // 或者 curse 对 fortune（诅咒对抗幸运）
-        return f.type === force.type ||
-               (force.type === 'fortune' && f.type === 'curse') ||
-               (force.type === 'curse' && f.type === 'fortune');
-      });
-
-      if (opponentForces.length === 0) return null;
-
-      // 取最强敌方 force 的属性
-      const strongest = opponentForces.reduce((a, b) => (b.power > a.power ? b : a));
-      return this.attributeSystem.getAttributeForEffect(strongest.type);
     }
 
     // ========== 特质加成 ==========
@@ -316,8 +318,8 @@ export class CombatFormula {
           }
         }
 
-        // --- null_armor（虚无铠装）：拥有者的 fortune -20%（通用） ---
-        if (f.type === 'fortune') {
+        // --- null_armor（零号体质）：特质层，不是 Void 被动技能。已绝缘处理的 force 不再叠加。 ---
+        if (f.type === 'fortune' && !f._insulationReduced) {
           const na = this.traitSystem.hasEffect(f.ownerId, 'null_absorption');
           if (na.has && na.value.fortunePenalty) {
             traitMult *= (1 - na.value.fortunePenalty);
@@ -432,17 +434,17 @@ export class CombatFormula {
           f._traitTag = traitTag;
         }
 
-        // --- null_armor（虚无铠装）二层：每街共限1次，吸收 curse / fortune 并回蓝 ---
+        // --- null_armor（零号体质）：每街首次抹除敌方 Curse 或任意 Fortune，并回收 Mana。 ---
         {
           const nullTargetId = (f.type === 'fortune')
             ? f.ownerId
             : (f.targetId != null ? f.targetId : this.heroId);
           const isHostileCurse = f.type === 'curse' && f.ownerId !== nullTargetId;
-          const isSelfFortune = f.type === 'fortune' && f.ownerId === nullTargetId;
+          const isAnyFortune = f.type === 'fortune';
           const naAbsorb = this.traitSystem.hasEffect(nullTargetId, 'null_absorption');
 
-          if (naAbsorb.has && !this._hasPhaseTrigger(nullTargetId, 'null_armor_shared') &&
-              (isHostileCurse || isSelfFortune) && f.power > 0) {
+          if (naAbsorb.has && !f._insulationReduced && !this._hasPhaseTrigger(nullTargetId, 'null_armor_shared') &&
+              (isHostileCurse || isAnyFortune) && f.power > 0) {
             const absorbRate = naAbsorb.value.absorbRate || 0;
             const manaGainRate = naAbsorb.value.manaGainRate || 0;
             const absorbedPower = Math.round(f.power * absorbRate * 10) / 10;
@@ -492,9 +494,11 @@ export class CombatFormula {
               ownerId: p.id,
               ownerName: '执念之爱',
               type: 'fortune',
+              kind: 'fortune',
               power: ol.value.passiveAhead,
               effectivePower: ol.value.passiveAhead,
-              tier: 99,
+              level: 0,
+              system: 'moirai',
               activation: 'passive',
               source: 'trait',
               _traitTag: 'obsessive_love(顺风)',
@@ -506,10 +510,12 @@ export class CombatFormula {
               ownerId: p.id,
               ownerName: '执念反噬',
               type: 'curse',
+              kind: 'curse',
               power: Math.abs(ol.value.passiveBehind),
               effectivePower: Math.abs(ol.value.passiveBehind),
               targetId: p.id,
-              tier: 99,
+              level: 0,
+              system: 'chaos',
               activation: 'passive',
               source: 'trait',
               _traitTag: 'obsessive_love(逆风)',
@@ -543,9 +549,11 @@ export class CombatFormula {
               ownerId: p.id,
               ownerName: '四叶草',
               type: 'fortune',
+              kind: 'fortune',
               power: fixedFortune,
               effectivePower: fixedFortune,
-              tier: 99,
+              level: 0,
+              system: 'moirai',
               activation: 'passive',
               source: 'trait',
               _traitTag: 'four_leaf_clover(常驻P' + fixedFortune + ')',
@@ -655,8 +663,8 @@ export class CombatFormula {
       const pBonus = this.attributeSystem.getAttributeBonus(pAttrs[pAttr] || 0);
       const eBonus = this.attributeSystem.getAttributeBonus(eAttrs[eAttr] || 0);
 
-      const pCounter = this.attributeSystem.getCounterMultiplier(pAttr, eAttr);
-      const eCounter = this.attributeSystem.getCounterMultiplier(eAttr, pAttr);
+      const pCounter = 1.0;
+      const eCounter = 1.0;
 
       const pFinal = Math.round(playerForce.power * pBonus * pCounter * 10) / 10;
       const eFinal = Math.round(enemyForce.power * eBonus * eCounter * 10) / 10;

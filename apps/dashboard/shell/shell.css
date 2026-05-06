@@ -2937,6 +2937,27 @@ body[data-character="kazu"] .bgm-vinyl-disc {
 
 html body.is-unintroduced,
 html[data-character] body.is-unintroduced {
+  --gold-main: #b8b8b8 !important;
+  --gold-dim: #6e6e6e !important;
+  --gold-glow: rgba(255, 255, 255, 0.10) !important;
+  --theme-name-color: #cfcfcf !important;
+  --theme-name-glow: rgba(255, 255, 255, 0.10) !important;
+  --theme-page-glow: rgba(255, 255, 255, 0.06) !important;
+  --theme-panel-edge: rgba(255, 255, 255, 0.10) !important;
+  --theme-watermark-stroke: rgba(255, 255, 255, 0.10) !important;
+  --theme-track-accent-bg: rgba(255, 255, 255, 0.08) !important;
+  --rino-glow: rgba(255, 255, 255, 0.10) !important;
+  --rino-text: #cfcfcf !important;
+  --mana-blue: #9a9a9a !important;
+  --semantic-fortune: #c2c2c2 !important;
+  --semantic-curse: #a7a7a7 !important;
+  --semantic-mana: #b5b5b5 !important;
+  --semantic-exclusive: #cfcfcf !important;
+  --semantic-trait: #d2d2d2 !important;
+  --semantic-skill: #bdbdbd !important;
+  --semantic-status: #adadad !important;
+  --semantic-warning: #c4c4c4 !important;
+  --semantic-void: #b7b7b7 !important;
   background-color: #101010 !important;
   background-image:
     radial-gradient(circle at 50% 18%, rgba(255,255,255,0.06) 0%, transparent 44%),

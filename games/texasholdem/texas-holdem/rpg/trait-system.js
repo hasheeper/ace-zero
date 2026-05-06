@@ -54,7 +54,7 @@ export const TRAIT_CATALOG = {
   null_armor: {
     slot: 'vanguard',
     name: '零号体质',
-    description: '自身幸运效果-20%；每街首次受到hostile Curse或作用于自身的fortune时，抹除该力量30%，并将被抹除力量值的50%转为mana（直接进位）',
+    description: '自身获得的 Fortune -20%；每街首次受到敌方 Curse 或任意 Fortune 时，抹除其中30%，并将抹除值50%转为 Mana',
     effect: { type: 'null_absorption', fortunePenalty: 0.20, absorbRate: 0.30, manaGainRate: 0.50 }
   },
   crimson_crown: {

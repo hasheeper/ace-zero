@@ -45,6 +45,16 @@
     return `<ace0_first_meet>\n${header}\n${lines.join('\n')}\n</ace0_first_meet>`;
   }
 
+  function buildPreSignalPromptContent(preSignalHints) {
+    if (!preSignalHints || typeof preSignalHints !== 'object' || Array.isArray(preSignalHints)) return '';
+    const entries = Object.entries(preSignalHints)
+      .filter(([, v]) => typeof v === 'string' && v.trim());
+    if (!entries.length) return '';
+    const lines = entries.map(([charKey, hint]) => `- ${charKey}：${hint}`);
+    const header = '本轮出现以下角色的前置信号。请只写成线索、气味、委托、监视或环境异常；不要让角色本人正式登场，不要解锁熟人关系，也不要写成已经相识。';
+    return `<ace0_pre_signal>\n${header}\n${lines.join('\n')}\n</ace0_pre_signal>`;
+  }
+
   function buildActStateSummaryFromDerived(derivedState) {
     if (!derivedState) return '';
 
@@ -180,43 +190,6 @@ ${phaseLines.join('\n')}
     return candidates[candidates.length - 1];
   }
 
-  function normalizePhaseGuideCandidates(guide) {
-    if (!guide || typeof guide !== 'object') return [];
-    if (Array.isArray(guide.candidates) && guide.candidates.length) {
-      return guide.candidates.filter((c) => c && typeof c === 'object');
-    }
-    // 向后兼容：旧结构 { direction } 当 1 候选
-    if (typeof guide.direction === 'string' && guide.direction) {
-      return [{
-        id: 'legacy',
-        weight: 1,
-        direction: guide.direction,
-        mustEnd: typeof guide.mustEnd === 'string' ? guide.mustEnd : ''
-      }];
-    }
-    return [];
-  }
-
-  function collectUsedPackIds(act) {
-    const picked = act?.pickedPacks;
-    if (!picked || typeof picked !== 'object') return [];
-    const ids = [];
-    Object.values(picked).forEach((perNode) => {
-      if (perNode && typeof perNode === 'object') {
-        Object.values(perNode).forEach((id) => {
-          if (typeof id === 'string' && id) ids.push(id);
-        });
-      }
-    });
-    return ids;
-  }
-
-  function getPoolFallbackText(guide, slotKey) {
-    if (guide && typeof guide.fallback === 'string' && guide.fallback.trim()) return guide.fallback.trim();
-    const label = (guide && guide.summary) || slotKey || '命运事件';
-    return `本章节的${label}候选已全部消耗。本段作自然过场推进即可，不再增加新的命运事件。`;
-  }
-
   function resolvePhaseEvent(config, narrative, nodeId, phaseIndex, act) {
     const visionReplacement = getVisionReplacementForPhase(act, nodeId, phaseIndex);
 
@@ -240,82 +213,10 @@ ${phaseLines.join('\n')}
     const nodeNarrative = config?.nodes?.[nodeId]?.narrative;
     const fateFlavor = slotKey && nodeNarrative?.fateEvents?.[slotKey];
     if (fateFlavor) {
-      const guide = slotKey && narrative?.phaseGuides?.[slotKey];
-      return { kind: 'flavor', flavorText: fateFlavor, guide, slotKey };
+      return { kind: 'flavor', flavorText: fateFlavor, slotKey };
     }
 
-    // L3 章级 phaseGuides 随机池：玩家规划点数或 Vision 替换固定相位时触发。
-    if (!slotKeyFromToken && !slotKeyFromReplacement) return null;
-
-    const guide = narrative?.phaseGuides?.[slotKeyFromToken || slotKeyFromReplacement];
-    const candidates = normalizePhaseGuideCandidates(guide);
-    if (!candidates.length) return null;
-
-    // 已抽过：从 pickedPacks 读回，保证同一 segment 重入稳定
-    const pickedId = act?.pickedPacks?.[nodeId]?.[phaseIndex];
-    if (pickedId) {
-      const found = candidates.find((c) => c.id === pickedId);
-      if (found) {
-        return { kind: 'pooled', candidate: found, guide, slotKey: slotKeyFromToken || slotKeyFromReplacement, isNew: false };
-      }
-      // pickedId 不在当前池里（candidate 被删或改名）→ 穿透到重抽分支
-    }
-
-    // 滤掉全局已用（跨 node/seg）
-    const usedIds = collectUsedPackIds(act);
-    const available = candidates.filter((c) => !usedIds.includes(c.id));
-
-    // 池空：所有候选已被消耗 → 通用兜底
-    if (!available.length) {
-      const effectiveSlotKey = slotKeyFromToken || slotKeyFromReplacement;
-      return {
-        kind: 'fallback',
-        guide,
-        slotKey: effectiveSlotKey,
-        fallbackText: getPoolFallbackText(guide, effectiveSlotKey)
-      };
-    }
-
-    const seedStr = `${act?.seed || 'AUTO'}::${nodeId}::${phaseIndex}`;
-    const picked = pickFromCandidates(available, seedStr);
-    return { kind: 'pooled', candidate: picked, guide, slotKey: slotKeyFromToken || slotKeyFromReplacement, isNew: true };
-  }
-
-  // 给 host 调：在段位推进前将本段的抽签结果落存到 actState.pickedPacks。
-  // 幂等：已落存的 segment 不会重抄。只对 isNew 的 pooled 结果写入。
-  function commitPackUsageForPhase(actState, config, narrative, nodeId, phaseIndex) {
-    if (!actState || typeof actState !== 'object') return false;
-    const resolved = resolvePhaseEvent(config, narrative, nodeId, phaseIndex, actState);
-    if (resolved?.kind !== 'pooled' || !resolved.isNew || !resolved.candidate?.id) return false;
-    if (!actState.pickedPacks || typeof actState.pickedPacks !== 'object') {
-      actState.pickedPacks = {};
-    }
-    if (!actState.pickedPacks[nodeId] || typeof actState.pickedPacks[nodeId] !== 'object') {
-      actState.pickedPacks[nodeId] = {};
-    }
-    actState.pickedPacks[nodeId][phaseIndex] = resolved.candidate.id;
-    return true;
-  }
-
-  function renderPooledCandidate(candidate, phaseIndex, guide, slotKey) {
-    if (!candidate) return '';
-    const summary = (guide && guide.summary) || slotKey || '';
-    const segLabel = ACT_PHASE_LABELS[phaseIndex] || `段${phaseIndex + 1}`;
-    const idTag = candidate.id ? ` #${candidate.id}` : '';
-    const heading = `[命运事件 · ${segLabel}${summary ? ` · ${summary}` : ''}]${idTag}`;
-    return [
-      heading,
-      candidate.direction ? `  方向: ${candidate.direction}` : '',
-      candidate.castDirective ? `  出手: ${candidate.castDirective}` : '',
-      candidate.mustEnd ? `  收束: ${candidate.mustEnd}` : ''
-    ].filter(Boolean).join('\n');
-  }
-
-  function renderPoolFallback(fallbackText, phaseIndex, guide, slotKey) {
-    const summary = (guide && guide.summary) || slotKey || '';
-    const segLabel = ACT_PHASE_LABELS[phaseIndex] || `段${phaseIndex + 1}`;
-    const heading = `[命运事件 · ${segLabel}${summary ? ` · ${summary}` : ''}] (池已消耗 · 通用兜底)`;
-    return `${heading}\n${fallbackText}`;
+    return null;
   }
 
   function findPinnedEvent(config, narrative, nodeId, phaseIndex) {
@@ -355,8 +256,8 @@ ${phaseLines.join('\n')}
     ].filter(Boolean).join('\n');
   }
 
-  function renderFateFlavor(flavorText, phaseIndex, phaseGuide, tokenKey) {
-    const label = (phaseGuide && phaseGuide.summary) || tokenKey || '';
+  function renderFateFlavor(flavorText, phaseIndex, tokenKey) {
+    const label = tokenKey || '';
     const segLabel = ACT_PHASE_LABELS[phaseIndex] || `段${phaseIndex + 1}`;
     const heading = `[命运事件 · ${segLabel}${label ? ` · ${label}` : ''}]`;
     return flavorText ? `${heading}\n${flavorText}` : heading;
@@ -414,11 +315,7 @@ ${phaseLines.join('\n')}
       if (resolved?.kind === 'pinned') {
         sections.push(renderPinnedTemplate(resolved.template, phaseIndex));
       } else if (resolved?.kind === 'flavor') {
-        sections.push(renderFateFlavor(resolved.flavorText, phaseIndex, resolved.guide, resolved.slotKey));
-      } else if (resolved?.kind === 'pooled') {
-        sections.push(renderPooledCandidate(resolved.candidate, phaseIndex, resolved.guide, resolved.slotKey));
-      } else if (resolved?.kind === 'fallback') {
-        sections.push(renderPoolFallback(resolved.fallbackText, phaseIndex, resolved.guide, resolved.slotKey));
+        sections.push(renderFateFlavor(resolved.flavorText, phaseIndex, resolved.slotKey));
       }
 
       if (stageGuides.executing) {
@@ -513,6 +410,7 @@ ${phaseLines.join('\n')}
 
       return {
         buildFirstMeetPromptContent,
+        buildPreSignalPromptContent,
         buildActStateSummaryFromDerived,
         NARRATIVE_TENSION_TIERS: deepClone(NARRATIVE_TENSION_TIERS),
         pickNarrativeTensionTier,
@@ -521,13 +419,7 @@ ${phaseLines.join('\n')}
         hashStringToSeed,
         mulberry32,
         pickFromCandidates,
-        normalizePhaseGuideCandidates,
-        collectUsedPackIds,
-        getPoolFallbackText,
         resolvePhaseEvent,
-        commitPackUsageForPhase,
-        renderPooledCandidate,
-        renderPoolFallback,
         findPinnedEvent,
         resolveNodeGuide,
         renderPinnedTemplate,

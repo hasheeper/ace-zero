@@ -762,7 +762,7 @@
   var KAKO_STREET_FORTUNE_KEY = 'kako_street_added_fortune';
   var KAKO_STREET_CURSE_KEY = 'kako_street_added_curse';
   var KAKO_LAST_MANA_DELTA_KEY = 'kako_last_mana_delta';
-  var KAKO_USED_T0_KEY = 'kako_used_t0_this_street';
+  var KAKO_USED_LIMITED_KEY = 'kako_used_limited_skill_this_street';
   var KAKO_RULING_CONTRACT_KEY = 'kako_ruling_contract';
   var KAKO_RULING_PENDING_MARK_KEY = 'kako_ruling_pending';
   var cotaCardSerial = 0;
@@ -1194,7 +1194,7 @@
     };
     for (var i = 0; i < packs.length; i++) {
       var pack = packs[i] || {};
-      var size = Math.max(1, Number(pack.entrySize != null ? pack.entrySize : (pack.tier != null ? pack.tier : 1)) || 1);
+      var size = Math.max(1, Number(pack.entrySize != null ? pack.entrySize : 1) || 1);
       summary.entrySize += size;
       summary.fortune += Math.max(0, Number(pack.bubble_fortune || 0));
       summary.chaos += Math.max(0, Number(pack.bubble_chaos || 0));
@@ -1863,10 +1863,11 @@
       targetId: ownerId,
       targetName: owner.name,
       type: 'curse',
+      kind: 'curse',
       power: power,
       effectivePower: power,
-      tier: 0,
-      attr: 'moirai',
+      level: 0,
+      system: 'moirai',
       activation: 'active',
       source: 'eulalia_absolution_burden',
       skillKey: 'absolution',
@@ -1983,10 +1984,11 @@
         targetId: target.id,
         targetName: target.name,
         type: 'curse',
+        kind: 'curse',
         power: share,
         effectivePower: share,
-        tier: 0,
-        attr: 'moirai',
+        level: 0,
+        system: 'moirai',
         activation: 'active',
         source: 'eulalia_absolution_burst',
         skillKey: 'absolution',
@@ -2207,10 +2209,11 @@
         ownerId: ownerId,
         ownerName: owner.name,
         type: 'fortune',
+        kind: 'fortune',
         power: selfPower,
         effectivePower: selfPower,
-        tier: skill && skill.tier != null ? skill.tier : 2,
-        attr: skill && skill.attr ? skill.attr : 'moirai',
+        level: skill && skill.level != null ? skill.level : 2,
+        system: 'moirai',
         activation: 'active',
         source: 'eulalia_benediction_self',
         skillKey: 'benediction',
@@ -2233,10 +2236,11 @@
         targetId: targetId,
         targetName: target.name,
         type: 'fortune',
+        kind: 'fortune',
         power: targetPower,
         effectivePower: targetPower,
-        tier: skill && skill.tier != null ? skill.tier : 2,
-        attr: skill && skill.attr ? skill.attr : 'moirai',
+        level: skill && skill.level != null ? skill.level : 2,
+        system: 'moirai',
         activation: 'active',
         source: 'eulalia_benediction_target',
         skillKey: 'benediction',
@@ -2553,7 +2557,7 @@
     var skills = getPlayerSkills(runtimeApi, ownerId);
     for (var i = 0; i < skills.length; i++) {
       if (!skills[i]) continue;
-      if (skills[i].attr === 'chaos') return true;
+      if (skills[i].system === 'chaos') return true;
     }
     return false;
   }
@@ -2663,23 +2667,23 @@
       var forecast = scoreVvTargetDelta(roleCtx, target, runtimeApi);
       var targetState = getVvTargetState(runtimeApi, target.id, owner.id);
       var alreadyHolding = targetState.positionCount > 0;
-      var tier = 1;
-      if (phase !== 'preflop' && forecast.strength >= 24 && manaCurrent >= 78) tier = 3;
-      else if (forecast.strength >= 14 && manaCurrent >= 62) tier = 2;
+      var entrySize = 1;
+      if (phase !== 'preflop' && forecast.strength >= 24 && manaCurrent >= 78) entrySize = 3;
+      else if (forecast.strength >= 14 && manaCurrent >= 62) entrySize = 2;
       var shouldUse = false;
       if (phase !== 'river' && !hasOwnerPendingSkillKey(roleCtx, 'bubble_liquidation') && manaCurrent >= 42 && manaRatio >= 0.28) {
         if (!alreadyHolding && phase === 'preflop') shouldUse = forecast.strength >= 16;
         else if (phase === 'flop') shouldUse = forecast.strength >= (alreadyHolding ? 13 : 10);
         else if (phase === 'turn') shouldUse = !alreadyHolding && forecast.strength >= 14;
       }
-      var score = forecast.strength + tier * 4 - (alreadyHolding ? 6 : 0);
+      var score = forecast.strength + entrySize * 4 - (alreadyHolding ? 6 : 0);
       if (!best || score > best.score) {
         best = {
           shouldUse: shouldUse,
           targetId: target.id,
           targetName: target.name || null,
           direction: forecast.direction,
-          tier: tier,
+          entrySize: entrySize,
           riseScore: forecast.riseScore,
           fallScore: forecast.fallScore,
           strength: forecast.strength,
@@ -2695,7 +2699,7 @@
       targetId: null,
       targetName: null,
       direction: 'bullish',
-      tier: 1,
+      entrySize: 1,
       riseScore: 0,
       fallScore: 0,
       strength: 0,
@@ -2808,7 +2812,7 @@
           targetId: target.id,
           targetName: target.name || null,
           direction: leadPack.direction === 'bearish' ? 'bearish' : 'bullish',
-          tier: Math.max(1, Number(leadPack.tier != null ? leadPack.tier : leadPack.entrySize || 1) || 1),
+          entrySize: Math.max(1, Number(leadPack.entrySize || 1) || 1),
           deviationLevel: deviationLevel,
           bubbleTotal: bubbleTotal,
           score: score,
@@ -2824,7 +2828,7 @@
       targetId: null,
       targetName: null,
       direction: 'bullish',
-      tier: 1,
+      entrySize: 1,
       deviationLevel: 0,
       bubbleTotal: 0,
       score: -999,
@@ -2930,10 +2934,11 @@
         ownerId: collectorId,
         ownerName: collector.name,
         type: 'fortune',
+        kind: 'fortune',
         power: fortuneFee,
         effectivePower: fortuneFee,
-        tier: 99,
-        attr: 'moirai',
+        level: 0,
+        system: 'moirai',
         activation: 'passive',
         source: 'vv_service_fee',
         skillKey: 'service_fee',
@@ -2977,25 +2982,24 @@
 
     var targetId = payload.targetId != null ? payload.targetId : payload.protectId;
     if (targetId == null) return;
-    var requestedTier = Math.max(1, Math.min(3,
+    var requestedEntrySize = Math.max(1, Math.min(3,
       Number(
-        payload.tier != null ? payload.tier :
-        payload.positionTier != null ? payload.positionTier :
         payload.entrySize != null ? payload.entrySize :
-        payload.options && payload.options.tier != null ? payload.options.tier :
+        payload.positionEntrySize != null ? payload.positionEntrySize :
+        payload.options && payload.options.entrySize != null ? payload.options.entrySize :
         1
       ) || 1
     ));
-    var packPower = VV_POSITION_UNIT * requestedTier;
+    var packPower = VV_POSITION_UNIT * requestedEntrySize;
     applyVvServiceFeeForGain(runtimeApi, skill.ownerId, targetId, packPower, 'fortune', skill.skillKey, {
       targetId: targetId,
       direction: payload.direction || (payload.options && payload.options.direction) || 'bullish',
-      tier: requestedTier
+      entrySize: requestedEntrySize
     });
     applyVvServiceFeeForGain(runtimeApi, skill.ownerId, targetId, packPower, 'mana', skill.skillKey, {
       targetId: targetId,
       direction: payload.direction || (payload.options && payload.options.direction) || 'bullish',
-      tier: requestedTier
+      entrySize: requestedEntrySize
     });
   }
 
@@ -3478,10 +3482,11 @@
         ownerId: ownerId,
         ownerName: player.name,
         type: 'fortune',
+        kind: 'fortune',
         power: recoveredFortune,
         effectivePower: recoveredFortune,
-        tier: 99,
-        attr: 'moirai',
+        level: 0,
+        system: 'moirai',
         activation: 'passive',
         source: 'poppy_cockroach_fortune',
         skillKey: 'cockroach',
@@ -3581,10 +3586,11 @@
       ownerId: ownerId,
       ownerName: player.name,
       type: 'fortune',
+      kind: 'fortune',
       power: 20,
       effectivePower: 20,
-      tier: skill && skill.tier != null ? skill.tier : 2,
-      attr: 'moirai',
+      level: skill && skill.level != null ? skill.level : 2,
+      system: 'moirai',
       activation: 'passive',
       source: 'poppy_lucky_find',
       skillKey: 'lucky_find',
@@ -3636,15 +3642,15 @@
       queueRuntimeForce(runtimeApi, {
         ownerId: player.id,
         ownerName: player.name,
-        type: 'fortune',
-        power: packPower,
-        effectivePower: packPower,
-        tier: 0,
-        attr: 'moirai',
+      type: 'fortune',
+      kind: 'fortune',
+      power: packPower,
+      effectivePower: packPower,
+      level: 0,
+      system: 'moirai',
         activation: 'passive',
         source: 'poppy_miracle',
         skillKey: 'miracle',
-        suppressTiers: [1, 2, 3],
         _poppyMiracleAsset: true
       }, {
         reason: 'poppy_miracle_inject',
@@ -3830,12 +3836,13 @@
       ownerId: ownerId,
       ownerName: owner.name,
       type: 'curse',
+      kind: 'curse',
       targetId: targetId,
       targetName: target.name,
       power: power,
       effectivePower: power,
-      tier: 99,
-      attr: 'chaos',
+      level: 0,
+      system: 'chaos',
       activation: 'active',
       source: sourceKey,
       skillKey: sourceKey
@@ -3855,10 +3862,11 @@
       ownerId: ownerId,
       ownerName: owner.name,
       type: 'fortune',
+      kind: 'fortune',
       power: power,
       effectivePower: power,
-      tier: 99,
-      attr: 'moirai',
+      level: 0,
+      system: 'moirai',
       activation: 'active',
       source: sourceKey,
       skillKey: sourceKey
@@ -4227,12 +4235,13 @@
       ownerId: ownerId,
       ownerName: owner.name,
       type: 'curse',
+      kind: 'curse',
       targetId: target.id,
       targetName: target.name,
       power: power,
       effectivePower: power,
-      tier: 99,
-      attr: 'chaos',
+      level: 0,
+      system: 'chaos',
       activation: 'active',
       source: 'trixie_wild_overflow',
       skillKey: 'wild_card_core',
@@ -4552,8 +4561,8 @@
         type: contract.mode === 'fortune_self' ? 'fortune' : 'curse',
         power: Math.max(0, Number(contract.power || 0)),
         effectivePower: Math.max(0, Number(contract.power || 0)),
-        tier: 2,
-        attr: 'chaos',
+        level: skill && skill.level != null ? skill.level : 2,
+        system: 'chaos',
         activation: 'active',
         source: 'trixie_rule_rewrite',
         skillKey: 'rule_rewrite'
@@ -5812,7 +5821,7 @@
 
   function handleCotaRealityFaultLink(payload, runtimeApi) {
     var skill = payload && payload.skill;
-    if (!skill || skill.ownerId == null || skill.id !== 'reality') return;
+    if (!skill || skill.ownerId == null || skill.skillKey !== 'reality') return;
     var owner = getPlayerById(runtimeApi, skill.ownerId);
     if (!owner || (owner.role !== 'KAZU' && owner.subRole !== 'KAZU')) return;
     var players = getCotaPlayers(runtimeApi);
@@ -6191,7 +6200,7 @@
       fortune: getKakoAssetValue(runtimeApi, targetId, KAKO_STREET_FORTUNE_KEY),
       curse: Math.max(0, Number(curseState.value || 0)),
       lastManaDelta: getKakoAssetValue(runtimeApi, targetId, KAKO_LAST_MANA_DELTA_KEY),
-      usedT0: getKakoAssetValue(runtimeApi, targetId, KAKO_USED_T0_KEY),
+      usedLimitedSkill: getKakoAssetValue(runtimeApi, targetId, KAKO_USED_LIMITED_KEY),
       redSeal: getKakoAssetValue(runtimeApi, targetId, KAKO_RED_SEAL_KEY) > 0
     };
   }
@@ -6298,13 +6307,13 @@
     var outgoingFortune = getKakoMaxOutgoingForcePower(runtimeApi, ownerId, 'fortune');
     var outgoingCurse = getKakoMaxOutgoingForcePower(runtimeApi, ownerId, 'curse');
     var lastManaDelta = getKakoAssetValue(runtimeApi, ownerId, KAKO_LAST_MANA_DELTA_KEY);
-    var usedT0 = getKakoAssetValue(runtimeApi, ownerId, KAKO_USED_T0_KEY);
+    var usedLimitedSkill = getKakoAssetValue(runtimeApi, ownerId, KAKO_USED_LIMITED_KEY);
     return incomingFortune >= 40 ||
       incomingCurse >= 40 ||
       outgoingFortune >= 40 ||
       outgoingCurse >= 40 ||
       lastManaDelta >= 40 ||
-      usedT0 > 0;
+      usedLimitedSkill > 0;
   }
 
   function syncKakoRedSealState(runtimeApi, ownerId) {
@@ -6394,7 +6403,7 @@
       clearKakoAsset(runtimeApi, player.id, KAKO_STREET_FORTUNE_KEY);
       clearKakoAsset(runtimeApi, player.id, KAKO_STREET_CURSE_KEY);
       clearKakoAsset(runtimeApi, player.id, KAKO_LAST_MANA_DELTA_KEY);
-      clearKakoAsset(runtimeApi, player.id, KAKO_USED_T0_KEY);
+      clearKakoAsset(runtimeApi, player.id, KAKO_USED_LIMITED_KEY);
       if (skillSystem && typeof skillSystem.clearStatusMark === 'function') {
         skillSystem.clearStatusMark(player.id, KAKO_RULING_PENDING_MARK_KEY);
       }
@@ -6534,12 +6543,12 @@
     syncKakoRedSealState(runtimeApi, ownerId);
   }
 
-  function captureKakoTierZeroUsage(payload, runtimeApi) {
+  function captureKakoLimitedSkillUsage(payload, runtimeApi) {
     if (!payload || !payload.skill || payload.skill.ownerId == null) return;
     var skill = payload.skill;
-    if (Number(skill.tier) !== 0) return;
-    setKakoAsset(runtimeApi, skill.ownerId, KAKO_USED_T0_KEY, 1, {
-      source: skill.skillKey || skill.effect || 'tier_zero'
+    if (!(skill.usesPerGame > 0 || Number(skill.level || 0) === 0)) return;
+    setKakoAsset(runtimeApi, skill.ownerId, KAKO_USED_LIMITED_KEY, 1, {
+      source: skill.skillKey || skill.effect || 'limited_skill'
     });
     syncKakoRedSealState(runtimeApi, skill.ownerId);
   }
@@ -6908,7 +6917,7 @@
     if (!payload || !payload.skill || payload.skill.ownerId == null) return;
     if (payload.__kakoRuntimeHandled) return;
     payload.__kakoRuntimeHandled = true;
-    captureKakoTierZeroUsage(payload, runtimeApi);
+    captureKakoLimitedSkillUsage(payload, runtimeApi);
 
     var ownerId = payload.skill.ownerId;
     var owner = getPlayerById(runtimeApi, ownerId);
@@ -7239,10 +7248,11 @@
           targetId: player.id,
           targetName: player.name,
           type: 'fortune',
+          kind: 'fortune',
           power: fortuneTotal,
           effectivePower: fortuneTotal,
-          tier: 99,
-          attr: 'moirai',
+          level: 0,
+          system: 'moirai',
           activation: 'passive',
           source: 'vv_bubble',
           skillKey: 'clairvoyance',
@@ -7267,11 +7277,12 @@
           ownerId: sourceId,
           ownerName: source ? source.name : 'VV',
           type: 'curse',
+          kind: 'curse',
           targetId: player.id,
           power: chaosTotal,
           effectivePower: chaosTotal,
-          tier: 99,
-          attr: 'chaos',
+          level: 0,
+          system: 'chaos',
           activation: 'passive',
           source: 'vv_bubble',
           skillKey: 'clairvoyance',
@@ -7306,12 +7317,11 @@
     if (targetId == null) return;
 
     var manaPool = getPlayerManaPool(runtimeApi, targetId);
-    var requestedTier = Math.max(1, Math.min(3,
+    var requestedEntrySize = Math.max(1, Math.min(3,
       Number(
-        payload.tier != null ? payload.tier :
-        payload.positionTier != null ? payload.positionTier :
         payload.entrySize != null ? payload.entrySize :
-        payload.options && payload.options.tier != null ? payload.options.tier :
+        payload.positionEntrySize != null ? payload.positionEntrySize :
+        payload.options && payload.options.entrySize != null ? payload.options.entrySize :
         1
       ) || 1
     ));
@@ -7320,7 +7330,7 @@
       : payload.options && payload.options.direction != null ? payload.options.direction
       : 'bullish';
     requestedDirection = requestedDirection === 'bearish' ? 'bearish' : 'bullish';
-    var packPower = VV_POSITION_UNIT * requestedTier;
+    var packPower = VV_POSITION_UNIT * requestedEntrySize;
     var targetPlayer = getPlayerById(runtimeApi, targetId);
     var nextPacks = getVvPositionPacks(runtimeApi, targetId).filter(function(pack) {
       return !(pack && pack.ownerId === skill.ownerId);
@@ -7335,8 +7345,7 @@
       bubble_fortune: packPower,
       bubble_chaos: packPower,
       bubble_mana: packPower,
-      entrySize: requestedTier,
-      tier: requestedTier,
+      entrySize: requestedEntrySize,
       direction: requestedDirection,
       createdPhase: payload.phase || null,
       icon: VV_MARK_ICON
@@ -7344,7 +7353,7 @@
     var nextEntrySize = 0;
     for (var pi = 0; pi < nextPacks.length; pi++) {
       var nextPack = nextPacks[pi] || {};
-      nextEntrySize += Math.max(1, Number(nextPack.entrySize != null ? nextPack.entrySize : (nextPack.tier != null ? nextPack.tier : 1)) || 1);
+      nextEntrySize += Math.max(1, Number(nextPack.entrySize != null ? nextPack.entrySize : 1) || 1);
     }
     ledger.setAsset(targetId, VV_POSITION_KEY, nextPacks.length, {
       positions: nextPacks,
@@ -7424,10 +7433,11 @@
             ownerId: casterId,
             ownerName: casterName,
             type: 'fortune',
+            kind: 'fortune',
             power: fortuneRecover,
             effectivePower: fortuneRecover,
-            tier: 0,
-            attr: 'moirai',
+            level: 0,
+            system: 'moirai',
             activation: 'active',
             source: 'bubble_liquidation',
             skillKey: 'bubble_liquidation',
@@ -7456,10 +7466,11 @@
           ownerId: target.id,
           ownerName: target.name,
           type: 'fortune',
+          kind: 'fortune',
           power: fortuneBurst,
           effectivePower: fortuneBurst,
-          tier: 0,
-          attr: 'moirai',
+          level: 0,
+          system: 'moirai',
           activation: 'active',
           source: 'bubble_liquidation',
           skillKey: 'bubble_liquidation',
@@ -7478,11 +7489,12 @@
           ownerId: casterId,
           ownerName: casterName,
           type: 'curse',
+          kind: 'curse',
           targetId: target.id,
           power: chaosBurst,
           effectivePower: chaosBurst,
-          tier: 0,
-          attr: 'chaos',
+          level: 0,
+          system: 'chaos',
           activation: 'active',
           source: 'bubble_liquidation',
           skillKey: 'bubble_liquidation',
@@ -7497,7 +7509,7 @@
       }
 
       packDetails.push({
-        tier: Math.max(1, Number(pack.tier != null ? pack.tier : pack.entrySize || 1) || 1),
+        entrySize: Math.max(1, Number(pack.entrySize || 1) || 1),
         direction: pack.direction === 'bearish' ? 'bearish' : 'bullish',
         level: Math.max(0, Number(state.level || 0)),
         stateDirection: state.direction || 'flat',
@@ -7740,7 +7752,7 @@
         };
         options.targetState = buildPlan.targetState;
       }
-      options.tier = buildPlan.tier;
+      options.entrySize = buildPlan.entrySize || 1;
       options.direction = buildPlan.direction;
       options.rolePlan = 'vv_open_position_forecast';
     } else if (skill.effect === 'bubble_liquidation') {

@@ -18,6 +18,21 @@
           "url": "./packs/acezero-main/schema/acezero-schema.js"
         },
         {
+          "id": "acezero-asset-data",
+          "type": "script",
+          "url": "./packs/acezero-main/asset/data.js"
+        },
+        {
+          "id": "acezero-asset-runtime",
+          "type": "script",
+          "url": "./packs/acezero-main/asset/runtime.js"
+        },
+        {
+          "id": "acezero-asset-summary",
+          "type": "script",
+          "url": "./packs/acezero-main/asset/summary.js"
+        },
+        {
           "id": "acezero-act-data",
           "type": "script",
           "url": "./packs/acezero-main/act/data.js"

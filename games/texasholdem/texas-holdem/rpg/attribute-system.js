@@ -1,6 +1,6 @@
 /**
  * Attribute System — 属性系统
- * 《零之王牌》四属性定义 + 三角克制 + 属性面板管理
+ * 《零之王牌》四属性定义 + 属性面板管理
  *
  * 四属性：
  *   天命 (Moirai)  — 顺流，强制发好牌，Rino 专精
@@ -8,15 +8,14 @@
  *   灵视 (Psyche)  — 观察者之眼，识破与读心，Kazu 专精
  *   虚无 (Void)    — Kazu 前台独有，% 魔法减伤
  *
- * 克制环：
- *   Chaos > Moirai > Psyche > Chaos
- *   Void 不参与克制，纯减伤
+ * 系统克制关系由 MoZ force resolution 按技能需求稿逐条处理。
+ * AttributeSystem 只负责属性面板数值和 Void 减伤除数。
  *
  * 技能→属性映射：
- *   fortune                          → Moirai
- *   curse                            → Chaos
- *   clarity / refraction / reversal  → Psyche
- *   null_field / void_shield / purge_all → Void
+ *   fortune / role moirai skills → Moirai
+ *   curse / role chaos skills    → Chaos
+ *   psyche / role psyche skills  → Psyche
+ *   void                         → Void
  */
 
 // ========== 属性常量 ==========
@@ -28,25 +27,16 @@ export const ATTR = {
   VOID:   'void'
 };
 
-export const COUNTER_MAP = {
-  [ATTR.CHAOS]:  ATTR.MOIRAI,
-  [ATTR.MOIRAI]: ATTR.PSYCHE,
-  [ATTR.PSYCHE]: ATTR.CHAOS
-};
-
-export const ADVANTAGE_MULT  = 1.5;
-export const DISADVANTAGE_MULT = 0.75;
-const NEUTRAL_MULT = 1.0;
-
 export const EFFECT_TO_ATTR = {
   fortune:      ATTR.MOIRAI,
   curse:        ATTR.CHAOS,
-  clarity:      ATTR.PSYCHE,
+  psyche:       ATTR.PSYCHE,
+  void:         ATTR.VOID,
+  analysis:     ATTR.PSYCHE,
+  premonition:  ATTR.PSYCHE,
   refraction:   ATTR.PSYCHE,
-  reversal:     ATTR.PSYCHE,
-  null_field:   ATTR.VOID,
-  void_shield:  ATTR.VOID,
-  purge_all:    ATTR.VOID,
+  insulation:   ATTR.VOID,
+  reality:      ATTR.VOID,
   royal_decree: ATTR.MOIRAI,
   heart_read:   ATTR.PSYCHE,
   cooler:       ATTR.CHAOS,
@@ -111,14 +101,6 @@ export class AttributeSystem {
 
   getAttributeForEffect(effectType) {
     return EFFECT_TO_ATTR[effectType] || ATTR.MOIRAI;
-  }
-
-  getCounterMultiplier(attackerAttr, defenderAttr) {
-    if (attackerAttr === ATTR.VOID || defenderAttr === ATTR.VOID) return NEUTRAL_MULT;
-    if (attackerAttr === defenderAttr) return NEUTRAL_MULT;
-    if (COUNTER_MAP[attackerAttr] === defenderAttr) return ADVANTAGE_MULT;
-    if (COUNTER_MAP[defenderAttr] === attackerAttr) return DISADVANTAGE_MULT;
-    return NEUTRAL_MULT;
   }
 
   getAttributeBonus(attrValue) {

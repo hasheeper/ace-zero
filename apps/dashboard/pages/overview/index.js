@@ -14,6 +14,39 @@ const WORLD_LOCATION_LAYER_LABELS = Object.freeze({
     THE_STREET: '下街',
     THE_RUST: '底锈'
 });
+const ENCOUNTER_DEBUG_TAG_OPTIONS = Object.freeze([
+    { key: 'casino', label: 'CASINO' },
+    { key: 'gambling_hall', label: 'GAMBLING' },
+    { key: 'dealer', label: 'DEALER' },
+    { key: 'card_table', label: 'TABLE' },
+    { key: 'church', label: 'CHURCH' },
+    { key: 'audit', label: 'AUDIT' },
+    { key: 'rust', label: 'RUST' },
+    { key: 'market', label: 'MARKET' }
+]);
+const ENCOUNTER_DEBUG_FLAG_OPTIONS = Object.freeze([
+    { key: 'church_event_triggered', label: 'CHURCH EVENT' },
+    { key: 'sia_introduced', label: 'SIA MET' },
+    { key: 'poppy_introduced', label: 'POPPY MET' },
+    { key: 'vv_introduced', label: 'VV MET' }
+]);
+const ENCOUNTER_REASON_LABELS = Object.freeze({
+    active_or_done: 'already active/done',
+    cooldown: 'cooldown',
+    crisis: 'crisis too low',
+    day: 'day too early',
+    funds: 'funds too low',
+    geo: 'wrong geo',
+    missing_church_event: 'needs church event',
+    missing_day: 'missing day',
+    missing_geo: 'missing geo',
+    missing_rule: 'missing rule',
+    missing_tags: 'missing scene tag',
+    node_index: 'node too early',
+    requires_any: 'needs one alternate gate',
+    spent_score: 'spent score too low',
+    tag: 'wrong scene tag'
+});
 const DASHBOARD_HERO_CODE_BY_KEY = Object.freeze({
     kazu: 'KAZU',
     rino: 'RINO',
@@ -189,6 +222,8 @@ function createPlannerRuntimeContext() {
         getNodeTemplate,
         getSelectableNodeIds,
         getDefaultPresentNodeId,
+        normalizeResourceKey,
+        resourceTypeMap: RESOURCE_TYPE_MAP,
         setCurrentFocusNodeId(nextNodeId) {
             currentFocusNodeId = nextNodeId;
         }
@@ -244,12 +279,12 @@ const appData = {
             nodePool: [
                 { key: 'combat', title: '交锋', icon: '◆', count: 0, className: 'stat-combat' },
                 { key: 'rest', title: '休整', icon: '●', count: 0, className: 'stat-rest' },
-                { key: 'asset', title: '资产', icon: '■', count: 0, className: 'stat-asset' },
-                { key: 'vision', title: '视野', icon: '⬢', count: 0, className: 'stat-vision' }
+                { key: 'asset', title: '契令', icon: '■', count: 0, className: 'stat-asset' },
+                { key: 'vision', title: '情报', icon: '⬢', count: 0, className: 'stat-vision' }
             ],
         resources: [
                 { label: 'FUNDS', value: '1,250', className: 'res-gold' },
-                { label: 'ASSETS', value: '0', className: 'res-assets' },
+                { label: 'DECK PTS', value: '0', className: 'res-assets' },
                 { label: 'MAJOR DEBT', value: '395,000,000', className: 'res-danger' },
                 { label: 'DEBT', value: '0', className: 'res-debt' }
             ]
@@ -283,10 +318,10 @@ const appData = {
             executeReadyLabel: 'ADVANCE NODE',
             executeWorkingLabel: 'EXECUTING...',
             inventory: [
-                { key: 'combat', type: 'COMBAT', label: '交锋', sublabel: 'L0 / R0', count: 0 },
-                { key: 'rest', type: 'REST', label: '休整', sublabel: 'L0 / R0', count: 0 },
-                { key: 'asset', type: 'ASSET', label: '资产', sublabel: 'L0 / R0', count: 0 },
-                { key: 'vision', type: 'VISION', label: '视野', sublabel: 'L0 / R0', count: 0 }
+                { key: 'combat', type: 'COMBAT', label: '交锋点', sublabel: '', count: 0 },
+                { key: 'rest', type: 'REST', label: '休整点', sublabel: '', count: 0 },
+                { key: 'asset', type: 'TOKEN', label: '契点', sublabel: '', count: 0 },
+                { key: 'vision', type: 'INTEL', label: '情报点', sublabel: '', count: 0 }
             ],
             // slotId/key 为 DOM 稳定标识，保留既有命名不改；
             // 显示字符串改为罗马数字 I~IV，不再使用中文段位文案。
@@ -343,19 +378,30 @@ const appData = {
     const RESOURCE_KEYS = ['combat', 'rest', 'asset', 'vision'];
     const RESOURCE_ALIASES = {
         contract: 'asset',
-        event: 'vision'
+        event: 'vision',
+        intel: 'vision',
+        intelligence: 'vision',
+        sight: 'vision'
     };
     const RESOURCE_TYPE_MAP = {
         combat: 'COMBAT',
         rest: 'REST',
-        asset: 'ASSET',
-        vision: 'VISION'
+        asset: 'TOKEN',
+        vision: 'INTEL'
     };
     const RESOURCE_LABEL_MAP = {
         combat: '交锋',
         rest: '休整',
-        asset: '资产',
-        vision: '视野'
+        asset: '契令',
+        vision: '情报'
+    };
+    const PLANNER_PAGE_KEYS = ['planner', ...RESOURCE_KEYS];
+    const PLANNER_PAGE_META = {
+        planner: { title: 'PHASE PLANNER', label: '规划', subtitle: '四段相位排程' },
+        combat: { title: 'COMBAT', label: '交锋点', subtitle: '战斗接口预留' },
+        rest: { title: 'REST', label: '休整点', subtitle: '回复 / 染色 / 营收' },
+        asset: { title: 'ASSET', label: '契令点', subtitle: '契约卡组 / Deck' },
+        vision: { title: 'VISION', label: '情报点', subtitle: '视野 / 替换 / 跃迁' }
     };
     const REST_CONTROL_TINT_KEYS = ['neutral', ...RESOURCE_KEYS];
     const ENCOUNTER_DEBUG_CHARACTER_KEYS = ['SIA', 'TRIXIE', 'POPPY', 'COTA', 'VV', 'KUZUHA', 'KAKO', 'EULALIA'];
@@ -367,6 +413,12 @@ const appData = {
         worldClock: { ...DEFAULT_WORLD_CLOCK },
         executing: false,
         drawerOpen: false,
+        assetDrawerTab: 'planner',
+        plannerPage: 'planner',
+        plannerEditMode: 'add',
+        plannerAddType: '',
+        assetWarehouseOpen: false,
+        restTintPopupSlotId: '',
         encounterDebugOpen: false,
         awaitingRouteChoice: false,
         routeHistory: ['node1'],
@@ -377,6 +429,7 @@ const appData = {
         phaseSlots: Object.fromEntries(PHASE_SLOT_IDS.map((slotId) => [slotId, null])),
         resources: {
             funds: 1250,
+            // Balance-sheet assets from hero.assets. AssetDeck points are world.assetDeck.asset_count.
             assets: 0,
             mana: 45,
             majorDebt: 395000000,
@@ -386,10 +439,12 @@ const appData = {
     const INITIAL_RESOURCES = { ...appState.resources };
     const ACT_MESSAGE_TYPES = new Set(['ACE0_ACT_INIT', 'ACE0_ACT_REFRESH', 'ACE0_DASHBOARD_INIT', 'ACE0_DASHBOARD_REFRESH']);
     const ACT_OUTBOUND_MESSAGE_TYPES = {
-        commit: 'ACE0_ACT_COMMIT'
+        commit: 'ACE0_ACT_COMMIT',
+        assetCommand: 'ACE0_ASSET_DECK_COMMAND'
     };
     const ACT_INBOUND_MESSAGE_TYPES = {
-        commitResult: 'ACE0_ACT_COMMIT_RESULT'
+        commitResult: 'ACE0_ACT_COMMIT_RESULT',
+        assetCommandResult: 'ACE0_ASSET_DECK_COMMAND_RESULT'
     };
     const selectionState = { source: null, type: null, slotId: null };
     const syncState = {
@@ -399,6 +454,11 @@ const appData = {
         pendingTimer: null,
         statusText: 'SYNCED TO MVU',
         errorText: ''
+    };
+    const assetCommandState = {
+        pendingRequestId: '',
+        pendingTimer: null,
+        resolver: null
     };
     const DASHBOARD_DEBUG_STORAGE_KEY = 'ace0.dashboard.debugPayload';
     const DASHBOARD_DEBUG_GLOBAL_PAYLOAD_KEY = '__ACE0_DEBUG_PAYLOAD__';
@@ -507,6 +567,175 @@ const adapterState = {
             : null;
     }
 
+    function getAssetDeckModuleApi() {
+        const candidates = [window];
+        try {
+            if (window.parent && window.parent !== window) candidates.push(window.parent);
+        } catch (_) {}
+        try {
+            if (window.top && window.top !== window && !candidates.includes(window.top)) candidates.push(window.top);
+        } catch (_) {}
+        if (typeof globalThis === 'object' && globalThis && !candidates.includes(globalThis)) candidates.push(globalThis);
+
+        for (const candidate of candidates) {
+            try {
+                const assetModule = candidate?.ACE0Modules?.assetDeck;
+                if (assetModule && typeof assetModule.applyAssetDeckCommand === 'function') return assetModule;
+            } catch (_) {}
+        }
+        return null;
+    }
+
+    function getAssetSummaryModuleApi() {
+        const candidates = [window];
+        try {
+            if (window.parent && window.parent !== window) candidates.push(window.parent);
+        } catch (_) {}
+        try {
+            if (window.top && window.top !== window && !candidates.includes(window.top)) candidates.push(window.top);
+        } catch (_) {}
+        if (typeof globalThis === 'object' && globalThis && !candidates.includes(globalThis)) candidates.push(globalThis);
+
+        for (const candidate of candidates) {
+            try {
+                const assetSummary = candidate?.ACE0Modules?.assetSummary;
+                if (assetSummary && typeof assetSummary.buildAssetDeckSummary === 'function') return assetSummary;
+            } catch (_) {}
+        }
+        return null;
+    }
+
+    function createFallbackAssetDeckState() {
+        return {
+            version: 1,
+            asset_count: 0,
+            general_slots_unlocked: 4,
+            void_slots_unlocked: 2,
+            active_general_cards: [],
+            active_void_cards: [],
+            pending_offer: null,
+            pending_offer_queue: [],
+            pending_replace: null,
+            history: [],
+            debug: {}
+        };
+    }
+
+    function normalizeAssetDeckForDashboard(rawAssetDeck) {
+        const assetModule = getAssetDeckModuleApi();
+        if (assetModule && typeof assetModule.normalizeAssetDeckState === 'function') {
+            try {
+                return assetModule.normalizeAssetDeckState(rawAssetDeck);
+            } catch (error) {
+                console.warn('[ACE0 AssetDeck] normalize failed:', error);
+            }
+        }
+        const source = rawAssetDeck && typeof rawAssetDeck === 'object' && !Array.isArray(rawAssetDeck) ? rawAssetDeck : {};
+        return {
+            ...createFallbackAssetDeckState(),
+            ...deepCloneValue(source),
+            asset_count: Math.max(0, Math.round(Number(source.asset_count ?? source.assetCount) || 0)),
+            general_slots_unlocked: Math.max(4, Math.min(8, Math.round(Number(source.general_slots_unlocked ?? source.generalSlotsUnlocked) || 4))),
+            void_slots_unlocked: Math.max(0, Math.min(2, Math.round(Number(source.void_slots_unlocked ?? source.voidSlotsUnlocked) || 2))),
+            active_general_cards: Array.isArray(source.active_general_cards) ? deepCloneValue(source.active_general_cards) : [],
+            active_void_cards: Array.isArray(source.active_void_cards) ? deepCloneValue(source.active_void_cards) : [],
+            pending_offer: source.pending_offer && typeof source.pending_offer === 'object' ? deepCloneValue(source.pending_offer) : null,
+            pending_offer_queue: Array.isArray(source.pending_offer_queue || source.pendingOfferQueue) ? deepCloneValue(source.pending_offer_queue || source.pendingOfferQueue) : [],
+            pending_replace: source.pending_replace && typeof source.pending_replace === 'object' ? deepCloneValue(source.pending_replace) : null
+        };
+    }
+
+    function getCurrentAssetDeckState() {
+        const world = getCurrentWorldPayload();
+        return normalizeAssetDeckForDashboard(world?.assetDeck);
+    }
+
+    function getAssetPendingOfferIdentity(assetDeckInput) {
+        const normalized = normalizeAssetDeckForDashboard(assetDeckInput);
+        const offer = normalized.pending_offer;
+        if (!offer || typeof offer !== 'object') return '';
+        const queueIdentity = Array.isArray(normalized.pending_offer_queue)
+            ? normalized.pending_offer_queue.map((queued) => [
+                queued?.id || '',
+                queued?.pool || '',
+                queued?.createdAt || ''
+            ].join(':')).join(';')
+            : '';
+        return [
+            offer.id || '',
+            offer.pool || '',
+            offer.createdAt || '',
+            Array.isArray(offer.choices) ? offer.choices.map((card) => card?.cardId || '').join(',') : '',
+            queueIdentity
+        ].join('|');
+    }
+
+    function getDashboardAssetSummaryGameId() {
+        return 'texas-holdem';
+    }
+
+    function buildFallbackAssetDeckSummary(assetDeck, gameId = getDashboardAssetSummaryGameId()) {
+        const normalized = normalizeAssetDeckForDashboard(assetDeck);
+        const generalCards = Array.isArray(normalized.active_general_cards) ? deepCloneValue(normalized.active_general_cards) : [];
+        const voidCards = Array.isArray(normalized.active_void_cards) ? deepCloneValue(normalized.active_void_cards) : [];
+        const allCards = [...generalCards, ...voidCards];
+        return {
+            version: 1,
+            gameId,
+            mode: isOverviewDebugMode() ? 'debug' : 'host',
+            points: Math.max(0, Math.round(Number(normalized.asset_count) || 0)),
+            slots: {
+                generalUsed: generalCards.length,
+                generalMax: Math.max(0, Math.round(Number(normalized.general_slots_unlocked) || 0)),
+                voidUsed: voidCards.length,
+                voidMax: Math.max(0, Math.round(Number(normalized.void_slots_unlocked) || 0))
+            },
+            activeCards: {
+                general: generalCards,
+                void: voidCards,
+                all: allCards,
+                effective: allCards,
+                inactive: []
+            },
+            counts: {
+                active: allCards.length,
+                effective: allCards.length,
+                inactive: 0
+            },
+            pending: {
+                offer: normalized.pending_offer,
+                offerQueue: Array.isArray(normalized.pending_offer_queue) ? deepCloneValue(normalized.pending_offer_queue) : [],
+                replace: normalized.pending_replace
+            },
+            recentHistory: Array.isArray(normalized.history) ? normalized.history.slice(-5) : [],
+            gameplay: {
+                skillLevels: [],
+                mana: [],
+                cost: [],
+                forcePower: [],
+                passive: [],
+                miniGame: {}
+            },
+            ...(isOverviewDebugMode() ? { debug: { fallback: true } } : {})
+        };
+    }
+
+    function getCurrentAssetDeckSummary(gameId = getDashboardAssetSummaryGameId()) {
+        const assetDeck = getCurrentAssetDeckState();
+        const summaryModule = getAssetSummaryModuleApi();
+        if (summaryModule && typeof summaryModule.buildAssetDeckSummary === 'function') {
+            try {
+                return summaryModule.buildAssetDeckSummary(assetDeck, {
+                    gameId,
+                    mode: isOverviewDebugMode() ? 'debug' : 'host'
+                });
+            } catch (error) {
+                console.warn('[ACE0 AssetDeck] summary failed:', error);
+            }
+        }
+        return buildFallbackAssetDeckSummary(assetDeck, gameId);
+    }
+
     function getCurrentChapterId() {
         const snapshotChapterId = typeof adapterState.lastFrontendSnapshot?.chapterId === 'string'
             ? adapterState.lastFrontendSnapshot.chapterId.trim()
@@ -552,7 +781,9 @@ const adapterState = {
             resourceSpent: createEmptyActResourceCounts(0),
             characterEncounter: {},
             pendingFirstMeet: {},
+            pendingPreSignal: {},
             pendingResolutions: [],
+            pendingAssetDeckCommands: [],
             resolutionHistory: []
         };
     }
@@ -789,10 +1020,12 @@ const adapterState = {
                 return true;
             },
             async commitActState(commitPayload) {
+                const settledWorld = settlePendingActAssetDeckCommandsForDashboardWorld(commitPayload?.world || {});
                 const debugPayload = {
                     ...(adapterState.lastPayload || {}),
                     ...deepCloneValue(commitPayload),
-                    frontendSnapshot: createFrontendSnapshotForActState(commitPayload?.world?.act || createDefaultActStateForDashboard())
+                    world: settledWorld,
+                    frontendSnapshot: createFrontendSnapshotForActState(settledWorld?.act || createDefaultActStateForDashboard())
                 };
                 writeStoredDebugPayload(debugPayload);
                 applyActStateFromPayload(debugPayload);
@@ -803,6 +1036,88 @@ const adapterState = {
                 };
             }
         };
+    }
+
+    function normalizePendingAssetDeckCommandsForDashboard(actState) {
+        const list = Array.isArray(actState?.pendingAssetDeckCommands) ? actState.pendingAssetDeckCommands : [];
+        return list.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+    }
+
+    function settlePendingActAssetDeckCommandsForDashboardWorld(worldInput) {
+        const world = worldInput && typeof worldInput === 'object' && !Array.isArray(worldInput)
+            ? deepCloneValue(worldInput)
+            : {};
+        const actState = world.act && typeof world.act === 'object' && !Array.isArray(world.act)
+            ? deepCloneValue(world.act)
+            : null;
+        const pendingCommands = normalizePendingAssetDeckCommandsForDashboard(actState);
+        const commandsToApply = pendingCommands.filter((item) => {
+            const status = typeof item.status === 'string' && item.status.trim() ? item.status.trim().toLowerCase() : 'pending';
+            return status === 'pending' && item.command && typeof item.command === 'object' && !Array.isArray(item.command);
+        });
+        if (!actState || !commandsToApply.length) return world;
+
+        const assetModule = getAssetDeckModuleApi();
+        if (!assetModule || typeof assetModule.applyAssetDeckCommand !== 'function') return world;
+
+        let assetDeck = normalizeAssetDeckForDashboard(world.assetDeck);
+        const consumedIds = new Set();
+        const resolutionHistory = Array.isArray(actState.resolutionHistory) ? deepCloneValue(actState.resolutionHistory) : [];
+
+        commandsToApply.forEach((pending) => {
+            const command = deepCloneValue(pending.command || {});
+            const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
+                ? deepCloneValue(command.payload)
+                : {};
+            command.payload = {
+                ...payload,
+                requestId: typeof payload.requestId === 'string' && payload.requestId.trim() ? payload.requestId.trim() : pending.id
+            };
+            if (!command.payload.source && pending.nodeId) {
+                command.payload.source = {
+                    type: 'act_asset_token',
+                    actId: actState.id || '',
+                    nodeId: pending.nodeId,
+                    nodeIndex: pending.nodeIndex,
+                    phaseIndex: pending.phaseIndex,
+                    level: pending.level,
+                    sources: Array.isArray(pending.sources) ? deepCloneValue(pending.sources) : []
+                };
+            }
+
+            let result;
+            try {
+                result = assetModule.applyAssetDeckCommand(assetDeck, command, {
+                    seed: `debug-act:${pending.id || Date.now()}`
+                });
+            } catch (error) {
+                result = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
+            }
+
+            if (result?.assetDeck) assetDeck = normalizeAssetDeckForDashboard(result.assetDeck);
+            const status = result?.ok ? 'resolved' : 'failed';
+            resolutionHistory.push({
+                ...deepCloneValue(pending),
+                type: 'asset',
+                status,
+                outcome: result?.code || (result?.ok ? 'asset_command_applied' : 'asset_command_failed'),
+                summary: pending.summary || `ACT AssetDeck command ${status}`,
+                payload: {
+                    commandKind: command.kind || command.type || '',
+                    commandPayload: deepCloneValue(command.payload),
+                    resultCode: result?.code || '',
+                    asset_count: Math.max(0, Math.round(Number(assetDeck.asset_count) || 0)),
+                    error: result?.error || ''
+                }
+            });
+            consumedIds.add(pending.id);
+        });
+
+        actState.pendingAssetDeckCommands = pendingCommands.filter((item) => !consumedIds.has(item.id));
+        actState.resolutionHistory = resolutionHistory;
+        world.act = actState;
+        world.assetDeck = assetDeck;
+        return world;
     }
 
     function ensureDashboardAdapter() {
@@ -1024,8 +1339,44 @@ const adapterState = {
         const source = rawLocation && typeof rawLocation === 'object' ? rawLocation : {};
         return {
             layer: normalizeWorldLocationLayer(source.layer),
-            site: typeof source.site === 'string' ? source.site.trim() : ''
+            site: typeof source.site === 'string' ? source.site.trim() : '',
+            tags: Array.isArray(source.tags)
+                ? source.tags.map((tag) => typeof tag === 'string' ? tag.trim().toLowerCase() : '').filter(Boolean)
+                : []
         };
+    }
+
+    function normalizeEncounterDebugTags(value) {
+        const allowed = new Set(ENCOUNTER_DEBUG_TAG_OPTIONS.map((option) => option.key));
+        const raw = Array.isArray(value) ? value : [];
+        return raw
+            .map((tag) => typeof tag === 'string' ? tag.trim().toLowerCase() : '')
+            .filter((tag, index, list) => tag && allowed.has(tag) && list.indexOf(tag) === index);
+    }
+
+    function normalizeEncounterDebugFlags(value) {
+        const allowed = new Set(ENCOUNTER_DEBUG_FLAG_OPTIONS.map((option) => option.key));
+        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        return ENCOUNTER_DEBUG_FLAG_OPTIONS.reduce((result, option) => {
+            result[option.key] = source[option.key] === true && allowed.has(option.key);
+            return result;
+        }, {});
+    }
+
+    function normalizeEncounterDebugContext(rawContext, actState = null) {
+        const source = rawContext && typeof rawContext === 'object' ? rawContext : {};
+        return {
+            tags: normalizeEncounterDebugTags(source.tags),
+            storyFlags: normalizeEncounterDebugFlags(source.storyFlags),
+            funds: Math.max(0, Math.round(Number(source.funds ?? appState.resources.funds) || 0)),
+            crisis: Math.max(0, Math.min(100, Math.round(Number(source.crisis ?? actState?.crisis) || 0)))
+        };
+    }
+
+    function getCurrentEncounterDebugContext() {
+        const world = getCurrentWorldPayload();
+        const actState = world?.act && typeof world.act === 'object' ? world.act : buildCurrentActStateSnapshot();
+        return normalizeEncounterDebugContext(world?.encounterContext, actState);
     }
 
     function getCurrentWorldPayload() {
@@ -1152,6 +1503,14 @@ const adapterState = {
         });
     }
 
+    function notifyDashboardCharactersSynced(payload) {
+        try {
+            window.dispatchEvent(new CustomEvent('acezero:dashboard-characters-synced', {
+                detail: { payload }
+            }));
+        } catch (_) {}
+    }
+
     function applyFrontendSnapshotToDashboard(frontendSnapshot, actState) {
         if (!frontendSnapshot || typeof frontendSnapshot !== 'object') return false;
         if (frontendSnapshot.campaign && typeof frontendSnapshot.campaign === 'object') {
@@ -1230,13 +1589,17 @@ const adapterState = {
 
     function applyActStateFromPayload(payload) {
         const previousDrawerOpen = appState.drawerOpen;
+        const previousPayload = adapterState.lastPayload;
+        const previousOfferIdentity = getAssetPendingOfferIdentity(extractWorldPayload(previousPayload)?.assetDeck);
         const normalizedPayload = buildNormalizedDashboardPayload(payload);
         const world = extractWorldPayload(normalizedPayload);
         const actState = world?.act;
         const frontendSnapshot = extractFrontendSnapshot(normalizedPayload);
+        const nextOfferIdentity = getAssetPendingOfferIdentity(world?.assetDeck);
 
         syncHeroResourcesFromPayload(normalizedPayload);
         syncDashboardCharactersFromHeroPayload(normalizedPayload);
+        notifyDashboardCharactersSynced(normalizedPayload);
         if (!actState || typeof actState !== 'object') return false;
         adapterState.lastPayload = deepCloneValue(normalizedPayload);
         if (frontendSnapshot && typeof frontendSnapshot === 'object') {
@@ -1291,6 +1654,10 @@ const adapterState = {
             reserve: normalizeActResourceCounts(actState.reserve)[key]
         }]));
         appState.phaseSlots = normalizeActPhaseSlots(actState.phase_slots);
+        if (nextOfferIdentity && nextOfferIdentity !== previousOfferIdentity && canOpenPlannerDrawer()) {
+            appState.drawerOpen = true;
+            setPlannerPage('asset');
+        }
         syncState.dirty = false;
         syncState.saving = false;
         syncState.pendingRequestId = '';
@@ -1374,8 +1741,9 @@ const adapterState = {
                 : [],
             vision: (() => {
                 const vision = deepCloneValue(currentActState.vision || { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null });
-                if (appState.currentNodeIndex > Math.max(1, Math.round(Number(currentActState.nodeIndex) || 1))) {
-                    vision.bonusSight = 0;
+                const nodeDelta = appState.currentNodeIndex - Math.max(1, Math.round(Number(currentActState.nodeIndex) || 1));
+                if (nodeDelta > 0) {
+                    vision.bonusSight = Math.max(0, Math.round(Number(vision.bonusSight) || 0) - nodeDelta);
                     vision.jumpReady = false;
                 }
                 return vision;
@@ -1385,8 +1753,14 @@ const adapterState = {
             pendingFirstMeet: currentActState.pendingFirstMeet && typeof currentActState.pendingFirstMeet === 'object' && !Array.isArray(currentActState.pendingFirstMeet)
                 ? deepCloneValue(currentActState.pendingFirstMeet)
                 : {},
+            pendingPreSignal: currentActState.pendingPreSignal && typeof currentActState.pendingPreSignal === 'object' && !Array.isArray(currentActState.pendingPreSignal)
+                ? deepCloneValue(currentActState.pendingPreSignal)
+                : {},
             pendingResolutions: Array.isArray(currentActState.pendingResolutions)
                 ? deepCloneValue(currentActState.pendingResolutions)
+                : [],
+            pendingAssetDeckCommands: Array.isArray(currentActState.pendingAssetDeckCommands)
+                ? deepCloneValue(currentActState.pendingAssetDeckCommands)
                 : [],
             resolutionHistory: Array.isArray(currentActState.resolutionHistory)
                 ? deepCloneValue(currentActState.resolutionHistory)
@@ -1395,8 +1769,20 @@ const adapterState = {
     }
 
     function buildWorldStateForCommit() {
+        const currentWorld = getCurrentWorldPayload();
+        const world = currentWorld && typeof currentWorld === 'object'
+            ? deepCloneValue(currentWorld)
+            : {};
+        if (!isOverviewDebugMode() && Object.prototype.hasOwnProperty.call(world, 'encounterContext')) {
+            delete world.encounterContext;
+        }
+        const encounterContext = isOverviewDebugMode()
+            ? normalizeEncounterDebugContext(world.encounterContext, world.act)
+            : undefined;
         return {
+            ...world,
             location: getCurrentWorldLocation(),
+            ...(encounterContext ? { encounterContext } : {}),
             act: buildActStateForCommit()
         };
     }
@@ -1469,6 +1855,156 @@ const adapterState = {
         return true;
     }
 
+    function applyAssetDeckCommand(command) {
+        if (!command || typeof command !== 'object') return false;
+        if (isOverviewDebugMode()) {
+            return applyAssetDeckCommandLocally(command);
+        }
+
+        const requestId = `asset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const commandPayload = { requestId, command };
+        const directBridge = resolveDirectAssetDeckCommandBridge();
+        syncState.statusText = 'ASSET COMMAND';
+        syncState.errorText = '';
+
+        if (directBridge) {
+            Promise.resolve()
+                .then(() => directBridge(commandPayload))
+                .then((result) => {
+                    resolveAssetDeckCommandResult(result || {
+                        ok: false,
+                        requestId,
+                        error: 'Direct AssetDeck bridge returned no result.'
+                    });
+                })
+                .catch((error) => {
+                    resolveAssetDeckCommandResult({
+                        ok: false,
+                        requestId,
+                        error: error?.message || String(error)
+                    });
+                });
+            refreshPlannerUI();
+            return true;
+        }
+
+        if (assetCommandState.pendingTimer) {
+            window.clearTimeout(assetCommandState.pendingTimer);
+        }
+        assetCommandState.pendingRequestId = requestId;
+        assetCommandState.pendingTimer = window.setTimeout(() => {
+            if (assetCommandState.pendingRequestId !== requestId) return;
+            assetCommandState.pendingRequestId = '';
+            assetCommandState.pendingTimer = null;
+            assetCommandState.resolver = null;
+            syncState.statusText = 'ASSET COMMAND FAILED';
+            syncState.errorText = 'No ACK from host within 4s. Bridge path: ACT -> DASHBOARD -> HOST.';
+            refreshPlannerUI();
+        }, 4000);
+
+        const didDispatch = postActMessageToHost({
+            type: ACT_OUTBOUND_MESSAGE_TYPES.assetCommand,
+            payload: commandPayload
+        });
+        if (!didDispatch) {
+            if (assetCommandState.pendingTimer) {
+                window.clearTimeout(assetCommandState.pendingTimer);
+                assetCommandState.pendingTimer = null;
+            }
+            assetCommandState.pendingRequestId = '';
+            syncState.statusText = 'ASSET COMMAND FAILED';
+            syncState.errorText = 'No parent/top host window available for AssetDeck command.';
+            refreshPlannerUI();
+            return false;
+        }
+        refreshPlannerUI();
+        return true;
+    }
+
+    function applyAssetDeckCommandLocally(command) {
+        const assetModule = getAssetDeckModuleApi();
+        if (!assetModule || typeof assetModule.applyAssetDeckCommand !== 'function') {
+            syncState.statusText = 'ASSET RUNTIME MISSING';
+            syncState.errorText = 'AssetDeck runtime is not loaded.';
+            refreshPlannerUI();
+            return false;
+        }
+        return updateWorldPayloadAndCommit((world) => {
+            const currentAssetDeck = normalizeAssetDeckForDashboard(world.assetDeck);
+            const result = assetModule.applyAssetDeckCommand(currentAssetDeck, command, {
+                seed: `${appData.campaign.seed || 'ASSET'}:${Date.now()}`
+            });
+            if (!result?.assetDeck) {
+                syncState.statusText = 'ASSET COMMAND FAILED';
+                syncState.errorText = result?.code || 'Unknown AssetDeck command failure.';
+                return world;
+            }
+            world.assetDeck = result.assetDeck;
+            syncState.statusText = result.ok ? `ASSET: ${String(result.code || 'OK').toUpperCase()}` : 'ASSET COMMAND BLOCKED';
+            syncState.errorText = result.ok ? '' : String(result.code || 'Command rejected.');
+            return world;
+        });
+    }
+
+    function handleAssetDeckAction(target) {
+        if (!target) return false;
+        if (target.disabled || target.getAttribute('aria-disabled') === 'true') return false;
+        const action = target.dataset.assetAction;
+        if (!action) return false;
+        if (['open-offer', 'refresh-offer', 'choose-card', 'unlock-slot', 'replace-card', 'open-warehouse', 'close-warehouse'].includes(action)) {
+            setPlannerPage('asset');
+        }
+        if (action === 'grant-asset') {
+            return applyAssetDeckCommand({ kind: 'grant_asset', payload: { amount: 1 } });
+        }
+        if (action === 'unlock-slot') {
+            appState.assetWarehouseOpen = true;
+            return applyAssetDeckCommand({ kind: 'unlock_slot', payload: {} });
+        }
+        if (action === 'open-warehouse') {
+            appState.assetWarehouseOpen = true;
+            refreshPlannerUI();
+            return true;
+        }
+        if (action === 'close-warehouse') {
+            appState.assetWarehouseOpen = false;
+            refreshPlannerUI();
+            return true;
+        }
+        if (action === 'open-offer') {
+            appState.assetWarehouseOpen = false;
+            return applyAssetDeckCommand({ kind: 'open_offer', payload: { pool: target.dataset.pool || 'low' } });
+        }
+        if (action === 'refresh-offer') {
+            return applyAssetDeckCommand({ kind: 'refresh_offer', payload: {} });
+        }
+        if (action === 'choose-card') {
+            return applyAssetDeckCommand({
+                kind: 'choose_card',
+                payload: {
+                    choiceIndex: Math.max(0, Math.round(Number(target.dataset.choiceIndex) || 0)),
+                    slotType: target.dataset.slotType || 'general'
+                }
+            });
+        }
+        if (action === 'replace-card') {
+            const pending = getCurrentAssetDeckState().pending_replace;
+            return applyAssetDeckCommand({
+                kind: 'replace_card',
+                payload: {
+                    slotType: target.dataset.slotType || 'general',
+                    targetIndex: Math.max(0, Math.round(Number(target.dataset.slotIndex) || 0)),
+                    confirmDestroy: target.dataset.confirmDestroy === 'true'
+                        || !!(pending && pending.confirm_destroy === true)
+                }
+            });
+        }
+        if (action === 'debug-reset') {
+            return applyAssetDeckCommand({ kind: 'debug_reset', payload: {} });
+        }
+        return false;
+    }
+
     function getDebugChapterTransitionOption() {
         if (!isOverviewDebugMode()) return null;
         const actModule = getActModuleApi();
@@ -1537,6 +2073,26 @@ const adapterState = {
         return null;
     }
 
+    function resolveDirectAssetDeckCommandBridge() {
+        const candidates = [window];
+        try {
+            if (window.parent && window.parent !== window) candidates.push(window.parent);
+        } catch (_) {}
+        try {
+            if (window.top && window.top !== window && !candidates.includes(window.top)) candidates.push(window.top);
+        } catch (_) {}
+
+        for (const candidate of candidates) {
+            try {
+                if (typeof candidate.ACE0DashboardApplyAssetDeckCommand === 'function') {
+                    return candidate.ACE0DashboardApplyAssetDeckCommand.bind(candidate);
+                }
+            } catch (_) {}
+        }
+
+        return null;
+    }
+
     function resolveActCommitResult(resultPayload) {
         const requestId = typeof resultPayload?.requestId === 'string' ? resultPayload.requestId : '';
         if (requestId && syncState.pendingRequestId && requestId !== syncState.pendingRequestId) return;
@@ -1561,6 +2117,47 @@ const adapterState = {
         }
 
         refreshPlannerUI();
+    }
+
+    function resolveAssetDeckCommandResult(resultPayload) {
+        const requestId = typeof resultPayload?.requestId === 'string' ? resultPayload.requestId : '';
+        if (requestId && assetCommandState.pendingRequestId && requestId !== assetCommandState.pendingRequestId) return;
+        if (assetCommandState.pendingTimer) {
+            window.clearTimeout(assetCommandState.pendingTimer);
+            assetCommandState.pendingTimer = null;
+        }
+
+        assetCommandState.pendingRequestId = '';
+        const resolver = assetCommandState.resolver;
+        assetCommandState.resolver = null;
+
+        if (resultPayload?.ok) {
+            if (resultPayload.assetDeck && typeof resultPayload.assetDeck === 'object') {
+                const currentPayload = adapterState.lastPayload || buildInitialDebugPayload();
+                const currentWorld = extractWorldPayload(currentPayload) || {};
+                const nextPayload = buildNormalizedDashboardPayload({
+                    ...(currentPayload || {}),
+                    world: {
+                        ...deepCloneValue(currentWorld),
+                        assetDeck: deepCloneValue(resultPayload.assetDeck)
+                    }
+                });
+                if (nextPayload) {
+                    applyActStateFromPayload(nextPayload);
+                }
+            }
+            syncState.dirty = false;
+            syncState.statusText = resultPayload.code ? `ASSET: ${String(resultPayload.code).toUpperCase()}` : getCommitIdleStatusText();
+            syncState.errorText = '';
+        } else {
+            syncState.statusText = 'ASSET COMMAND BLOCKED';
+            syncState.errorText = typeof resultPayload?.error === 'string' && resultPayload.error.trim()
+                ? resultPayload.error.trim()
+                : String(resultPayload?.code || 'AssetDeck command failed.');
+        }
+
+        refreshPlannerUI();
+        if (typeof resolver === 'function') resolver(resultPayload);
     }
 
     async function commitActStateToHost() {
@@ -1641,10 +2238,16 @@ const adapterState = {
     function handleActHostMessage(event) {
         const payload = event?.data;
         if (!payload || typeof payload !== 'object') return;
-        const isActMessage = payload.type === ACT_INBOUND_MESSAGE_TYPES.commitResult || ACT_MESSAGE_TYPES.has(payload.type);
+        const isActMessage = payload.type === ACT_INBOUND_MESSAGE_TYPES.commitResult
+            || payload.type === ACT_INBOUND_MESSAGE_TYPES.assetCommandResult
+            || ACT_MESSAGE_TYPES.has(payload.type);
         if (!isActMessage) return;
         if (payload.type === ACT_INBOUND_MESSAGE_TYPES.commitResult) {
             resolveActCommitResult(payload.payload || payload.data || payload);
+            return;
+        }
+        if (payload.type === ACT_INBOUND_MESSAGE_TYPES.assetCommandResult) {
+            resolveAssetDeckCommandResult(payload.payload || payload.data || payload);
             return;
         }
 
@@ -1776,6 +2379,7 @@ const adapterState = {
     }
 
     function getEncounterMarkersForNode(nodeId) {
+        if (!isNodeDetailVisible(nodeId)) return [];
         const markers = Array.isArray(appData.runtime.frontendSnapshot?.encounterMarkers)
             ? appData.runtime.frontendSnapshot.encounterMarkers
             : [];
@@ -1804,8 +2408,9 @@ const adapterState = {
         const displayName = meta?.name || marker.charKey;
         const avatarUrl = typeof meta?.avatarUrl === 'string' ? meta.avatarUrl : '';
         const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(marker.phaseIndex) || 0)));
+        const typeLabel = marker.type === 'pre_signal' ? 'PRE SIGNAL' : 'FIRST MEET';
         return `
-            <div class="encounter-badge" title="${escapePartyHtml(displayName)} · FIRST MEET · ${escapePartyHtml(getPhaseRomanLabel(phaseIndex))}" data-encounter-char="${escapePartyHtml(marker.charKey)}" data-encounter-phase="${phaseIndex}">
+            <div class="encounter-badge${marker.type === 'pre_signal' ? ' is-pre-signal' : ''}" title="${escapePartyHtml(displayName)} · ${typeLabel} · ${escapePartyHtml(getPhaseRomanLabel(phaseIndex))}" data-encounter-char="${escapePartyHtml(marker.charKey)}" data-encounter-phase="${phaseIndex}" data-encounter-type="${escapePartyHtml(marker.type || 'first_meet')}">
                 ${avatarUrl
                     ? `<img src="${escapePartyHtml(avatarUrl)}" alt="${escapePartyHtml(displayName)}" draggable="false">`
                     : `<span>${escapePartyHtml(String(marker.charKey || '?').slice(0, 2))}</span>`}
@@ -2003,6 +2608,25 @@ const adapterState = {
             });
         }
         return topology;
+    }
+
+    function getTopologyEdgeKey(fromId, toId) {
+        return `${fromId || ''}->${toId || ''}`;
+    }
+
+    function getRenderedMapTopology() {
+        const baseTopology = getMapTopology();
+        const renderedTopology = baseTopology.map((entry) => ({ ...entry, isJumpPath: entry.isJumpPath === true }));
+        const knownEdges = new Set(renderedTopology.map((entry) => getTopologyEdgeKey(entry.from, entry.to)));
+        appState.routeHistory.forEach((fromId, index) => {
+            const toId = appState.routeHistory[index + 1];
+            if (!fromId || !toId) return;
+            const edgeKey = getTopologyEdgeKey(fromId, toId);
+            if (knownEdges.has(edgeKey)) return;
+            knownEdges.add(edgeKey);
+            renderedTopology.push({ from: fromId, to: toId, isJumpPath: true });
+        });
+        return renderedTopology;
     }
 
     function getChosenNodeIdByIndex(nodeIndex, currentPresentNodeId = appState.currentNodeId) {
@@ -2220,6 +2844,32 @@ const adapterState = {
         const nodeIndex = getNodeIndex(nodeId);
         if (nodeIndex < 0) return false;
         return nodeIndex <= appState.currentNodeIndex + getVisionSightValue();
+    }
+
+    function isNodeDetailVisible(nodeId) {
+        const nodeIndex = getNodeIndex(nodeId);
+        if (nodeIndex < 0) return false;
+        if (nodeIndex <= appState.currentNodeIndex) return true;
+        return isNodeInVisionRange(nodeId);
+    }
+
+    function isColumnVisibleInMapFog(column) {
+        return Array.isArray(column?.nodeIds) && column.nodeIds.some((nodeId) => isNodeDetailVisible(nodeId));
+    }
+
+    function isConnectionVisibleInMapFog(conn) {
+        return conn
+            && isNodeDetailVisible(conn.from)
+            && isNodeDetailVisible(conn.to);
+    }
+
+    function isNodeTemporarilyRevealedByIntel(nodeId) {
+        const nodeIndex = getNodeIndex(nodeId);
+        if (nodeIndex < 0 || nodeIndex <= appState.currentNodeIndex) return false;
+        const vision = getVisionStateForDashboard();
+        const baseVisibleTo = appState.currentNodeIndex + Math.max(0, Math.round(Number(vision.baseSight) || 0));
+        const boostedVisibleTo = baseVisibleTo + Math.max(0, Math.round(Number(vision.bonusSight) || 0));
+        return vision.bonusSight > 0 && nodeIndex > baseVisibleTo && nodeIndex <= boostedVisibleTo;
     }
 
     function getVisionReplaceChargeCount() {
@@ -2478,7 +3128,7 @@ const adapterState = {
         if (phaseIndex < 0) return false;
         if (getFixedPhaseKind(getCurrentNodeData().presentNode, phaseIndex)) return false;
         if (getEncounterMarkerForPhase(getCurrentNodeData().presentNode, phaseIndex)) return false;
-        return phaseIndex >= appState.currentPhaseIndex;
+        return phaseIndex > appState.currentPhaseIndex;
     }
 
     function getPreferredSourceForKey(key) {
@@ -2573,10 +3223,7 @@ const adapterState = {
                 <span class="phase">${worldClock.phase}</span>
             </div>
         `;
-        const progressionControlsEnabled = canUseInteractivePlannerControls();
-        const routeSelectionActive = progressionControlsEnabled && isRouteSelectionActive();
-        const canAdvanceNode = progressionControlsEnabled && canUseNodeAdvanceControl() && canExecuteCurrentNode();
-        const pendingLimitedCount = getPendingLimitedCount();
+        const assetSummary = getCurrentAssetDeckSummary();
         const nodePoolMarkup = appData.topbar.nodePool.map((node) => `
             <div class="node-stat ${node.className}${getTotalInventoryCount(node.key) <= 0 ? ' is-empty' : ''}" title="${node.title}">
                 <div class="mini-sigil"><div class="sigil-${node.key}"></div></div>
@@ -2591,7 +3238,7 @@ const adapterState = {
                     resource.className === 'res-gold'
                         ? formatCompactResourceValue(appState.resources.funds)
                         : resource.className === 'res-assets'
-                            ? formatCompactResourceValue(appState.resources.assets)
+                            ? formatCompactResourceValue(assetSummary.points)
                         : resource.className === 'res-mana'
                             ? `${appState.resources.mana}/100`
                             : resource.className === 'res-danger'
@@ -2600,29 +3247,6 @@ const adapterState = {
                 }</span>
             </div>
         `).join('');
-        const routeOptionsMarkup = routeSelectionActive
-            ? `
-                <div class="topbar-route-list">
-                    ${getRouteOptions().map((nodeId) => `<button class="route-option-btn" data-node-id="${nodeId}">${getRouteOptionLabel(nodeId)}</button>`).join('')}
-                </div>
-            `
-            : '';
-        const controlsMarkup = !progressionControlsEnabled
-            ? ''
-            : routeSelectionActive
-            ? `
-                <div class="topbar-actions">
-                    <div class="topbar-mode-chip">SELECT PATH</div>
-                </div>
-            `
-            : pendingLimitedCount > 0 && !canAdvanceNode
-            ? `
-                <div class="topbar-actions">
-                    <div class="topbar-mode-chip">QUEUE ${pendingLimitedCount} LIMITED</div>
-                </div>
-            `
-            : '';
-
         sysTopbar.innerHTML = `
             <div class="bar-group">
                 <div class="hdr-title">${actLabel} <span class="hdr-title-cn">${actTitleCn}</span></div>
@@ -2636,7 +3260,7 @@ const adapterState = {
                 <div class="magic-divider"></div>
                 ${nodePoolMarkup}
             </div>
-            <div class="bar-group topbar-right">${resourcesMarkup}${controlsMarkup}${routeOptionsMarkup}</div>
+            <div class="bar-group topbar-right">${resourcesMarkup}</div>
         `;
     }
 
@@ -2786,12 +3410,12 @@ const adapterState = {
     function renderMapLayer() {
         const mapLayer = document.getElementById('mapLayer');
         const gridMarkup = getMapColumns().map((column) => `
-            <div class="grid-base-line ${column.lineClass}" id="${column.lineId}"></div>
+            <div class="grid-base-line ${getCurrentColumnLineClass(column)}${isColumnVisibleInMapFog(column) ? '' : ' grid-line-fog-hidden'}" id="${column.lineId}"></div>
         `).join('');
         const nodeMarkup = getMapNodes().map((node) => `
-            <div class="az-node ${node.classes.join(' ')}" id="${node.id}">
-                <div class="node-label">${node.label}</div>
-                <div class="node-sublabel">${node.sublabel}</div>
+            <div class="${getMapClassNameForNode(node)}" id="${node.id}">
+                <div class="node-label">${escapePartyHtml(node.label)}</div>
+                <div class="node-sublabel">${escapePartyHtml(isNodeDetailVisible(node.id) ? node.sublabel : 'UNKNOWN')}</div>
                 <div class="astrolabe-ring">
                     <div class="node-fixed-envelope" aria-hidden="true"></div>
                     ${buildEncounterBadgeMarkup(node.id)}
@@ -2832,34 +3456,652 @@ const adapterState = {
         return false;
     }
 
+    function getAssetCardDisplayName(card) {
+        if (card?.name) return card.name;
+        const assetModule = getAssetDeckModuleApi();
+        const catalog = assetModule && typeof assetModule.getCatalog === 'function' ? assetModule.getCatalog() : [];
+        const catalogCard = Array.isArray(catalog)
+            ? catalog.find((item) => item?.id === card?.cardId)
+            : null;
+        return catalogCard?.name || card?.name || card?.cardId || 'EMPTY';
+    }
+
+    function getAssetCardLevelLabel(card) {
+        const level = Math.max(0, Math.round(Number(card?.level) || 0));
+        return level > 0 ? `LV ${level}` : String(card?.kind || 'CARD').toUpperCase();
+    }
+
+    function buildAssetCardTagsMarkup(card) {
+        const tags = [
+            card?.rarity,
+            card?.system,
+            ...(Array.isArray(card?.gameTags) ? card.gameTags : []),
+            ...(Array.isArray(card?.slotTags) ? card.slotTags : [])
+        ].map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean).slice(0, 4);
+        return tags.map((tag) => `<span>${escapePartyHtml(tag.toUpperCase())}</span>`).join('');
+    }
+
+    function normalizeAssetPendingReplaceForMarkup(pendingReplace) {
+        if (!pendingReplace || typeof pendingReplace !== 'object') return null;
+        return {
+            card: pendingReplace.card || pendingReplace.candidate || null,
+            allowedSlots: Array.isArray(pendingReplace.allowedSlots) ? pendingReplace.allowedSlots : [],
+            reason: pendingReplace.reason || 'slot_full',
+            confirm_destroy: pendingReplace.confirm_destroy === true || pendingReplace.confirmDestroy === true
+        };
+    }
+
+    function normalizePlannerPage(value) {
+        const page = typeof value === 'string' ? value.trim().toLowerCase() : '';
+        if (page === 'deck' || page === 'extract') return 'asset';
+        return PLANNER_PAGE_KEYS.includes(page) ? page : 'planner';
+    }
+
+    function getActivePlannerPage() {
+        const activePage = normalizePlannerPage(appState.plannerPage || appState.assetDrawerTab);
+        appState.plannerPage = activePage;
+        appState.assetDrawerTab = activePage === 'asset' ? 'deck' : activePage;
+        return activePage;
+    }
+
+    function setPlannerPage(page) {
+        appState.plannerPage = normalizePlannerPage(page);
+        appState.assetDrawerTab = appState.plannerPage === 'asset' ? 'deck' : appState.plannerPage;
+        if (appState.plannerPage !== 'asset') appState.assetWarehouseOpen = false;
+        return appState.plannerPage;
+    }
+
+    function normalizePlannerEditMode(mode) {
+        return mode === 'remove' ? 'remove' : 'add';
+    }
+
+    function setPlannerEditMode(mode) {
+        appState.plannerEditMode = normalizePlannerEditMode(mode);
+        if (appState.plannerEditMode === 'add') {
+            const key = normalizeResourceKey(appState.plannerAddType || selectionState.type, '');
+            if (key && getTotalInventoryCount(key) > 0) {
+                selectInventoryToken(key);
+            }
+        }
+        return appState.plannerEditMode;
+    }
+
+    function buildPlannerResourceNavMarkup(activePage) {
+        return PLANNER_PAGE_KEYS.map((page) => {
+            const meta = PLANNER_PAGE_META[page] || PLANNER_PAGE_META.planner;
+            return `
+                <button class="${activePage === page ? 'is-active' : ''} page-${page}" type="button" data-planner-tab="${page}">
+                    <span>${escapePartyHtml(meta.title)}</span>
+                    <em>${escapePartyHtml(meta.label)}</em>
+                </button>
+            `;
+        }).join('');
+    }
+
+    function buildResourceMeterMarkup(key) {
+        const resourceKey = normalizeResourceKey(key, 'vision');
+        const total = getTotalInventoryCount(resourceKey);
+        return `
+            <div class="meter type-${resourceKey}">
+                <span>AVAILABLE</span>
+                <strong>${Math.max(0, total)} / ${Math.max(0, total)}</strong>
+            </div>
+        `;
+    }
+
+    function getPlannedResourceState(key) {
+        const resourceKey = normalizeResourceKey(key, '');
+        const state = { amount: 0, maxAmount: 0, slots: 0 };
+        if (!resourceKey) return state;
+        Object.values(appState.phaseSlots).forEach((slot) => {
+            if (!slot || normalizeResourceKey(slot.key, '') !== resourceKey) return;
+            const amount = Math.max(1, Math.min(3, Math.round(Number(slot.amount) || 1)));
+            state.amount += amount;
+            state.maxAmount = Math.max(state.maxAmount, amount);
+            state.slots += 1;
+        });
+        return state;
+    }
+
+    function getPlannedModuleClass(key) {
+        const planned = getPlannedResourceState(key);
+        return planned.amount > 0 ? ` is-planned planned-level-${planned.maxAmount}` : '';
+    }
+
+    function buildRuleCardMarkup(key, level, title, note) {
+        const planned = getPlannedResourceState(key);
+        const isLit = planned.maxAmount >= level;
+        return `<div class="rule-card${isLit ? ' is-lit' : ''}" data-rule-level="${level}"><span>${level === 1 ? 'I' : level === 2 ? 'II' : 'III'}</span><strong>${escapePartyHtml(title)}</strong><em>${escapePartyHtml(note)}</em></div>`;
+    }
+
+    const ASSET_POOL_META = Object.freeze([
+        { pool: 'low', level: 1, code: 'I', title: '一级卡池', label: 'LOW EXTRACT', cost: 1, note: '基础契令，偏向铜 / 银。' },
+        { pool: 'mid', level: 2, code: 'II', title: '二级卡池', label: 'MID EXTRACT', cost: 2, note: '进阶契令，提升金卡概率。' },
+        { pool: 'high', level: 3, code: 'III', title: '三级卡池', label: 'HIGH EXTRACT', cost: 3, note: '高阶契令，开放虹卡权重。' }
+    ]);
+
+    function buildAssetPoolCardMarkup(meta, assetSummary, plannedAsset) {
+        const points = Math.max(0, Math.round(Number(assetSummary?.points) || 0));
+        const isActive = plannedAsset.maxAmount >= meta.level;
+        const canOpen = isActive && points >= meta.cost && !assetSummary?.pending?.offer;
+        const stateText = !isActive ? 'LOCKED' : (points >= meta.cost ? 'READY' : `NEED ${meta.cost}`);
+        return `
+            <button class="asset-pool-card pool-${meta.pool}${isActive ? ' is-lit' : ''}${canOpen ? ' is-ready' : ''}" type="button" data-asset-action="open-offer" data-pool="${meta.pool}"${canOpen ? '' : ' disabled'}>
+                <span>${escapePartyHtml(meta.code)}</span>
+                <strong>${escapePartyHtml(meta.title)}</strong>
+                <em>${escapePartyHtml(meta.note)}</em>
+                <b>${escapePartyHtml(meta.label)} · ${escapePartyHtml(stateText)}</b>
+            </button>
+        `;
+    }
+
+    function buildAssetPoolPanelMarkup(assetSummary) {
+        const plannedAsset = getPlannedResourceState('asset');
+        return `
+            <div class="asset-pool-grid">
+                ${ASSET_POOL_META.map((meta) => buildAssetPoolCardMarkup(meta, assetSummary, plannedAsset)).join('')}
+            </div>
+        `;
+    }
+
+    function buildScheduledResourceSlotsMarkup(resourceKey) {
+        const normalizedKey = normalizeResourceKey(resourceKey, 'vision');
+        const rows = appData.planner.phases.map((phase, index) => {
+            const slot = appState.phaseSlots[phase.slotId];
+            if (!slot || normalizeResourceKey(slot.key, '') !== normalizedKey) return '';
+            const amount = Math.max(1, Math.min(3, Math.round(Number(slot.amount) || 1)));
+            const tint = normalizedKey === 'rest'
+                ? normalizeRestTintKey(slot.tint || slot.controlType || slot.targetKey, 'neutral')
+                : '';
+            const tintLabel = normalizedKey === 'rest' && tint !== 'neutral'
+                ? ` · ${RESOURCE_LABEL_MAP[tint] || RESOURCE_TYPE_MAP[tint] || tint}`
+                : '';
+            const state = index < appState.currentPhaseIndex ? 'DONE' : (index === appState.currentPhaseIndex ? 'NOW' : 'WAIT');
+            return `
+                <div class="row type-${normalizedKey}${index === appState.currentPhaseIndex ? ' is-current' : ''}">
+                    <strong>${escapePartyHtml(phase.title || String(index + 1))}</strong>
+                    <span>${RESOURCE_TYPE_MAP[normalizedKey]} x${amount}${escapePartyHtml(tintLabel)}</span>
+                    <em>${state}</em>
+                </div>
+            `;
+        }).filter(Boolean).join('');
+        return rows || `<div class="row is-empty"><strong>-</strong><span>没有更多${escapePartyHtml(RESOURCE_LABEL_MAP[normalizedKey] || '')}点</span><em>EMPTY</em></div>`;
+    }
+
+    function buildControlledNodeSummaryMarkup() {
+        const actState = buildCurrentActStateSnapshot();
+        const controlled = actState.controlledNodes && typeof actState.controlledNodes === 'object'
+            ? Object.entries(actState.controlledNodes)
+            : [];
+        const rows = controlled.slice(-4).reverse().map(([nodeId, entry]) => {
+            const type = normalizeRestTintKey(entry?.type || entry?.tint || entry?.key, 'neutral');
+            const label = type === 'neutral' ? 'NEUTRAL' : (RESOURCE_TYPE_MAP[type] || type.toUpperCase());
+            return `
+                <div class="row type-${type}">
+                    <strong>${escapePartyHtml(label.slice(0, 1))}</strong>
+                    <span>${escapePartyHtml(getRouteOptionLabel(nodeId) || nodeId)} · ${escapePartyHtml(label)} tint</span>
+                    <em>+0.25</em>
+                </div>
+            `;
+        }).join('');
+        return rows || '<div class="row is-empty"><strong>-</strong><span>没有更多控制节点</span><em>EMPTY</em></div>';
+    }
+
+    function getRestTintActionMeta(tintKey, token = getSelectedRestSlotToken()) {
+        const normalized = normalizeRestTintKey(tintKey, 'neutral');
+        const currentTint = token ? normalizeRestTintKey(token.tint || token.controlType || token.targetKey, 'neutral') : 'neutral';
+        const labelMap = {
+            neutral: { title: '默认休整', note: '只结算回复，不追加节点染色。' },
+            rest: { title: '休整染色', note: '稳定节奏，强化后续回复窗口。' },
+            asset: { title: '契点染色', note: '倾向后续契约池与技能槽操作。' },
+            vision: { title: '情报染色', note: '倾向视野、路径与固定相位信息。' },
+            combat: { title: '交锋接口', note: '先保留接口，等待战斗 adapter 接入。' }
+        };
+        if (normalized === 'neutral') {
+            return {
+                disabled: !token,
+                active: currentTint === 'neutral',
+                ...(labelMap.neutral),
+                note: token ? labelMap.neutral.note : '先选择一个未来 Rest 相位。'
+            };
+        }
+        const source = getPreferredSourceForKey(normalized);
+        const disabled = !token || (!source && currentTint !== normalized);
+        return {
+            disabled,
+            active: currentTint === normalized,
+            ...(labelMap[normalized] || { title: getRestTintLabel(normalized), note: '' }),
+            note: !token
+                ? '先选择一个未来 Rest 相位。'
+                : (disabled ? `${RESOURCE_LABEL_MAP[normalized] || normalized} 点不足。` : (labelMap[normalized]?.note || ''))
+        };
+    }
+
+    function buildRestTintActionsMarkup() {
+        const token = getSelectedRestSlotToken();
+        return REST_CONTROL_TINT_KEYS.map((key) => {
+            const meta = getRestTintActionMeta(key, token);
+            const tint = key === 'combat' ? 'combat' : key === 'asset' ? 'asset' : key === 'vision' ? 'vision' : 'rest';
+            const label = key === 'vision' ? 'intel' : key;
+            return `
+                <button class="tint-choice${meta.active ? ' is-active' : ''}${meta.disabled ? ' is-disabled' : ''}" style="--tint: var(--${tint});" type="button" data-rest-tint="${key}" data-tint-type="${key}"${meta.disabled ? ' disabled' : ''}>
+                    <span>${escapePartyHtml(label)}</span>
+                    <strong>${escapePartyHtml(meta.title)}</strong>
+                    <em>${escapePartyHtml(meta.note)}</em>
+                </button>
+            `;
+        }).join('');
+    }
+
+    function buildVisionNextStepMarkup(vision, sight) {
+        const pending = vision.pendingReplace;
+        const routeMode = appData.runtime.frontendSnapshot?.routeMode || '';
+        let label = '探路';
+        let value = `可见到 NODE ${String(Math.min(getCampaignTotalNodes(), appState.currentNodeIndex + sight)).padStart(2, '0')}`;
+        let note = 'Vision 1 会扩大未来节点可见范围。';
+        if (pending && pending.status === 'ready') {
+            label = '固定相位替换';
+            value = 'READY';
+            note = '抵达目标相位时，底部 phase bar 会要求 KEEP 或替换。';
+        } else if (pending && ['charged', 'choosing'].includes(pending.status)) {
+            label = '固定相位替换';
+            value = `CHARGED x${Math.max(1, Math.round(Number(pending.charges) || 1))}`;
+            note = '等待下一个可替换 fixed phase。';
+        } else if (vision.jumpReady || routeMode === 'jump') {
+            label = '跃迁';
+            value = isRouteSelectionActive() ? 'CHOOSE ROUTE' : 'READY';
+            note = isRouteSelectionActive() ? '可在下方候选中选择跃迁目标。' : '抵达 route 阶段后可跨线选择。';
+        }
+        return `
+            <div class="resource-next-step">
+                <span>${escapePartyHtml(label)}</span>
+                <strong>${escapePartyHtml(value)}</strong>
+                <em>${escapePartyHtml(note)}</em>
+            </div>
+        `;
+    }
+
+    function buildCombatResourcePageMarkup() {
+        const actState = buildCurrentActStateSnapshot();
+        return `
+            <div class="resource-shell${getPlannedModuleClass('combat')}" data-planned-resource="combat">
+                <aside class="side-panel">
+                    <div class="eyebrow">COMBAT POINT</div>
+                    <div class="big-title">交锋点</div>
+                    ${buildResourceMeterMarkup('combat')}
+                    <div class="note">只生成外部结算请求，不伪造收益。</div>
+                    <button class="action-btn" type="button">REQUEST QUEUE</button>
+                </aside>
+                <main class="main-panel">
+                    <div class="section-head"><span>COMBAT RULES</span><strong>外部结算</strong></div>
+                    <div class="rule-grid">
+                        ${buildRuleCardMarkup('combat', 1, '小游戏', '低风险外部请求。')}
+                        ${buildRuleCardMarkup('combat', 2, '精英德州', '生成精英对局请求。')}
+                        ${buildRuleCardMarkup('combat', 3, 'Boss 德州', '等待 adapter 回写。')}
+                    </div>
+                    <div class="queue-grid">
+                        <div class="queue-card"><span>COMBAT PHASES</span>
+                            ${buildScheduledResourceSlotsMarkup('combat')}
+                        </div>
+                        <div class="queue-card"><span>EXTERNAL REQUESTS</span>
+                            ${buildCombatSettlementRowsMarkup(actState)}
+                        </div>
+                    </div>
+                </main>
+                <aside class="detail-panel">
+                    <div class="detail-icon">C</div>
+                    <div class="detail-title">请求详情</div>
+                    <div class="detail-text">最终由德州或小游戏 adapter 决定收益、损失与状态回写。</div>
+                    <div class="detail-box"><span>ADAPTER</span><strong>PENDING</strong></div>
+                </aside>
+            </div>
+        `;
+    }
+
+    function buildRestResourcePageMarkup() {
+        const selectedRest = getSelectedRestSlotToken();
+        const selectedTint = selectedRest
+            ? normalizeRestTintKey(selectedRest.tint || selectedRest.controlType || selectedRest.targetKey, 'neutral')
+            : 'neutral';
+        const showTintOverlay = Boolean(selectedRest && appState.restTintPopupSlotId);
+        return `
+            <div class="resource-shell${getPlannedModuleClass('rest')}" data-planned-resource="rest">
+                <aside class="side-panel">
+                    <div class="eyebrow">REST POINT</div>
+                    <div class="big-title">休整点</div>
+                    ${buildResourceMeterMarkup('rest')}
+                    <div class="note">回复 Mana、染色节点、稳定节奏。</div>
+                    <button class="action-btn" type="button" data-open-rest-tint>SET TINT</button>
+                </aside>
+                <main class="main-panel">
+                    <div class="section-head"><span>REST RULES</span><strong>回复 · 染色 · 营收</strong></div>
+                    <div class="rule-grid">
+                        ${buildRuleCardMarkup('rest', 1, '回复 25%', '可追加节点染色。')}
+                        ${buildRuleCardMarkup('rest', 2, '回复 66%', '固定营收 +0.25。')}
+                        ${buildRuleCardMarkup('rest', 3, '回复 100%', '完整重整。')}
+                    </div>
+                    <div class="queue-grid">
+                        <div class="queue-card"><span>REST PHASES</span>
+                            ${buildScheduledResourceSlotsMarkup('rest')}
+                        </div>
+                        <div class="queue-card"><span>CONTROLLED NODES</span>
+                            ${buildControlledNodeSummaryMarkup()}
+                        </div>
+                    </div>
+                </main>
+                <aside class="detail-panel">
+                    <div class="detail-icon">R</div>
+                    <div class="detail-title">染色状态</div>
+                    <div class="detail-text">当前选择 ${escapePartyHtml(selectedTint.toUpperCase())}，不额外消耗其他点数。</div>
+                    <div class="detail-box"><span>CURRENT</span><strong>${escapePartyHtml(selectedTint.toUpperCase())}</strong></div>
+                </aside>
+                ${showTintOverlay ? `<div class="tint-overlay" id="restTintOverlay" role="dialog" aria-label="Rest Tint">
+                    <section class="tint-panel">
+                        <div class="tint-head"><span>REST RESOLUTION</span><strong>SELECT TINT</strong></div>
+                        <div class="tint-grid">${buildRestTintActionsMarkup()}</div>
+                        <div class="tint-foot"><span>DEFAULT POPUP · ON RESOLVE</span><button class="action-btn" type="button" data-close-rest-tint>SKIP</button></div>
+                    </section>
+                </div>` : ''}
+            </div>
+        `;
+    }
+
+    function buildVisionResourcePageMarkup() {
+        const vision = getVisionStateForDashboard();
+        const sight = Math.max(0, Math.round(Number(vision.baseSight) || 0)) + Math.max(0, Math.round(Number(vision.bonusSight) || 0));
+        const replaceStatus = vision.pendingReplace?.status || 'none';
+        return `
+            <div class="resource-shell${getPlannedModuleClass('vision')}" data-planned-resource="vision">
+                <aside class="side-panel">
+                    <div class="eyebrow">VISION POINT</div>
+                    <div class="big-title">情报点</div>
+                    <div class="meter type-vision"><span>SIGHT</span><strong>${sight}</strong></div>
+                    <div class="note">有限视野、固定相位替换、跃迁路径。</div>
+                    <button class="action-btn" type="button">SCAN ROUTE</button>
+                </aside>
+                <main class="main-panel">
+                    <div class="section-head"><span>VISION RULES</span><strong>视野 · 替换 · 跃迁</strong></div>
+                    <div class="rule-grid">
+                        ${buildRuleCardMarkup('vision', 1, '探路', '当前视野 +2。')}
+                        ${buildRuleCardMarkup('vision', 2, '替换相位', '可替换固定事件。')}
+                        ${buildRuleCardMarkup('vision', 3, '跃迁', '显示连续路径线。')}
+                    </div>
+                    <div class="queue-grid">
+                        <div class="queue-card"><span>VISION PHASES</span>
+                            ${buildScheduledResourceSlotsMarkup('vision')}
+                        </div>
+                        <div class="queue-card"><span>VISION STATE</span>
+                            ${buildVisionPanelMarkup()}
+                        </div>
+                    </div>
+                </main>
+                <aside class="detail-panel">
+                    <div class="detail-icon">V</div>
+                    <div class="detail-title">跃迁就绪</div>
+                    <div class="detail-text">抵达 route 阶段后可以跨线选择。</div>
+                    <div class="detail-box"><span>NEXT STEP</span><strong>${vision.jumpReady ? 'READY' : escapePartyHtml(String(replaceStatus).toUpperCase())}</strong></div>
+                </aside>
+            </div>
+        `;
+    }
+
+    function buildAssetCardMarkup(card, options = {}) {
+        const { compact = false, action = '', choiceIndex = null, slotType = '', slotIndex = null, confirmDestroy = false } = options;
+        if (!card) {
+            return `<div class="mini-slot empty"><span class="type">EMPTY</span><div class="name-row"><span class="name">未装配指令</span></div></div>`;
+        }
+        const attrs = [
+            action ? `data-asset-action="${escapePartyHtml(action)}"` : '',
+            choiceIndex != null ? `data-choice-index="${choiceIndex}"` : '',
+            slotType ? `data-slot-type="${escapePartyHtml(slotType)}"` : '',
+            slotIndex != null ? `data-slot-index="${slotIndex}"` : '',
+            confirmDestroy ? 'data-confirm-destroy="true"' : ''
+        ].filter(Boolean).join(' ');
+        const accent = String(card.system || card.kind || '').toLowerCase().includes('void') ? 'var(--void)' : 'var(--asset)';
+        const glyph = String(card.system || card.kind || 'A').slice(0, 1).toUpperCase();
+        return `
+            <button class="cmd-card rarity-${escapePartyHtml(String(card.rarity || 'bronze').toLowerCase())}${compact ? ' is-compact' : ''}" style="--card-accent:${accent};" type="button" ${attrs}>
+                <div class="cmd-card-accent-line"></div>
+                <div class="bg-svg">${escapePartyHtml(glyph)}</div>
+                <span class="cmd-type">${escapePartyHtml(String(card.rarity || 'bronze').toUpperCase())} · ${escapePartyHtml(String(card.kind || 'card').toUpperCase())}</span>
+                <div class="cmd-name-row">
+                    <span class="cmd-name">${escapePartyHtml(getAssetCardDisplayName(card))}</span>
+                    <span class="cmd-level">${escapePartyHtml(getAssetCardLevelLabel(card))}</span>
+                </div>
+                <div class="cmd-desc">${escapePartyHtml(String(card.skillKey || '').replace(/_/g, ' ') || String(card.kind || 'ACTIVE CARD'))}</div>
+            </button>
+        `;
+    }
+
+    function buildAssetSlotMarkup(card, slotType, index, unlocked = true, pendingReplaceInput = null) {
+        if (!unlocked) {
+            return `<div class="mini-slot locked"><span class="type">LOCKED</span><div class="name-row"><span class="name">硬件锁止</span></div></div>`;
+        }
+        const pending = normalizeAssetPendingReplaceForMarkup(pendingReplaceInput);
+        const canReplace = pending && Array.isArray(pending.allowedSlots) && pending.allowedSlots.includes(slotType) && card;
+        const confirmDestroy = !!(canReplace && pending.confirm_destroy === true);
+        if (!card) {
+            const voidCopy = slotType === 'void';
+            return `<div class="mini-slot empty"><span class="type">${voidCopy ? 'EMPTY VOID' : 'EMPTY'}</span><div class="name-row"><span class="name">${voidCopy ? '未装配零号参数' : '未装配指令'}</span></div></div>`;
+        }
+        const accent = String(card.system || card.kind || '').toLowerCase().includes('void') || slotType === 'void' ? 'var(--void)' : 'var(--asset)';
+        return `
+            <div class="mini-slot filled${canReplace ? ' is-replaceable' : ''}" style="--c:${accent};" data-asset-action="${canReplace ? 'replace-card' : ''}" data-slot-type="${escapePartyHtml(slotType)}" data-slot-index="${index}"${confirmDestroy ? ' data-confirm-destroy="true"' : ''}>
+                <span class="type">${escapePartyHtml(String(card.kind || card.system || 'ASSET').toUpperCase())}</span>
+                <div class="name-row"><span class="name">${escapePartyHtml(getAssetCardDisplayName(card))}</span><span class="lvl">${escapePartyHtml(getAssetCardLevelLabel(card))}</span></div>
+            </div>
+        `;
+    }
+
+    function buildAssetOfferChoiceMarkup(card, index) {
+        const slotTags = Array.isArray(card?.slotTags) ? card.slotTags : [];
+        const canUseVoid = slotTags.includes('void');
+        return `
+            <div class="choice">
+                ${buildAssetCardMarkup(card, { compact: true })}
+                <div class="choice-actions">
+                    <button type="button" data-asset-action="choose-card" data-choice-index="${index}" data-slot-type="general">GENERAL</button>
+                    ${canUseVoid ? `<button type="button" data-asset-action="choose-card" data-choice-index="${index}" data-slot-type="void">VOID</button>` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    function buildAssetOfferOverlayMarkup(assetSummary) {
+        const pendingOffer = assetSummary.pending?.offer;
+        const queuedOffers = Array.isArray(assetSummary.pending?.offerQueue) ? assetSummary.pending.offerQueue : [];
+        const queueText = queuedOffers.length ? ` · QUEUE ${queuedOffers.length}` : '';
+        const offerMarkup = pendingOffer?.choices?.length
+            ? pendingOffer.choices.map((card, index) => buildAssetOfferChoiceMarkup(card, index)).join('')
+            : '';
+        if (!offerMarkup) return '';
+        return `
+            <div class="offer-overlay pool-${escapePartyHtml(String(pendingOffer?.pool || 'low').toLowerCase())}" role="dialog" aria-label="Contract Extract">
+                <section class="offer-panel draw-panel">
+                    <div class="offer-head"><span>CONTRACT EXTRACT${escapePartyHtml(queueText)}</span><strong>${escapePartyHtml(String(pendingOffer?.pool || 'POOL').toUpperCase())}</strong></div>
+                    <div class="offer-grid">${offerMarkup}</div>
+                    <div class="offer-foot">
+                        <span>DECK POINTS · ${assetSummary.points}</span>
+                        <button class="action-btn" type="button" data-asset-action="refresh-offer">REROLL POOL</button>
+                    </div>
+                </section>
+            </div>
+        `;
+    }
+
+    function buildAssetWarehouseOverlayMarkup(assetSummary) {
+        const generalCards = Array.isArray(assetSummary.activeCards?.general) ? assetSummary.activeCards.general : [];
+        const voidCards = Array.isArray(assetSummary.activeCards?.void) ? assetSummary.activeCards.void : [];
+        const slots = assetSummary.slots || {};
+        const pendingReplace = normalizeAssetPendingReplaceForMarkup(assetSummary.pending?.replace);
+        const generalSlots = Array.from({ length: 8 }, (_, index) => buildAssetSlotMarkup(generalCards[index], 'general', index, index < slots.generalMax, pendingReplace)).join('');
+        const voidSlots = Array.from({ length: 2 }, (_, index) => buildAssetSlotMarkup(voidCards[index], 'void', index, index < slots.voidMax, pendingReplace)).join('');
+        const focusedCard = pendingReplace?.card || generalCards.find(Boolean) || voidCards.find(Boolean);
+        const replaceMarkup = pendingReplace?.card
+            ? `<div class="asset-replace-callout">
+                    <span>${pendingReplace.confirm_destroy ? 'CONFIRM DESTROY' : 'PENDING REPLACE'}</span>
+                    <strong>${escapePartyHtml(getAssetCardDisplayName(pendingReplace.card))}</strong>
+                    <em>${pendingReplace.confirm_destroy ? 'Protected Rainbow/God card selected. Click the highlighted slot again to destroy it.' : 'Choose a highlighted occupied slot. Old card will be destroyed.'}</em>
+                </div>`
+            : '';
+        const focusedType = focusedCard
+            ? `${String(focusedCard.system || focusedCard.kind || 'asset').toUpperCase()} / ${String(focusedCard.rarity || 'bronze').toUpperCase()}`
+            : '';
+        const focusedName = focusedCard ? getAssetCardDisplayName(focusedCard) : '';
+        const focusedLevel = focusedCard ? getAssetCardLevelLabel(focusedCard) : '';
+        const focusedDesc = focusedCard
+            ? `${String(focusedCard.kind || 'card').toUpperCase()}${focusedCard.skillKey ? ` · ${String(focusedCard.skillKey).toUpperCase()}` : ''}`
+            : '';
+        if (!appState.assetWarehouseOpen && !pendingReplace?.card) return '';
+        return `
+            <div class="warehouse-overlay" role="dialog" aria-label="Contract Warehouse">
+                <section class="warehouse-panel asset-layout">
+                    <aside class="detect-panel">
+                        <span class="detect-label">CONTRACT WAREHOUSE</span>
+                        <span class="detect-target">${slots.generalUsed}<span> / ${slots.generalMax}</span></span>
+                        <span class="detect-label">VOID ISOLATION · ${slots.voidUsed}/${slots.voidMax}</span>
+                        <span class="detect-label">ASSET POINTS · ${assetSummary.points}</span>
+                        <div class="astrolabe-ring"><div class="magic-core"></div></div>
+                        <button class="action-btn" type="button" data-asset-action="unlock-slot">EXPAND (1 ASSET)</button>
+                        <button class="action-btn ghost" type="button" data-asset-action="close-warehouse">CLOSE</button>
+                    </aside>
+                    <main class="deck-scroll-area">
+                        ${replaceMarkup}
+                        <div class="deck-grid-vertical">${generalSlots}</div>
+                        <div class="void-section-vertical">${voidSlots}</div>
+                    </main>
+                    <aside class="details-panel${focusedCard ? '' : ' is-idle'}" style="--dp-color: var(--asset);">
+                        ${focusedCard ? `
+                            <div class="dp-bg-svg">${escapePartyHtml(String(focusedCard.system || focusedCard.kind || 'A').slice(0, 1).toUpperCase())}</div>
+                            <div class="dp-type">${escapePartyHtml(focusedType)}</div>
+                            <div class="dp-name-row">
+                                <div class="dp-name">${escapePartyHtml(focusedName)}</div>
+                                <div class="dp-lvl">${escapePartyHtml(focusedLevel)}</div>
+                            </div>
+                            <div class="dp-divider"></div>
+                            <div class="dp-desc">${escapePartyHtml(focusedDesc)}</div>
+                            <div class="dp-action-area">
+                                <div class="dp-note">[ STATUS: ACTIVE ]</div>
+                                <button class="btn-unequip" type="button" disabled>REPLACE & DESTROY OLD CARD</button>
+                            </div>
+                        ` : ''}
+                    </aside>
+                </section>
+            </div>
+        `;
+    }
+
+    function buildAssetWarehouseRowsMarkup(assetSummary) {
+        const slots = assetSummary.slots || {};
+        const queue = Array.isArray(assetSummary.pending?.offerQueue) ? assetSummary.pending.offerQueue : [];
+        return `
+            <div class="row type-asset"><strong>G</strong><span>GENERAL · ${slots.generalUsed || 0}/${slots.generalMax || 0}</span><em>SLOTS</em></div>
+            <div class="row type-asset"><strong>V</strong><span>VOID · ${slots.voidUsed || 0}/${slots.voidMax || 0}</span><em>ISO</em></div>
+            <div class="row type-asset${queue.length ? '' : ' is-empty'}"><strong>Q</strong><span>抽卡队列 · ${queue.length}</span><em>QUEUE</em></div>
+        `;
+    }
+
+    function buildAssetResourcePageMarkup() {
+        const assetSummary = getCurrentAssetDeckSummary();
+        const pendingOffer = assetSummary.pending?.offer;
+        const offerOverlayMarkup = buildAssetOfferOverlayMarkup(assetSummary);
+        const warehouseOverlayMarkup = buildAssetWarehouseOverlayMarkup(assetSummary);
+        return `
+            <div class="resource-shell${getPlannedModuleClass('asset')}" data-planned-resource="asset">
+                <aside class="side-panel">
+                    <div class="eyebrow">ASSET POINT</div>
+                    <div class="big-title">契点</div>
+                    <div class="meter type-asset"><span>DECK POINTS</span><strong>${Math.max(0, Math.round(Number(assetSummary.points) || 0))}</strong></div>
+                    <div class="note">投入契点激活一级 / 二级 / 三级卡池，满足条件后进入抽卡页面。</div>
+                    <button class="action-btn" type="button" data-asset-action="open-warehouse">WAREHOUSE</button>
+                </aside>
+                <main class="main-panel">
+                    <div class="section-head"><span>ASSET RULES</span><strong>卡池 · 抽取 · 仓库</strong></div>
+                    ${buildAssetPoolPanelMarkup(assetSummary)}
+                    <div class="queue-grid">
+                        <div class="queue-card"><span>ASSET PHASES</span>
+                            ${buildScheduledResourceSlotsMarkup('asset')}
+                        </div>
+                        <div class="queue-card"><span>WAREHOUSE STATE</span>
+                            ${buildAssetWarehouseRowsMarkup(assetSummary)}
+                        </div>
+                    </div>
+                </main>
+                <aside class="detail-panel">
+                    <div class="detail-icon">A</div>
+                    <div class="detail-title">契约卡池</div>
+                    <div class="detail-text">${pendingOffer ? '当前已有抽卡页面等待选择。' : '激活卡池并消耗 Deck Points 后，会弹出抽卡页面。'}</div>
+                    <div class="detail-box"><span>NEXT STEP</span><strong>${pendingOffer ? 'CHOOSE CARD' : 'OPEN POOL'}</strong></div>
+                    <button class="action-btn" type="button" data-asset-action="open-warehouse">OPEN WAREHOUSE</button>
+                </aside>
+                ${warehouseOverlayMarkup}
+                ${offerOverlayMarkup}
+            </div>
+        `;
+    }
+
     function renderPlannerDrawer() {
         const plannerDrawerMount = document.getElementById('plannerDrawerMount');
         if (!plannerDrawerMount) return;
         const readonlyClass = canUseInteractivePlannerControls() ? '' : ' is-host-readonly';
-        const inventoryMarkup = appData.planner.inventory.map((item) => `
-            <div class="token-dispenser type-${item.key}" id="inv_${item.key}" data-type="${item.type}">
-                <div class="badge-count" id="count_${item.key}">x0</div>
-                <div class="magic-core"></div>
-                <div class="token-info">
+        const inventoryMarkup = appData.planner.inventory.map((item) => {
+            const planned = getPlannedResourceState(item.key);
+            return `
+                <div class="token-dispenser type-${item.key}${planned.amount > 0 ? ' is-planned' : ''}" id="inv_${item.key}" data-planner-tab="${item.key}" data-tab="${item.key}" data-type="${item.key}" data-planned-amount="${planned.amount}">
+                    <span class="badge-count" id="count_${item.key}">×0</span>
+                    <div class="magic-core"></div>
                     <div class="token-label">${item.label}</div>
-                    <div class="token-sub" id="sub_${item.key}">L0 / R0</div>
                 </div>
-            </div>
-        `).join('');
-        const restTintMarkup = REST_CONTROL_TINT_KEYS.map((key) => `
-            <button class="rest-tint-btn tint-${key}" type="button" data-rest-tint="${key}" title="${key === 'neutral' ? 'Neutral control point' : `${RESOURCE_TYPE_MAP[key]} control tint`}">${getRestTintLabel(key)}</button>
-        `).join('');
+            `;
+        }).join('');
+        const activePage = getActivePlannerPage();
+        const activeResourcePage = activePage === 'planner' ? '' : activePage;
+        const drawerTheme = activeResourcePage || 'asset';
+        const drawerOpenClass = appState.drawerOpen ? ' is-hub-open' : '';
+        const drawerExpandedClass = appState.drawerOpen && activeResourcePage ? ' is-expanded' : '';
+        const assetDeckHash = JSON.stringify({
+            summary: getCurrentAssetDeckSummary(),
+            assetWarehouseOpen: appState.assetWarehouseOpen,
+            phaseSlots: appState.phaseSlots
+        });
+        const resourceHash = JSON.stringify({
+            page: activePage,
+            inventory: appState.inventory,
+            phaseSlots: appState.phaseSlots,
+            selection: selectionState,
+            restTintPopupSlotId: appState.restTintPopupSlotId,
+            nodeId: appState.currentNodeId,
+            nodeIndex: appState.currentNodeIndex,
+            vision: getVisionStateForDashboard()
+        });
+        const editMode = normalizePlannerEditMode(appState.plannerEditMode);
         plannerDrawerMount.innerHTML = `
-            <div class="planner-drawer${readonlyClass}" id="planner-drawer">
-                <div class="planner-panel-header">
-                    <span class="planner-panel-title">${appData.planner.header}</span>
-                    <div class="rest-control-panel" id="rest-control-panel">
-                        <div class="rest-control-label">REST CONTROL</div>
-                        <div class="rest-control-options">${restTintMarkup}</div>
-                    </div>
+            <section class="drawer theme-${drawerTheme}${drawerOpenClass}${drawerExpandedClass}${readonlyClass}" id="drawer" data-active-tab="${activeResourcePage}" data-planner-page="${activePage}" data-edit-mode="${editMode}" data-asset-page="${activePage === 'asset' ? 'deck' : activePage}" data-asset-hash="${escapePartyHtml(assetDeckHash)}" data-resource-hash="${escapePartyHtml(resourceHash)}">
+                <div class="aux-container">
+                    <section class="view theme-combat ${activePage === 'combat' ? 'is-active' : ''}" data-view="combat">
+                        ${buildCombatResourcePageMarkup()}
+                    </section>
+                    <section class="view theme-rest ${activePage === 'rest' ? 'is-active' : ''}" data-view="rest">
+                        ${buildRestResourcePageMarkup()}
+                    </section>
+                    <section class="view theme-asset ${activePage === 'asset' ? 'is-active' : ''}" data-view="asset">
+                        ${buildAssetResourcePageMarkup()}
+                    </section>
+                    <section class="view theme-vision ${activePage === 'vision' ? 'is-active' : ''}" data-view="vision">
+                        ${buildVisionResourcePageMarkup()}
+                    </section>
                 </div>
-                <div class="inventory-area${readonlyClass}" id="inventory">${inventoryMarkup}</div>
-            </div>
+                <header class="planner-hub">
+                    <div class="hub-title">
+                        <span>PHASE DEPLOYMENT · RESOURCES</span>
+                        <div class="planner-edit-mode" aria-label="Phase point edit mode">
+                            <button class="${editMode === 'remove' ? 'is-active' : ''}" type="button" data-planner-edit-mode="remove">-1</button>
+                            <button class="${editMode === 'add' ? 'is-active' : ''}" type="button" data-planner-edit-mode="add">+1</button>
+                        </div>
+                    </div>
+                    <div class="token-grid${readonlyClass}" id="inventory" aria-label="Phase resource hub">${inventoryMarkup}</div>
+                </header>
+            </section>
         `;
     }
 
@@ -2872,7 +4114,7 @@ const adapterState = {
         return `
             <div class="phase-vision-prompt" id="phase-vision-prompt" data-phase-key="${prompt.phaseKey}" data-charges="${prompt.charges}">
                 <div class="phase-vision-copy">
-                    <span>VISION REPLACE x${prompt.charges}</span>
+                    <span>情报改写 x${prompt.charges}</span>
                     <strong>${getRouteOptionLabel(prompt.nodeId)} · ${getPhaseRomanLabel(prompt.phaseIndex)} · ${RESOURCE_TYPE_MAP[prompt.fixedKind]}</strong>
                 </div>
                 <div class="phase-vision-actions">
@@ -2934,12 +4176,34 @@ ${phaseSegments}
     }
 
     function needsPlannerDrawerRebuild() {
-        const drawer = document.getElementById('planner-drawer');
+        const drawer = document.getElementById('drawer');
         const inventory = document.getElementById('inventory');
         if (!drawer || !inventory) return true;
         const shouldBeReadonly = !canUseInteractivePlannerControls();
         if (drawer.classList.contains('is-host-readonly') !== shouldBeReadonly) return true;
         if (inventory.classList.contains('is-host-readonly') !== shouldBeReadonly) return true;
+        const activePage = getActivePlannerPage();
+        const activeResourcePage = activePage === 'planner' ? '' : activePage;
+        const resourceHash = JSON.stringify({
+            page: activePage,
+            inventory: appState.inventory,
+            phaseSlots: appState.phaseSlots,
+            selection: selectionState,
+            restTintPopupSlotId: appState.restTintPopupSlotId,
+            nodeId: appState.currentNodeId,
+            nodeIndex: appState.currentNodeIndex,
+            vision: getVisionStateForDashboard()
+        });
+        if (drawer.dataset.activeTab !== activeResourcePage) return true;
+        if (drawer.dataset.plannerPage !== activePage) return true;
+        if (drawer.dataset.editMode !== normalizePlannerEditMode(appState.plannerEditMode)) return true;
+        if (drawer.dataset.assetPage !== (activePage === 'asset' ? 'deck' : activePage)) return true;
+        if (activePage === 'asset' && drawer.dataset.assetHash !== JSON.stringify({
+            summary: getCurrentAssetDeckSummary(),
+            assetWarehouseOpen: appState.assetWarehouseOpen,
+            phaseSlots: appState.phaseSlots
+        })) return true;
+        if (activePage !== 'asset' && activePage !== 'planner' && drawer.dataset.resourceHash !== resourceHash) return true;
         const renderedCount = inventory.querySelectorAll('.token-dispenser').length;
         return renderedCount !== appData.planner.inventory.length;
     }
@@ -2962,30 +4226,45 @@ ${phaseSegments}
     }
 
     function syncPlannerDrawerDOM() {
-        const drawer = document.getElementById('planner-drawer');
+        const drawer = document.getElementById('drawer');
         if (!drawer) return;
-        drawer.classList.toggle('is-open', appState.drawerOpen);
+        const activePage = getActivePlannerPage();
+        const activeResourcePage = activePage === 'planner' ? '' : activePage;
+        drawer.classList.toggle('is-hub-open', appState.drawerOpen);
+        drawer.classList.toggle('is-expanded', appState.drawerOpen && Boolean(activeResourcePage));
+        drawer.classList.toggle('theme-combat', activeResourcePage === 'combat');
+        drawer.classList.toggle('theme-rest', activeResourcePage === 'rest');
+        drawer.classList.toggle('theme-asset', !activeResourcePage || activeResourcePage === 'asset');
+        drawer.classList.toggle('theme-vision', activeResourcePage === 'vision');
 
         appData.planner.inventory.forEach((item) => {
             const tokenEl = document.getElementById(`inv_${item.key}`);
             const countEl = document.getElementById(`count_${item.key}`);
             const subEl = document.getElementById(`sub_${item.key}`);
-            if (!tokenEl || !countEl || !subEl) return;
+            if (!tokenEl || !countEl) return;
             const total = getTotalInventoryCount(item.key);
             tokenEl.className = `token-dispenser type-${item.key}`;
-            tokenEl.classList.toggle('is-empty', total <= 0);
-            tokenEl.classList.toggle('is-selected', selectionState.source === 'inventory' && selectionState.type === item.type);
-            countEl.textContent = `x${total}`;
-            subEl.textContent = `L${getInventoryBucket(item.key).limited} / R${getInventoryBucket(item.key).reserve}`;
+            tokenEl.classList.toggle('is-empty', total <= 0 && !tokenEl.dataset.plannerTab);
+            tokenEl.classList.toggle('is-active', activePage === item.key);
+            tokenEl.classList.toggle('is-selected', selectionState.source === 'inventory' && selectionState.type === item.key);
+            const planned = getPlannedResourceState(item.key);
+            tokenEl.classList.toggle('is-planned', planned.amount > 0);
+            tokenEl.dataset.plannedAmount = String(planned.amount);
+            countEl.textContent = `×${total}`;
+            if (subEl) subEl.textContent = '';
+        });
+
+        document.querySelectorAll('[data-planner-edit-mode]').forEach((button) => {
+            button.classList.toggle('is-active', normalizePlannerEditMode(button.dataset.plannerEditMode) === normalizePlannerEditMode(appState.plannerEditMode));
         });
 
         syncRestControlPanelDOM();
     }
 
     function getSelectedRestSlotToken() {
-        if (selectionState.source !== 'slot' || !selectionState.slotId) return null;
-        if (!canEditPhaseSlot(selectionState.slotId)) return null;
-        const token = appState.phaseSlots[selectionState.slotId];
+        const slotId = appState.restTintPopupSlotId || (selectionState.source === 'slot' ? selectionState.slotId : '');
+        if (!slotId || !canEditPhaseSlot(slotId)) return null;
+        const token = appState.phaseSlots[slotId];
         return token?.key === 'rest' ? token : null;
     }
 
@@ -2998,14 +4277,25 @@ ${phaseSegments}
         return getTotalInventoryCount(normalized) > 0;
     }
 
+    function openRestTintPopup(slotId = selectionState.slotId) {
+        const token = slotId ? appState.phaseSlots[slotId] : null;
+        if (!token || token.key !== 'rest') return false;
+        setPlannerPage('rest');
+        appState.drawerOpen = true;
+        appState.restTintPopupSlotId = slotId;
+        return true;
+    }
+
+    function closeRestTintPopup() {
+        appState.restTintPopupSlotId = '';
+        document.getElementById('restTintOverlay')?.remove();
+    }
+
     function syncRestControlPanelDOM() {
-        const panel = document.getElementById('rest-control-panel');
-        if (!panel) return;
         const token = getSelectedRestSlotToken();
         const isVisible = Boolean(token) && canUseInteractivePlannerControls();
-        panel.classList.toggle('is-visible', isVisible);
         const currentTint = token ? normalizeRestTintKey(token.tint || token.controlType || token.targetKey, 'neutral') : 'neutral';
-        panel.querySelectorAll('[data-rest-tint]').forEach((button) => {
+        document.querySelectorAll('[data-rest-tint]').forEach((button) => {
             const tintKey = normalizeRestTintKey(button.dataset.restTint, 'neutral');
             const isActive = tintKey === currentTint;
             const isDisabled = !isVisible || !canApplyRestTint(tintKey, token);
@@ -3078,7 +4368,7 @@ ${phaseSegments}
             if (fixedKind) coreEl.classList.add('has-fixed', `fixed-${fixedKind}`);
             if (encounterMarker) coreEl.classList.add('has-fixed', 'has-encounter-fixed');
             if (isVisionPromptPhase) coreEl.classList.add('vision-replace-prompt');
-            if (selectionState.source === 'slot' && selectionState.slotId === phase.slotId) coreEl.classList.add('is-selected');
+            if ((selectionState.source === 'slot' && selectionState.slotId === phase.slotId) || appState.restTintPopupSlotId === phase.slotId) coreEl.classList.add('is-selected');
             if (!canEditPhaseSlot(phase.slotId)) coreEl.classList.add('is-locked');
 
             mountedEl.className = 'mounted-token';
@@ -3089,7 +4379,7 @@ ${phaseSegments}
             mountedEl.removeAttribute('data-vision-replacement');
             if (displayToken) {
                 mountedEl.classList.add(`type-${displayToken.key}`);
-                if (selectionState.source === 'slot' && selectionState.slotId === phase.slotId) mountedEl.classList.add('is-selected');
+                if ((selectionState.source === 'slot' && selectionState.slotId === phase.slotId) || appState.restTintPopupSlotId === phase.slotId) mountedEl.classList.add('is-selected');
                 mountedEl.dataset.type = displayToken.type;
                 mountedEl.dataset.source = displayToken.source;
                 mountedEl.dataset.amount = String(Math.max(1, Math.min(3, Math.round(Number(displayToken.amount) || 1))));
@@ -3105,7 +4395,8 @@ ${phaseSegments}
                 fixedGlyphEl.className = 'phase-fixed-glyph';
                 if (encounterMarker) {
                     fixedGlyphEl.classList.add('type-encounter', 'is-visible');
-                    fixedGlyphEl.title = `${encounterMarker.charKey} · FIRST MEET`;
+                    fixedGlyphEl.classList.toggle('is-pre-signal', encounterMarker.type === 'pre_signal');
+                    fixedGlyphEl.title = `${encounterMarker.charKey} · ${encounterMarker.type === 'pre_signal' ? 'PRE SIGNAL' : 'FIRST MEET'}`;
                     fixedGlyphEl.innerHTML = buildEncounterFixedGlyphMarkup(encounterMarker);
                 } else if (fixedKind) {
                     fixedGlyphEl.classList.add(`type-${fixedKind}`, 'is-visible');
@@ -3287,13 +4578,11 @@ ${phaseSegments}
         return RESOURCE_KEYS.map((key) => {
             const limited = Math.max(0, Math.round(Number(actState.limited?.[key]) || 0));
             const reserve = Math.max(0, Math.round(Number(actState.reserve?.[key]) || 0));
-            const rate = formatActDecimal(actState.income_rate?.[key] ?? appState.incomeRate?.[key] ?? 0);
-            const progress = formatActDecimal(actState.income_progress?.[key] ?? appState.incomeProgress?.[key] ?? 0);
+            const total = limited + reserve;
             return `
                 <div class="act-state-row type-${key}">
                     <span class="act-state-key">${RESOURCE_TYPE_MAP[key]}</span>
-                    <span class="act-state-value">L${limited} / R${reserve}</span>
-                    <span class="act-state-sub">+${rate} · ${progress}</span>
+                    <span class="act-state-value">${total}</span>
                 </div>
             `;
         }).join('');
@@ -3396,7 +4685,7 @@ ${phaseSegments}
         if (!routeOptions.length) {
             return `
                 <div class="vision-task-row${vision.jumpReady ? ' is-ready' : ''}">
-                    <span>JUMP</span>
+                    <span>跃迁</span>
                     <strong>${vision.jumpReady ? 'READY' : 'WAIT ROUTE'}</strong>
                 </div>
             `;
@@ -3418,11 +4707,137 @@ ${phaseSegments}
         return `
             <div class="vision-act-panel">
                 <div class="vision-task-row">
-                    <span>SIGHT</span>
+                    <span>情报</span>
                     <strong>${String(appState.currentNodeIndex).padStart(2, '0')} > ${String(visibleTo).padStart(2, '0')}</strong>
                 </div>
                 ${pendingMarkup}
                 ${jumpMarkup}
+            </div>
+        `;
+    }
+
+    function formatActAssetSourceLabel(item) {
+        const nodeId = typeof item?.nodeId === 'string' ? item.nodeId : item?.payload?.commandPayload?.source?.nodeId;
+        const phaseIndex = Number.isFinite(Number(item?.phaseIndex))
+            ? Math.max(0, Math.min(3, Math.round(Number(item.phaseIndex))))
+            : Number.isFinite(Number(item?.payload?.commandPayload?.source?.phaseIndex))
+                ? Math.max(0, Math.min(3, Math.round(Number(item.payload.commandPayload.source.phaseIndex))))
+                : null;
+        const nodeLabel = nodeId ? getRouteOptionLabel(nodeId) || nodeId : 'ACT';
+        return phaseIndex === null ? nodeLabel : `${nodeLabel} · ${getPhaseRomanLabel(phaseIndex)}`;
+    }
+
+    function formatActAssetCommandLabel(commandInput) {
+        const command = commandInput && typeof commandInput === 'object' ? commandInput : {};
+        const kind = typeof command.kind === 'string' ? command.kind : command.type;
+        const payload = command.payload && typeof command.payload === 'object' ? command.payload : {};
+        if (kind === 'grant_asset') return `+${Math.max(0, Math.round(Number(payload.amount) || 0))} DECK PT`;
+        if (kind === 'open_offer') return `OPEN ${String(payload.pool || 'low').toUpperCase()}`;
+        return String(kind || 'COMMAND').toUpperCase();
+    }
+
+    function normalizeCombatPendingResolutionsForDashboard(actState) {
+        return (Array.isArray(actState?.pendingResolutions) ? actState.pendingResolutions : [])
+            .filter((item) => item && typeof item === 'object' && normalizeResourceKey(item.type, '') === 'combat')
+            .map((item) => ({
+                ...deepCloneValue(item),
+                level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
+                status: typeof item.status === 'string' && item.status.trim() ? item.status.trim().toLowerCase() : 'pending'
+            }));
+    }
+
+    function formatCombatRequestLabel(item) {
+        const level = Math.max(1, Math.min(3, Math.round(Number(item?.level) || 1)));
+        if (level === 1) return 'COMBAT I · LOW STAKE';
+        if (level === 2) return 'COMBAT II · ELITE';
+        return 'COMBAT III · BOSS';
+    }
+
+    function buildCombatSettlementRowsMarkup(actState, options = {}) {
+        const rowClass = options.panel === 'act'
+            ? 'vision-task-row combat-task-row type-combat'
+            : 'row combat-request-row type-combat';
+        const pendingRows = normalizeCombatPendingResolutionsForDashboard(actState)
+            .filter((item) => item.status === 'pending')
+            .slice(0, 3)
+            .map((item) => `
+                <div class="${rowClass}">
+                    <span>PENDING</span>
+                    <strong>${escapePartyHtml(formatCombatRequestLabel(item))} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                    <em>EXT</em>
+                </div>
+            `).join('');
+        const historyRows = (Array.isArray(actState?.resolutionHistory) ? actState.resolutionHistory : [])
+            .filter((item) => item && typeof item === 'object' && normalizeResourceKey(item.type, '') === 'combat')
+            .slice(-2)
+            .reverse()
+            .map((item) => `
+                <div class="${rowClass} is-current">
+                    <span>${escapePartyHtml(String(item.status || 'DONE').toUpperCase().slice(0, 8))}</span>
+                    <strong>${escapePartyHtml(String(item.outcome || item.summary || 'COMBAT RESULT').toUpperCase())} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                    <em>HIST</em>
+                </div>
+            `).join('');
+        return pendingRows || historyRows || `<div class="${options.panel === 'act' ? 'vision-task-row combat-task-row' : 'row'} is-empty"><strong>-</strong><span>不生成假收益</span><em>LOCK</em></div>`;
+    }
+
+    function buildCombatSettlementPanelMarkup(actState) {
+        return `
+            <div class="asset-act-panel combat-act-panel">
+                <div class="vision-task-row combat-task-row">
+                    <span>COMBAT</span>
+                    <strong>ADAPTER PENDING · EXTERNAL ONLY</strong>
+                </div>
+                ${buildCombatSettlementRowsMarkup(actState, { panel: 'act' })}
+            </div>
+        `;
+    }
+
+    function buildAssetSettlementPanelMarkup(actState) {
+        const assetSummary = getCurrentAssetDeckSummary();
+        const pendingCommands = normalizePendingAssetDeckCommandsForDashboard(actState);
+        const pendingRows = pendingCommands
+            .filter((item) => {
+                const status = typeof item.status === 'string' && item.status.trim() ? item.status.trim().toLowerCase() : 'pending';
+                return status === 'pending';
+            })
+            .slice(0, 2)
+            .map((item) => `
+                <div class="vision-task-row asset-task-row">
+                    <span>PENDING</span>
+                    <strong>${escapePartyHtml(formatActAssetCommandLabel(item.command))} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                </div>
+            `).join('');
+        const historyRows = (Array.isArray(actState.resolutionHistory) ? actState.resolutionHistory : [])
+            .filter((item) => item && typeof item === 'object' && item.type === 'asset')
+            .slice(-2)
+            .reverse()
+            .map((item) => {
+                const kind = item?.payload?.commandKind || item?.command?.kind || item?.command?.type || 'asset';
+                const outcome = item?.outcome || item?.status || '';
+                return `
+                    <div class="vision-task-row asset-task-row is-ready">
+                        <span>${escapePartyHtml(String(kind).replace(/_/g, ' ').toUpperCase().slice(0, 8))}</span>
+                        <strong>${escapePartyHtml(String(outcome).toUpperCase())} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                    </div>
+                `;
+            }).join('');
+        const offer = assetSummary.pending?.offer;
+        const offerMarkup = offer ? `
+            <div class="vision-task-row asset-task-row is-ready">
+                <span>OFFER</span>
+                <strong>${escapePartyHtml(String(offer.pool || 'low').toUpperCase())} · ${Array.isArray(offer.choices) ? offer.choices.length : 0} CARDS</strong>
+            </div>
+        ` : '';
+        return `
+            <div class="asset-act-panel">
+                <div class="vision-task-row asset-task-row">
+                    <span>DECK PTS</span>
+                    <strong>${Math.max(0, Math.round(Number(assetSummary.points) || 0))} POINTS</strong>
+                </div>
+                ${offerMarkup}
+                ${pendingRows}
+                ${historyRows}
             </div>
         `;
     }
@@ -3447,6 +4862,10 @@ ${phaseSegments}
 
     function buildEncounterLocationDebugMarkup() {
         const location = getCurrentWorldLocation();
+        const context = getCurrentEncounterDebugContext();
+        const enabledFlags = Object.entries(context.storyFlags)
+            .filter(([, enabled]) => enabled === true)
+            .map(([key]) => key);
         return `
             <div class="encounter-location-debug">
                 <div class="encounter-location-head">
@@ -3460,6 +4879,38 @@ ${phaseSegments}
                         </button>
                     `).join('')}
                 </div>
+                <div class="encounter-location-head">
+                    <span>SCENE TAGS</span>
+                    <strong>${context.tags.length ? context.tags.join(' / ') : 'NONE'}</strong>
+                </div>
+                <div class="encounter-location-grid is-tags">
+                    ${ENCOUNTER_DEBUG_TAG_OPTIONS.map((option) => `
+                        <button class="debug-act-btn${context.tags.includes(option.key) ? ' is-ready' : ''}" type="button" data-debug-action="toggle-encounter-tag" data-encounter-tag="${option.key}">
+                            ${option.label}
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="encounter-location-head">
+                    <span>STORY FLAGS</span>
+                    <strong>${enabledFlags.length ? enabledFlags.join(' / ') : 'NONE'}</strong>
+                </div>
+                <div class="encounter-location-grid is-flags">
+                    ${ENCOUNTER_DEBUG_FLAG_OPTIONS.map((option) => `
+                        <button class="debug-act-btn${context.storyFlags[option.key] ? ' is-ready' : ''}" type="button" data-debug-action="toggle-encounter-flag" data-encounter-flag="${option.key}">
+                            ${option.label}
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="encounter-debug-numeric-grid">
+                    <label>
+                        <span>FUNDS</span>
+                        <input type="number" min="0" step="50" value="${context.funds}" data-debug-action="set-encounter-funds">
+                    </label>
+                    <label>
+                        <span>CRISIS</span>
+                        <input type="number" min="0" max="100" step="1" value="${context.crisis}" data-debug-action="set-encounter-crisis">
+                    </label>
+                </div>
             </div>
         `;
     }
@@ -3471,13 +4922,16 @@ ${phaseSegments}
         if (state.firstMeetDone === true || state.status === 'introduced') {
             return { label: 'DONE', reason: state.introducedNodeId || 'introduced', canForce: false, className: 'is-done' };
         }
+        if (state.preSignalDone === true) {
+            return { label: 'PRE-SIGNAL', reason: 'signal done; first meet boosted', canForce: true, className: 'is-pre-signal' };
+        }
         if (active?.status === 'placed') {
             const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(active.targetPhaseIndex) || 0)));
             return {
-                label: 'PLACED',
+                label: active.type === 'pre_signal' ? 'SIGNAL' : 'PLACED',
                 reason: `${getRouteOptionLabel(active.targetNodeId || '') || active.targetNodeId || 'NODE'} · ${getPhaseRomanLabel(phaseIndex)}`,
                 canForce: false,
-                className: 'is-placed'
+                className: active.type === 'pre_signal' ? 'is-pre-signal' : 'is-placed'
             };
         }
         if (active) {
@@ -3485,12 +4939,66 @@ ${phaseSegments}
         }
         const evaluated = eligibilityMap.get(charKey);
         if (evaluated?.debugState === 'ready') {
-            return { label: 'READY', reason: `priority ${evaluated.priority || 0}`, canForce: true, className: 'is-ready' };
+            return { label: 'READY', reason: formatEncounterRequirementSummary(evaluated, { includePassed: true }), canForce: true, className: 'is-ready' };
         }
         const reasons = Array.isArray(evaluated?.reasonCodes) && evaluated.reasonCodes.length
-            ? evaluated.reasonCodes.join(' / ')
-            : 'blocked';
-        return { label: 'BLOCKED', reason: reasons, canForce: true, className: 'is-blocked' };
+            ? evaluated.reasonCodes
+            : ['blocked'];
+        return { label: 'BLOCKED', reason: formatEncounterRequirementSummary(evaluated, { fallback: formatEncounterReasonCodes(reasons) }), canForce: true, className: 'is-blocked' };
+    }
+
+    function formatEncounterReasonCodes(reasonCodes) {
+        const codes = Array.isArray(reasonCodes)
+            ? reasonCodes
+            : String(reasonCodes || '').split('/');
+        return codes
+            .map((code) => {
+                const normalized = String(code || '').trim();
+                if (!normalized) return '';
+                if (ENCOUNTER_REASON_LABELS[normalized]) return ENCOUNTER_REASON_LABELS[normalized];
+                if (normalized.startsWith('requires_')) return `needs ${normalized.slice('requires_'.length).toUpperCase()}`;
+                if (normalized.startsWith('missing_flag_')) return `missing ${normalized.slice('missing_flag_'.length).replace(/_/g, ' ')}`;
+                return normalized.replace(/_/g, ' ');
+            })
+            .filter(Boolean)
+            .join(' / ') || 'blocked';
+    }
+
+    function formatEncounterRequirementSummary(evaluated, options = {}) {
+        const req = evaluated?.requirements && typeof evaluated.requirements === 'object' ? evaluated.requirements : null;
+        if (!req) return options.fallback || `priority ${evaluated?.priority || 0}`;
+        const parts = [];
+        const pushThreshold = (label, current, required) => {
+            const threshold = Math.max(0, Math.round(Number(required) || 0));
+            if (!threshold) return;
+            parts.push(`${label} ${Math.max(0, Math.round(Number(current) || 0))}/${threshold}`);
+        };
+        pushThreshold('day', req.day, req.minDay);
+        pushThreshold('node', req.nodeIndex, req.minNodeIndex);
+        pushThreshold('funds', req.funds, req.minFunds);
+        pushThreshold('crisis', req.crisis, req.minCrisis);
+        pushThreshold('spent', req.spentScore, req.minSpentScore);
+        if (req.requiredGeo) parts.push(`geo ${req.geo || 'missing'}>${req.requiredGeo}`);
+        if (Array.isArray(req.requiredTags) && req.requiredTags.length) parts.push(`tag ${req.requiredTags.join('|')}`);
+        if (Array.isArray(req.requiredFlags) && req.requiredFlags.length) parts.push(`flag ${req.requiredFlags.join('|')}`);
+        if (Array.isArray(req.requiredCharacters) && req.requiredCharacters.length) parts.push(`needs ${req.requiredCharacters.join('|')}`);
+        if (Array.isArray(req.requiredAny) && req.requiredAny.length) parts.push(`any ${formatEncounterAnyRequirement(req.requiredAny)}`);
+        if (options.includePassed) parts.push(`priority ${evaluated?.priority || 0}`);
+        return parts.join(' / ') || options.fallback || 'no requirements';
+    }
+
+    function formatEncounterAnyRequirement(groups) {
+        return groups
+            .map((group) => {
+                const parts = [];
+                if (Array.isArray(group.requiredCharacters) && group.requiredCharacters.length) parts.push(group.requiredCharacters.join('+'));
+                if (Array.isArray(group.requiredFlags) && group.requiredFlags.length) parts.push(group.requiredFlags.join('+'));
+                if (Number(group.minCrisis) > 0) parts.push(`crisis>${group.minCrisis}`);
+                if (Number(group.minFunds) > 0) parts.push(`funds>${group.minFunds}`);
+                return parts.join('+');
+            })
+            .filter(Boolean)
+            .join(' OR ') || 'alternate gate';
     }
 
     function buildEncounterDebugPanelMarkup(actState, encounter) {
@@ -3499,8 +5007,13 @@ ${phaseSegments}
         return `
             <details class="encounter-debug-panel"${appState.encounterDebugOpen ? ' open' : ''}>
                 <summary>ENCOUNTER DEBUG</summary>
+                <div class="encounter-debug-mode-note">
+                    <span>FREE ADD = FORCE ignores rules</span>
+                    <span>RULE ADD = eligible auto placement</span>
+                </div>
                 <div class="encounter-debug-actions">
                     <button class="debug-act-btn" type="button" data-debug-action="encounter-scan">SCAN</button>
+                    <button class="debug-act-btn is-ready" type="button" data-debug-action="auto-add-encounter">RULE ADD</button>
                     <button class="debug-act-btn" type="button" data-debug-action="clear-encounter">CLEAR</button>
                 </div>
                 ${buildEncounterLocationDebugMarkup()}
@@ -3511,9 +5024,9 @@ ${phaseSegments}
                             <div class="encounter-debug-row ${debugState.className}">
                                 <div class="encounter-debug-meta">
                                     <strong>${charKey}</strong>
-                                    <span>${debugState.label} · ${escapePartyHtml(debugState.reason)}</span>
+                                    <span title="${escapePartyHtml(`${debugState.label} · ${debugState.reason}`)}">${debugState.label} · ${escapePartyHtml(debugState.reason)}</span>
                                 </div>
-                                <button class="debug-act-btn${debugState.canForce ? ' is-ready' : ' is-disabled'}" type="button" data-debug-action="force-encounter" data-encounter-char="${charKey}">FORCE</button>
+                                <button class="debug-act-btn${debugState.canForce ? ' is-ready' : ' is-disabled'}" type="button" data-debug-action="force-encounter" data-encounter-char="${charKey}">FREE</button>
                             </div>
                         `;
                     }).join('')}
@@ -3535,15 +5048,16 @@ ${phaseSegments}
         const activeLabel = placed.length
             ? placed.map((item) => {
                 const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
-                return `${item.charKey}@${getRouteOptionLabel(item.targetNodeId || '') || item.targetNodeId || 'NODE'}·${getPhaseRomanLabel(phaseIndex)}`;
+                const typeLabel = item.type === 'pre_signal' ? 'SIG' : 'MEET';
+                return `${typeLabel}:${item.charKey}@${getRouteOptionLabel(item.targetNodeId || '') || item.targetNodeId || 'NODE'}·${getPhaseRomanLabel(phaseIndex)}`;
             }).join(' / ')
             : activeQueue.length
-                ? activeQueue.map((item) => `${item.charKey}:${String(item.status || 'queued').toUpperCase()}`).join(' / ')
+                ? activeQueue.map((item) => `${item.type === 'pre_signal' ? 'SIG' : 'MEET'}:${item.charKey}:${String(item.status || 'queued').toUpperCase()}`).join(' / ')
                 : 'EMPTY';
         return `
             <div class="encounter-act-panel">
                 <div class="vision-task-row${placed.length ? ' is-ready' : ''}">
-                    <span>FIRST MEET</span>
+                    <span>ENCOUNTER</span>
                     <strong>${activeLabel}</strong>
                 </div>
                 <div class="vision-task-row">
@@ -3584,13 +5098,15 @@ ${phaseSegments}
                         <strong>${crisis}</strong>
                     </div>
                     <div class="act-kpi">
-                        <span>SIGHT</span>
+                        <span>情报</span>
                         <strong>${sight}</strong>
                     </div>
                 </div>
                 <div class="act-resource-ledger">${buildResourceStateRows(actState)}</div>
                 <div class="act-slot-ledger">${buildPhaseSlotStateRows(actState)}</div>
                 ${buildVisionPanelMarkup(actState)}
+                ${buildCombatSettlementPanelMarkup(actState)}
+                ${buildAssetSettlementPanelMarkup(actState)}
                 ${buildEncounterPanelMarkup(actState)}
                 ${buildDebugActionButtons()}
             </div>
@@ -3771,6 +5287,33 @@ ${phaseSegments}
         updateTransform();
     }
 
+    function getCameraFitMetrics() {
+        const currentIndex = Math.max(1, Math.round(Number(appState.currentNodeIndex) || 1));
+        const maxIndex = currentIndex + getVisionSightValue();
+        const minIndex = Math.max(1, currentIndex - 1);
+        const fitNodes = Array.from(layer.querySelectorAll('.az-node:not(.node-fog-hidden)'))
+            .map((node) => ({
+                x: parsePxPosition(node.style.left, NaN),
+                y: parsePxPosition(node.style.top, NaN),
+                nodeIndex: getNodeIndex(node.id)
+            }))
+            .filter((node) => (
+                Number.isFinite(node.x) &&
+                Number.isFinite(node.y) &&
+                node.nodeIndex >= minIndex &&
+                node.nodeIndex <= maxIndex
+            ));
+        if (!fitNodes.length) return layerMetrics;
+        const minX = Math.min(...fitNodes.map((node) => node.x));
+        const maxX = Math.max(...fitNodes.map((node) => node.x));
+        const minY = Math.min(...fitNodes.map((node) => node.y));
+        const maxY = Math.max(...fitNodes.map((node) => node.y));
+        return {
+            width: Math.max(320, (maxX - minX) + 260),
+            height: Math.max(320, (maxY - minY) + 260)
+        };
+    }
+
     function getColumnLineBounds(column, layerHeight, fallbackTop, fallbackBottom) {
         const currentNodeData = getCurrentNodeData();
         if (column.nodeIds.includes(currentNodeData.presentNode)) {
@@ -3817,12 +5360,12 @@ ${phaseSegments}
         const yValues = [];
         const currentNodeData = getCurrentNodeData();
 
-        layer.querySelectorAll('.az-node').forEach((node) => {
+        layer.querySelectorAll('.az-node:not(.node-fog-hidden)').forEach((node) => {
             xValues.push(parsePxPosition(node.style.left, 0));
             yValues.push(parsePxPosition(node.style.top, 0));
         });
 
-        layer.querySelectorAll('.grid-base-line').forEach((line) => {
+        layer.querySelectorAll('.grid-base-line:not(.grid-line-fog-hidden)').forEach((line) => {
             xValues.push(parsePxPosition(line.style.left, 0));
         });
 
@@ -3879,8 +5422,9 @@ ${phaseSegments}
     function fitLayerToViewport() {
         const safeWidth = Math.max(viewportWidth - 180, 320);
         const safeHeight = Math.max(viewportHeight - 220, 320);
-        const widthScale = safeWidth / Math.max(layerMetrics.width, 1);
-        const heightScale = safeHeight / Math.max(layerMetrics.height, 1);
+        const fitMetrics = getCameraFitMetrics();
+        const widthScale = safeWidth / Math.max(fitMetrics.width, 1);
+        const heightScale = safeHeight / Math.max(fitMetrics.height, 1);
         const fittedScale = Math.min(widthScale, heightScale, 1) * LAYER_FIT_SHRINK;
         scale = Math.max(0.32, fittedScale);
     }
@@ -3962,7 +5506,8 @@ ${phaseSegments}
         const isFinaleNode = isFinaleNodeId(node.id);
         const controlledEntry = getControlledNodeEntry(node.id);
         const controlType = normalizeRestTintKey(controlledEntry?.type, '');
-        const displayTypeClass = `type-${getDisplayTypeKeyForMapNode(node)}`;
+        const detailVisible = isNodeDetailVisible(node.id);
+        const displayTypeClass = detailVisible ? `type-${getDisplayTypeKeyForMapNode(node)}` : '';
         const pathNodeIds = Array.isArray(currentNodeData.pathNodes) && currentNodeData.pathNodes.length
             ? currentNodeData.pathNodes
             : appState.routeHistory;
@@ -3995,11 +5540,13 @@ ${phaseSegments}
         }
 
         if (isBranchNode) classList.push('node-branch');
-        if (hasFixedPhase) classList.push('node-has-fixed-phase');
+        if (hasFixedPhase && detailVisible) classList.push('node-has-fixed-phase');
         if (displayTypeClass) classList.push(displayTypeClass);
         if (node.id !== currentNodeData.presentNode && !pathNodeIds.includes(node.id) && !currentNodeData.deadNodes.includes(node.id)) {
             classList.push(isNodeInVisionRange(node.id) ? 'node-visible' : 'node-obscured');
         }
+        if (!detailVisible) classList.push('node-intel-hidden', 'node-fog-hidden');
+        if (isNodeTemporarilyRevealedByIntel(node.id)) classList.push('node-intel-revealed');
         if (controlledEntry) {
             classList.push('node-controlled', `control-${controlType || 'neutral'}`);
         }
@@ -4013,7 +5560,7 @@ ${phaseSegments}
         getMapColumns().forEach((column) => {
             const lineEl = document.getElementById(column.lineId);
             if (!lineEl) return;
-            lineEl.className = `grid-base-line ${getCurrentColumnLineClass(column)}`;
+            lineEl.className = `grid-base-line ${getCurrentColumnLineClass(column)}${isColumnVisibleInMapFog(column) ? '' : ' grid-line-fog-hidden'}`;
         });
 
         getMapNodes().forEach((node) => {
@@ -4022,9 +5569,10 @@ ${phaseSegments}
             nodeEl.className = getMapClassNameForNode(node);
             const labelEl = nodeEl.querySelector('.node-label');
             const sublabelEl = nodeEl.querySelector('.node-sublabel');
+            const detailVisible = isNodeDetailVisible(node.id);
             if (labelEl) labelEl.textContent = node.label;
-            if (sublabelEl) sublabelEl.textContent = node.sublabel;
-            nodeEl.dataset.displayType = getDisplayTypeKeyForMapNode(node);
+            if (sublabelEl) sublabelEl.textContent = detailVisible ? node.sublabel : 'UNKNOWN';
+            nodeEl.dataset.displayType = detailVisible ? getDisplayTypeKeyForMapNode(node) : 'unknown';
             const controlledEntry = getControlledNodeEntry(node.id);
             const controlType = normalizeRestTintKey(controlledEntry?.type, '');
             const encounterMarkup = buildEncounterBadgeMarkup(node.id);
@@ -4111,6 +5659,7 @@ ${phaseSegments}
         selectionState.source = null;
         selectionState.type = null;
         selectionState.slotId = null;
+        appState.restTintPopupSlotId = '';
     }
 
     function resetCampaignRuntimeState() {
@@ -4140,9 +5689,13 @@ ${phaseSegments}
     }
 
     function selectInventoryToken(type) {
+        const key = normalizeResourceKey(type, '');
+        if (!key) return;
         selectionState.source = 'inventory';
-        selectionState.type = type;
+        selectionState.type = key;
         selectionState.slotId = null;
+        appState.plannerAddType = key;
+        appState.restTintPopupSlotId = '';
     }
 
     function selectSlotToken(slotId) {
@@ -4152,6 +5705,7 @@ ${phaseSegments}
         selectionState.source = 'slot';
         selectionState.type = token.type;
         selectionState.slotId = slotId;
+        if (token.key !== 'rest') appState.restTintPopupSlotId = '';
     }
 
     function consumeInventoryToken(type) {
@@ -4159,11 +5713,12 @@ ${phaseSegments}
         if (plannerRuntime && typeof plannerRuntime.consumeInventoryToken === 'function') {
             return plannerRuntime.consumeInventoryToken(createPlannerRuntimeContext(), type);
         }
-        const key = type.toLowerCase();
+        const key = normalizeResourceKey(type, '');
+        if (!key) return null;
         const source = getPreferredSourceForKey(key);
         if (!source) return null;
         appState.inventory[key][source] -= 1;
-        return { key, type, source, amount: 1, sources: [source] };
+        return { key, type: RESOURCE_TYPE_MAP[key] || key.toUpperCase(), source, amount: 1, sources: [source] };
     }
 
     function restoreTokenToInventory(token) {
@@ -4233,10 +5788,14 @@ ${phaseSegments}
             currentToken.sources.push(extraToken.source);
             currentToken.source = currentToken.sources.includes('limited') ? 'limited' : 'reserve';
             markActStateDirty();
-            if (getTotalInventoryCount(currentToken.key) <= 0) {
-                resetSelection();
+            if (currentToken.key === 'rest') {
+                openRestTintPopup(slotId);
             } else {
-                selectInventoryToken(selectionState.type);
+                if (getTotalInventoryCount(currentToken.key) <= 0) {
+                    resetSelection();
+                } else {
+                    selectInventoryToken(selectionState.type);
+                }
             }
             refreshAllUI();
             return;
@@ -4246,10 +5805,14 @@ ${phaseSegments}
         restoreTokenToInventory(appState.phaseSlots[slotId]);
         appState.phaseSlots[slotId] = token;
         markActStateDirty();
-        if (getTotalInventoryCount(token.key) <= 0) {
-            resetSelection();
+        if (token.key === 'rest') {
+            openRestTintPopup(slotId);
         } else {
-            selectInventoryToken(token.type);
+            if (getTotalInventoryCount(token.key) <= 0) {
+                resetSelection();
+            } else {
+                selectInventoryToken(token.type);
+            }
         }
         refreshAllUI();
     }
@@ -4289,6 +5852,38 @@ ${phaseSegments}
         refreshAllUI();
     }
 
+    function removeOnePointFromPhaseSlot(slotId) {
+        if (!canEditPhaseSlot(slotId)) return false;
+        const token = appState.phaseSlots[slotId];
+        if (!token) return false;
+        restoreRestTintToInventory(token);
+        const amount = Math.max(1, Math.min(3, Math.round(Number(token.amount) || 1)));
+        const sources = Array.isArray(token.sources) && token.sources.length
+            ? token.sources
+            : Array.from({ length: amount }, () => token.source || 'limited');
+        const source = sources.pop() || token.source || 'limited';
+        const bucket = source === 'reserve' ? 'reserve' : 'limited';
+        appState.inventory[token.key][bucket] += 1;
+        if (amount <= 1) {
+            appState.phaseSlots[slotId] = null;
+        } else {
+            token.amount = amount - 1;
+            token.sources = sources.slice(0, amount - 1);
+            token.source = token.sources.includes('limited') ? 'limited' : (token.sources[0] || 'limited');
+        }
+        const addKey = normalizeResourceKey(appState.plannerAddType, '');
+        if (addKey && getTotalInventoryCount(addKey) > 0) {
+            selectInventoryToken(addKey);
+        } else if (selectionState.source === 'slot' && selectionState.slotId === slotId) {
+            selectionState.source = null;
+            selectionState.type = null;
+            selectionState.slotId = null;
+        }
+        markActStateDirty();
+        refreshAllUI();
+        return true;
+    }
+
     function grantDebugResource(key, amount = 1, source = 'reserve') {
         if (!isOverviewDebugMode()) return false;
         const normalizedKey = normalizeResourceKey(key, '');
@@ -4304,24 +5899,34 @@ ${phaseSegments}
         const node = getCurrentNodeData();
         const runtimeNode = getNodeRuntimeEntry(node.presentNode);
         const location = getCurrentWorldLocation();
+        const debugContext = getCurrentEncounterDebugContext();
         return {
             day: 99,
             geo: location.layer,
+            site: location.site,
             location,
+            funds: debugContext.funds,
+            crisis: debugContext.crisis,
+            storyFlags: debugContext.storyFlags,
             world: {
-                location
+                location,
+                encounterContext: debugContext
             },
             tags: [
                 'debug',
-                'casino',
+                ...debugContext.tags,
                 location.layer,
                 location.site,
+                ...location.tags,
                 runtimeNode?.ui?.subtitle,
                 runtimeNode?.narrative?.title,
                 runtimeNode?.narrative?.overview,
                 runtimeNode?.narrative?.guidance
             ].filter(Boolean),
-            flags: ['debug']
+            flags: [
+                'debug',
+                ...Object.entries(debugContext.storyFlags).filter(([, enabled]) => enabled === true).map(([key]) => key)
+            ]
         };
     }
 
@@ -4341,6 +5946,41 @@ ${phaseSegments}
         return true;
     }
 
+    function autoAddEligibleEncounter() {
+        if (!isOverviewDebugMode()) return false;
+        const actModule = getActModuleApi();
+        if (
+            !actModule
+            || typeof actModule.enqueueEligibleCharacterEncounters !== 'function'
+            || typeof actModule.getChapter !== 'function'
+        ) {
+            return false;
+        }
+        const currentPayload = adapterState.lastPayload || buildInitialDebugPayload();
+        const hero = extractHeroPayload(currentPayload) || { funds: appState.resources.funds, assets: appState.resources.assets };
+        return updateActStatePayloadAndCommit((actState) => {
+            const config = actModule.getChapter(actState.id || getCurrentChapterId());
+            const result = actModule.enqueueEligibleCharacterEncounters(actState, hero, {
+                context: getDebugEncounterContext(),
+                config,
+                limit: 1,
+                place: true,
+                distance: 1
+            });
+            const queued = Array.isArray(result?.queued) ? result.queued : [];
+            const placed = result?.placed || null;
+            const blockedCount = Array.isArray(result?.evaluated?.blocked) ? result.evaluated.blocked.length : 0;
+            if (placed) {
+                syncState.statusText = `RULE ADD: ${placed.charKey}@${placed.targetNodeId || 'PATH'}`;
+            } else if (queued.length) {
+                syncState.statusText = `RULE ADD QUEUED: ${queued.map((item) => item.charKey).join('/')}`;
+            } else {
+                syncState.statusText = `RULE ADD NONE (${blockedCount} BLOCKED)`;
+            }
+            return result?.actState || actState;
+        });
+    }
+
     function forceDebugEncounter(charKey) {
         if (!isOverviewDebugMode()) return false;
         const actModule = getActModuleApi();
@@ -4349,7 +5989,7 @@ ${phaseSegments}
         if (!normalizedCharKey) return false;
         return updateActStatePayloadAndCommit((actState) => {
             const config = actModule.getChapter(actState.id || getCurrentChapterId());
-            const result = actModule.debugForceCharacterEncounter(actState, normalizedCharKey, config, { distance: 2 });
+            const result = actModule.debugForceCharacterEncounter(actState, normalizedCharKey, config, { distance: 1 });
             syncState.statusText = result?.applied
                 ? `ENCOUNTER FORCED: ${normalizedCharKey}`
                 : `ENCOUNTER SKIP: ${result?.reason || normalizedCharKey}`;
@@ -4404,6 +6044,52 @@ ${phaseSegments}
         });
     }
 
+    function updateDebugEncounterContext(updater) {
+        if (!isOverviewDebugMode()) return false;
+        return updateWorldPayloadAndCommit((world) => {
+            const current = normalizeEncounterDebugContext(world.encounterContext, world.act);
+            const next = typeof updater === 'function'
+                ? updater(current)
+                : { ...current, ...(updater || {}) };
+            world.encounterContext = normalizeEncounterDebugContext(next, world.act);
+            syncState.statusText = 'ENCOUNTER CONTEXT UPDATED';
+            return world;
+        });
+    }
+
+    function toggleDebugEncounterTag(tagValue) {
+        const tag = typeof tagValue === 'string' ? tagValue.trim().toLowerCase() : '';
+        if (!tag) return false;
+        return updateDebugEncounterContext((context) => {
+            const tags = context.tags.includes(tag)
+                ? context.tags.filter((item) => item !== tag)
+                : [...context.tags, tag];
+            return { ...context, tags };
+        });
+    }
+
+    function toggleDebugEncounterFlag(flagValue) {
+        const flag = typeof flagValue === 'string' ? flagValue.trim().toLowerCase() : '';
+        if (!flag) return false;
+        return updateDebugEncounterContext((context) => ({
+            ...context,
+            storyFlags: {
+                ...context.storyFlags,
+                [flag]: context.storyFlags[flag] !== true
+            }
+        }));
+    }
+
+    function setDebugEncounterNumericField(field, value) {
+        const key = field === 'crisis' ? 'crisis' : 'funds';
+        const max = key === 'crisis' ? 100 : Number.POSITIVE_INFINITY;
+        const numeric = Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
+        return updateDebugEncounterContext((context) => ({
+            ...context,
+            [key]: numeric
+        }));
+    }
+
     function resetDebugActState() {
         if (!isOverviewDebugMode()) return false;
         if (window.ACE0DashboardDebug && typeof window.ACE0DashboardDebug.reset === 'function') {
@@ -4448,24 +6134,28 @@ ${phaseSegments}
 
         let result = null;
         try {
-            result = actModule.resolvePendingAdvanceState(actState, currentHero, config);
+            result = actModule.resolvePendingAdvanceState(actState, currentHero, config, getDebugEncounterContext());
         } catch (error) {
             console.warn('[ACE0 DEBUG] advance through ACT module failed:', error);
             return false;
         }
         if (!result?.actState) return false;
 
+        const settledWorld = settlePendingActAssetDeckCommandsForDashboardWorld({
+            ...(currentWorld || {}),
+            act: result.actState
+        });
+        const settledActState = settledWorld?.act && typeof settledWorld.act === 'object'
+            ? settledWorld.act
+            : result.actState;
         const nextPayload = buildNormalizedDashboardPayload({
             ...(currentPayload || {}),
             hero: result.heroState && typeof result.heroState === 'object'
                 ? result.heroState
                 : currentHero,
-            world: {
-                ...(currentWorld || {}),
-                act: result.actState
-            }
+            world: settledWorld
         }, {
-            actState: result.actState,
+            actState: settledActState,
             forceActDerivedSnapshot: true
         });
         if (!nextPayload) return false;
@@ -4542,6 +6232,9 @@ ${phaseSegments}
         if (action === 'encounter-scan') {
             return scanDebugEncounters();
         }
+        if (action === 'auto-add-encounter') {
+            return autoAddEligibleEncounter();
+        }
         if (action === 'force-encounter') {
             return forceDebugEncounter(target?.dataset?.encounterChar);
         }
@@ -4550,6 +6243,12 @@ ${phaseSegments}
         }
         if (action === 'set-location-layer') {
             return setDebugWorldLocationLayer(target?.dataset?.locationLayer);
+        }
+        if (action === 'toggle-encounter-tag') {
+            return toggleDebugEncounterTag(target?.dataset?.encounterTag);
+        }
+        if (action === 'toggle-encounter-flag') {
+            return toggleDebugEncounterFlag(target?.dataset?.encounterFlag);
         }
         if (action === 'advance-node') {
             return advanceDebugNode();
@@ -4791,7 +6490,7 @@ ${phaseSegments}
 
     function bindPlannerEvents() {
         plannerToggleBtn = document.getElementById('toggle-planner');
-        plannerDrawer = document.getElementById('planner-drawer');
+        plannerDrawer = document.getElementById('drawer');
         inventoryPanel = document.getElementById('inventory');
         inventoryTokens = Array.from(document.querySelectorAll('.token-dispenser'));
         dropZones = Array.from(document.querySelectorAll('.phase-core.drop-zone'));
@@ -4802,15 +6501,15 @@ ${phaseSegments}
             token.dataset.bound = 'true';
             token.addEventListener('click', () => {
                 if (!canUseInteractivePlannerControls()) return;
+                if (token.dataset.plannerTab) return;
                 // executing 下仍允许点击 inventory token，用于编辑未来相位
                 if (isRouteSelectionActive() || token.classList.contains('is-empty')) return;
                 const type = token.dataset.type;
-                if (selectionState.source === 'inventory' && selectionState.type === type) {
-                    resetSelection();
-                } else {
-                    selectInventoryToken(type);
-                    appState.drawerOpen = true;
-                }
+                setPlannerEditMode('add');
+                if (getTotalInventoryCount(type) > 0) selectInventoryToken(type);
+                else resetSelection();
+                appState.drawerOpen = true;
+                setPlannerPage(type);
                 syncPlannerOpenState();
             });
         });
@@ -4827,6 +6526,11 @@ ${phaseSegments}
                 const mounted = appState.phaseSlots[slotId];
                 const editable = canEditPhaseSlot(slotId);
 
+                if (normalizePlannerEditMode(appState.plannerEditMode) === 'remove') {
+                    removeOnePointFromPhaseSlot(slotId);
+                    return;
+                }
+
                 if (selectionState.source === 'inventory') {
                     if (!editable) return;
                     placeInventorySelection(slotId);
@@ -4835,12 +6539,7 @@ ${phaseSegments}
 
                 if (selectionState.source === 'slot') {
                     if (selectionState.slotId === slotId) {
-                        if (!editable) return;
-                        if (mounted) restoreTokenToInventory(mounted);
-                        appState.phaseSlots[slotId] = null;
-                        markActStateDirty();
-                        resetSelection();
-                        refreshAllUI();
+                        syncPlannerOpenState();
                         return;
                     }
 
@@ -4850,6 +6549,10 @@ ${phaseSegments}
 
                 if (mounted && editable) {
                     selectSlotToken(slotId);
+                    if (mounted.key === 'rest') {
+                        setPlannerPage('rest');
+                        appState.drawerOpen = true;
+                    }
                     syncPlannerOpenState();
                 }
             });
@@ -4863,7 +6566,21 @@ ${phaseSegments}
                 event.stopPropagation();
                 if (!canUseInteractivePlannerControls()) return;
                 if (button.disabled || button.classList.contains('is-disabled')) return;
-                setSelectedRestTint(button.dataset.restTint);
+                if (setSelectedRestTint(button.dataset.restTint)) {
+                    closeRestTintPopup();
+                    refreshPlannerUI();
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-close-rest-tint]').forEach((button) => {
+            if (button.dataset.bound === 'true') return;
+            button.dataset.bound = 'true';
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeRestTintPopup();
+                refreshPlannerUI();
             });
         });
 
@@ -4911,11 +6628,59 @@ ${phaseSegments}
             return;
         }
 
+        const editModeButton = e.target.closest('[data-planner-edit-mode]');
+        if (editModeButton) {
+            e.preventDefault();
+            e.stopPropagation();
+            setPlannerEditMode(editModeButton.dataset.plannerEditMode);
+            appState.drawerOpen = true;
+            refreshPlannerUI();
+            return;
+        }
+
+        const plannerTabButton = e.target.closest('[data-planner-tab]');
+        if (plannerTabButton) {
+            e.preventDefault();
+            e.stopPropagation();
+            const requestedTab = plannerTabButton.dataset.plannerTab;
+            if (normalizePlannerEditMode(appState.plannerEditMode) === 'remove') setPlannerEditMode('add');
+            if (RESOURCE_KEYS.includes(requestedTab)) {
+                if (getTotalInventoryCount(requestedTab) > 0) selectInventoryToken(requestedTab);
+                else resetSelection();
+            }
+            setPlannerPage(requestedTab);
+            appState.drawerOpen = true;
+            refreshPlannerUI();
+            return;
+        }
+
+        const assetActionButton = e.target.closest('[data-asset-action]');
+        if (assetActionButton) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleAssetDeckAction(assetActionButton);
+            return;
+        }
+
+        if (e.target.matches?.('input[data-debug-action]')) return;
         const debugActionButton = e.target.closest('[data-debug-action]');
         if (!debugActionButton) return;
         e.preventDefault();
         e.stopPropagation();
         handleDebugActAction(debugActionButton.dataset.debugAction, debugActionButton);
+    });
+
+    document.addEventListener('change', (e) => {
+        const input = e.target.closest?.('input[data-debug-action]');
+        if (!input) return;
+        const action = input.dataset.debugAction;
+        if (action === 'set-encounter-funds') {
+            setDebugEncounterNumericField('funds', input.value);
+            return;
+        }
+        if (action === 'set-encounter-crisis') {
+            setDebugEncounterNumericField('crisis', input.value);
+        }
     });
 
     phaseBarMount.addEventListener('pointerdown', (e) => {
@@ -4931,7 +6696,13 @@ ${phaseSegments}
         e.preventDefault();
         if (!canOpenPlannerDrawer()) return;
         if (isRouteSelectionActive()) return;
-        appState.drawerOpen = !appState.drawerOpen;
+        if (appState.drawerOpen) {
+            appState.drawerOpen = false;
+            setPlannerPage('planner');
+        } else {
+            appState.drawerOpen = true;
+            setPlannerPage('planner');
+        }
         syncPlannerOpenState();
     });
 
@@ -4945,10 +6716,10 @@ ${phaseSegments}
     });
 
     document.addEventListener('click', (e) => {
-        const keepAction = e.target.closest('#toggle-planner, #commit-act-state, .route-option-btn, [data-debug-action], [data-vision-phase-action]');
+        const keepAction = e.target.closest('#toggle-planner, #commit-act-state, .route-option-btn, [data-debug-action], [data-vision-phase-action], [data-planner-tab], [data-planner-edit-mode], [data-asset-action]');
         if (keepAction) return;
 
-        const keep = e.target.closest('.token-dispenser, .phase-core.drop-zone, .mounted-token, #inventory, .rest-control-panel, .az-node');
+        const keep = e.target.closest('.token-dispenser, .phase-core.drop-zone, .mounted-token, #inventory, .view, .asset-layout, .az-node');
         if (keep || !selectionState.source) return;
         resetSelection();
         syncPlannerOpenState();
@@ -4957,6 +6728,7 @@ ${phaseSegments}
     const themes = {
         'dead':[ { class: 'th-dead', isStatic: true } ],
         'solid_path':[ { class: 'th-path-solid', isStatic: true } ],
+        'jump_path':[ { class: 'th-jump-aura', isStatic: true }, { class: 'th-jump-main', isStatic: true } ],
         'future':[ { class: 'th-future', isStatic: true } ],
         'finale_far':[ { class: 'th-finale-far', isStatic: true }, { class: 'th-finale-aura', isStatic: false, freq: 1.6, mathAmp: 7, speed: 0.0009, phaseOffset: 0 } ],
         'danger_far':[ { class: 'th-danger-far', isStatic: true }, { class: 'th-danger-aura', isStatic: false, freq: 2, mathAmp: 8, speed: 0.001, phaseOffset: 0 } ],
@@ -5019,6 +6791,7 @@ ${phaseSegments}
     }
 
     function getConnectionLaneKey(conn) {
+        if (conn.isJumpPath) return 'lane-jump';
         if (conn.from === 'node3-descent') {
             if (conn.to === 'node04-a-route') return 'lane-blue';
             if (conn.to === 'node04-b-route') return 'lane-orange';
@@ -5043,6 +6816,7 @@ ${phaseSegments}
 
     function getConnectionTypeForCurrentNode(conn) {
         const presentNode = getCurrentNodeData().presentNode;
+        if (conn.isJumpPath) return 'jump_path';
         if (isBossNodeId(conn.to) && appState.currentNodeIndex < getCampaignTotalNodes()) return 'danger_far';
         if (isFinaleNodeId(conn.to) && appState.currentNodeIndex < getCampaignTotalNodes()) return 'finale_far';
         if (conn.from === presentNode) return 'active_flow';
@@ -5051,14 +6825,15 @@ ${phaseSegments}
     }
 
     function initSVGPaths() {
-        if (!getMapNodes().length || !getMapTopology().length) {
+        const renderedTopology = getRenderedMapTopology().filter((conn) => isConnectionVisibleInMapFog(conn));
+        if (!getMapNodes().length || !renderedTopology.length) {
             canvas.innerHTML = '';
             renderQueue = [];
             return;
         }
         canvas.innerHTML = ''; 
         renderQueue =[];
-        getMapTopology().forEach(conn => {
+        renderedTopology.forEach(conn => {
             const type = getConnectionTypeForCurrentNode(conn);
             const layers = themes[type];
             const laneClass = getConnectionLaneKey(conn);
@@ -5066,7 +6841,7 @@ ${phaseSegments}
                 const pathEl = document.createElementNS(SVG_NS, 'path');
                 pathEl.setAttribute('class', `magic-thread ${cfg.class} ${laneClass}`);
                 canvas.appendChild(pathEl);
-                renderQueue.push({ pathEl: pathEl, fromId: conn.from, toId: conn.to, laneClass, ...cfg });
+                renderQueue.push({ pathEl: pathEl, fromId: conn.from, toId: conn.to, laneClass, isJumpPath: conn.isJumpPath === true, ...cfg });
             });
         });
     }
@@ -5096,6 +6871,10 @@ ${phaseSegments}
         renderQueue.forEach(item => {
             const start = getNodeCenter(item.fromId);
             const end = getNodeCenter(item.toId);
+            if (item.isJumpPath) {
+                item.pathEl.setAttribute('d', `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
+                return;
+            }
             
             const dx = end.x - start.x;
             const cy = dx * 0.45;

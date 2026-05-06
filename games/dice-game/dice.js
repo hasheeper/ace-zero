@@ -14,7 +14,7 @@
  *   - 厄运骰 (♠, 20 mana): 偏向极端值/豹子
  *   - 预知   (♦, 10 mana): 提前显示一颗骰子 + 拦截庄家 force
  *
- * 依赖: shared/mini-game-force.js, shared/mini-game-base.js
+ * 依赖: ../shared/mini-game-force.js, ../shared/mini-game-base.js
  */
 (function () {
   'use strict';
@@ -80,7 +80,8 @@
     fortuneActive: 0,
     jinxActive: 0,
     foresightUsed: false,
-    previewDie: null
+    previewDie: null,
+    assetRiskMult: 1
   };
 
   // ---- DOM ----
@@ -114,6 +115,17 @@
 
   function msg(text, cls) {
     MiniGameBase.updateMessage(UI.message, text, cls);
+  }
+
+  function getAssetModifiers() {
+    var cfg = configLoader && configLoader.cfg ? configLoader.cfg() : null;
+    return cfg && cfg.assetModifiers && typeof cfg.assetModifiers === 'object'
+      ? cfg.assetModifiers
+      : null;
+  }
+
+  function resolveAssetValue(bucketName, key, baseValue) {
+    return MiniGameBase.resolveAssetValue(getAssetModifiers(), bucketName, key, baseValue);
   }
 
   // ---- 3D 骰子旋转映射 ----
@@ -190,6 +202,10 @@
     var manaEnabled = gc.mana && gc.mana.enabled !== false;
     var maxMana = Number(hc.maxMana) || Number(gc.mana && gc.mana.pool) || 60;
     var curMana = Number(hc.mana) || maxMana;
+    state.assetRiskMult = Math.max(0.5, Math.min(1.5, Number(resolveAssetValue('risk', 'roll', 1).value) || 1));
+    if (forceEngine) {
+      MiniGameBase.applyAssetModifiersToForceEngine(forceEngine, getAssetModifiers());
+    }
 
     manaManager.state.enabled = manaEnabled;
     manaManager.set(curMana, maxMana);
@@ -286,22 +302,31 @@
     var triple = isTriple(d);
 
     if (triple) {
-      return betType === 'triple'
+      var tripleResult = betType === 'triple'
         ? { win: true, payout: 30, label: '豹子！' }
         : { win: false, payout: 0, label: '豹子通吃！' };
+      if (tripleResult.win) {
+        tripleResult.payout = resolveAssetValue('payout', betType, tripleResult.payout).value;
+      }
+      return tripleResult;
     }
 
     var isBig = sum >= 11;
     var isOdd = sum % 2 === 1;
 
+    var result;
     switch (betType) {
-      case 'big':    return isBig  ? { win: true, payout: 1, label: '大！' } : { win: false, payout: 0, label: '小。' };
-      case 'small':  return !isBig ? { win: true, payout: 1, label: '小！' } : { win: false, payout: 0, label: '大。' };
-      case 'odd':    return isOdd  ? { win: true, payout: 1, label: '单！' } : { win: false, payout: 0, label: '双。' };
-      case 'even':   return !isOdd ? { win: true, payout: 1, label: '双！' } : { win: false, payout: 0, label: '单。' };
-      case 'triple': return { win: false, payout: 0, label: '非豹子。' };
-      default:       return { win: false, payout: 0, label: '?' };
+      case 'big':    result = isBig  ? { win: true, payout: 1, label: '大！' } : { win: false, payout: 0, label: '小。' }; break;
+      case 'small':  result = !isBig ? { win: true, payout: 1, label: '小！' } : { win: false, payout: 0, label: '大。' }; break;
+      case 'odd':    result = isOdd  ? { win: true, payout: 1, label: '单！' } : { win: false, payout: 0, label: '双。' }; break;
+      case 'even':   result = !isOdd ? { win: true, payout: 1, label: '双！' } : { win: false, payout: 0, label: '单。' }; break;
+      case 'triple': result = { win: false, payout: 0, label: '非豹子。' }; break;
+      default:       result = { win: false, payout: 0, label: '?' };
     }
+    if (result.win) {
+      result.payout = resolveAssetValue('payout', betType, result.payout).value;
+    }
+    return result;
   }
 
   function buildBetFavorScore(d, betType) {
@@ -343,7 +368,8 @@
   function pickRollByForce() {
     var fortuneWeight = state.fortuneActive || 0;
     var jinxWeight = state.jinxActive || 0;
-    var sampleCount = Math.max(1, 1 + Math.ceil((fortuneWeight + jinxWeight) * 14));
+    var riskMult = Math.max(0.5, Math.min(1.5, Number(state.assetRiskMult) || 1));
+    var sampleCount = Math.max(1, 1 + Math.ceil((fortuneWeight + jinxWeight) * 14 * riskMult));
     var bestRoll = rollDiceWithPreview();
     var bestScore = -Infinity;
 

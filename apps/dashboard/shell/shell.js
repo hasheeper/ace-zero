@@ -151,6 +151,7 @@ let currentDashboardPage = 'overview';
 let dashboardExtensions = typeof expansionPageApi.getBuiltinTabs === 'function'
   ? expansionPageApi.getBuiltinTabs()
   : [];
+let dashboardAssetSummary = null;
 
 const DASHBOARD_MESSAGE_TYPES = dashboardBridge.MESSAGE_TYPES || {
   init: 'ACE0_DASHBOARD_INIT',
@@ -158,7 +159,9 @@ const DASHBOARD_MESSAGE_TYPES = dashboardBridge.MESSAGE_TYPES || {
   ready: 'ACE0_DASHBOARD_READY',
   request: 'ACE0_DASHBOARD_REQUEST_DATA',
   actCommit: 'ACE0_DASHBOARD_ACT_COMMIT',
-  actCommitResult: 'ACE0_DASHBOARD_ACT_COMMIT_RESULT'
+  actCommitResult: 'ACE0_DASHBOARD_ACT_COMMIT_RESULT',
+  assetCommand: 'ACE0_DASHBOARD_ASSET_DECK_COMMAND',
+  assetCommandResult: 'ACE0_DASHBOARD_ASSET_DECK_COMMAND_RESULT'
 };
 
 const HERO_CODE_TO_DASHBOARD_KEY = {
@@ -454,6 +457,15 @@ function applyMvuHero(hero, world = null) {
   activateCharacter(nextKey, { centerDock: true, dockBehavior: 'auto' });
 }
 
+function refreshDossierFromSharedCharacters() {
+  syncOverviewNodesFromCharacters();
+  renderRosterDock();
+  try { window.__acezeroHomeRefreshIntel?.(); } catch (_) {}
+  const fallbackKey = Object.keys(characters).find((key) => !checkIsUnintroduced(key)) || 'rino';
+  const nextKey = characters[currentCharacterKey] ? currentCharacterKey : fallbackKey;
+  activateCharacter(nextKey, { centerDock: true, dockBehavior: 'auto' });
+}
+
 function extractHeroFromPayload(payload) {
   if (!payload || typeof payload !== 'object') return null;
   if (payload.hero && typeof payload.hero === 'object') return payload.hero;
@@ -470,6 +482,65 @@ function extractWorldFromPayload(payload) {
   if (payload.data?.world && typeof payload.data.world === 'object') return payload.data.world;
   if (payload.data?.stat_data?.world && typeof payload.data.stat_data.world === 'object') return payload.data.stat_data.world;
   return null;
+}
+
+function resolveAssetSummaryModule() {
+  const candidates = [window];
+  try {
+    if (window.parent && window.parent !== window) candidates.push(window.parent);
+  } catch (_) {}
+  try {
+    if (window.top && window.top !== window && !candidates.includes(window.top)) candidates.push(window.top);
+  } catch (_) {}
+  if (typeof globalThis === 'object' && globalThis && !candidates.includes(globalThis)) candidates.push(globalThis);
+
+  for (const candidate of candidates) {
+    try {
+      const assetSummary = candidate?.ACE0Modules?.assetSummary;
+      if (assetSummary && typeof assetSummary.buildAssetDeckSummary === 'function') return assetSummary;
+    } catch (_) {}
+  }
+  return null;
+}
+
+function buildDashboardAssetSummary(world) {
+  const assetDeck = world?.assetDeck && typeof world.assetDeck === 'object' ? world.assetDeck : null;
+  if (!assetDeck) return null;
+  const assetSummary = resolveAssetSummaryModule();
+  if (assetSummary && typeof assetSummary.buildAssetDeckSummary === 'function') {
+    try {
+      return assetSummary.buildAssetDeckSummary(assetDeck, {
+        gameId: 'texas-holdem',
+        mode: 'host'
+      });
+    } catch (error) {
+      console.warn('[ACE0 Dashboard] Asset summary failed:', error);
+    }
+  }
+  const generalCards = Array.isArray(assetDeck.active_general_cards) ? assetDeck.active_general_cards : [];
+  const voidCards = Array.isArray(assetDeck.active_void_cards) ? assetDeck.active_void_cards : [];
+  return {
+    points: Math.max(0, Math.round(Number(assetDeck.asset_count) || 0)),
+    slots: {
+      generalUsed: generalCards.length,
+      generalMax: Math.max(0, Math.round(Number(assetDeck.general_slots_unlocked) || 0)),
+      voidUsed: voidCards.length,
+      voidMax: Math.max(0, Math.round(Number(assetDeck.void_slots_unlocked) || 0))
+    },
+    counts: {
+      active: generalCards.length + voidCards.length,
+      effective: generalCards.length + voidCards.length,
+      inactive: 0
+    },
+    gameplay: {
+      skillLevels: [],
+      mana: [],
+      cost: [],
+      forcePower: [],
+      passive: [],
+      miniGame: {}
+    }
+  };
 }
 
 function postExpansionFrameData(messageType = 'ACE0_ACT_REFRESH') {
@@ -499,6 +570,7 @@ function handleHostPayloadMessage({ messageType, hostPayload }) {
   }
   const hero = extractHeroFromPayload(hostPayload);
   const world = extractWorldFromPayload(hostPayload);
+  dashboardAssetSummary = buildDashboardAssetSummary(world);
   if (hero) applyMvuHero(hero, world);
   dashboardExtensions = typeof expansionPageApi.extractExtensionsFromPayload === 'function'
     ? expansionPageApi.extractExtensionsFromPayload(hostPayload)
@@ -507,6 +579,10 @@ function handleHostPayloadMessage({ messageType, hostPayload }) {
   attachExpansionFrameActCommitBridge();
   postExpansionFrameData(messageType === DASHBOARD_MESSAGE_TYPES.init ? 'ACE0_ACT_INIT' : 'ACE0_ACT_REFRESH');
 }
+
+window.addEventListener('acezero:dashboard-characters-synced', () => {
+  refreshDossierFromSharedCharacters();
+});
 
 function renderExpansionPage() {
   if (typeof expansionPageApi.renderPage === 'function') {
@@ -1123,7 +1199,8 @@ function getDossierPageContext() {
     data: {
       characters,
       rosterCharacters,
-      svgLibrary
+      svgLibrary,
+      assetSummary: dashboardAssetSummary
     },
     helpers: {
       escapeHtml,

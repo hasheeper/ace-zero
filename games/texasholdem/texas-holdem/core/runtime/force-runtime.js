@@ -131,7 +131,7 @@
 
     var moz = runtimeApi && runtimeApi.moz ? runtimeApi.moz : null;
     var combatFormula = moz && moz.combatFormula ? moz.combatFormula : null;
-    if (!moz || !combatFormula || typeof moz._resolveForceOpposition !== 'function') {
+    if (!moz || !combatFormula || typeof moz.resolveForceOpposition !== 'function') {
       return forces.map(function(force) {
         return Object.assign({}, force, {
           effectivePower: force && force.effectivePower != null
@@ -155,7 +155,7 @@
     try {
       combatFormula.onTraitManaGain = null;
       var enhanced = combatFormula.enhanceForces(forces, { players: players });
-      return clone(moz._resolveForceOpposition(enhanced));
+      return clone(moz.resolveForceOpposition(enhanced, { players: players }));
     } catch (err) {
       return forces.map(function(force) {
         return Object.assign({}, force, {

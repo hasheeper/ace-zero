@@ -7,7 +7,9 @@
     ready: 'ACE0_DASHBOARD_READY',
     request: 'ACE0_DASHBOARD_REQUEST_DATA',
     actCommit: 'ACE0_DASHBOARD_ACT_COMMIT',
-    actCommitResult: 'ACE0_DASHBOARD_ACT_COMMIT_RESULT'
+    actCommitResult: 'ACE0_DASHBOARD_ACT_COMMIT_RESULT',
+    assetCommand: 'ACE0_DASHBOARD_ASSET_DECK_COMMAND',
+    assetCommandResult: 'ACE0_DASHBOARD_ASSET_DECK_COMMAND_RESULT'
   };
 
   function getFrameWindow(frame) {
@@ -54,6 +56,26 @@
     return null;
   }
 
+  function resolveDashboardAssetDeckCommandBridge() {
+    const candidates = [window];
+    try {
+      if (window.parent && window.parent !== window) candidates.push(window.parent);
+    } catch (_) {}
+    try {
+      if (window.top && window.top !== window && !candidates.includes(window.top)) candidates.push(window.top);
+    } catch (_) {}
+
+    for (const candidate of candidates) {
+      try {
+        if (typeof candidate.ACE0DashboardApplyAssetDeckCommand === 'function') {
+          return candidate.ACE0DashboardApplyAssetDeckCommand.bind(candidate);
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
   function attachExpansionFrameActCommitBridge(frame) {
     const targetWindow = getFrameWindow(frame);
     if (!targetWindow) return false;
@@ -65,6 +87,13 @@
           throw new Error('Dashboard act commit bridge is unavailable.');
         }
         return bridge(commitPayload);
+      };
+      targetWindow.ACE0DashboardApplyAssetDeckCommand = async (commandPayload) => {
+        const bridge = resolveDashboardAssetDeckCommandBridge();
+        if (!bridge) {
+          throw new Error('Dashboard AssetDeck command bridge is unavailable.');
+        }
+        return bridge(commandPayload);
       };
       return true;
     } catch (_) {
@@ -124,8 +153,28 @@
         return;
       }
 
+      if (payload.type === 'ACE0_ASSET_DECK_COMMAND') {
+        const didForward = postDashboardMessageUpstream(
+          MESSAGE_TYPES.assetCommand,
+          payload.payload || payload.data || payload
+        );
+        if (!didForward) {
+          postExpansionFrameMessage(frame, 'ACE0_ASSET_DECK_COMMAND_RESULT', {
+            ok: false,
+            requestId: payload.payload?.requestId || payload.data?.requestId || '',
+            error: 'Dashboard could not find a parent/top host window.'
+          });
+        }
+        return;
+      }
+
       if (payload.type === MESSAGE_TYPES.actCommitResult) {
         postExpansionFrameMessage(frame, 'ACE0_ACT_COMMIT_RESULT', payload.payload || payload.data || payload);
+        return;
+      }
+
+      if (payload.type === MESSAGE_TYPES.assetCommandResult) {
+        postExpansionFrameMessage(frame, 'ACE0_ASSET_DECK_COMMAND_RESULT', payload.payload || payload.data || payload);
         return;
       }
 
@@ -153,6 +202,7 @@
     MESSAGE_TYPES,
     postDashboardMessageUpstream,
     resolveDashboardActCommitBridge,
+    resolveDashboardAssetDeckCommandBridge,
     attachExpansionFrameActCommitBridge,
     postExpansionFrameMessage,
     postExpansionFrameData,

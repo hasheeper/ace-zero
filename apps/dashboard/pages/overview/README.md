@@ -67,4 +67,5 @@ future 节点统一灰化。
 
 ## 参考
 
-- [ACT_IMPLEMENTATION.md](/Users/liuhang/Documents/acezero/ST/docs/ACT_IMPLEMENTATION.md)
+- [CURRENT_ACT_STATUS.md](/Users/liuhang/Documents/ace-zero/st/docs/CURRENT_ACT_STATUS.md)
+- [ENCOUNTER_NEXT_PLAN.md](/Users/liuhang/Documents/ace-zero/st/docs/ENCOUNTER_NEXT_PLAN.md)

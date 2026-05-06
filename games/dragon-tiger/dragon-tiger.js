@@ -14,7 +14,7 @@
  *   - 乾坤逆转 (♠, 20 mana): 对方偏向小牌
  *   - 先知     (♦, 10 mana): 提前窥视一方的牌 + 拦截庄家 force
  *
- * 依赖: shared/mini-game-force.js, shared/mini-game-base.js, deck.js
+ * 依赖: ../shared/mini-game-force.js, ../shared/mini-game-base.js, deck.js
  */
 (function () {
   'use strict';
@@ -118,6 +118,17 @@
   var configLoader, manaManager, betSelector;
 
   function msg(text, cls) { MiniGameBase.updateMessage(UI.message, text, cls); }
+
+  function getAssetModifiers() {
+    var cfg = configLoader && configLoader.cfg ? configLoader.cfg() : null;
+    return cfg && cfg.assetModifiers && typeof cfg.assetModifiers === 'object'
+      ? cfg.assetModifiers
+      : null;
+  }
+
+  function resolveAssetValue(bucketName, key, baseValue) {
+    return MiniGameBase.resolveAssetValue(getAssetModifiers(), bucketName, key, baseValue);
+  }
 
   // ---- 牌面值 ----
   function cardStrength(rank) {
@@ -289,7 +300,10 @@
     var def = DEFAULT_CONFIG.dragon_tiger;
 
     state.chips = Number(gc.startingChips) || Number(cfg.chips) || def.startingChips;
-    state.tiePayout = Number(gc.tiePayout) || def.tiePayout;
+    state.tiePayout = resolveAssetValue('odds', 'tie', Number(gc.tiePayout) || def.tiePayout).value;
+    if (forceEngine) {
+      MiniGameBase.applyAssetModifiersToForceEngine(forceEngine, getAssetModifiers());
+    }
 
     var manaEnabled = gc.mana && gc.mana.enabled !== false;
     var maxMana = Number(hc.maxMana) || Number(gc.mana && gc.mana.pool) || 60;

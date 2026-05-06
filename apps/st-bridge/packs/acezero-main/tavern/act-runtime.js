@@ -30,7 +30,8 @@
         ACT_NARRATIVE_INJECT_ID = 'ace0_act_narrative',
         ACT_TRANSITION_INJECT_ID = 'ace0_act_transition',
         ACT_PACING_INJECT_ID = 'ace0_narrative_pacing',
-        ACT_FIRST_MEET_INJECT_ID = 'ace0_first_meet'
+        ACT_FIRST_MEET_INJECT_ID = 'ace0_first_meet',
+        ACT_PRE_SIGNAL_INJECT_ID = 'ace0_pre_signal'
       } = constants;
       const {
         getAce0HostRoot = () => root,
@@ -184,7 +185,6 @@
       'advanceActToNextNode',
       'resolveActNodeTransition',
       'consumeSingleActPhase',
-      'commitPackUsageForPhase',
       'deriveWorldTimeFromAct',
       'resolvePendingAdvanceState',
       'deriveCharacterStatesFromActState',
@@ -194,7 +194,8 @@
       'buildNarrativePromptContentFromDerived',
       'buildNarrativePacingSummary',
       'getNodeFirstMeetMap',
-      'buildFirstMeetPromptContent'
+      'buildFirstMeetPromptContent',
+      'buildPreSignalPromptContent'
     ];
 
     const bridge = {
@@ -359,9 +360,6 @@
       phase_index: Math.max(0, Math.min(4, Math.round(Number(rawAct.phase_index) || 0))),
       stage: normalizeActStage(rawAct.stage),
       phase_advance: Math.max(0, Math.round(Number(rawAct.phase_advance) || 0)),
-      pickedPacks: (rawAct.pickedPacks && typeof rawAct.pickedPacks === 'object' && !Array.isArray(rawAct.pickedPacks))
-        ? JSON.parse(JSON.stringify(rawAct.pickedPacks))
-        : {},
       controlledNodes: (rawAct.controlledNodes && typeof rawAct.controlledNodes === 'object' && !Array.isArray(rawAct.controlledNodes))
         ? JSON.parse(JSON.stringify(rawAct.controlledNodes))
         : {},
@@ -381,6 +379,11 @@
             .filter(item => item && typeof item === 'object' && !Array.isArray(item))
             .map(item => JSON.parse(JSON.stringify(item)))
         : [],
+      pendingAssetDeckCommands: Array.isArray(rawAct.pendingAssetDeckCommands)
+        ? rawAct.pendingAssetDeckCommands
+            .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+            .map(item => JSON.parse(JSON.stringify(item)))
+        : [],
       resolutionHistory: Array.isArray(rawAct.resolutionHistory)
         ? rawAct.resolutionHistory
             .filter(item => item && typeof item === 'object' && !Array.isArray(item))
@@ -389,6 +392,15 @@
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(rawAct.narrativeTension) || 0))),
       pendingFirstMeet: (() => {
         const raw = rawAct.pendingFirstMeet;
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+        const out = {};
+        for (const [k, v] of Object.entries(raw)) {
+          if (typeof v === 'string' && v.trim()) out[k] = v;
+        }
+        return out;
+      })(),
+      pendingPreSignal: (() => {
+        const raw = rawAct.pendingPreSignal;
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
         const out = {};
         for (const [k, v] of Object.entries(raw)) {
@@ -464,6 +476,7 @@
         actState: {
           ...targetActState,
           pendingFirstMeet: {},
+          pendingPreSignal: {},
           pendingTransitionTarget: '',
           transitionRequestTarget: '',
           pendingTransitionPrompt: enteredPrompt
@@ -576,11 +589,52 @@
     return keySet;
   }
 
-  async function synchronizeActCharacterState(eraVars) {
-    const derived = deriveActCharacterStates(eraVars);
-    if (!derived) return { eraVars, derived: null, changed: false };
+  async function autoUpdateHostEncounters(eraVars) {
+    const world = getWorldState(eraVars);
+    const hero = eraVars?.hero && typeof eraVars.hero === 'object' ? eraVars.hero : {};
+    const act = getWorldActState(eraVars);
+    const config = getActRuntimeConfig(act.id);
+    if (!config) return { eraVars, changed: false };
+    if (act.stage === 'complete' || act.stage === 'route') return { eraVars, changed: false };
+    if (Math.max(0, Math.round(Number(act.phase_advance) || 0)) > 0) return { eraVars, changed: false };
 
-    const hero = eraVars?.hero || {};
+    const beforeEncounter = JSON.stringify(act.characterEncounter || {});
+    const encounterContext = buildEncounterContextFromEraVars(eraVars);
+    // Host auto mode only discovers newly eligible encounters. ACT owns placement at node boundaries.
+    const result = runActModuleMethod('enqueueEligibleCharacterEncounters', act, hero, {
+      context: encounterContext,
+      config,
+      limit: 8,
+      place: false
+    });
+    if (!result.ok || !result.value?.actState) return { eraVars, changed: false };
+
+    const nextAct = result.value.actState;
+    const afterEncounter = JSON.stringify(nextAct.characterEncounter || {});
+    if (beforeEncounter === afterEncounter) return { eraVars, changed: false };
+
+    await updateEraVars({ world: { act: nextAct } });
+    return {
+      eraVars: {
+        ...(eraVars || {}),
+        world: {
+          ...(world || {}),
+          act: nextAct
+        }
+      },
+      changed: true,
+      queued: result.value.queued || [],
+      placed: null
+    };
+  }
+
+  async function synchronizeActCharacterState(eraVars) {
+    const autoEncounter = await autoUpdateHostEncounters(eraVars);
+    const workingEraVars = autoEncounter.eraVars || eraVars;
+    const derived = deriveActCharacterStates(workingEraVars);
+    if (!derived) return { eraVars: workingEraVars, derived: null, changed: autoEncounter.changed === true };
+
+    const hero = workingEraVars?.hero || {};
     const currentCast = getHeroCast(hero);
     const modulePatchResult = runActModuleMethod('createCharacterCastPatch', currentCast, derived);
     const castPatch = modulePatchResult.ok && modulePatchResult.value?.castPatch
@@ -649,9 +703,9 @@
     // - 纯跃迁驱动：只在本轮 cast 的 introduced=false→true 时写入
     // - 跨楼层稳定：玩家在同一楼层内编辑 / swipe / 重生成都保留
     //   （楼层前进的清理由 prompt 流水里的 chat.length 闸门负责）
-    // - 段位推进清空（见 resolvePendingActAdvance）
-    // 注意：不做"设计了就补写"的补偿逻辑——那会让 pending 段位内常驻去不掉。
-    const currentActState = getWorldActState(eraVars);
+    // - 推进时只清掉进入本次推进前已存在的旧 pending；本次新触发的首见帧保留给下一轮 prompt。
+    // 注意：不做"设计了就补写"的补偿逻辑——那会让 pending 常驻去不掉。
+    const currentActState = getWorldActState(workingEraVars);
     const currentPending = currentActState?.pendingFirstMeet && typeof currentActState.pendingFirstMeet === 'object'
       ? currentActState.pendingFirstMeet
       : {};
@@ -678,18 +732,18 @@
       });
 
       const nextEraVars = {
-        ...(eraVars || {}),
+        ...(workingEraVars || {}),
         hero: {
-          ...(eraVars?.hero || {}),
+          ...(workingEraVars?.hero || {}),
           cast: {
-            ...(eraVars?.hero?.cast || {}),
+            ...(workingEraVars?.hero?.cast || {}),
             ...(changed ? castPatch : {})
           }
         },
         world: {
-          ...(eraVars?.world || {}),
+          ...(workingEraVars?.world || {}),
           act: {
-            ...(eraVars?.world?.act || {}),
+            ...(workingEraVars?.world?.act || {}),
             ...(pendingChanged ? { pendingFirstMeet: nextPending } : {})
           }
         }
@@ -697,7 +751,7 @@
       return { eraVars: nextEraVars, derived, changed: changed || pendingChanged, firstMeetHints };
     }
 
-    return { eraVars, derived, changed: false, firstMeetHints };
+    return { eraVars: workingEraVars, derived, changed: autoEncounter.changed === true, firstMeetHints };
   }
 
   function buildActStateSummary(eraVars, derivedActState = null) {
@@ -708,7 +762,7 @@
     return '';
   }
 
-  function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null) {
+  function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) {
     const derived = derivedActState || deriveActCharacterStates(eraVars);
     if (!derived) return [];
     const { act, config, currentNodeId } = derived;
@@ -755,6 +809,24 @@
           depth: 1,
           role: 'system',
           content: firstMeetContent,
+          should_scan: false
+        });
+      }
+    }
+
+    const signalHints = preSignalHints && typeof preSignalHints === 'object' ? preSignalHints : {};
+    if (Object.keys(signalHints).length > 0) {
+      const preSignalModule = runActModuleMethod('buildPreSignalPromptContent', signalHints);
+      const preSignalContent = preSignalModule.ok && typeof preSignalModule.value === 'string'
+        ? preSignalModule.value
+        : '';
+      if (preSignalContent) {
+        prompts.push({
+          id: ACT_PRE_SIGNAL_INJECT_ID,
+          position: 'in_chat',
+          depth: 1,
+          role: 'system',
+          content: preSignalContent,
           should_scan: false
         });
       }
@@ -955,19 +1027,19 @@
     if (moduleResult.ok) return;
   }
 
-  function advanceActToNextNode(actState, config) {
-    const moduleResult = runActModuleMethod('advanceActToNextNode', actState, config);
+  function advanceActToNextNode(actState, config, heroState = {}, contextInput = {}) {
+    const moduleResult = runActModuleMethod('advanceActToNextNode', actState, config, heroState, contextInput);
     if (moduleResult.ok) return moduleResult.value;
     return false;
   }
 
-  function resolveActNodeTransition(actState, config) {
-    const moduleResult = runActModuleMethod('resolveActNodeTransition', actState, config);
+  function resolveActNodeTransition(actState, config, heroState = {}, contextInput = {}) {
+    const moduleResult = runActModuleMethod('resolveActNodeTransition', actState, config, heroState, contextInput);
     if (moduleResult.ok) return moduleResult.value;
   }
 
-  function consumeSingleActPhase(actState, heroState, config) {
-    const moduleResult = runActModuleMethod('consumeSingleActPhase', actState, heroState, config);
+  function consumeSingleActPhase(actState, heroState, config, contextInput = {}) {
+    const moduleResult = runActModuleMethod('consumeSingleActPhase', actState, heroState, config, contextInput);
     if (moduleResult.ok) return moduleResult.value;
   }
 
@@ -1072,27 +1144,74 @@
     return setClockPressureInternal(0);
   }
 
-  // 在段位推进前：将当前 nodeId×phaseIndex 的随机池抽签结果落到 actState.pickedPacks。
-  function commitCurrentPhasePackUsage(actState, config) {
-    const actModule = getActModuleApi();
-    if (!actModule || typeof actModule.commitPackUsageForPhase !== 'function') return;
-    if (actState.stage !== 'executing') return;
-    const nodeId = Array.isArray(actState.route_history)
-      ? actState.route_history[Math.max(0, (actState.nodeIndex || 1) - 1)]
-      : null;
-    if (!nodeId) return;
-    const phaseIdx = Math.max(0, Math.min(3, Math.round(Number(actState.phase_index) || 0)));
-    const narrative = (config && config.narrative) || null;
-    try {
-      actModule.commitPackUsageForPhase(actState, config, narrative, nodeId, phaseIdx);
-    } catch (_) {}
-  }
-
   function deriveWorldTimeFromAct(actState) {
     // 阶段2：ACT 不再为世界时间提供任何值。全部返回 null 表示"不覆盖"。
     const moduleResult = runActModuleMethod('deriveWorldTimeFromAct', actState);
     if (moduleResult.ok && moduleResult.value) return moduleResult.value;
     return { day: null, phase: null };
+  }
+
+  function normalizePendingPromptMap(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const out = {};
+    Object.entries(source).forEach(([rawKey, rawHint]) => {
+      const key = normalizeTrimmedString(rawKey, '').toUpperCase();
+      const hint = normalizeTrimmedString(rawHint, '');
+      if (key && hint) out[key] = hint;
+    });
+    return out;
+  }
+
+  function keepNewPendingPrompts(currentInput, previousInput) {
+    const current = normalizePendingPromptMap(currentInput);
+    const previous = normalizePendingPromptMap(previousInput);
+    const out = {};
+    Object.entries(current).forEach(([key, hint]) => {
+      if (Object.prototype.hasOwnProperty.call(previous, key)) return;
+      out[key] = hint;
+    });
+    return out;
+  }
+
+  function buildEncounterContextFromEraVars(eraVars) {
+    const world = getWorldState(eraVars);
+    const hero = eraVars?.hero && typeof eraVars.hero === 'object' ? eraVars.hero : {};
+    const clock = getWorldClock(eraVars);
+    const location = getWorldLocation(eraVars);
+    const storyFlags = {
+      ...(world?.storyFlags && typeof world.storyFlags === 'object' && !Array.isArray(world.storyFlags) ? world.storyFlags : {})
+    };
+    const tags = [
+      ...(Array.isArray(world?.tags) ? world.tags : []),
+      ...(Array.isArray(world?.flags) ? world.flags : []),
+      ...(Array.isArray(location?.tags) ? location.tags : []),
+      ...Object.entries(storyFlags).filter(([, enabled]) => enabled === true).map(([key]) => key),
+      location?.layer,
+      location?.site
+    ].filter(Boolean);
+    return {
+      day: Math.max(1, Math.round(Number(clock.day) || 1)),
+      worldDay: clock.day,
+      clock,
+      worldClock: clock,
+      geo: location.layer,
+      layer: location.layer,
+      locationLayer: location.layer,
+      location,
+      site: location.site,
+      funds: normalizeFundsAmount(hero.funds ?? hero.money),
+      crisis: Math.max(0, Math.min(100, Math.round(Number(world?.act?.crisis) || 0))),
+      storyFlags,
+      world: {
+        ...(world && typeof world === 'object' ? world : {}),
+        location,
+        current_time: clock
+      },
+      tags,
+      flags: [
+        ...(Array.isArray(world?.flags) ? world.flags : [])
+      ]
+    };
   }
 
   async function resolvePendingActAdvance(eraVars) {
@@ -1110,9 +1229,12 @@
     let actState = JSON.parse(JSON.stringify(act));
     let nextHero = hero;
     let moduleAdvance = { ok: false };
+    const encounterContext = buildEncounterContextFromEraVars(eraVars);
+    const previousPendingFirstMeet = normalizePendingPromptMap(act.pendingFirstMeet);
+    const previousPendingPreSignal = normalizePendingPromptMap(act.pendingPreSignal);
 
     if (requestedSteps > 0) {
-      moduleAdvance = runActModuleMethod('resolvePendingAdvanceState', act, hero, config);
+      moduleAdvance = runActModuleMethod('resolvePendingAdvanceState', act, hero, config, encounterContext);
       actState = moduleAdvance.ok && moduleAdvance.value?.actState
         ? moduleAdvance.value.actState
         : JSON.parse(JSON.stringify(act));
@@ -1130,14 +1252,15 @@
       actState.phase_advance = 0;
 
       for (let index = 0; index < stepCount; index += 1) {
-        // 先落存本段的抽签结果再推进（commit 是幂等的，已存不会重写）
-        commitCurrentPhasePackUsage(actState, config);
-        consumeSingleActPhase(actState, nextHero, config);
-        // 段位推进一格，上一段的首见帧进入历史 → 清空缓冲，避免注入到下一段的 prompt。
-        actState.pendingFirstMeet = {};
+        consumeSingleActPhase(actState, nextHero, config, encounterContext);
         if (actState.stage === 'complete') break;
         if (actState.stage === 'route' && actState.route_history.length < actState.nodeIndex + 1) break;
       }
+    }
+
+    if (requestedSteps > 0) {
+      actState.pendingFirstMeet = keepNewPendingPrompts(actState.pendingFirstMeet, previousPendingFirstMeet);
+      actState.pendingPreSignal = keepNewPendingPrompts(actState.pendingPreSignal, previousPendingPreSignal);
     }
 
     // 阶段推进后的两套积分独立累计：
@@ -1167,14 +1290,6 @@
     const nextClockPressure = clockPressureDelta !== 0
       ? Math.max(0, Math.min(100, getWorldClockPressure(eraVars) + clockPressureDelta))
       : getWorldClockPressure(eraVars);
-
-    // 首见帧兜底清空：无论 module 路径还是 fallback，只要推进后坐标（node:phase:stage）有变化，
-    // 上一段的 pendingFirstMeet 都应进入历史、不带进下一段。
-    const prevCoord = `${act?.nodeIndex}:${act?.phase_index}:${act?.stage}`;
-    const nextCoord = `${actState?.nodeIndex}:${actState?.phase_index}:${actState?.stage}`;
-    if (prevCoord !== nextCoord) {
-      actState.pendingFirstMeet = {};
-    }
 
     const completionTransition = maybeResolveActCompletionTransition(actState, nextHero, world);
     if (completionTransition.transitioned) {
@@ -1359,8 +1474,8 @@
         adjustClockPressureInternal,
         setClockPressureInternal,
         resetClockPressureInternal,
-        commitCurrentPhasePackUsage,
         deriveWorldTimeFromAct,
+        buildEncounterContextFromEraVars,
         resolvePendingActAdvance,
         applyFloorProgressDelta,
         advanceWorldClock,
