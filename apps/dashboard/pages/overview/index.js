@@ -1,10 +1,18 @@
-// Overview page is now a thin engine layer.
-// Static chapter config and legacy generation live in sibling modules under this directory.
+// Overview page is now a composition layer.
+// Static config, shared boot helpers, runtimes, and views live in sibling modules.
 
-const OVERVIEW_CONFIG_REGISTRY = (typeof window !== 'undefined' && window.ACE0_OVERVIEW_CONFIGS && typeof window.ACE0_OVERVIEW_CONFIGS === 'object')
-    ? window.ACE0_OVERVIEW_CONFIGS
+const OVERVIEW_CORE = (typeof window !== 'undefined' && window.ACE0OverviewCore && typeof window.ACE0OverviewCore === 'object')
+    ? window.ACE0OverviewCore
     : {};
-const DEFAULT_DASHBOARD_CHAPTER_ID = 'chapter0_exchange';
+const {
+    DEFAULT_DASHBOARD_CHAPTER_ID = 'chapter0_exchange',
+    INITIAL_OVERVIEW_MODE = 'debug',
+    getOverviewConfigProfile = () => ({ chapterId: 'chapter0_exchange', campaign: {}, fixedPhaseMarkers: {} }),
+    getOverviewFallbackCampaign = () => ({ seed: '', totalNodes: 1, rules: {}, reserveGrowthByNode: [], days: [] }),
+    getOverviewFallbackFixedPhaseMarkers = () => ({}),
+    hasUsableCampaignNodes = (campaign) => Array.isArray(campaign?.nodes) && campaign.nodes.length > 0,
+    canUseOverviewFallbackData = (mode = 'debug') => mode !== 'host'
+} = OVERVIEW_CORE;
 const WORLD_CLOCK_PHASES = ['MORNING', 'NOON', 'AFTERNOON', 'NIGHT'];
 const DEFAULT_WORLD_CLOCK = Object.freeze({ day: 1, phase: 'MORNING' });
 const WORLD_LOCATION_LAYERS = ['THE_COURT', 'THE_EXCHANGE', 'THE_STREET', 'THE_RUST'];
@@ -60,109 +68,6 @@ const DASHBOARD_HERO_CODE_BY_KEY = Object.freeze({
     kuzuha: 'KUZUHA'
 });
 
-const DEFAULT_DEBUG_CONFIG = Object.freeze({
-    chapterId: DEFAULT_DASHBOARD_CHAPTER_ID,
-    campaign: {
-        seed: 'AUTO-DEMO',
-        totalNodes: 1,
-        rules: {
-            requireScheduleAllLimited: true,
-            reserveGrowthTiming: 'end_of_node'
-        },
-        reserveGrowthByNode: [],
-        days: []
-    },
-    fixedPhaseMarkers: {}
-});
-
-const DEFAULT_TAVERN_CONFIG = Object.freeze({
-    campaign: {
-        seed: '',
-        totalNodes: 1,
-        rules: {
-            requireScheduleAllLimited: true,
-            reserveGrowthTiming: 'end_of_node'
-        },
-        reserveGrowthByNode: [],
-        days: []
-    },
-    fixedPhaseMarkers: {}
-});
-
-const DEBUG_OVERVIEW_CONFIG = Object.freeze(
-    JSON.parse(JSON.stringify(OVERVIEW_CONFIG_REGISTRY.debug || DEFAULT_DEBUG_CONFIG))
-);
-const TAVERN_OVERVIEW_CONFIG = Object.freeze(
-    JSON.parse(JSON.stringify(OVERVIEW_CONFIG_REGISTRY.tavern || DEFAULT_TAVERN_CONFIG))
-);
-
-function cloneOverviewConfigValue(value, fallback) {
-    try {
-        return JSON.parse(JSON.stringify(value == null ? fallback : value));
-    } catch (_) {
-        return JSON.parse(JSON.stringify(fallback));
-    }
-}
-
-function getOverviewConfigProfile(mode = 'debug') {
-    return mode === 'host' ? TAVERN_OVERVIEW_CONFIG : DEBUG_OVERVIEW_CONFIG;
-}
-
-function getOverviewFallbackCampaign(mode = 'debug') {
-    if (mode === 'host') {
-        return cloneOverviewConfigValue(DEFAULT_TAVERN_CONFIG.campaign, DEFAULT_TAVERN_CONFIG.campaign);
-    }
-    return cloneOverviewConfigValue(getOverviewConfigProfile(mode).campaign, DEFAULT_DEBUG_CONFIG.campaign);
-}
-
-function getOverviewFallbackFixedPhaseMarkers(mode = 'debug') {
-    if (mode === 'host') {
-        return cloneOverviewConfigValue(DEFAULT_TAVERN_CONFIG.fixedPhaseMarkers, DEFAULT_TAVERN_CONFIG.fixedPhaseMarkers);
-    }
-    return cloneOverviewConfigValue(getOverviewConfigProfile(mode).fixedPhaseMarkers, DEFAULT_DEBUG_CONFIG.fixedPhaseMarkers);
-}
-
-function hasUsableCampaignNodes(campaign) {
-    return Array.isArray(campaign?.nodes) && campaign.nodes.length > 0;
-}
-
-function detectInitialOverviewMode() {
-    try {
-        const forcedMode = typeof window.ACE0_OVERVIEW_BOOT_MODE === 'string'
-            ? window.ACE0_OVERVIEW_BOOT_MODE.trim().toLowerCase()
-            : '';
-        if (forcedMode === 'host' || forcedMode === 'debug') return forcedMode;
-    } catch (_) {}
-
-    try {
-        const params = new URLSearchParams(window.location.search || '');
-        const debugValue = typeof params.get('debug') === 'string' ? params.get('debug').trim().toLowerCase() : '';
-        if (['1', 'true', 'yes', 'on', 'debug'].includes(debugValue)) return 'debug';
-    } catch (_) {}
-
-    try {
-        if (window.__ACE0_DEBUG_PAYLOAD__ || window.__ACE0_DEBUG_SNAPSHOT__ || window.__ACE0_DEBUG_ACT_STATE__) {
-            return 'debug';
-        }
-    } catch (_) {}
-
-    try {
-        if (window.localStorage.getItem('ace0.dashboard.debugPayload')) return 'debug';
-    } catch (_) {}
-
-    try {
-        if (window.parent && window.parent !== window) return 'host';
-    } catch (_) {}
-
-    return 'debug';
-}
-
-const INITIAL_OVERVIEW_MODE = detectInitialOverviewMode();
-
-function canUseOverviewFallbackData(mode = INITIAL_OVERVIEW_MODE) {
-    return mode !== 'host';
-}
-
 // Runtime module accessors: overview/index.js only bridges these modules into UI state.
 
 function getOverviewCampaignRuntimeApi() {
@@ -177,6 +82,16 @@ function getOverviewPlannerRuntimeApi() {
 
 function getOverviewExecutionRuntimeApi() {
     const api = typeof window !== 'undefined' ? window.ACE0OverviewExecutionRuntime : null;
+    return api && typeof api === 'object' ? api : null;
+}
+
+function getOverviewDashboardAdapterApi() {
+    const api = typeof window !== 'undefined' ? window.ACE0OverviewDashboardAdapter : null;
+    return api && typeof api === 'object' ? api : null;
+}
+
+function getOverviewMapViewApi() {
+    const api = typeof window !== 'undefined' ? window.ACE0OverviewMapView : null;
     return api && typeof api === 'object' ? api : null;
 }
 
@@ -520,34 +435,31 @@ const adapterState = {
     }
 
     function readStoredDebugPayload() {
-        try {
-            const raw = window.localStorage.getItem(DASHBOARD_DEBUG_STORAGE_KEY);
-            if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            return parsed && typeof parsed === 'object' ? parsed : null;
-        } catch (_) {
-            return null;
-        }
+        const adapterRuntime = getOverviewDashboardAdapterApi();
+        return adapterRuntime && typeof adapterRuntime.readStoredJson === 'function'
+            ? adapterRuntime.readStoredJson(DASHBOARD_DEBUG_STORAGE_KEY)
+            : null;
     }
 
     function writeStoredDebugPayload(payload) {
-        try {
-            window.localStorage.setItem(DASHBOARD_DEBUG_STORAGE_KEY, JSON.stringify(payload));
-        } catch (_) {}
+        const adapterRuntime = getOverviewDashboardAdapterApi();
+        if (adapterRuntime && typeof adapterRuntime.writeStoredJson === 'function') {
+            adapterRuntime.writeStoredJson(DASHBOARD_DEBUG_STORAGE_KEY, payload);
+        }
     }
 
     function clearStoredDebugPayload() {
-        try {
-            window.localStorage.removeItem(DASHBOARD_DEBUG_STORAGE_KEY);
-        } catch (_) {}
+        const adapterRuntime = getOverviewDashboardAdapterApi();
+        if (adapterRuntime && typeof adapterRuntime.clearStoredJson === 'function') {
+            adapterRuntime.clearStoredJson(DASHBOARD_DEBUG_STORAGE_KEY);
+        }
     }
 
     function extractFrontendSnapshot(payload) {
-        if (!payload || typeof payload !== 'object') return null;
-        if (payload.frontendSnapshot && typeof payload.frontendSnapshot === 'object') return payload.frontendSnapshot;
-        if (payload.data?.frontendSnapshot && typeof payload.data.frontendSnapshot === 'object') return payload.data.frontendSnapshot;
-        if (payload.payload?.frontendSnapshot && typeof payload.payload.frontendSnapshot === 'object') return payload.payload.frontendSnapshot;
-        return null;
+        const adapterRuntime = getOverviewDashboardAdapterApi();
+        return adapterRuntime && typeof adapterRuntime.extractFrontendSnapshot === 'function'
+            ? adapterRuntime.extractFrontendSnapshot(payload)
+            : null;
     }
 
     function shouldIgnoreStoredDebugPayload(payload) {
@@ -2034,63 +1946,25 @@ const adapterState = {
     }
 
     function postActMessageToHost(message) {
-        const targets = [];
-        if (window.parent && window.parent !== window) {
-            targets.push(window.parent);
+        const adapterRuntime = getOverviewDashboardAdapterApi();
+        if (adapterRuntime && typeof adapterRuntime.postMessageToHost === 'function') {
+            return adapterRuntime.postMessageToHost(message);
         }
-        if (window.top && window.top !== window && !targets.includes(window.top)) {
-            targets.push(window.top);
-        }
-
-        targets.forEach((targetWindow) => {
-            try {
-                targetWindow.postMessage(message, '*');
-            } catch (error) {
-                console.warn('[ACE0 ACT] postMessage failed:', error);
-            }
-        });
-
-        return targets.length > 0;
+        return false;
     }
 
     function resolveDirectActCommitBridge() {
-        const candidates = [window];
-        try {
-            if (window.parent && window.parent !== window) candidates.push(window.parent);
-        } catch (_) {}
-        try {
-            if (window.top && window.top !== window && !candidates.includes(window.top)) candidates.push(window.top);
-        } catch (_) {}
-
-        for (const candidate of candidates) {
-            try {
-                if (typeof candidate.ACE0DashboardCommitActState === 'function') {
-                    return candidate.ACE0DashboardCommitActState.bind(candidate);
-                }
-            } catch (_) {}
-        }
-
-        return null;
+        const adapterRuntime = getOverviewDashboardAdapterApi();
+        return adapterRuntime && typeof adapterRuntime.resolveDirectBridge === 'function'
+            ? adapterRuntime.resolveDirectBridge('ACE0DashboardCommitActState')
+            : null;
     }
 
     function resolveDirectAssetDeckCommandBridge() {
-        const candidates = [window];
-        try {
-            if (window.parent && window.parent !== window) candidates.push(window.parent);
-        } catch (_) {}
-        try {
-            if (window.top && window.top !== window && !candidates.includes(window.top)) candidates.push(window.top);
-        } catch (_) {}
-
-        for (const candidate of candidates) {
-            try {
-                if (typeof candidate.ACE0DashboardApplyAssetDeckCommand === 'function') {
-                    return candidate.ACE0DashboardApplyAssetDeckCommand.bind(candidate);
-                }
-            } catch (_) {}
-        }
-
-        return null;
+        const adapterRuntime = getOverviewDashboardAdapterApi();
+        return adapterRuntime && typeof adapterRuntime.resolveDirectBridge === 'function'
+            ? adapterRuntime.resolveDirectBridge('ACE0DashboardApplyAssetDeckCommand')
+            : null;
     }
 
     function resolveActCommitResult(resultPayload) {
@@ -2266,8 +2140,6 @@ const adapterState = {
         }
     }
 
-    const SVG_NS = "http://www.w3.org/2000/svg";
-    const SEGMENTS = 100;
     const LAYER_FIT_SHRINK = 1;
     const LAYER_PADDING_X = 48;
     const LAYER_PADDING_Y = 64;
@@ -5168,6 +5040,7 @@ ${phaseSegments}
     let canvas = document.getElementById('fate-canvas');
     const sysTopbar = document.getElementById('sysTopbar');
     const phaseBarMount = document.getElementById('phaseBarMount');
+    let overviewMapView = null;
     
     let scale = 1; 
     let viewportWidth = viewport.clientWidth;
@@ -5600,8 +5473,13 @@ ${phaseSegments}
         });
         currentFocusNodeId = getCurrentNodeData().mapFocus;
         syncLayerSize();
-        initSVGPaths();
-        ensureDrawLoop();
+        if (overviewMapView) {
+            overviewMapView.rebuild();
+            overviewMapView.ensureDrawLoop();
+        } else {
+            initSVGPaths();
+            ensureDrawLoop();
+        }
         centerViewportOnCurrentFocus();
     }
 
@@ -6725,190 +6603,12 @@ ${phaseSegments}
         syncPlannerOpenState();
     });
 
-    const themes = {
-        'dead':[ { class: 'th-dead', isStatic: true } ],
-        'solid_path':[ { class: 'th-path-solid', isStatic: true } ],
-        'jump_path':[ { class: 'th-jump-aura', isStatic: true }, { class: 'th-jump-main', isStatic: true } ],
-        'future':[ { class: 'th-future', isStatic: true } ],
-        'finale_far':[ { class: 'th-finale-far', isStatic: true }, { class: 'th-finale-aura', isStatic: false, freq: 1.6, mathAmp: 7, speed: 0.0009, phaseOffset: 0 } ],
-        'danger_far':[ { class: 'th-danger-far', isStatic: true }, { class: 'th-danger-aura', isStatic: false, freq: 2, mathAmp: 8, speed: 0.001, phaseOffset: 0 } ],
-        'active_flow':[ 
-            { class: 'th-active-aura', isStatic: false, freq: 1.5, mathAmp: 5, speed: 0.0008, phaseOffset: 0 },
-            { class: 'th-active-main', isStatic: false, freq: 2.2, mathAmp: 3, speed: 0.0016, phaseOffset: Math.PI / 4 },
-            { class: 'th-active-high', isStatic: false, freq: 3.5, mathAmp: -2, speed: 0.0022, phaseOffset: Math.PI }
-        ]
-    };
-
-    let renderQueue =[];
-
-    function getNodeMainlineLanes(nodeId) {
-        const nodeData = getNodeData(nodeId);
-        return Array.isArray(nodeData?.mainlineLanes) ? nodeData.mainlineLanes : [];
-    }
-
-    function getPreferredLaneTargetId(fromNodeId, laneKey) {
-        const outgoing = getMapTopology().filter((entry) => entry.from === fromNodeId);
-        const candidates = outgoing
-            .map((entry) => {
-                const targetLanes = getNodeMainlineLanes(entry.to);
-                return {
-                    nodeId: entry.to,
-                    targetLanes
-                };
-            })
-            .filter((entry) => entry.targetLanes.includes(laneKey));
-        if (!candidates.length) return '';
-        candidates.sort((left, right) => {
-            const leftExact = left.targetLanes.length === 1 && left.targetLanes[0] === laneKey ? 0 : 1;
-            const rightExact = right.targetLanes.length === 1 && right.targetLanes[0] === laneKey ? 0 : 1;
-            if (leftExact !== rightExact) return leftExact - rightExact;
-            if (left.targetLanes.length !== right.targetLanes.length) return left.targetLanes.length - right.targetLanes.length;
-            return left.nodeId.localeCompare(right.nodeId);
-        });
-        return candidates[0]?.nodeId || '';
-    }
-
-    function getPreferredLaneSourceId(toNodeId, laneKey) {
-        const incoming = getMapTopology().filter((entry) => entry.to === toNodeId);
-        const candidates = incoming
-            .map((entry) => {
-                const sourceLanes = getNodeMainlineLanes(entry.from);
-                return {
-                    nodeId: entry.from,
-                    sourceLanes
-                };
-            })
-            .filter((entry) => entry.sourceLanes.includes(laneKey));
-        if (!candidates.length) return '';
-        candidates.sort((left, right) => {
-            const leftExact = left.sourceLanes.length === 1 && left.sourceLanes[0] === laneKey ? 0 : 1;
-            const rightExact = right.sourceLanes.length === 1 && right.sourceLanes[0] === laneKey ? 0 : 1;
-            if (leftExact !== rightExact) return leftExact - rightExact;
-            if (left.sourceLanes.length !== right.sourceLanes.length) return left.sourceLanes.length - right.sourceLanes.length;
-            return left.nodeId.localeCompare(right.nodeId);
-        });
-        return candidates[0]?.nodeId || '';
-    }
-
-    function getConnectionLaneKey(conn) {
-        if (conn.isJumpPath) return 'lane-jump';
-        if (conn.from === 'node3-descent') {
-            if (conn.to === 'node04-a-route') return 'lane-blue';
-            if (conn.to === 'node04-b-route') return 'lane-orange';
-        }
-        if (conn.from === 'node04-a-route' && conn.to === 'node05-a-route') return 'lane-white';
-        if (conn.from === 'node04-b-route' && conn.to === 'node05-d-route') return 'lane-red';
-        if (conn.from === 'node14-a-route' && conn.to === 'node15-a-route') return 'lane-white';
-        if (conn.from === 'node14-b-route' && conn.to === 'node15-a-route') return 'lane-blue';
-        if (conn.from === 'node14-c-route' && conn.to === 'node15-a-route') return 'lane-orange';
-        if (conn.from === 'node14-c-route' && conn.to === 'node15-b-route') return 'lane-orange';
-        if (conn.from === 'node14-d-route' && conn.to === 'node15-b-route') return 'lane-red';
-        const fromMainlineLanes = getNodeMainlineLanes(conn.from);
-        const toMainlineLanes = getNodeMainlineLanes(conn.to);
-        const sharedLane = ['white', 'blue', 'orange', 'red'].find((laneKey) => (
-            fromMainlineLanes.includes(laneKey) &&
-            toMainlineLanes.includes(laneKey) &&
-            getPreferredLaneTargetId(conn.from, laneKey) === conn.to &&
-            getPreferredLaneSourceId(conn.to, laneKey) === conn.from
-        ));
-        return sharedLane ? `lane-${sharedLane}` : 'lane-neutral';
-    }
-
-    function getConnectionTypeForCurrentNode(conn) {
-        const presentNode = getCurrentNodeData().presentNode;
-        if (conn.isJumpPath) return 'jump_path';
-        if (isBossNodeId(conn.to) && appState.currentNodeIndex < getCampaignTotalNodes()) return 'danger_far';
-        if (isFinaleNodeId(conn.to) && appState.currentNodeIndex < getCampaignTotalNodes()) return 'finale_far';
-        if (conn.from === presentNode) return 'active_flow';
-        if (isVisitedConnection(conn.from, conn.to)) return 'solid_path';
-        return 'future';
-    }
-
     function initSVGPaths() {
-        const renderedTopology = getRenderedMapTopology().filter((conn) => isConnectionVisibleInMapFog(conn));
-        if (!getMapNodes().length || !renderedTopology.length) {
-            canvas.innerHTML = '';
-            renderQueue = [];
-            return;
-        }
-        canvas.innerHTML = ''; 
-        renderQueue =[];
-        renderedTopology.forEach(conn => {
-            const type = getConnectionTypeForCurrentNode(conn);
-            const layers = themes[type];
-            const laneClass = getConnectionLaneKey(conn);
-            layers.forEach(cfg => {
-                const pathEl = document.createElementNS(SVG_NS, 'path');
-                pathEl.setAttribute('class', `magic-thread ${cfg.class} ${laneClass}`);
-                canvas.appendChild(pathEl);
-                renderQueue.push({ pathEl: pathEl, fromId: conn.from, toId: conn.to, laneClass, isJumpPath: conn.isJumpPath === true, ...cfg });
-            });
-        });
+        if (overviewMapView) overviewMapView.rebuild();
     }
-
-    function getNodeCenter(id) {
-        const el = document.getElementById(id);
-        if (!el) return { x: 0, y: 0 };
-        return { x: parseFloat(el.style.left), y: parseFloat(el.style.top) };
-    }
-
-    let drawActive = true;
-    let drawLoopRunning = false;
 
     function ensureDrawLoop() {
-        if (!drawActive || drawLoopRunning) return;
-        drawLoopRunning = true;
-        requestAnimationFrame(draw);
-    }
-
-    function draw() {
-        if (!drawActive) {
-            drawLoopRunning = false;
-            return;
-        }
-        const time = performance.now();
-
-        renderQueue.forEach(item => {
-            const start = getNodeCenter(item.fromId);
-            const end = getNodeCenter(item.toId);
-            if (item.isJumpPath) {
-                item.pathEl.setAttribute('d', `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
-                return;
-            }
-            
-            const dx = end.x - start.x;
-            const cy = dx * 0.45;
-            const c1x = start.x + cy, c1y = start.y; 
-            const c2x = end.x - cy,   c2y = end.y;
-
-            if (item.isStatic) {
-                item.pathEl.setAttribute('d', `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${end.x} ${end.y}`);
-                return;
-            }
-
-            let d = `M ${start.x} ${start.y} `;
-            for (let i = 1; i <= SEGMENTS; i++) {
-                const t = i / SEGMENTS;
-                const mt = 1 - t;
-                const pX = mt*mt*mt*start.x + 3*mt*mt*t*c1x + 3*mt*t*t*c2x + t*t*t*end.x;
-                const pY = mt*mt*mt*start.y + 3*mt*mt*t*c1y + 3*mt*t*t*c2y + t*t*t*end.y;
-
-                const dX = 3*mt*mt*(c1x - start.x) + 6*mt*t*(c2x - c1x) + 3*t*t*(end.x - c2x);
-                const dY = 3*mt*mt*(c1y - start.y) + 6*mt*t*(c2y - c1y) + 3*t*t*(end.y - c2y);
-                const len = Math.sqrt(dX*dX + dY*dY) || 1;
-                const nX = -dY / len;
-                const nY =  dX / len;
-
-                const damping = Math.sin(t * Math.PI); 
-                const wave = Math.sin((t * Math.PI * item.freq) + (time * item.speed) + item.phaseOffset);
-                const offset = item.mathAmp * damping * wave;
-
-                d += `L ${pX + nX * offset} ${pY + nY * offset} `;
-            }
-            item.pathEl.setAttribute('d', d);
-        });
-
-        requestAnimationFrame(draw);
+        if (overviewMapView) overviewMapView.start();
     }
 
     function registerDashboardDebugApi() {
@@ -6985,7 +6685,8 @@ ${phaseSegments}
             },
             rerender() {
                 refreshAllUI();
-                initSVGPaths();
+                if (overviewMapView) overviewMapView.rebuild();
+                else initSVGPaths();
             },
             async commit() {
                 switchDashboardAdapter('debug');
@@ -7008,10 +6709,16 @@ ${phaseSegments}
             return;
         }
         refreshAllUI();
-        initSVGPaths();
-        ensureDrawLoop();
+        if (overviewMapView) {
+            overviewMapView.rebuild();
+            overviewMapView.start();
+        } else {
+            initSVGPaths();
+            ensureDrawLoop();
+        }
     }
 
+    overviewMapView = createOverviewMapView();
     registerDashboardDebugApi();
     window.addEventListener('message', handleActHostMessage);
     bootstrapDashboard();
@@ -7021,8 +6728,7 @@ ${phaseSegments}
     };
 
     window.__acezeroHomePageActive = function acezeroHomePageActive(isActive) {
-        const next = !!isActive;
-        if (drawActive === next) return;
-        drawActive = next;
-        if (drawActive) ensureDrawLoop();
+        if (overviewMapView) {
+            overviewMapView.setActive(isActive);
+        }
     };

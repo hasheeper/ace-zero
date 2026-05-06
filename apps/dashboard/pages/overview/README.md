@@ -1,71 +1,71 @@
 # Overview Architecture
 
-`overview` 现在是 Dashboard 的 ACT 渲染页，不再持有章节真相。
+`overview` 是 Dashboard 的 ACT 渲染页。第一阶段重构保留静态 HTML + 普通 script + IIFE 全局对象架构，不引入 bundler，也不改变宿主通信协议。
 
-## 当前职责
+## Directory Layout
 
-- 渲染 `frontendSnapshot`
-- 渲染节点树、地图、路线、相位、planner
-- 处理 debug / host 双模式
-- 处理 lane 节点、主线彩线、灰色交汇线
+- [index.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/index.js)
+  页面入口与组装层：创建 state/context、渲染 shell、连接 runtime/view/adapter。
 
-## 模块分层
+- [style.css](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/style.css)
+  CSS 稳定入口。当前仍保持单文件，避免视觉回归。
 
-- [index.js](/Users/liuhang/Documents/acezero/apps/dashboard/pages/overview/index.js)
-  页面主引擎、事件绑定、宿主桥、DOM 渲染
+- [config/debug.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/config/debug.js)
+  Debug 启动配置，注册到 `window.ACE0_OVERVIEW_CONFIGS.debug`。
 
-- [campaign-runtime.js](/Users/liuhang/Documents/acezero/apps/dashboard/pages/overview/campaign-runtime.js)
-  节点模板、route options、topology、node catalog 读取
+- [config/tavern.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/config/tavern.js)
+  Host/Tavern 启动配置，注册到 `window.ACE0_OVERVIEW_CONFIGS.tavern`。
 
-- [planner-runtime.js](/Users/liuhang/Documents/acezero/apps/dashboard/pages/overview/planner-runtime.js)
-  planner 状态、phase slot、inventory、编辑约束
+- [core/boot.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/core/boot.js)
+  启动模式识别、fallback campaign/fixed marker、config profile helpers。
 
-- [execution-runtime.js](/Users/liuhang/Documents/acezero/apps/dashboard/pages/overview/execution-runtime.js)
-  节点推进、phase 执行、forced next、route choice
+- [runtime/campaign-runtime.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/runtime/campaign-runtime.js)
+  节点模板、route options、topology、node catalog 读取。
 
-- [config.debug.js](/Users/liuhang/Documents/acezero/apps/dashboard/pages/overview/config.debug.js)
-  debug 启动配置
+- [runtime/planner-runtime.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/runtime/planner-runtime.js)
+  planner 状态、phase slot、inventory、编辑约束。
 
-- [config.tavern.js](/Users/liuhang/Documents/acezero/apps/dashboard/pages/overview/config.tavern.js)
-  host 启动配置
+- [runtime/execution-runtime.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/runtime/execution-runtime.js)
+  节点推进、phase 执行、forced next、route choice。
 
-## 当前数据入口
+- [runtime/legacy-generator.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/runtime/legacy-generator.js)
+  旧版 seed/random campaign generator。当前未由 `index.html` 加载，暂保留。
 
-### Debug
+- [adapters/dashboard-adapter.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/adapters/dashboard-adapter.js)
+  Host window/postMessage/direct bridge discovery helpers。
 
-- 本地构建 ACT payload
-- 应用到 overview
+- [views/map-view.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/views/map-view.js)
+  地图视图生命周期边界：refresh/rebuild/focus/active state。
 
-### Host
+## Loading Order
 
-- 宿主下发 `hero / world / frontendSnapshot`
-- overview 只消费真实 payload
+`apps/dashboard/index.html` 需要按以下顺序加载：
 
-## 当前地图逻辑
+1. `config/debug.js`
+2. `config/tavern.js`
+3. `core/boot.js`
+4. `adapters/dashboard-adapter.js`
+5. `runtime/campaign-runtime.js`
+6. `runtime/planner-runtime.js`
+7. `runtime/execution-runtime.js`
+8. `views/map-view.js`
+9. `index.js`
 
-当前 overview 已经内建：
+## Current Notes
 
-- 节点位自动排布
-- lane 类
-- 主彩线判定
-- 灰色交汇线判定
-- finale / boss 节点外观
+- 章节真相不要写回 overview；host 模式只消费真实 payload。
+- 新增 runtime/view/adapter 仍通过 `window.ACE0Overview*` 暴露，保持 browser-debug 友好。
+- `window.ACE0DashboardDebug`、`window.__acezeroHomeRefreshIntel`、`window.__acezeroHomePageActive` 仍由 `index.js` 暴露。
+- 如果改拓扑、lane 或 fog 规则，要同步检查 `index.js` 与 `views/map-view.js` 的地图刷新边界。
 
-当前 sidebar 已统一为三态：
+## Regression
 
-- `is-past`
-- `is-active`
-- `is-future`
-
-future 节点统一灰化。
-
-## 当前注意点
-
-- 章节真相不要写回 overview
-- 新主线通过 [containers/app.html](/Users/liuhang/Documents/acezero/containers/app.html) 作为 GitPage App 加载 Dashboard，不再要求把 Dashboard 本体打包进 `dashboard-inject.js`。
-- 如果改了拓扑或 lane 规则，要同步检查 `index.js` 里的彩线判定
-
-## 参考
-
-- [CURRENT_ACT_STATUS.md](/Users/liuhang/Documents/ace-zero/st/docs/CURRENT_ACT_STATUS.md)
-- [ENCOUNTER_NEXT_PLAN.md](/Users/liuhang/Documents/ace-zero/st/docs/ENCOUNTER_NEXT_PLAN.md)
+```bash
+node --check apps/dashboard/pages/overview/index.js
+node --check apps/dashboard/pages/overview/core/boot.js
+node --check apps/dashboard/pages/overview/adapters/dashboard-adapter.js
+node --check apps/dashboard/pages/overview/views/map-view.js
+node --check apps/dashboard/pages/overview/runtime/campaign-runtime.js
+node --check apps/dashboard/pages/overview/runtime/planner-runtime.js
+node --check apps/dashboard/pages/overview/runtime/execution-runtime.js
+```
