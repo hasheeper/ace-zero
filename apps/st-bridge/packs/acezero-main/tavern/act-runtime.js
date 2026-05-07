@@ -56,6 +56,7 @@
       } = deps;
 
       let hasWarnedMissingActModule = false;
+      let hasWarnedMissingAssetDeckModule = false;
       let lastHandledMk = null;
       let latchedTransitionRequestTarget = '';
 
@@ -143,6 +144,45 @@
     }
 
     return null;
+  }
+
+  function getAssetDeckModuleApi() {
+    const candidates = [];
+    const pushCandidate = (candidate) => {
+      if (!candidate || typeof candidate !== 'object') return;
+      if (candidates.includes(candidate)) return;
+      candidates.push(candidate);
+    };
+
+    try {
+      if (window && typeof window === 'object') pushCandidate(window);
+    } catch (_) {}
+    try {
+      const hostRoot = getAce0HostRoot();
+      if (hostRoot && typeof hostRoot === 'object') pushCandidate(hostRoot);
+    } catch (_) {}
+    try {
+      if (typeof globalThis === 'object' && globalThis) pushCandidate(globalThis);
+    } catch (_) {}
+
+    for (const candidate of candidates) {
+      try {
+        const modules = candidate.ACE0Modules;
+        const assetDeck = modules && typeof modules === 'object' ? modules.assetDeck : null;
+        if (assetDeck && typeof assetDeck.applyAssetDeckCommand === 'function') return assetDeck;
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  function cloneJsonData(value, fallback = null) {
+    if (value == null) return fallback;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return fallback;
+    }
   }
 
   function installActModuleHostBridge() {
@@ -1311,6 +1351,113 @@
     };
   }
 
+  function normalizePendingAssetDeckCommands(actState) {
+    return Array.isArray(actState?.pendingAssetDeckCommands)
+      ? actState.pendingAssetDeckCommands
+          .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+          .map(item => cloneJsonData(item, {}))
+      : [];
+  }
+
+  function settlePendingActAssetDeckCommandsForHost(worldInput, actStateInput) {
+    const pendingCommands = normalizePendingAssetDeckCommands(actStateInput);
+    const commandsToApply = pendingCommands.filter((item) => {
+      const status = normalizeTrimmedString(item.status, 'pending').toLowerCase() || 'pending';
+      return status === 'pending' && item.command && typeof item.command === 'object' && !Array.isArray(item.command);
+    });
+    if (!commandsToApply.length) {
+      return {
+        world: worldInput && typeof worldInput === 'object' ? worldInput : {},
+        actState: actStateInput,
+        changed: false
+      };
+    }
+
+    const assetDeckModule = getAssetDeckModuleApi();
+    if (!assetDeckModule || typeof assetDeckModule.applyAssetDeckCommand !== 'function') {
+      if (!hasWarnedMissingAssetDeckModule) {
+        hasWarnedMissingAssetDeckModule = true;
+        console.warn('[ACE0 ACT] AssetDeck runtime missing; ACT asset commands will remain pending.');
+      }
+      return {
+        world: worldInput && typeof worldInput === 'object' ? worldInput : {},
+        actState: actStateInput,
+        changed: false
+      };
+    }
+
+    const nextWorld = {
+      ...(worldInput && typeof worldInput === 'object' && !Array.isArray(worldInput) ? worldInput : {})
+    };
+    const nextActState = cloneJsonData(actStateInput, actStateInput) || {};
+    let currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
+      ? assetDeckModule.normalizeAssetDeckState(nextWorld.assetDeck)
+      : (nextWorld.assetDeck && typeof nextWorld.assetDeck === 'object' ? cloneJsonData(nextWorld.assetDeck, {}) : {});
+    const consumedIds = new Set();
+    const resolutionHistory = Array.isArray(nextActState.resolutionHistory)
+      ? cloneJsonData(nextActState.resolutionHistory, [])
+      : [];
+
+    commandsToApply.forEach((pending, index) => {
+      const command = cloneJsonData(pending.command, {}) || {};
+      const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
+        ? cloneJsonData(command.payload, {})
+        : {};
+      command.payload = {
+        ...payload,
+        requestId: normalizeTrimmedString(payload.requestId || pending.id, pending.id || '')
+      };
+      if (!command.payload.source && pending.nodeId) {
+        command.payload.source = {
+          type: 'act_asset_token',
+          actId: normalizeTrimmedString(nextActState.id, ''),
+          nodeId: pending.nodeId,
+          nodeIndex: pending.nodeIndex,
+          phaseIndex: pending.phaseIndex,
+          level: pending.level,
+          sources: Array.isArray(pending.sources) ? cloneJsonData(pending.sources, []) : []
+        };
+      }
+
+      let commandResult;
+      try {
+        commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
+          seed: `act:${pending.id || index}`
+        });
+      } catch (error) {
+        commandResult = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
+      }
+
+      const status = commandResult?.ok ? 'resolved' : 'failed';
+      if (commandResult?.assetDeck) currentAssetDeck = cloneJsonData(commandResult.assetDeck, currentAssetDeck);
+      resolutionHistory.push({
+        ...cloneJsonData(pending, {}),
+        type: 'asset',
+        status,
+        outcome: commandResult?.code || (commandResult?.ok ? 'asset_command_applied' : 'asset_command_failed'),
+        summary: pending.summary || `ACT AssetDeck command ${status}`,
+        payload: {
+          commandKind: command.kind || command.type || '',
+          commandPayload: cloneJsonData(command.payload, {}),
+          resultCode: commandResult?.code || '',
+          asset_count: Math.max(0, Math.round(Number(currentAssetDeck?.asset_count) || 0)),
+          error: commandResult?.error || ''
+        }
+      });
+      if (pending.id) consumedIds.add(pending.id);
+    });
+
+    nextWorld.assetDeck = cloneJsonData(currentAssetDeck, currentAssetDeck);
+    nextActState.pendingAssetDeckCommands = pendingCommands.filter((item) => !item.id || !consumedIds.has(item.id));
+    nextActState.resolutionHistory = resolutionHistory;
+
+    return {
+      world: nextWorld,
+      actState: nextActState,
+      changed: true
+    };
+  }
+
   async function resolvePendingActAdvance(eraVars) {
     const world = getWorldState(eraVars);
     const hero = eraVars?.hero && typeof eraVars.hero === 'object'
@@ -1395,15 +1542,35 @@
       actState = completionTransition.actState;
     }
 
+    const settledAssetDeck = settlePendingActAssetDeckCommandsForHost(
+      {
+        ...(world || {}),
+        clockPressure: nextClockPressure,
+        act: actState
+      },
+      actState
+    );
+    if (settledAssetDeck.changed) {
+      actState = settledAssetDeck.actState;
+    }
+
     const stateChanged = requestedSteps > 0
       || completionTransition.transitioned === true
-      || completionTransition.changed === true;
+      || completionTransition.changed === true
+      || settledAssetDeck.changed === true;
     if (!stateChanged && nextClockPressure === getWorldClockPressure(eraVars)) {
       return { eraVars, changed: false };
     }
 
     // 阶段2：ACT 推进不再触及 world.current_time（世界时钟完全独立）。
     // 若需推进时钟，调用 ACE0Plugin.advanceWorldClock() 或直接写 world.current_time。
+    const worldPatch = {
+      clockPressure: nextClockPressure,
+      act: actState
+    };
+    if (settledAssetDeck.changed) {
+      worldPatch.assetDeck = settledAssetDeck.world.assetDeck;
+    }
     await updateEraVars({
       hero: {
         funds: nextHero.funds,
@@ -1413,10 +1580,7 @@
               [HERO_INTERNAL_KEY]: getRosterNode(nextHero, HERO_INTERNAL_KEY)
             }
       },
-      world: {
-        clockPressure: nextClockPressure,
-        act: actState
-      }
+      world: worldPatch
     });
 
     return {
@@ -1425,6 +1589,7 @@
         hero: nextHero,
         world: {
           ...(world || {}),
+          ...(settledAssetDeck.changed ? { assetDeck: settledAssetDeck.world.assetDeck } : {}),
           clockPressure: nextClockPressure,
           act: actState
         }
@@ -1511,6 +1676,7 @@
 
       function resetState() {
         hasWarnedMissingActModule = false;
+        hasWarnedMissingAssetDeckModule = false;
         lastHandledMk = null;
         latchedTransitionRequestTarget = '';
       }
@@ -1530,6 +1696,7 @@
         applyDebtInterest,
         normalizeActStage,
         getActModuleApi,
+        getAssetDeckModuleApi,
         installActModuleHostBridge,
         getActDefaultStateFromModule,
         getActChapterConfigFromModule,
@@ -1573,6 +1740,7 @@
         resetClockPressureInternal,
         deriveWorldTimeFromAct,
         buildEncounterContextFromEraVars,
+        settlePendingActAssetDeckCommandsForHost,
         resolvePendingActAdvance,
         applyFloorProgressDelta,
         advanceWorldClock,

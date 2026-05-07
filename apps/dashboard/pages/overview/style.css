@@ -4016,12 +4016,25 @@
         }
         .warehouse-panel {
             width: min(1120px, 100%);
-            height: min(286px, 100%);
+            height: min(560px, 100%);
             padding: 22px 24px;
             gap: 24px;
             border-top-color: var(--asset);
         }
         .warehouse-panel.asset-layout {
+            flex: none;
+            display: grid;
+            grid-template-columns: minmax(148px, 0.22fr) minmax(320px, 1fr) minmax(220px, 0.34fr);
+            align-items: stretch;
+            overflow: hidden;
+        }
+        .warehouse-panel.asset-layout .detect-panel,
+        .warehouse-panel.asset-layout .deck-scroll-area,
+        .warehouse-panel.asset-layout .details-panel {
+            min-width: 0;
+            min-height: 0;
+        }
+        .warehouse-panel.asset-layout .details-panel {
             flex: none;
         }
         .tint-panel { width: min(820px, 100%); }
@@ -4262,6 +4275,7 @@
             display: grid;
             grid-template-columns: minmax(128px, 0.32fr) minmax(0, 1fr);
             grid-template-rows: minmax(0, 1fr) auto;
+            height: min(520px, 100%);
             max-height: 100%;
             overflow: hidden;
             gap: 16px;
@@ -4280,8 +4294,15 @@
             grid-column: 2;
             grid-row: 2;
             flex: none;
-            min-height: 92px;
-            padding: 14px 16px;
+            min-height: 48px;
+            gap: 4px;
+            padding: 7px 12px;
+        }
+        .drawer.plan-layout-mid .warehouse-panel .details-panel .dp-name-row {
+            margin: 6px 0 7px;
+        }
+        .drawer.plan-layout-mid .warehouse-panel .details-panel .dp-divider {
+            margin-bottom: 8px;
         }
         .drawer.plan-layout-narrow .warehouse-panel.asset-layout {
             display: flex;
