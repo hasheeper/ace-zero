@@ -162,6 +162,25 @@
     } else {
       fundsLine = '主角本session不赚不亏，如有其他特殊赌局收益/损失，请补充对应金额的 UpdateVariable。';
     }
+    var combatSettlement = global.ACE0CombatSettlement && typeof global.ACE0CombatSettlement.buildSettlementFromSession === 'function'
+      ? global.ACE0CombatSettlement.buildSettlementFromSession({
+          gameId: context.gameId || '',
+          gameName: gameName,
+          rounds: roundsForPrompt,
+          context: context
+        })
+      : null;
+    var combatSettlementBlock = combatSettlement
+      ? [
+          '',
+          '<ACE0_COMBAT_SETTLEMENT>',
+          JSON.stringify(combatSettlement, null, 2),
+          '</ACE0_COMBAT_SETTLEMENT>'
+        ]
+      : [];
+    if (combatSettlement) {
+      fundsLine += '\n检测到交锋点结算：不要再额外写一条普通资金更新；资金、返还点数、pending resolved 都直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
+    }
 
     // 推荐字数 (简化版 + 多局加成)
     var eventCount = 0;
@@ -218,6 +237,7 @@
       '<VARIABLE_UPDATE_HINT>',
       fundsLine,
       '</VARIABLE_UPDATE_HINT>',
+      combatSettlementBlock.join('\n'),
       '',
       '<WRITING_INSTRUCTION>',
       writingNote,

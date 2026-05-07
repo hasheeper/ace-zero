@@ -507,6 +507,8 @@
       resultText: resultText,
       isWin: isWin, isLose: isLose,
       playerName: configLoader.heroName(),
+      gameId: 'dragon_tiger',
+      ace0Combat: (configLoader.cfg() && configLoader.cfg().ace0Combat) || null,
       round: state.roundCount,
       startingChips: state._startChips,
       endingChips: state.chips,

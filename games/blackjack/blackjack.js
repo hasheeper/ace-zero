@@ -817,6 +817,8 @@
       resultText: resultText,
       isWin: isWin, isLose: isLose,
       playerName: heroName(),
+      gameId: 'blackjack',
+      ace0Combat: cfg().ace0Combat || null,
       round: state.roundCount,
       startingChips: state._startChips,
       endingChips: state.chips,

@@ -31,7 +31,8 @@
         ACT_TRANSITION_INJECT_ID = 'ace0_act_transition',
         ACT_PACING_INJECT_ID = 'ace0_narrative_pacing',
         ACT_FIRST_MEET_INJECT_ID = 'ace0_first_meet',
-        ACT_PRE_SIGNAL_INJECT_ID = 'ace0_pre_signal'
+        ACT_PRE_SIGNAL_INJECT_ID = 'ace0_pre_signal',
+        ACT_COMBAT_REQUEST_INJECT_ID = 'ace0_combat_request'
       } = constants;
       const {
         getAce0HostRoot = () => root,
@@ -762,6 +763,59 @@
     return '';
   }
 
+  function findPendingCombatRequest(liveAct) {
+    const pending = Array.isArray(liveAct?.pendingResolutions) ? liveAct.pendingResolutions : [];
+    for (let i = 0; i < pending.length; i++) {
+      const item = pending[i];
+      if (!item || typeof item !== 'object') continue;
+      const type = typeof item.type === 'string' ? item.type.trim().toLowerCase() : '';
+      const status = typeof item.status === 'string' ? item.status.trim().toLowerCase() : 'pending';
+      if (type === 'combat' && status === 'pending') return { request: item, index: i };
+    }
+    return null;
+  }
+
+  function buildCombatRequestPromptContent(liveAct, eraVars) {
+    const pending = findPendingCombatRequest(liveAct);
+    if (!pending) return '';
+    const request = pending.request;
+    const level = Math.max(1, Math.min(3, Math.round(Number(request.level || request.combatLevel || request.tier) || 1)));
+    const kind = typeof request.kind === 'string' && request.kind.trim()
+      ? request.kind.trim()
+      : (level >= 3 ? 'boss' : level === 2 ? 'elite' : 'skirmish');
+    const resource = getHeroResourceSnapshot(eraVars);
+    const positiveAssets = Math.max(0, Number(resource.assets) || 0);
+    const available = Math.max(0, (Number(resource.funds) || 0) + positiveAssets);
+    const rate = level >= 3 ? 0.7 : level === 2 ? 0.33 : 0.1;
+    const stakeGold = Math.round(available * rate * 100) / 100;
+    const requestId = typeof request.id === 'string' && request.id.trim()
+      ? request.id.trim()
+      : (typeof request.requestId === 'string' && request.requestId.trim() ? request.requestId.trim() : 'combat-' + pending.index);
+    const payload = {
+      ace0Combat: {
+        protocol: 'ace0.combat.v1',
+        requestId,
+        requestIndex: pending.index,
+        level,
+        kind,
+        special: true,
+        stakeGold
+      }
+    };
+    const label = level >= 3 ? 'Combat 3 / Boss 交锋' : level === 2 ? 'Combat 2 / 精英交锋' : 'Combat 1 / 小交锋';
+    return [
+      '<ace0_combat_request>',
+      '当前存在一个待结算交锋点 pending request。本轮若进入这个特殊交锋局，必须在 <ACE0_BATTLE> JSON 顶层原样写入以下 ace0Combat 字段；普通赌局、非交锋点赌局、回放模式都不要写 ace0Combat。',
+      '特殊档位: ' + label,
+      '筹码参考: level 1 约正资产 10%，level 2 约 33%，level 3 约 70%。stakeGold 已由系统按当前资源估算，AI 不要自由改动。',
+      '```json',
+      JSON.stringify(payload, null, 2),
+      '```',
+      '结算规则: 游戏引擎只会在日志末尾生成 <ACE0_COMBAT_SETTLEMENT> 建议；变量必须由之后的 LLM 在叙事回放末尾复制 suggestedJsonPatch 到 <UpdateVariable>，插件和引擎不会直接写变量。',
+      '</ace0_combat_request>'
+    ].join('\n');
+  }
+
   function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) {
     const derived = derivedActState || deriveActCharacterStates(eraVars);
     if (!derived) return [];
@@ -771,6 +825,17 @@
 
     const prompts = [];
     const liveAct = getWorldActState(eraVars);
+    const combatRequestContent = buildCombatRequestPromptContent(liveAct, eraVars);
+    if (combatRequestContent) {
+      prompts.push({
+        id: ACT_COMBAT_REQUEST_INJECT_ID,
+        position: 'in_chat',
+        depth: 0,
+        role: 'system',
+        content: combatRequestContent,
+        should_scan: false
+      });
+    }
     let transitionPromptContent = typeof liveAct?.pendingTransitionPrompt === 'string'
       ? liveAct.pendingTransitionPrompt.trim()
       : '';

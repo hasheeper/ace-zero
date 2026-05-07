@@ -53,6 +53,7 @@
   const ACT_PACING_INJECT_ID = 'ace0_narrative_pacing';
   const ACT_FIRST_MEET_INJECT_ID = 'ace0_first_meet';
   const ACT_PRE_SIGNAL_INJECT_ID = 'ace0_pre_signal';
+  const ACT_COMBAT_REQUEST_INJECT_ID = 'ace0_combat_request';
   const WORLD_CONTEXT_INJECT_ID = 'ace0_world_context';
   const LOCATION_DOC_INJECT_ID = 'ace0_location_doc';
   const HERO_INTERNAL_KEY = 'KAZU';
@@ -428,6 +429,9 @@
     const gameMode = battle.gameMode || (Object.keys(battle.seats || {}).length > 0 ? 'texas-holdem' : null);
     if (gameMode) result.gameMode = gameMode;
 
+    const ace0Combat = _normalizeAce0CombatConfig(battle.ace0Combat);
+    if (ace0Combat) result.ace0Combat = ace0Combat;
+
     // 小游戏配置：根据主手/副手属性映射
     if (gameMode === 'blackjack' || gameMode === 'dice' || gameMode === 'dragon-tiger' || gameMode === 'dragon_tiger') {
       const miniGameAttrs = rName
@@ -495,6 +499,25 @@
     const numeric = Number(silver);
     if (!Number.isFinite(numeric)) return 0;
     return _normalizeFundsAmount(numeric / SILVER_PER_GOLD);
+  }
+
+  function _normalizeAce0CombatConfig(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const requestId = _normalizeTrimmedString(value.requestId, '');
+    if (!requestId) return null;
+    const level = Math.max(1, Math.min(3, Math.round(Number(value.level) || 1)));
+    const kind = _normalizeTrimmedString(value.kind, level >= 3 ? 'boss' : level === 2 ? 'elite' : 'skirmish');
+    const stakeGold = _normalizeFundsAmount(value.stakeGold);
+    return {
+      protocol: 'ace0.combat.v1',
+      requestId,
+      requestIndex: Math.max(0, Math.round(Number(value.requestIndex) || 0)),
+      level,
+      kind,
+      special: true,
+      stakeGold,
+      stakeChips: _goldFundsToSilverUnits(stakeGold)
+    };
   }
 
   function _normalizeBattleBlinds(blinds) {
@@ -619,7 +642,8 @@
       ACT_TRANSITION_INJECT_ID,
       ACT_PACING_INJECT_ID,
       ACT_FIRST_MEET_INJECT_ID,
-      ACT_PRE_SIGNAL_INJECT_ID
+      ACT_PRE_SIGNAL_INJECT_ID,
+      ACT_COMBAT_REQUEST_INJECT_ID
     },
     deps: {
       getAce0HostRoot,
@@ -847,6 +871,7 @@
           ACT_NARRATIVE_INJECT_ID,
           ACT_TRANSITION_INJECT_ID,
           ACT_PACING_INJECT_ID,
+          ACT_COMBAT_REQUEST_INJECT_ID,
           // 首见帧注入 id 必须每轮清理：本轮若 pending 空（楼层已前进/被闸门清掉），
           // 不会再 push 新 first_meet prompt；若这里不 uninject 旧注入，
           // 酒馆会保留上轮的 first_meet 记录形成幽灵残留。

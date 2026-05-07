@@ -10,6 +10,15 @@ ACE0 MVU 变量规则
 - `/world/location/site`
 - `/world/event_log/-`
 - `/world/activity_log/-`
+- `/world/act/reserve/combat`
+- `/world/act/reserve/rest`
+- `/world/act/reserve/asset`
+- `/world/act/reserve/vision`
+- `/world/act/pendingResolutions/<index>/status`
+- `/world/act/pendingResolutions/<index>/outcome`
+- `/world/act/pendingResolutions/<index>/summary`
+- `/world/act/crisis`
+- `/world/act/crisisSignals/-`
 - `/hero/cast/<角色名>/introduced`
 - `/hero/cast/<角色名>/present`
 - `/hero/cast/<角色名>/inParty`
@@ -22,7 +31,7 @@ ACE0 MVU 变量规则
 操作约定
 - `delta`: 仅用于数字增减。适用：`/hero/funds`、`/hero/relationship/*`
 - `replace`: 仅用于直接写结果值。适用：时间、地区、布尔值、level、mana、maxMana
-- `add`: 仅用于数组尾部追加。适用：`/world/event_log/-`、`/world/activity_log/-`
+- `add`: 仅用于数组尾部追加。适用：`/world/event_log/-`、`/world/activity_log/-`、交锋点结算 marker 明确给出的 `/world/act/crisisSignals/-`
 - 不使用整段对象覆写，不新增未声明路径
 - 关系第二字段统一写 `/exclusive`
 - `reversal / ownership / parasitism / indebtedness / takeover / entrustment / retention / coverup / fixation` 都只是显示名，不是变量路径
@@ -97,6 +106,29 @@ ACE0 MVU 变量规则
       - 同一事件不重复给同一角色写同类 `reaction`
       - 同角色同日同时段同 `kind` 视为同一条轨迹
       - 后台按 `actor + day + phase + kind` 归并
+  world.act.reserve.${combat|rest|asset|vision}:
+    type: number
+    check:
+      - 仅用于 `<ACE0_COMBAT_SETTLEMENT>` 给出的交锋点返还建议
+      - 必须原样复制 marker 内 `suggestedJsonPatch`
+      - 只用 `delta`
+      - 不由 LLM 自由分配点数
+  world.act.pendingResolutions.${index}.status/outcome/summary:
+    type: string
+    check:
+      - 仅用于 `<ACE0_COMBAT_SETTLEMENT>` 给出的交锋点结算
+      - pending 条目不删除，只把对应 index 的 `status` 改为 `resolved`
+      - `outcome` / `summary` 必须原样来自 marker 内 `suggestedJsonPatch`
+  world.act.crisis:
+    type: number
+    check:
+      - 仅在交锋点结算 marker 明确给出危机增加时用 `delta`
+      - 不要自行按输赢脑补危机值
+  world.act.crisisSignals:
+    type: array
+    check:
+      - 仅在交锋点结算 marker 明确给出时，原样复制 `/world/act/crisisSignals/-` 的 `add`
+      - 禁止整段替换数组
   hero.cast.${角色名}.introduced:
     type: boolean
     check:

@@ -1005,6 +1005,25 @@
         '2. 金钱只看【POKER_RESULT】和【FUNDS_UPDATE】',
         '3. 魔运 / mana 只有日志或结算明确写出时才更新；技能使用、好运抽取、命运偏转不自动等于局外 mana 变化。'
       ].join('\n');
+      var combatSettlement = window.ACE0CombatSettlement && typeof window.ACE0CombatSettlement.buildSettlementFromSession === 'function'
+        ? window.ACE0CombatSettlement.buildSettlementFromSession({
+            gameId: 'texas-holdem',
+            gameName: '德州扑克',
+            rounds: roundsForPrompt,
+            context: context
+          })
+        : null;
+      var combatSettlementBlock = combatSettlement
+        ? [
+            '',
+            '<ACE0_COMBAT_SETTLEMENT>',
+            JSON.stringify(combatSettlement, null, 2),
+            '</ACE0_COMBAT_SETTLEMENT>'
+          ]
+        : [];
+      if (combatSettlement) {
+        fundsInstruction += '\n检测到交锋点结算：不要再额外写一条普通资金更新；资金、返还点数、pending resolved 都直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
+      }
 
       // 多局写作指导
       var writingNote = '请立即生成牌局实况文案，建议字数参考 ' + wordCount.min + '~' + wordCount.max + ' 字，并优先保证节奏与重点局质量。';
@@ -1039,6 +1058,7 @@
         '<FUNDS_UPDATE>',
         fundsInstruction,
         '</FUNDS_UPDATE>',
+        combatSettlementBlock.join('\n'),
         '',
         '<LOG_RULES>',
         variableRules,
