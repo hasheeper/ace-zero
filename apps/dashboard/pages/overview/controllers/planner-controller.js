@@ -211,14 +211,10 @@
             token.sources = sources.slice(0, amount - 1);
             token.source = token.sources.includes('limited') ? 'limited' : (token.sources[0] || 'limited');
         }
-        const addKey = normalizeResourceKey(appState.plannerAddType, '');
-        if (addKey && getTotalInventoryCount(addKey) > 0) {
-            selectInventoryToken(addKey);
-        } else if (selectionState.source === 'slot' && selectionState.slotId === slotId) {
-            selectionState.source = null;
-            selectionState.type = null;
-            selectionState.slotId = null;
-        }
+        selectionState.source = null;
+        selectionState.type = null;
+        selectionState.slotId = null;
+        appState.restTintPopupSlotId = '';
         markActStateDirty();
         refreshAllUI();
         return true;

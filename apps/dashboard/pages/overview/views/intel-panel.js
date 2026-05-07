@@ -663,6 +663,7 @@
 
     function buildActModePanelMarkup() {
         if (!isOverviewDebugMode()) return '';
+        if (appState.actPanelCollapsed === true) return '';
         const actState = getCurrentActStateForPanel();
         const modeLabel = getAdapterModeLabel();
         const stage = normalizeActStage(actState.stage).toUpperCase();
@@ -723,6 +724,9 @@
         `).join('');
         const rosterMarkup = buildPartyRosterMarkup();
         const actPanelMarkup = buildActModePanelMarkup();
+        const actToggleMarkup = isOverviewDebugMode()
+            ? `<div class="act-panel-control"><button class="act-panel-mini-toggle${appState.actPanelCollapsed === true ? ' is-collapsed' : ''}" type="button" data-act-panel-toggle aria-expanded="${appState.actPanelCollapsed === true ? 'false' : 'true'}">${appState.actPanelCollapsed === true ? 'SHOW ACT' : 'HIDE ACT'}</button></div>`
+            : '';
 
         intelBody.innerHTML = `
             <div class="node-hero">
@@ -734,12 +738,21 @@
                 <div class="section-header"><span>${appData.intel.rewardsTitle}</span></div>
                 <div class="token-ledger-list">${rewardMarkup}</div>
             </div>
+            ${actToggleMarkup}
             ${actPanelMarkup}
             <div>
                 <div class="section-header"><span>${appData.intel.rosterTitle}</span></div>
                 <div class="glass-cards-grid">${rosterMarkup}</div>
             </div>
         `;
+
+        const actPanelToggle = intelBody.querySelector('[data-act-panel-toggle]');
+        if (actPanelToggle) {
+            actPanelToggle.addEventListener('click', () => {
+                appState.actPanelCollapsed = !appState.actPanelCollapsed;
+                renderIntelPanel();
+            });
+        }
     }
 
 

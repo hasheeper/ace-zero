@@ -2381,6 +2381,10 @@ function createExecutionRuntimeContext() {
         return getOverviewShellView().renderSidebar();
     }
 
+    function syncSidePanelChrome() {
+        return getOverviewShellView().syncSidePanelChrome();
+    }
+
     function renderMapLayer() {
         return getOverviewShellView().renderMapLayer();
     }
@@ -2581,6 +2585,7 @@ function createExecutionRuntimeContext() {
         renderPlannerDrawer();
         renderPhaseBar();
         renderIntelPanel();
+        syncSidePanelChrome();
     }
 
     overviewMapView = createOverviewMapView();
@@ -2627,6 +2632,7 @@ function createExecutionRuntimeContext() {
         renderTopbar();
         renderSidebar();
         renderIntelPanel();
+        syncSidePanelChrome();
         if (needsMapLayerRebuild()) {
             renderMapLayer();
             if (overviewMapView && typeof overviewMapView.renderedCanvasChanged === 'function') {
@@ -2866,6 +2872,41 @@ function createExecutionRuntimeContext() {
         return getOverviewExecutionController().bindPlannerEvents();
     }
 
+    function handlePhaseSlotPointer(slotId) {
+        if (!slotId) return;
+        if (!canUseInteractivePlannerControls()) return;
+        if (isRouteSelectionActive()) return;
+        if (!canEditPhaseSlot(slotId)) return;
+
+        const mounted = appState.phaseSlots[slotId];
+        if (normalizePlannerEditMode(appState.plannerEditMode) === 'remove') {
+            removeOnePointFromPhaseSlot(slotId);
+            return;
+        }
+
+        if (selectionState.source === 'inventory') {
+            placeInventorySelection(slotId);
+            return;
+        }
+
+        if (selectionState.source === 'slot') {
+            if (selectionState.slotId === slotId) {
+                syncPlannerOpenState();
+                return;
+            }
+            moveOrSwapSlotSelection(slotId);
+            return;
+        }
+
+        if (!mounted) return;
+        selectSlotToken(slotId);
+        if (mounted.key === 'rest') {
+            setPlannerPage('rest');
+            appState.drawerOpen = true;
+        }
+        syncPlannerOpenState();
+    }
+
     sysTopbar.addEventListener('pointerdown', (e) => {
         const commitActButton = e.target.closest('#commit-act-state');
         if (commitActButton) {
@@ -2904,7 +2945,13 @@ function createExecutionRuntimeContext() {
         if (editModeButton) {
             e.preventDefault();
             e.stopPropagation();
-            setPlannerEditMode(editModeButton.dataset.plannerEditMode);
+            const nextMode = normalizePlannerEditMode(editModeButton.dataset.plannerEditMode);
+            setPlannerEditMode(nextMode);
+            if (nextMode === 'remove') {
+                closeRestTintPopup();
+                resetSelection();
+                setPlannerPage('planner');
+            }
             appState.drawerOpen = true;
             refreshPlannerUI();
             return;
@@ -2915,6 +2962,17 @@ function createExecutionRuntimeContext() {
             e.preventDefault();
             e.stopPropagation();
             const requestedTab = plannerTabButton.dataset.plannerTab;
+            const activePage = getActivePlannerPage();
+            const isSameResourceTab = RESOURCE_KEYS.includes(requestedTab)
+                && appState.drawerOpen
+                && activePage === requestedTab;
+            if (isSameResourceTab) {
+                resetSelection();
+                setPlannerPage('planner');
+                appState.drawerOpen = true;
+                refreshPlannerUI();
+                return;
+            }
             if (normalizePlannerEditMode(appState.plannerEditMode) === 'remove') setPlannerEditMode('add');
             if (RESOURCE_KEYS.includes(requestedTab)) {
                 if (getTotalInventoryCount(requestedTab) > 0) selectInventoryToken(requestedTab);
@@ -2960,6 +3018,14 @@ function createExecutionRuntimeContext() {
         if (commitActButton) {
             e.preventDefault();
             commitActStateToHost();
+            return;
+        }
+
+        const phaseSlot = e.target.closest('.phase-core.drop-zone');
+        if (phaseSlot && phaseBarMount.contains(phaseSlot)) {
+            e.preventDefault();
+            e.stopPropagation();
+            handlePhaseSlotPointer(phaseSlot.id);
             return;
         }
 

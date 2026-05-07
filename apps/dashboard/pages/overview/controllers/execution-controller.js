@@ -10,7 +10,6 @@
             areProgressionControlsEnabled,
             buildInitialDebugPayload,
             canAdvanceCurrentPhase,
-            canEditPhaseSlot,
             canExecuteCurrentNode,
             canUseInteractivePlannerControls,
             clearPendingLimitedTokens,
@@ -31,18 +30,13 @@
             grantDailyReserveGrowth,
             isRouteSelectionActive,
             markActStateDirty,
-            moveOrSwapSlotSelection,
-            normalizePlannerEditMode,
             normalizeResourceKey,
-            placeInventorySelection,
             refreshAllUI,
             refreshPlannerUI,
-            removeOnePointFromPhaseSlot,
             resetPhaseSlots,
             resetSelection,
             returnSelectedSlotTokenToInventory,
             selectInventoryToken,
-            selectSlotToken,
             setPlannerEditMode,
             setPlannerPage,
             setSelectedRestTint,
@@ -284,7 +278,6 @@
     function bindPlannerEvents() {
         const inventoryPanel = global.document.getElementById('inventory');
         const inventoryTokens = Array.from(global.document.querySelectorAll('.token-dispenser'));
-        const dropZones = Array.from(global.document.querySelectorAll('.phase-core.drop-zone'));
         const restTintButtons = Array.from(global.document.querySelectorAll('[data-rest-tint]'));
 
         inventoryTokens.forEach((token) => {
@@ -302,50 +295,6 @@
                 appState.drawerOpen = true;
                 setPlannerPage(type);
                 syncPlannerOpenState();
-            });
-        });
-
-        dropZones.forEach((zone) => {
-            if (zone.dataset.bound === 'true') return;
-            zone.dataset.bound = 'true';
-            zone.addEventListener('click', () => {
-                if (!canUseInteractivePlannerControls()) return;
-                if (isRouteSelectionActive()) return;
-                const slotId = zone.id;
-                // 当前相位及以前的 slot 锁定，仅未来相位可编辑
-                if (!canEditPhaseSlot(slotId)) return;
-                const mounted = appState.phaseSlots[slotId];
-                const editable = canEditPhaseSlot(slotId);
-
-                if (normalizePlannerEditMode(appState.plannerEditMode) === 'remove') {
-                    removeOnePointFromPhaseSlot(slotId);
-                    return;
-                }
-
-                if (selectionState.source === 'inventory') {
-                    if (!editable) return;
-                    placeInventorySelection(slotId);
-                    return;
-                }
-
-                if (selectionState.source === 'slot') {
-                    if (selectionState.slotId === slotId) {
-                        syncPlannerOpenState();
-                        return;
-                    }
-
-                    moveOrSwapSlotSelection(slotId);
-                    return;
-                }
-
-                if (mounted && editable) {
-                    selectSlotToken(slotId);
-                    if (mounted.key === 'rest') {
-                        setPlannerPage('rest');
-                        appState.drawerOpen = true;
-                    }
-                    syncPlannerOpenState();
-                }
             });
         });
 

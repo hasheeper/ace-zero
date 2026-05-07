@@ -4,6 +4,49 @@
 
     function create(ctx = {}) {
         with (ctx) {
+    const PLAN_LAYOUT_WIDE_WIDTH = 1080;
+    const PLAN_LAYOUT_NARROW_WIDTH = 760;
+    const PLAN_LAYOUT_MIN_HEIGHT = 260;
+    let plannerLayoutResizeObserver = null;
+    let observedPlannerDrawer = null;
+    let observedPlannerAux = null;
+
+    function getPlannerLayoutMode(drawer, auxContainer) {
+        const drawerWidth = Math.max(0, drawer?.getBoundingClientRect?.().width || 0);
+        const isExpanded = drawer?.classList?.contains('is-expanded') === true;
+        const auxHeight = isExpanded
+            ? Math.max(0, auxContainer?.getBoundingClientRect?.().height || 0)
+            : Number.POSITIVE_INFINITY;
+        if ((drawerWidth > 0 && drawerWidth < PLAN_LAYOUT_NARROW_WIDTH) || auxHeight < PLAN_LAYOUT_MIN_HEIGHT) return 'narrow';
+        if (drawerWidth > 0 && drawerWidth < PLAN_LAYOUT_WIDE_WIDTH) return 'mid';
+        return 'wide';
+    }
+
+    function observePlannerLayout(drawer, auxContainer) {
+        if (typeof ResizeObserver !== 'function' || !drawer || !auxContainer) return;
+        if (!plannerLayoutResizeObserver) {
+            plannerLayoutResizeObserver = new ResizeObserver(() => syncPlannerLayoutChrome());
+        }
+        if (observedPlannerDrawer === drawer && observedPlannerAux === auxContainer) return;
+        plannerLayoutResizeObserver.disconnect();
+        plannerLayoutResizeObserver.observe(drawer);
+        plannerLayoutResizeObserver.observe(auxContainer);
+        observedPlannerDrawer = drawer;
+        observedPlannerAux = auxContainer;
+    }
+
+    function syncPlannerLayoutChrome() {
+        const drawer = document.getElementById('drawer');
+        if (!drawer) return;
+        const auxContainer = drawer.querySelector('.aux-container');
+        const mode = getPlannerLayoutMode(drawer, auxContainer);
+        drawer.classList.toggle('plan-layout-wide', mode === 'wide');
+        drawer.classList.toggle('plan-layout-mid', mode === 'mid');
+        drawer.classList.toggle('plan-layout-narrow', mode === 'narrow');
+        drawer.dataset.planLayout = mode;
+        observePlannerLayout(drawer, auxContainer);
+    }
+
     function getAssetCardDisplayName(card) {
         if (card?.name) return card.name;
         const assetModule = getAssetDeckModuleApi();
@@ -651,6 +694,7 @@
                 </header>
             </section>
         `;
+        syncPlannerLayoutChrome();
     }
 
     function buildPhaseVisionPromptMarkup() {
@@ -807,6 +851,7 @@ ${phaseSegments}
         });
 
         syncRestControlPanelDOM();
+        syncPlannerLayoutChrome();
     }
 
     function getSelectedRestSlotToken() {
@@ -962,6 +1007,7 @@ ${phaseSegments}
         getActivePlannerPage,
         setPlannerPage,
         normalizePlannerEditMode,
+        setPlannerEditMode,
         renderPlannerDrawer,
         renderPhaseBar,
         needsPlannerDrawerRebuild,
