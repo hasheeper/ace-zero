@@ -121,6 +121,37 @@ function testCombatPromptInjection() {
   assert(prompt.content.includes('"stakeGold": 105'), 'stakeGold should use 70% of positive funds + assets');
 }
 
+function testActiveCombatTokenPromptInjection() {
+  const { sandbox, act, tavernFactory } = loadTavernSandbox();
+  const eraVars = {
+    hero: { funds: 21.98, assets: 0, cast: {}, roster: {} },
+    world: {
+      current_time: { day: 1, phase: 'MORNING' },
+      location: { layer: 'THE_EXCHANGE', site: 'casino_floor', tags: [] },
+      act: createActStateAt(act, 1, ['node1-entry'], {
+        phase_index: 1,
+        resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
+        phase_slots: [
+          null,
+          { key: 'combat', source: 'limited', amount: 1 },
+          null,
+          null
+        ],
+        pendingResolutions: []
+      })
+    }
+  };
+  const { runtime } = createTavernRuntime(tavernFactory, sandbox, { eraVars });
+  const prompts = runtime.buildActNarrativePrompts(eraVars);
+  const prompt = prompts.find((item) => item.id === 'ace0_combat_request');
+  assert(prompt, 'active combat token should inject combat request prompt before pending exists');
+  assert(prompt.content.includes('"requestId": "chapter0_exchange:node1-entry:1:combat:1:0"'), 'active token request id should match future pending id');
+  assert(prompt.content.includes('"requestIndex": 0'), 'active token request index should point to future pending index');
+  assert(prompt.content.includes('"level": 1'), 'active token level should be carried');
+  assert(prompt.content.includes('"stakeGold": 2.2'), 'active token stakeGold should use level 1 10% estimate');
+  assert(prompt.content.includes('phase_advance'), 'active token prompt should ask to advance current phase when opening combat');
+}
+
 function testMiniGamePromptMarker() {
   const sandbox = createBrowserSandbox();
   runRepoFile(sandbox, 'games/shared/combat-settlement.js');
@@ -187,6 +218,7 @@ function main() {
   testOutcomeAndRewards();
   testSettlementPatch();
   testCombatPromptInjection();
+  testActiveCombatTokenPromptInjection();
   testMiniGamePromptMarker();
   testTexasPromptMarker();
   console.log('combat-loop-smoke ok');

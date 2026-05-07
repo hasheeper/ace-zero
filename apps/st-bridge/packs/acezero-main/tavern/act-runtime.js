@@ -775,8 +775,40 @@
     return null;
   }
 
-  function buildCombatRequestPromptContent(liveAct, eraVars) {
-    const pending = findPendingCombatRequest(liveAct);
+  function findActiveCombatTokenRequest(liveAct, derived) {
+    const act = derived?.act || liveAct;
+    const slots = Array.isArray(act?.phase_slots) ? act.phase_slots : [];
+    const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
+    const token = slots[phaseIndex];
+    const key = normalizeActResourceKey(token?.key, '');
+    if (key !== 'combat') return null;
+    const amount = Math.max(1, Math.min(3, Math.round(Number(token.amount) || 1)));
+    const nodeId = typeof derived?.currentNodeId === 'string' && derived.currentNodeId.trim()
+      ? derived.currentNodeId.trim()
+      : (Array.isArray(act?.route_history) ? act.route_history[Math.max(0, Math.round(Number(act?.nodeIndex) || 1) - 1)] : '') || 'node';
+    const resourceSpent = act?.resourceSpent && typeof act.resourceSpent === 'object' ? act.resourceSpent : {};
+    const pending = Array.isArray(liveAct?.pendingResolutions) ? liveAct.pendingResolutions : [];
+    const requestId = `${act?.id || 'chapter0_exchange'}:${nodeId}:${phaseIndex}:combat:${amount}:${resourceSpent.combat || 0}`;
+    const existingIndex = pending.findIndex(item => item && typeof item === 'object' && (item.id === requestId || item.requestId === requestId));
+    return {
+      request: {
+        id: requestId,
+        protocol: 'ace0.externalResolution.v1',
+        type: 'combat',
+        level: amount,
+        nodeId,
+        nodeIndex: Math.max(1, Math.round(Number(act?.nodeIndex) || 1)),
+        phaseIndex,
+        status: 'pending',
+        sources: Array.isArray(token.sources) ? token.sources : [token.source === 'reserve' ? 'reserve' : 'limited']
+      },
+      index: existingIndex >= 0 ? existingIndex : pending.length,
+      fromActiveToken: true
+    };
+  }
+
+  function buildCombatRequestPromptContent(liveAct, eraVars, derived = null) {
+    const pending = findPendingCombatRequest(liveAct) || findActiveCombatTokenRequest(liveAct, derived);
     if (!pending) return '';
     const request = pending.request;
     const level = Math.max(1, Math.min(3, Math.round(Number(request.level || request.combatLevel || request.tier) || 1)));
@@ -811,9 +843,10 @@
       '```json',
       JSON.stringify(payload, null, 2),
       '```',
+      pending.fromActiveToken ? '若本轮开启该交锋，正文末尾同步写 <UpdateVariable>：将 /world/act/phase_advance 设为 1。' : '',
       '结算规则: 游戏引擎只会在日志末尾生成 <ACE0_COMBAT_SETTLEMENT> 建议；变量必须由之后的 LLM 在叙事回放末尾复制 suggestedJsonPatch 到 <UpdateVariable>，插件和引擎不会直接写变量。',
       '</ace0_combat_request>'
-    ].join('\n');
+    ].filter(line => line !== '').join('\n');
   }
 
   function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) {
@@ -825,7 +858,7 @@
 
     const prompts = [];
     const liveAct = getWorldActState(eraVars);
-    const combatRequestContent = buildCombatRequestPromptContent(liveAct, eraVars);
+    const combatRequestContent = buildCombatRequestPromptContent(liveAct, eraVars, derived);
     if (combatRequestContent) {
       prompts.push({
         id: ACT_COMBAT_REQUEST_INJECT_ID,
