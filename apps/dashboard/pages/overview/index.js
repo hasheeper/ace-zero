@@ -4486,7 +4486,6 @@ ${phaseSegments}
     }
 
     function buildDebugActionButtons() {
-        if (!isOverviewDebugMode()) return '';
         const debugChapterTransition = getDebugChapterTransitionOption();
         const canAdvancePhase = canUsePhaseAdvanceControl() && canAdvanceCurrentPhase();
         const canAdvanceNode = canUseNodeAdvanceControl() && canExecuteCurrentNode();
@@ -4506,7 +4505,7 @@ ${phaseSegments}
 
     function buildModeMetaRows() {
         const seed = getCampaignConfig().seed || '';
-        const seedMarkup = isOverviewDebugMode() && seed ? `
+        const seedMarkup = seed ? `
             <div class="act-meta-row">
                 <span>SEED</span>
                 <strong title="${seed}">${getSeedDisplayLabel()}</strong>
@@ -4716,7 +4715,7 @@ ${phaseSegments}
 
     function getEncounterDebugEligibilityMap(actState) {
         const actModule = getActModuleApi();
-        if (!isOverviewDebugMode() || !actModule || typeof actModule.evaluateCharacterEncounterEligibility !== 'function') {
+        if (!actModule || typeof actModule.evaluateCharacterEncounterEligibility !== 'function') {
             return new Map();
         }
         const currentPayload = adapterState.lastPayload || buildInitialDebugPayload();
@@ -4874,7 +4873,6 @@ ${phaseSegments}
     }
 
     function buildEncounterDebugPanelMarkup(actState, encounter) {
-        if (!isOverviewDebugMode()) return '';
         const eligibilityMap = getEncounterDebugEligibilityMap(actState);
         return `
             <details class="encounter-debug-panel"${appState.encounterDebugOpen ? ' open' : ''}>
@@ -4942,6 +4940,7 @@ ${phaseSegments}
     }
 
     function buildActModePanelMarkup() {
+        if (!isOverviewDebugMode()) return '';
         const actState = getCurrentActStateForPanel();
         const modeLabel = getAdapterModeLabel();
         const stage = normalizeActStage(actState.stage).toUpperCase();
@@ -4949,7 +4948,7 @@ ${phaseSegments}
         const sight = Math.max(0, Math.round(Number(actState.vision?.baseSight) || 0))
             + Math.max(0, Math.round(Number(actState.vision?.bonusSight) || 0));
         return `
-            <div class="act-mode-panel ${isOverviewDebugMode() ? 'is-debug' : 'is-host'}">
+            <div class="act-mode-panel is-debug">
                 <div class="section-header"><span>ACT MODE</span></div>
                 <div class="act-mode-head">
                     <span class="act-mode-label">${modeLabel}</span>
