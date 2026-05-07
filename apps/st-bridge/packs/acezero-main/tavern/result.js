@@ -287,7 +287,6 @@
     // 解析 AI 输出的战局 JSON
     const rawBattleData = parseAiBattleOutput(content);
     if (!rawBattleData) {
-      console.warn(`${PLUGIN_NAME} 无法解析战局数据`);
       return null;
     }
 

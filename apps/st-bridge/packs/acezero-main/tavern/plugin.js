@@ -775,6 +775,12 @@
     }
   }
 
+  function hasCompleteBattleTag(content) {
+    const text = typeof content === 'string' ? content : '';
+    const regex = new RegExp(`<${BATTLE_TAG}>[\\s\\S]*?<\\/${BATTLE_TAG}>`, 'i');
+    return regex.test(text);
+  }
+
   function extractTransitionRequestTargetFromPatches(patches) {
     const items = Array.isArray(patches) ? patches : [];
     for (const patch of items) {
@@ -1038,7 +1044,7 @@
     }
 
     // Battle 处理（原就逻辑）
-    if (content.includes(`<${BATTLE_TAG}>`) && !content.includes(`<${FRONTEND_TAG}>`)) {
+    if (hasCompleteBattleTag(content) && !content.includes(`<${FRONTEND_TAG}>`)) {
       try {
         console.log(`${PLUGIN_NAME} [before_message_update] 检测到 ${BATTLE_TAG}，处理中...`);
         const result = await processBattleContent(content);
@@ -1081,7 +1087,7 @@
 
       isProcessing = true;
 
-      if (nextContent.includes(`<${BATTLE_TAG}>`) && !nextContent.includes(`<${FRONTEND_TAG}>`)) {
+      if (hasCompleteBattleTag(nextContent) && !nextContent.includes(`<${FRONTEND_TAG}>`)) {
         console.log(`${PLUGIN_NAME} [rendered_fallback] 检测到未处理的 ${BATTLE_TAG}，补注入...`);
         const battleResult = await processBattleContent(nextContent);
         if (battleResult) {
@@ -1178,7 +1184,7 @@
         if (!messages || messages.length === 0) continue;
         const msg = messages[0];
         const content = msg.message || '';
-        if (!content.includes(`<${BATTLE_TAG}>`)) continue;
+        if (!hasCompleteBattleTag(content)) continue;
         if (content.includes(`<${FRONTEND_TAG}>`)) continue;
 
         console.log(`${PLUGIN_NAME} [scan] 消息 #${i} 需要注入`);
