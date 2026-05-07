@@ -1,0 +1,758 @@
+(function initAce0OverviewIntelPanel(global) {
+    // Intentionally not strict: this module uses a ctx-backed with scope so the
+    // migrated markup helpers can keep their original browser-debug shape.
+
+    function create(ctx = {}) {
+        with (ctx) {
+    const PARTY_ORDER = [
+        { key: 'rino',    suit: '♥', exclusiveLabel: 'Bond',         exclusiveCn: '羁绊度' },
+        { key: 'kuzuha',  suit: '♣', exclusiveLabel: 'Debtbind',     exclusiveCn: '债缚度' },
+        { key: 'poppy',   suit: '♦', exclusiveLabel: 'Nesting',      exclusiveCn: '寄生度' },
+        { key: 'sia',     suit: '♠', exclusiveLabel: 'Custody',      exclusiveCn: '接管度' },
+        { key: 'vv',      suit: '♦', exclusiveLabel: 'Majority',     exclusiveCn: '控股度' },
+        { key: 'trixie',  suit: '🃏', exclusiveLabel: 'Mania',        exclusiveCn: '妄执度' },
+        { key: 'kako',    suit: '♠', exclusiveLabel: 'Complicity',   exclusiveCn: '包庇度' },
+        { key: 'eulalia', suit: '♥', exclusiveLabel: 'Entrust',      exclusiveCn: '寄托度' },
+        { key: 'cota',    suit: '♦', exclusiveLabel: 'Retention',    exclusiveCn: '留存度' }
+    ];
+
+    function escapePartyHtml(text) {
+        return String(text ?? '').replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    function pctClamp(value) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 0;
+        return Math.max(0, Math.min(100, Math.round(n)));
+    }
+
+    function buildPartySlotMarkup(entry) {
+        const pool = (typeof window !== 'undefined' && window.dashboardCharacters) || {};
+        const c = pool[entry.key];
+        if (!c) return '';
+
+        const state = c.dashboardState || {};
+        const isMasked = state.miniKnown === true;
+
+        // 未激活：整条消失（9人 → 8人）。默认 activated 缺省视为 true。
+        if (state.activated === false) return '';
+
+        let slotClass = 'sub-hand';
+        let roleLabel = 'UNKNOWN';
+        let opacityStyle = '';
+
+        if (isMasked) { roleLabel = 'UNKNOWN'; opacityStyle = 'opacity: 0.3; filter: grayscale(1);'; }
+        else if (state.inParty) { slotClass = 'main-hand'; roleLabel = 'IN PARTY'; }
+        else if (state.present) { roleLabel = 'PRESENT'; }
+        else if (state.introduced) { roleLabel = 'INTRODUCED'; opacityStyle = 'opacity: 0.6;'; }
+        else { roleLabel = 'UNKNOWN'; opacityStyle = 'opacity: 0.3; filter: grayscale(1);'; }
+
+        const resource = c.variables?.resource || {};
+        const manaCur = Math.max(0, Math.round(Number(resource.current) || 0));
+        const manaMax = Math.max(1, Math.round(Number(resource.max) || 0)) || 100;
+        const manaPct = Math.max(0, Math.min(100, Math.round((manaCur / manaMax) * 100)));
+
+        const isHookStage = isMasked || !state.introduced;
+
+        const rawDisplayName = c.watermark || c.name || entry.key.toUpperCase();
+        const displayName = isHookStage ? '???' : rawDisplayName;
+        const avatarUrl = isHookStage ? '' : (c.avatarUrl || c.portraitUrl || '');
+        const avatarLetter = isHookStage ? '?' : rawDisplayName.charAt(0);
+        const levelText = isHookStage
+            ? 'LV ??'
+            : `LV ${String(Math.max(0, Math.round(Number(c.level) || 0))).padStart(2, '0')}`;
+
+        const suitSymbol = String(c.suitSymbol || '');
+        const suitClass = String(c.suitClass || '').toLowerCase();
+        const attrUpper = String(c.attribute || '').toUpperCase();
+        const CHAR_TO_ATTR = { '♥': 'moirai', '♠': 'chaos', '♦': 'psyche', '♣': 'void' };
+        const CLASS_TO_ATTR = { 'heart': 'moirai', 'spade': 'chaos', 'diamond': 'psyche', 'club': 'void' };
+        const active = { moirai: false, chaos: false, psyche: false, void: false };
+        const isJoker = suitSymbol.includes('🃏') || suitClass === 'joker';
+        if (isJoker) {
+            active.moirai = active.chaos = active.psyche = active.void = true;
+        } else {
+            Array.from(suitSymbol).forEach((ch) => {
+                const k = CHAR_TO_ATTR[ch];
+                if (k) active[k] = true;
+            });
+            suitClass.split(/[^a-z]+/).forEach((piece) => {
+                const k = CLASS_TO_ATTR[piece];
+                if (k) active[k] = true;
+            });
+            if (!Object.values(active).some(Boolean)) {
+                if (attrUpper.includes('MOIRAI')) active.moirai = true;
+                if (attrUpper.includes('CHAOS')) active.chaos = true;
+                if (attrUpper.includes('PSYCHE')) active.psyche = true;
+                if (attrUpper.includes('VOID')) active.void = true;
+            }
+        }
+        const isMoirai = !isHookStage && active.moirai ? 'active' : '';
+        const isChaos  = !isHookStage && active.chaos  ? 'active' : '';
+        const isPsyche = !isHookStage && active.psyche ? 'active' : '';
+        const isVoid   = !isHookStage && active.void   ? 'active' : '';
+
+        const goldMain = c.theme?.semantic?.goldMain || c.theme?.goldMain || '#CFB53B';
+
+        return `
+            <div class="roster-slot ${slotClass}" data-party-key="${escapePartyHtml(entry.key)}" style="--gold-main: ${escapePartyHtml(goldMain)}; ${opacityStyle}">
+                <div class="comp-avatar-frame">${
+                    avatarUrl
+                        ? `<img class="comp-avatar-img" src="${escapePartyHtml(avatarUrl)}" alt="${escapePartyHtml(displayName)}" draggable="false">`
+                        : `<span class="comp-avatar">${escapePartyHtml(avatarLetter)}</span>`
+                }</div>
+                <div class="comp-details">
+                    <div class="comp-header">
+                        <span class="comp-role">${escapePartyHtml(roleLabel)}</span>
+                        <span class="comp-level">${escapePartyHtml(levelText)}</span>
+                    </div>
+                    <div class="comp-name">${escapePartyHtml(displayName)}</div>
+                    <div class="comp-traits">
+                        <span class="icon-moirai ${isMoirai}">♥</span>
+                        <span class="icon-chaos ${isChaos}">♠</span>
+                        <span class="icon-psyche ${isPsyche}">♦</span>
+                        <span class="icon-void ${isVoid}">♣</span>
+                    </div>
+                    <div class="mana-row">
+                        <span class="mana-label">MANA</span>
+                        <div class="mana-bar-glass"><div class="mana-fluid" style="width: ${isHookStage ? 0 : manaPct}%;"></div></div>
+                        <span class="mana-val">${isHookStage ? '??' : manaCur}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    const PARTY_STATUS_WEIGHT = { party: 0, present: 1, offstage: 2, unintroduced: 4 };
+
+    function getPartyEntryOrder(entry) {
+        const pool = (typeof window !== 'undefined' && window.dashboardCharacters) || {};
+        const c = pool[entry.key] || {};
+        const state = c.dashboardState || {};
+        const isMasked = state.miniKnown === true;
+        let tone = 'unintroduced';
+        if (isMasked) tone = 'unintroduced';
+        else if (state.inParty) tone = 'party';
+        else if (state.present) tone = 'present';
+        else if (state.introduced) tone = 'offstage';
+        const statusWeight = PARTY_STATUS_WEIGHT[tone] ?? 4;
+        const commonScore = pctClamp(c.variables?.common?.score);
+        const exclusiveScore = pctClamp(c.variables?.exclusive?.score);
+        return {
+            statusWeight,
+            total: commonScore + exclusiveScore,
+            fallbackIndex: PARTY_ORDER.findIndex((item) => item.key === entry.key)
+        };
+    }
+
+    function buildPartyRosterMarkup() {
+        const ordered = PARTY_ORDER.slice().sort((left, right) => {
+            const a = getPartyEntryOrder(left);
+            const b = getPartyEntryOrder(right);
+            if (a.statusWeight !== b.statusWeight) return a.statusWeight - b.statusWeight;
+            if (b.total !== a.total) return b.total - a.total;
+            return a.fallbackIndex - b.fallbackIndex;
+        });
+        return ordered.map((entry) => buildPartySlotMarkup(entry)).join('');
+    }
+
+    function formatActDecimal(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return '0';
+        return String(Math.round(numeric * 100) / 100);
+    }
+
+    function getCurrentActStateForPanel() {
+        return buildCurrentActStateSnapshot();
+    }
+
+    function buildResourceStateRows(actState) {
+        return RESOURCE_KEYS.map((key) => {
+            const limited = Math.max(0, Math.round(Number(actState.limited?.[key]) || 0));
+            const reserve = Math.max(0, Math.round(Number(actState.reserve?.[key]) || 0));
+            const total = limited + reserve;
+            return `
+                <div class="act-state-row type-${key}">
+                    <span class="act-state-key">${RESOURCE_TYPE_MAP[key]}</span>
+                    <span class="act-state-value">${total}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function buildPhaseSlotStateRows(actState) {
+        const slots = Array.isArray(actState.phase_slots) ? actState.phase_slots : [];
+        return slots.map((slot, index) => {
+            const label = appData.planner.phases[index]?.title || String(index + 1);
+            if (!slot) {
+                return `
+                    <div class="act-slot-row is-empty">
+                        <span>${label}</span>
+                        <span>EMPTY</span>
+                    </div>
+                `;
+            }
+            const key = normalizeResourceKey(slot.key, 'vision');
+            const amount = Math.max(1, Math.min(3, Math.round(Number(slot.amount) || 1)));
+            const tint = key === 'rest' ? normalizeRestTintKey(slot.tint || slot.controlType || slot.targetKey, 'neutral') : 'neutral';
+            const tintLabel = key === 'rest' && tint !== 'neutral' ? ` > ${RESOURCE_TYPE_MAP[tint]}` : '';
+            return `
+                <div class="act-slot-row type-${key}">
+                    <span>${label}</span>
+                    <span>${RESOURCE_TYPE_MAP[key]} x${amount}${tintLabel}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function buildDebugActionButtons() {
+        const debugChapterTransition = getDebugChapterTransitionOption();
+        const canAdvancePhase = canUsePhaseAdvanceControl() && canAdvanceCurrentPhase();
+        const canAdvanceNode = canUseNodeAdvanceControl() && canExecuteCurrentNode();
+        const resourceButtons = RESOURCE_KEYS.map((key) => `
+            <button class="debug-act-btn type-${key}" type="button" data-debug-action="grant-resource" data-resource-key="${key}">+${RESOURCE_TYPE_MAP[key]}</button>
+        `).join('');
+        return `
+            <div class="debug-action-grid">
+                ${resourceButtons}
+                <button class="debug-act-btn${canAdvancePhase ? '' : ' is-disabled'}" type="button" data-debug-action="advance-phase">ADV SEG</button>
+                <button class="debug-act-btn${canAdvanceNode ? '' : ' is-disabled'}" type="button" data-debug-action="advance-node">ADV NODE</button>
+                ${debugChapterTransition ? '<button class="debug-act-btn is-ready" type="button" data-debug-action="next-chapter">NEXT CHAPTER</button>' : ''}
+                <button class="debug-act-btn" type="button" data-debug-action="reset-act">RESET</button>
+            </div>
+        `;
+    }
+
+    function buildModeMetaRows() {
+        const seed = getCampaignConfig().seed || '';
+        const seedMarkup = seed ? `
+            <div class="act-meta-row">
+                <span>SEED</span>
+                <strong title="${seed}">${getSeedDisplayLabel()}</strong>
+            </div>
+        ` : '';
+        return `
+            <div class="act-mode-meta">
+                <div class="act-meta-row">
+                    <span>SYNC</span>
+                    <strong>${syncState.errorText || syncState.statusText}</strong>
+                </div>
+                ${seedMarkup}
+            </div>
+        `;
+    }
+
+    function getPhaseRomanLabel(phaseIndex) {
+        return appData.planner.phases[phaseIndex]?.title || String(phaseIndex + 1);
+    }
+
+    function buildVisionReadyReplacementMarkup(pendingReplace) {
+        if (!pendingReplace || pendingReplace.status !== 'ready') return '';
+        const nodeId = typeof pendingReplace.nodeId === 'string' ? pendingReplace.nodeId : '';
+        const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(pendingReplace.phaseIndex) || 0)));
+        const replacementKey = normalizeResourceKey(pendingReplace.replacementKey || pendingReplace.key, 'vision');
+        return `
+            <div class="vision-task-row type-${replacementKey}">
+                <span>REPLACE</span>
+                <strong>${nodeId ? getRouteOptionLabel(nodeId) : 'TARGET'} · ${getPhaseRomanLabel(phaseIndex)} > ${RESOURCE_TYPE_MAP[replacementKey]}</strong>
+            </div>
+        `;
+    }
+
+    function buildVisionChargedMarkup(pendingReplace) {
+        if (!pendingReplace || !['charged', 'choosing'].includes(pendingReplace.status)) return '';
+        const charges = Math.max(1, Math.round(Number(pendingReplace.charges) || 1));
+        return `
+            <div class="vision-task-row is-ready">
+                <span>REPLACE</span>
+                <strong>CHARGED x${charges}</strong>
+            </div>
+        `;
+    }
+
+    function buildVisionJumpMarkup(vision) {
+        if (!vision.jumpReady && appData.runtime.frontendSnapshot?.routeMode !== 'jump') return '';
+        const routeOptions = isRouteSelectionActive() ? getRouteOptions() : [];
+        if (!routeOptions.length) {
+            return `
+                <div class="vision-task-row${vision.jumpReady ? ' is-ready' : ''}">
+                    <span>跃迁</span>
+                    <strong>${vision.jumpReady ? 'READY' : 'WAIT ROUTE'}</strong>
+                </div>
+            `;
+        }
+        return `
+            <div class="vision-jump-list">
+                ${routeOptions.map((nodeId) => `<button class="vision-route-btn route-option-btn" type="button" data-node-id="${nodeId}">${getRouteOptionLabel(nodeId)}</button>`).join('')}
+            </div>
+        `;
+    }
+
+    function buildVisionPanelMarkup(actState) {
+        const vision = getVisionStateForDashboard();
+        const sight = Math.max(0, vision.baseSight + vision.bonusSight);
+        const visibleTo = Math.min(getCampaignTotalNodes(), appState.currentNodeIndex + sight);
+        const pendingReplace = vision.pendingReplace;
+        const pendingMarkup = buildVisionReadyReplacementMarkup(pendingReplace) || buildVisionChargedMarkup(pendingReplace);
+        const jumpMarkup = buildVisionJumpMarkup(vision);
+        return `
+            <div class="vision-act-panel">
+                <div class="vision-task-row">
+                    <span>情报</span>
+                    <strong>${String(appState.currentNodeIndex).padStart(2, '0')} > ${String(visibleTo).padStart(2, '0')}</strong>
+                </div>
+                ${pendingMarkup}
+                ${jumpMarkup}
+            </div>
+        `;
+    }
+
+    function formatActAssetSourceLabel(item) {
+        const nodeId = typeof item?.nodeId === 'string' ? item.nodeId : item?.payload?.commandPayload?.source?.nodeId;
+        const phaseIndex = Number.isFinite(Number(item?.phaseIndex))
+            ? Math.max(0, Math.min(3, Math.round(Number(item.phaseIndex))))
+            : Number.isFinite(Number(item?.payload?.commandPayload?.source?.phaseIndex))
+                ? Math.max(0, Math.min(3, Math.round(Number(item.payload.commandPayload.source.phaseIndex))))
+                : null;
+        const nodeLabel = nodeId ? getRouteOptionLabel(nodeId) || nodeId : 'ACT';
+        return phaseIndex === null ? nodeLabel : `${nodeLabel} · ${getPhaseRomanLabel(phaseIndex)}`;
+    }
+
+    function formatActAssetCommandLabel(commandInput) {
+        const command = commandInput && typeof commandInput === 'object' ? commandInput : {};
+        const kind = typeof command.kind === 'string' ? command.kind : command.type;
+        const payload = command.payload && typeof command.payload === 'object' ? command.payload : {};
+        if (kind === 'grant_asset') return `+${Math.max(0, Math.round(Number(payload.amount) || 0))} DECK PT`;
+        if (kind === 'open_offer') return `OPEN ${String(payload.pool || 'low').toUpperCase()}`;
+        return String(kind || 'COMMAND').toUpperCase();
+    }
+
+    function normalizeCombatPendingResolutionsForDashboard(actState) {
+        return (Array.isArray(actState?.pendingResolutions) ? actState.pendingResolutions : [])
+            .filter((item) => item && typeof item === 'object' && normalizeResourceKey(item.type, '') === 'combat')
+            .map((item) => ({
+                ...deepCloneValue(item),
+                level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
+                status: typeof item.status === 'string' && item.status.trim() ? item.status.trim().toLowerCase() : 'pending'
+            }));
+    }
+
+    function formatCombatRequestLabel(item) {
+        const level = Math.max(1, Math.min(3, Math.round(Number(item?.level) || 1)));
+        if (level === 1) return 'COMBAT I · LOW STAKE';
+        if (level === 2) return 'COMBAT II · ELITE';
+        return 'COMBAT III · BOSS';
+    }
+
+    function buildCombatSettlementRowsMarkup(actState, options = {}) {
+        const rowClass = options.panel === 'act'
+            ? 'vision-task-row combat-task-row type-combat'
+            : 'row combat-request-row type-combat';
+        const pendingRows = normalizeCombatPendingResolutionsForDashboard(actState)
+            .filter((item) => item.status === 'pending')
+            .slice(0, 3)
+            .map((item) => `
+                <div class="${rowClass}">
+                    <span>PENDING</span>
+                    <strong>${escapePartyHtml(formatCombatRequestLabel(item))} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                    <em>EXT</em>
+                </div>
+            `).join('');
+        const historyRows = (Array.isArray(actState?.resolutionHistory) ? actState.resolutionHistory : [])
+            .filter((item) => item && typeof item === 'object' && normalizeResourceKey(item.type, '') === 'combat')
+            .slice(-2)
+            .reverse()
+            .map((item) => `
+                <div class="${rowClass} is-current">
+                    <span>${escapePartyHtml(String(item.status || 'DONE').toUpperCase().slice(0, 8))}</span>
+                    <strong>${escapePartyHtml(String(item.outcome || item.summary || 'COMBAT RESULT').toUpperCase())} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                    <em>HIST</em>
+                </div>
+            `).join('');
+        return pendingRows || historyRows || `<div class="${options.panel === 'act' ? 'vision-task-row combat-task-row' : 'row'} is-empty"><strong>-</strong><span>不生成假收益</span><em>LOCK</em></div>`;
+    }
+
+    function buildCombatSettlementPanelMarkup(actState) {
+        return `
+            <div class="asset-act-panel combat-act-panel">
+                <div class="vision-task-row combat-task-row">
+                    <span>COMBAT</span>
+                    <strong>ADAPTER PENDING · EXTERNAL ONLY</strong>
+                </div>
+                ${buildCombatSettlementRowsMarkup(actState, { panel: 'act' })}
+            </div>
+        `;
+    }
+
+    function buildAssetSettlementPanelMarkup(actState) {
+        const assetSummary = getCurrentAssetDeckSummary();
+        const pendingCommands = normalizePendingAssetDeckCommandsForDashboard(actState);
+        const pendingRows = pendingCommands
+            .filter((item) => {
+                const status = typeof item.status === 'string' && item.status.trim() ? item.status.trim().toLowerCase() : 'pending';
+                return status === 'pending';
+            })
+            .slice(0, 2)
+            .map((item) => `
+                <div class="vision-task-row asset-task-row">
+                    <span>PENDING</span>
+                    <strong>${escapePartyHtml(formatActAssetCommandLabel(item.command))} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                </div>
+            `).join('');
+        const historyRows = (Array.isArray(actState.resolutionHistory) ? actState.resolutionHistory : [])
+            .filter((item) => item && typeof item === 'object' && item.type === 'asset')
+            .slice(-2)
+            .reverse()
+            .map((item) => {
+                const kind = item?.payload?.commandKind || item?.command?.kind || item?.command?.type || 'asset';
+                const outcome = item?.outcome || item?.status || '';
+                return `
+                    <div class="vision-task-row asset-task-row is-ready">
+                        <span>${escapePartyHtml(String(kind).replace(/_/g, ' ').toUpperCase().slice(0, 8))}</span>
+                        <strong>${escapePartyHtml(String(outcome).toUpperCase())} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
+                    </div>
+                `;
+            }).join('');
+        const offer = assetSummary.pending?.offer;
+        const offerMarkup = offer ? `
+            <div class="vision-task-row asset-task-row is-ready">
+                <span>OFFER</span>
+                <strong>${escapePartyHtml(String(offer.pool || 'low').toUpperCase())} · ${Array.isArray(offer.choices) ? offer.choices.length : 0} CARDS</strong>
+            </div>
+        ` : '';
+        return `
+            <div class="asset-act-panel">
+                <div class="vision-task-row asset-task-row">
+                    <span>DECK PTS</span>
+                    <strong>${Math.max(0, Math.round(Number(assetSummary.points) || 0))} POINTS</strong>
+                </div>
+                ${offerMarkup}
+                ${pendingRows}
+                ${historyRows}
+            </div>
+        `;
+    }
+
+    function getEncounterDebugEligibilityMap(actState) {
+        const actModule = getActModuleApi();
+        if (!actModule || typeof actModule.evaluateCharacterEncounterEligibility !== 'function') {
+            return new Map();
+        }
+        const currentPayload = adapterState.lastPayload || buildInitialDebugPayload();
+        const hero = extractHeroPayload(currentPayload) || { funds: appState.resources.funds, assets: appState.resources.assets };
+        const result = actModule.evaluateCharacterEncounterEligibility(actState, hero, getDebugEncounterContext());
+        const map = new Map();
+        (Array.isArray(result?.eligible) ? result.eligible : []).forEach((item) => {
+            map.set(item.charKey, { ...item, debugState: 'ready' });
+        });
+        (Array.isArray(result?.blocked) ? result.blocked : []).forEach((item) => {
+            if (!map.has(item.charKey)) map.set(item.charKey, { ...item, debugState: 'blocked' });
+        });
+        return map;
+    }
+
+    function buildEncounterLocationDebugMarkup() {
+        const location = getCurrentWorldLocation();
+        const context = getCurrentEncounterDebugContext();
+        const enabledFlags = Object.entries(context.storyFlags)
+            .filter(([, enabled]) => enabled === true)
+            .map(([key]) => key);
+        return `
+            <div class="encounter-location-debug">
+                <div class="encounter-location-head">
+                    <span>MVU LOCATION</span>
+                    <strong>${getWorldLocationLayerLabel(location.layer)} · ${location.layer}</strong>
+                </div>
+                <div class="encounter-location-grid">
+                    ${WORLD_LOCATION_LAYERS.map((layer) => `
+                        <button class="debug-act-btn${location.layer === layer ? ' is-ready' : ''}" type="button" data-debug-action="set-location-layer" data-location-layer="${layer}">
+                            ${getWorldLocationLayerLabel(layer)}
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="encounter-location-head">
+                    <span>SCENE TAGS</span>
+                    <strong>${context.tags.length ? context.tags.join(' / ') : 'NONE'}</strong>
+                </div>
+                <div class="encounter-location-grid is-tags">
+                    ${ENCOUNTER_DEBUG_TAG_OPTIONS.map((option) => `
+                        <button class="debug-act-btn${context.tags.includes(option.key) ? ' is-ready' : ''}" type="button" data-debug-action="toggle-encounter-tag" data-encounter-tag="${option.key}">
+                            ${option.label}
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="encounter-location-head">
+                    <span>STORY FLAGS</span>
+                    <strong>${enabledFlags.length ? enabledFlags.join(' / ') : 'NONE'}</strong>
+                </div>
+                <div class="encounter-location-grid is-flags">
+                    ${ENCOUNTER_DEBUG_FLAG_OPTIONS.map((option) => `
+                        <button class="debug-act-btn${context.storyFlags[option.key] ? ' is-ready' : ''}" type="button" data-debug-action="toggle-encounter-flag" data-encounter-flag="${option.key}">
+                            ${option.label}
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="encounter-debug-numeric-grid">
+                    <label>
+                        <span>FUNDS</span>
+                        <input type="number" min="0" step="50" value="${context.funds}" data-debug-action="set-encounter-funds">
+                    </label>
+                    <label>
+                        <span>CRISIS</span>
+                        <input type="number" min="0" max="100" step="1" value="${context.crisis}" data-debug-action="set-encounter-crisis">
+                    </label>
+                </div>
+            </div>
+        `;
+    }
+
+    function getEncounterDebugState(charKey, encounter, eligibilityMap) {
+        const state = encounter?.characters?.[charKey] || {};
+        const queue = Array.isArray(encounter?.queue) ? encounter.queue : [];
+        const active = queue.find((item) => item?.charKey === charKey && !['triggered', 'expired', 'cancelled'].includes(item.status));
+        if (state.firstMeetDone === true || state.status === 'introduced') {
+            return { label: 'DONE', reason: state.introducedNodeId || 'introduced', canForce: false, className: 'is-done' };
+        }
+        if (state.preSignalDone === true) {
+            return { label: 'PRE-SIGNAL', reason: 'signal done; first meet boosted', canForce: true, className: 'is-pre-signal' };
+        }
+        if (active?.status === 'placed') {
+            const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(active.targetPhaseIndex) || 0)));
+            return {
+                label: active.type === 'pre_signal' ? 'SIGNAL' : 'PLACED',
+                reason: `${getRouteOptionLabel(active.targetNodeId || '') || active.targetNodeId || 'NODE'} · ${getPhaseRomanLabel(phaseIndex)}`,
+                canForce: false,
+                className: active.type === 'pre_signal' ? 'is-pre-signal' : 'is-placed'
+            };
+        }
+        if (active) {
+            return { label: String(active.status || 'QUEUED').toUpperCase(), reason: 'queue', canForce: false, className: 'is-queued' };
+        }
+        const evaluated = eligibilityMap.get(charKey);
+        if (evaluated?.debugState === 'ready') {
+            return { label: 'READY', reason: formatEncounterRequirementSummary(evaluated, { includePassed: true }), canForce: true, className: 'is-ready' };
+        }
+        const reasons = Array.isArray(evaluated?.reasonCodes) && evaluated.reasonCodes.length
+            ? evaluated.reasonCodes
+            : ['blocked'];
+        return { label: 'BLOCKED', reason: formatEncounterRequirementSummary(evaluated, { fallback: formatEncounterReasonCodes(reasons) }), canForce: true, className: 'is-blocked' };
+    }
+
+    function formatEncounterReasonCodes(reasonCodes) {
+        const codes = Array.isArray(reasonCodes)
+            ? reasonCodes
+            : String(reasonCodes || '').split('/');
+        return codes
+            .map((code) => {
+                const normalized = String(code || '').trim();
+                if (!normalized) return '';
+                if (ENCOUNTER_REASON_LABELS[normalized]) return ENCOUNTER_REASON_LABELS[normalized];
+                if (normalized.startsWith('requires_')) return `needs ${normalized.slice('requires_'.length).toUpperCase()}`;
+                if (normalized.startsWith('missing_flag_')) return `missing ${normalized.slice('missing_flag_'.length).replace(/_/g, ' ')}`;
+                return normalized.replace(/_/g, ' ');
+            })
+            .filter(Boolean)
+            .join(' / ') || 'blocked';
+    }
+
+    function formatEncounterRequirementSummary(evaluated, options = {}) {
+        const req = evaluated?.requirements && typeof evaluated.requirements === 'object' ? evaluated.requirements : null;
+        if (!req) return options.fallback || `priority ${evaluated?.priority || 0}`;
+        const parts = [];
+        const pushThreshold = (label, current, required) => {
+            const threshold = Math.max(0, Math.round(Number(required) || 0));
+            if (!threshold) return;
+            parts.push(`${label} ${Math.max(0, Math.round(Number(current) || 0))}/${threshold}`);
+        };
+        pushThreshold('day', req.day, req.minDay);
+        pushThreshold('node', req.nodeIndex, req.minNodeIndex);
+        pushThreshold('funds', req.funds, req.minFunds);
+        pushThreshold('crisis', req.crisis, req.minCrisis);
+        pushThreshold('spent', req.spentScore, req.minSpentScore);
+        if (req.requiredGeo) parts.push(`geo ${req.geo || 'missing'}>${req.requiredGeo}`);
+        if (Array.isArray(req.requiredTags) && req.requiredTags.length) parts.push(`tag ${req.requiredTags.join('|')}`);
+        if (Array.isArray(req.requiredFlags) && req.requiredFlags.length) parts.push(`flag ${req.requiredFlags.join('|')}`);
+        if (Array.isArray(req.requiredCharacters) && req.requiredCharacters.length) parts.push(`needs ${req.requiredCharacters.join('|')}`);
+        if (Array.isArray(req.requiredAny) && req.requiredAny.length) parts.push(`any ${formatEncounterAnyRequirement(req.requiredAny)}`);
+        if (options.includePassed) parts.push(`priority ${evaluated?.priority || 0}`);
+        return parts.join(' / ') || options.fallback || 'no requirements';
+    }
+
+    function formatEncounterAnyRequirement(groups) {
+        return groups
+            .map((group) => {
+                const parts = [];
+                if (Array.isArray(group.requiredCharacters) && group.requiredCharacters.length) parts.push(group.requiredCharacters.join('+'));
+                if (Array.isArray(group.requiredFlags) && group.requiredFlags.length) parts.push(group.requiredFlags.join('+'));
+                if (Number(group.minCrisis) > 0) parts.push(`crisis>${group.minCrisis}`);
+                if (Number(group.minFunds) > 0) parts.push(`funds>${group.minFunds}`);
+                return parts.join('+');
+            })
+            .filter(Boolean)
+            .join(' OR ') || 'alternate gate';
+    }
+
+    function buildEncounterDebugPanelMarkup(actState, encounter) {
+        const eligibilityMap = getEncounterDebugEligibilityMap(actState);
+        return `
+            <details class="encounter-debug-panel"${appState.encounterDebugOpen ? ' open' : ''}>
+                <summary>ENCOUNTER DEBUG</summary>
+                <div class="encounter-debug-mode-note">
+                    <span>FREE ADD = FORCE ignores rules</span>
+                    <span>RULE ADD = eligible auto placement</span>
+                </div>
+                <div class="encounter-debug-actions">
+                    <button class="debug-act-btn" type="button" data-debug-action="encounter-scan">SCAN</button>
+                    <button class="debug-act-btn is-ready" type="button" data-debug-action="auto-add-encounter">RULE ADD</button>
+                    <button class="debug-act-btn" type="button" data-debug-action="clear-encounter">CLEAR</button>
+                </div>
+                ${buildEncounterLocationDebugMarkup()}
+                <div class="encounter-debug-list">
+                    ${ENCOUNTER_DEBUG_CHARACTER_KEYS.map((charKey) => {
+                        const debugState = getEncounterDebugState(charKey, encounter, eligibilityMap);
+                        return `
+                            <div class="encounter-debug-row ${debugState.className}">
+                                <div class="encounter-debug-meta">
+                                    <strong>${charKey}</strong>
+                                    <span title="${escapePartyHtml(`${debugState.label} · ${debugState.reason}`)}">${debugState.label} · ${escapePartyHtml(debugState.reason)}</span>
+                                </div>
+                                <button class="debug-act-btn${debugState.canForce ? ' is-ready' : ' is-disabled'}" type="button" data-debug-action="force-encounter" data-encounter-char="${charKey}">FREE</button>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </details>
+        `;
+    }
+
+    function buildEncounterPanelMarkup(actState) {
+        const encounter = actState.characterEncounter && typeof actState.characterEncounter === 'object'
+            ? actState.characterEncounter
+            : {};
+        const queue = Array.isArray(encounter.queue) ? encounter.queue : [];
+        const activeQueue = queue.filter((item) => item && !['triggered', 'expired', 'cancelled'].includes(item.status));
+        const placed = activeQueue.filter((item) => item.status === 'placed');
+        const introduced = Object.entries(encounter.characters || {})
+            .filter(([, state]) => state?.firstMeetDone === true || state?.status === 'introduced')
+            .map(([charKey]) => charKey);
+        const activeLabel = placed.length
+            ? placed.map((item) => {
+                const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
+                const typeLabel = item.type === 'pre_signal' ? 'SIG' : 'MEET';
+                return `${typeLabel}:${item.charKey}@${getRouteOptionLabel(item.targetNodeId || '') || item.targetNodeId || 'NODE'}·${getPhaseRomanLabel(phaseIndex)}`;
+            }).join(' / ')
+            : activeQueue.length
+                ? activeQueue.map((item) => `${item.type === 'pre_signal' ? 'SIG' : 'MEET'}:${item.charKey}:${String(item.status || 'queued').toUpperCase()}`).join(' / ')
+                : 'EMPTY';
+        return `
+            <div class="encounter-act-panel">
+                <div class="vision-task-row${placed.length ? ' is-ready' : ''}">
+                    <span>ENCOUNTER</span>
+                    <strong>${activeLabel}</strong>
+                </div>
+                <div class="vision-task-row">
+                    <span>DONE</span>
+                    <strong>${introduced.length ? introduced.join(' / ') : 'NONE'}</strong>
+                </div>
+                ${buildEncounterDebugPanelMarkup(actState, encounter)}
+            </div>
+        `;
+    }
+
+    function buildActModePanelMarkup() {
+        if (!isOverviewDebugMode()) return '';
+        const actState = getCurrentActStateForPanel();
+        const modeLabel = getAdapterModeLabel();
+        const stage = normalizeActStage(actState.stage).toUpperCase();
+        const crisis = Math.max(0, Math.min(100, Math.round(Number(actState.crisis) || 0)));
+        const sight = Math.max(0, Math.round(Number(actState.vision?.baseSight) || 0))
+            + Math.max(0, Math.round(Number(actState.vision?.bonusSight) || 0));
+        return `
+            <div class="act-mode-panel is-debug">
+                <div class="section-header"><span>ACT MODE</span></div>
+                <div class="act-mode-head">
+                    <span class="act-mode-label">${modeLabel}</span>
+                    <span class="act-mode-stage">${stage}</span>
+                </div>
+                ${buildModeMetaRows()}
+                <div class="act-state-grid">
+                    <div class="act-kpi">
+                        <span>NODE</span>
+                        <strong>${String(appState.currentNodeIndex).padStart(2, '0')}/${String(getCampaignTotalNodes()).padStart(2, '0')}</strong>
+                    </div>
+                    <div class="act-kpi">
+                        <span>PHASE</span>
+                        <strong>${Math.min(appState.currentPhaseIndex + 1, PHASE_SLOT_IDS.length)}/${PHASE_SLOT_IDS.length}</strong>
+                    </div>
+                    <div class="act-kpi">
+                        <span>CRISIS</span>
+                        <strong>${crisis}</strong>
+                    </div>
+                    <div class="act-kpi">
+                        <span>情报</span>
+                        <strong>${sight}</strong>
+                    </div>
+                </div>
+                <div class="act-resource-ledger">${buildResourceStateRows(actState)}</div>
+                <div class="act-slot-ledger">${buildPhaseSlotStateRows(actState)}</div>
+                ${buildVisionPanelMarkup(actState)}
+                ${buildCombatSettlementPanelMarkup(actState)}
+                ${buildAssetSettlementPanelMarkup(actState)}
+                ${buildEncounterPanelMarkup(actState)}
+                ${buildDebugActionButtons()}
+            </div>
+        `;
+    }
+
+    function renderIntelPanel() {
+        const intelBody = document.getElementById('intelBody');
+        const nodeData = getCurrentNodeData();
+        const rewardMarkup = nodeData.limited.map((reward) => `
+            <div class="token-row type-${reward.key}">
+                <div class="token-sigil">
+                    <div class="sigil-${reward.key}"></div>
+                </div>
+                <div class="token-info">
+                    <div class="token-title">${reward.title}</div>
+                    <div class="token-sub">${reward.sublabel}</div>
+                </div>
+                <div class="token-count">${String(reward.count).padStart(2, '0')}</div>
+            </div>
+        `).join('');
+        const rosterMarkup = buildPartyRosterMarkup();
+        const actPanelMarkup = buildActModePanelMarkup();
+
+        intelBody.innerHTML = `
+            <div class="node-hero">
+                <span class="hero-node">${nodeData.label}</span>
+                <span class="hero-title">${nodeData.title}</span>
+                <span class="hero-subtitle">${nodeData.subtitle}</span>
+            </div>
+            <div>
+                <div class="section-header"><span>${appData.intel.rewardsTitle}</span></div>
+                <div class="token-ledger-list">${rewardMarkup}</div>
+            </div>
+            ${actPanelMarkup}
+            <div>
+                <div class="section-header"><span>${appData.intel.rosterTitle}</span></div>
+                <div class="glass-cards-grid">${rosterMarkup}</div>
+            </div>
+        `;
+    }
+
+
+            return Object.freeze({
+                escapePartyHtml,
+                getPhaseRomanLabel,
+                buildVisionPanelMarkup,
+                buildCombatSettlementRowsMarkup,
+                buildActModePanelMarkup,
+                renderIntelPanel
+            });
+        }
+    }
+
+    global.ACE0OverviewIntelPanel = Object.freeze({ create });
+})(typeof window !== 'undefined' ? window : globalThis);
