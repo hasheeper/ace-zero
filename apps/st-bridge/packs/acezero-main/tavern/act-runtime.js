@@ -844,7 +844,6 @@
       JSON.stringify(payload, null, 2),
       '```',
       pending.fromActiveToken ? '若本轮开启该交锋，正文末尾同步写 <UpdateVariable>：将 /world/act/phase_advance 设为 1。' : '',
-      '结算规则: 游戏引擎只会在日志末尾生成 <ACE0_COMBAT_SETTLEMENT> 建议；变量必须由之后的 LLM 在叙事回放末尾复制 suggestedJsonPatch 到 <UpdateVariable>，插件和引擎不会直接写变量。',
       '</ace0_combat_request>'
     ].filter(line => line !== '').join('\n');
   }

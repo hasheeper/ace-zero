@@ -112,10 +112,25 @@
     return { total: total, delta: delta, max: max };
   }
 
-  function buildSummary(gameName, outcome, level, netChips, rewardInfo) {
+  function buildRewardText(delta) {
+    var parts = [];
+    Object.keys(delta || {}).forEach(function (key) {
+      if (delta[key] > 0) parts.push(key + '+' + delta[key]);
+    });
+    return parts.length ? parts.join(' / ') : '无返还点数';
+  }
+
+  function formatSignedGold(value) {
+    var n = roundGold(value);
+    if (n > 0) return '+' + n;
+    return String(n);
+  }
+
+  function buildSummary(gameName, outcome, level, fundsDeltaGold, rewardInfo) {
     var title = gameName || 'Combat';
-    var trend = netChips > 0 ? '净胜' : netChips < 0 ? '净负' : '持平';
-    return title + ' level ' + level + ' resolved as ' + outcome.label + ' (' + trend + ' ' + Math.abs(netChips) + ' silver, reward ' + rewardInfo.total + '/' + rewardInfo.max + ' points).';
+    return '交锋点结算：' + title + ' level ' + level + ' ' + outcome.label
+      + '；资金 ' + formatSignedGold(fundsDeltaGold) + ' 金弗'
+      + '；返还 ' + buildRewardText(rewardInfo.delta) + '。';
   }
 
   function buildSuggestedJsonPatch(settlement) {
@@ -131,7 +146,6 @@
     });
     patch.push({ op: 'replace', path: '/world/act/pendingResolutions/' + settlement.requestIndex + '/status', value: 'resolved' });
     patch.push({ op: 'replace', path: '/world/act/pendingResolutions/' + settlement.requestIndex + '/outcome', value: settlement.outcome.key });
-    patch.push({ op: 'replace', path: '/world/act/pendingResolutions/' + settlement.requestIndex + '/summary', value: settlement.summary });
     if (settlement.crisisDelta > 0) {
       patch.push({ op: 'delta', path: '/world/act/crisis', value: settlement.crisisDelta });
       patch.push({ op: 'add', path: '/world/act/crisisSignals/-', value: settlement.crisisSignal });
@@ -151,7 +165,8 @@
     var outcome = classifyOutcome(netChips, stakeChips);
     var rewardInfo = buildRewardDelta(combat.level, outcome.key);
     var crisisDelta = (CRISIS_BY_BUCKET[outcome.key] || 0) * combat.level;
-    var summary = buildSummary(input.gameName || input.gameId || 'Combat', outcome, combat.level, netChips, rewardInfo);
+    var fundsDeltaGold = silverToGold(netChips);
+    var summary = buildSummary(input.gameName || input.gameId || 'Combat', outcome, combat.level, fundsDeltaGold, rewardInfo);
     var settlement = {
       protocol: PROTOCOL,
       requestId: combat.requestId,
@@ -166,7 +181,7 @@
       startingChips: startingChips,
       endingChips: endingChips,
       netChips: netChips,
-      fundsDeltaGold: silverToGold(netChips),
+      fundsDeltaGold: fundsDeltaGold,
       outcome: outcome,
       rewardPoints: rewardInfo.total,
       rewardMax: rewardInfo.max,
@@ -183,6 +198,14 @@
     };
     settlement.suggestedJsonPatch = buildSuggestedJsonPatch(settlement);
     return settlement;
+  }
+
+  function buildMarkerPayload(settlement) {
+    if (!settlement || typeof settlement !== 'object') return null;
+    return {
+      summary: settlement.summary,
+      suggestedJsonPatch: settlement.suggestedJsonPatch || []
+    };
   }
 
   function buildSettlementFromSession(input) {
@@ -217,6 +240,7 @@
     buildRewardDelta: buildRewardDelta,
     buildSettlement: buildSettlement,
     buildSettlementFromSession: buildSettlementFromSession,
+    buildMarkerPayload: buildMarkerPayload,
     silverToGold: silverToGold,
     goldToSilver: goldToSilver
   };

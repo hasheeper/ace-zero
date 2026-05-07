@@ -1017,12 +1017,12 @@
         ? [
             '',
             '<ACE0_COMBAT_SETTLEMENT>',
-            JSON.stringify(combatSettlement, null, 2),
+            JSON.stringify(window.ACE0CombatSettlement.buildMarkerPayload(combatSettlement), null, 2),
             '</ACE0_COMBAT_SETTLEMENT>'
           ]
         : [];
       if (combatSettlement) {
-        fundsInstruction += '\n检测到交锋点结算：不要再额外写一条普通资金更新；资金、返还点数、pending resolved 都直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
+        fundsInstruction += '\n交锋点结算：直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
       }
 
       // 多局写作指导

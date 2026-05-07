@@ -27,7 +27,6 @@ ACE0 MVU 变量规则（最小 ACT 版）
 - `/world/act/reserve/vision`
 - `/world/act/pendingResolutions/<index>/status`
 - `/world/act/pendingResolutions/<index>/outcome`
-- `/world/act/pendingResolutions/<index>/summary`
 - `/world/act/crisis`
 - `/world/act/crisisSignals/-`
 - `/hero/cast/<角色名>/present`
@@ -138,7 +137,7 @@ ACE0 MVU 变量规则（最小 ACT 版）
       - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
       - 只用 `delta`
       - 不自行分配点数
-  world.act.pendingResolutions.${index}.status/outcome/summary:
+  world.act.pendingResolutions.${index}.status/outcome:
     type: string
     check:
       - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新

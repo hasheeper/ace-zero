@@ -175,8 +175,10 @@ function testMiniGamePromptMarker() {
     }
   });
   assert(prompt.includes('<ACE0_COMBAT_SETTLEMENT>'), 'mini-game prompt should include settlement marker');
-  assert(prompt.includes('"requestId": "mini-combat"'), 'mini-game marker should preserve request id');
+  assert(!prompt.includes('"requestId": "mini-combat"'), 'mini-game marker should not expose request id');
+  assert(!prompt.includes('"protocol"'), 'mini-game marker should not expose protocol internals');
   assert(prompt.includes('"suggestedJsonPatch"'), 'mini-game marker should include suggested patch');
+  assert(prompt.includes('交锋点结算'), 'mini-game marker should include compact summary');
   assert(!logger.generateAIPrompt({ startingChips: 1000, endingChips: 1100 }).includes('<ACE0_COMBAT_SETTLEMENT>'), 'ordinary mini-game prompt should not include settlement marker');
 }
 
@@ -209,8 +211,10 @@ function testTexasPromptMarker() {
   };
   const prompt = logger.generateAIPrompt(context);
   assert(prompt.includes('<ACE0_COMBAT_SETTLEMENT>'), 'texas prompt should include settlement marker');
-  assert(prompt.includes('"requestId": "texas-combat"'), 'texas marker should preserve request id');
-  assert(prompt.includes('"fundsDeltaGold": 8'), 'texas marker should convert silver to gold');
+  assert(!prompt.includes('"requestId": "texas-combat"'), 'texas marker should not expose request id');
+  assert(!prompt.includes('"fundsDeltaGold"'), 'texas marker should not expose intermediate fields');
+  assert(prompt.includes('/hero/funds'), 'texas marker should include funds patch');
+  assert(prompt.includes('资金 +8 金弗'), 'texas marker should include compact funds summary');
   assert(!logger.generateAIPrompt({ ...context, ace0Combat: null }).includes('<ACE0_COMBAT_SETTLEMENT>'), 'ordinary texas prompt should not include settlement marker');
 }
 

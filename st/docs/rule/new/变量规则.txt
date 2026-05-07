@@ -27,7 +27,6 @@ ACE0 MVU 变量规则（最小 ACT 版）
 - `/world/act/reserve/vision`
 - `/world/act/pendingResolutions/<index>/status`
 - `/world/act/pendingResolutions/<index>/outcome`
-- `/world/act/pendingResolutions/<index>/summary`
 - `/world/act/crisis`
 - `/world/act/crisisSignals/-`
 - `/hero/cast/<角色名>/activated`
@@ -142,7 +141,7 @@ ACE0 MVU 变量规则（最小 ACT 版）
       - 必须原样复制 marker 内 `suggestedJsonPatch`
       - 只用 `delta`
       - 不由 LLM 自由分配点数
-  world.act.pendingResolutions.${index}.status/outcome/summary:
+  world.act.pendingResolutions.${index}.status/outcome:
     type: string
     check:
       - 仅用于 `<ACE0_COMBAT_SETTLEMENT>` 给出的交锋点结算

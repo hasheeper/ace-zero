@@ -174,12 +174,12 @@
       ? [
           '',
           '<ACE0_COMBAT_SETTLEMENT>',
-          JSON.stringify(combatSettlement, null, 2),
+          JSON.stringify(global.ACE0CombatSettlement.buildMarkerPayload(combatSettlement), null, 2),
           '</ACE0_COMBAT_SETTLEMENT>'
         ]
       : [];
     if (combatSettlement) {
-      fundsLine += '\n检测到交锋点结算：不要再额外写一条普通资金更新；资金、返还点数、pending resolved 都直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
+      fundsLine += '\n交锋点结算：直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
     }
 
     // 推荐字数 (简化版 + 多局加成)
