@@ -2994,6 +2994,32 @@ html[data-character] body.is-unintroduced .meta-box {
   box-shadow: none !important;
 }
 
+html body.is-unintroduced .log-title,
+html body.is-unintroduced .log-title-standalone,
+html[data-character] body.is-unintroduced .log-title,
+html[data-character] body.is-unintroduced .log-title-standalone {
+  color: rgba(210,210,210,0.82) !important;
+  text-shadow: none !important;
+}
+
+html body.is-unintroduced .log-title .cursor,
+html body.is-unintroduced .cursor,
+html[data-character] body.is-unintroduced .log-title .cursor,
+html[data-character] body.is-unintroduced .cursor {
+  background: rgba(210,210,210,0.72) !important;
+}
+
+html body.is-unintroduced .deck-title,
+html[data-character] body.is-unintroduced .deck-title {
+  color: rgba(210,210,210,0.68) !important;
+  text-shadow: none !important;
+}
+
+html body.is-unintroduced .deck-title-divider,
+html[data-character] body.is-unintroduced .deck-title-divider {
+  background: linear-gradient(90deg, rgba(210,210,210,0.16) 0%, rgba(255,255,255,0.08) 36%, transparent 100%) !important;
+}
+
 html body.is-unintroduced .cmd-card::after,
 html[data-character] body.is-unintroduced .cmd-card::after {
   background: #101010 !important;
