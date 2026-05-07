@@ -1,15 +1,26 @@
 <variable_rule>
-ACE0 MVU 变量规则
+ACE0 MVU 变量规则（最小 ACT 版）
 仅输出本轮真实变化；禁止整段覆写。
+
+——【相位定义】——
+“相位”是理解节点内情节推进用的单位，不是世界时间。
+- 一个节点最多四个相位：一段 / 二段 / 三段 / 四段
+- 相位表示“当前节点里的这一小段戏 / 当前正在写的这一步情节”
+- 你可以把它理解为：同一节点内部，剧情从开场、试探、推进、收束，分成最多四步来写
+- 它不表示推进 DAY，也不表示推进 MORNING / NOON / AFTERNOON / NIGHT
+- 只有当前这一小段情节已经自然收束、确实该进入下一步时，才写 `phase_advance`
 
 允许更新的路径
 - `/hero/funds`
+- `/hero/assets`
+- `/hero/debt`
+- `/hero/majorDebt`
 - `/world/current_time/day`
 - `/world/current_time/phase`
 - `/world/location/layer`
 - `/world/location/site`
-- `/world/event_log/-`
-- `/world/activity_log/-`
+- `/world/act/route_history`
+- `/world/act/phase_advance`
 - `/world/act/reserve/combat`
 - `/world/act/reserve/rest`
 - `/world/act/reserve/asset`
@@ -19,7 +30,6 @@ ACE0 MVU 变量规则
 - `/world/act/pendingResolutions/<index>/summary`
 - `/world/act/crisis`
 - `/world/act/crisisSignals/-`
-- `/hero/cast/<角色名>/introduced`
 - `/hero/cast/<角色名>/present`
 - `/hero/cast/<角色名>/inParty`
 - `/hero/roster/<角色名>/level`
@@ -29,9 +39,9 @@ ACE0 MVU 变量规则
 - `/hero/relationship/<角色名>/exclusive`
 
 操作约定
-- `delta`: 仅用于数字增减。适用：`/hero/funds`、`/hero/relationship/*`
-- `replace`: 仅用于直接写结果值。适用：时间、地区、布尔值、level、mana、maxMana
-- `add`: 仅用于数组尾部追加。适用：`/world/event_log/-`、`/world/activity_log/-`、交锋点结算 marker 明确给出的 `/world/act/crisisSignals/-`
+- `delta`: 仅用于数字增减。适用：`/hero/funds`、`/hero/assets`、`/hero/debt`、`/hero/majorDebt`、`/hero/relationship/*`
+- `replace`: 仅用于直接写结果值。适用：时间、地点、ACT 路由/推进、布尔值、level、mana、maxMana
+- `add`: 仅用于明确要求追加的数组尾部路径：`/world/act/crisisSignals/-`
 - 不使用整段对象覆写，不新增未声明路径
 - 关系第二字段统一写 `/exclusive`
 - `reversal / ownership / parasitism / indebtedness / takeover / entrustment / retention / coverup / fixation` 都只是显示名，不是变量路径
@@ -40,12 +50,39 @@ ACE0 MVU 变量规则
   hero.funds:
     type: number
     check:
-      - 仅用 `delta`！
+      - 仅用 `delta`
       - 单位统一为金弗（可带 2 位小数）
       - 正数=收入，负数=支出
       - 最多保留 2 位小数
       - 不重复记账
       - 无金额变化则不写
+  hero.assets:
+    type: number
+    check:
+      - 仅用 `delta`
+      - 单位统一为金弗（可带 2 位小数）
+      - 表示当前名下非现金资产总值
+      - 买入资产通常 = `funds` 减少、`assets` 增加
+      - 卖出资产通常 = `funds` 增加、`assets` 减少
+      - 只有剧情明确发生资产取得、损毁、转移、出售、重估时才写
+  hero.debt:
+    type: number
+    check:
+      - 仅用 `delta`
+      - 单位统一为金弗（可带 2 位小数）
+      - 表示普通债务总额，不含主线大债
+      - 借到现金通常 = `funds` 增加，同时 `debt` 增加
+      - 偿还普通债务通常 = `funds` 减少，同时 `debt` 减少
+      - 罚款、赊账、杂项欠款成立时可只增加 `debt`
+      - 利息不由 LLM 手算；未来若有自动结息，由系统在时间推进后处理
+  hero.majorDebt:
+    type: number
+    check:
+      - 仅用 `delta`
+      - 单位统一为金弗（可带 2 位小数）
+      - 表示主线核心大债，独立于普通 `debt`
+      - 只有剧情明确让主线大债本金增加、减少、重组、减免时才写
+      - 利息不由 LLM 手算；未来若有自动结息，由系统在时间推进后处理
   hero.roster.${角色名}.level:
     type: number
     range: 0~5
@@ -63,86 +100,70 @@ ACE0 MVU 变量规则
     type: number
     check:
       - 仅在明确跨日时更新
+      - 独立于 ACT 节点；节点推进不自动跨日
   world.current_time.phase:
     type: enum
     allowed: MORNING / NOON / AFTERNOON / NIGHT
     check:
-      - 仅在明确推进时更新
+      - 仅在明确推进世界时段时更新
+      - 独立于 ACT 节点；节点推进不自动推时段
   world.location.layer:
     type: enum
     allowed: THE_COURT / THE_EXCHANGE / THE_STREET / THE_RUST
     check:
       - 仅在明确跨层时更新
       - 跨层时优先同步更新 `site`
-      - 正文体现环境落差即可
   world.location.site:
     type: string
     check:
       - 仅在明确换场时更新
       - 写当前镜头场所
-      - 同层换景通常只改 `site`
-  world.event_log[-]:
-    type: object
+  world.act.route_history:
+    type: array
     check:
-      - 可写新增玩家事件，也可写新增世界事件
-      - 普通对话、轻微情绪变化、琐碎动作不写
-      - `summary` 只写一条事件摘要，简洁具体
-      - `source` 仅可写 `player / world`
-      - `priority` 仅可写 `anchor / major / minor / ambient`
-      - `tags` 可选；若写，只写简短稳定标签，例如 `main / exchange / rumor / dlc-price-breach`
-      - `id` 建议留空，由后台补；若写则必须唯一
-      - 同一事件不重复新增
-      - append-only
-      - 第一版不写 `kind / weight / sticky / reactions`
-  world.activity_log[-]:
-    type: object
+      - 仅在明确选择下一节点时整体替换（追加新 node id）
+      - 必须保持顺序，表示已走过的节点
+      - 不要写派生字段，如 `current_node_id / dead_nodes / future_nodes`
+  world.act.phase_advance:
+    type: number
+    range: 0~4
     check:
-      - `actor` 用角色大写标识
-      - `kind` 仅可写 `routine / reaction / track`
-      - `priority` 仅可写 `major / minor / dormant`
-      - `summary` 写近期轨迹；`hook` 写近期切入口
-      - 明线：事件相关角色真的动起来时才写
-      - 暗线：时间推进时最多补 0~1 条重要 OFFSTAGE / NOT INTRODUCED 轨迹
-      - 同一事件不重复给同一角色写同类 `reaction`
-      - 同角色同日同时段同 `kind` 视为同一条轨迹
-      - 后台按 `actor + day + phase + kind` 归并
+      - 仅在需要请求系统推进段位时写
+      - 这里的“段位 / 相位” = 当前节点内部当前这一步情节，不是世界时段
+      - 写 1 = 推进 1 段；写 4 = 连推 4 段
+      - 只有当前相位已经写到自然收束时才写；若仍在展开 / 对话 / 试探中，就不要写
   world.act.reserve.${combat|rest|asset|vision}:
     type: number
     check:
-      - 仅用于 `<ACE0_COMBAT_SETTLEMENT>` 给出的交锋点返还建议
-      - 必须原样复制 marker 内 `suggestedJsonPatch`
+      - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
       - 只用 `delta`
-      - 不由 LLM 自由分配点数
+      - 不自行分配点数
   world.act.pendingResolutions.${index}.status/outcome/summary:
     type: string
     check:
-      - 仅用于 `<ACE0_COMBAT_SETTLEMENT>` 给出的交锋点结算
-      - pending 条目不删除，只把对应 index 的 `status` 改为 `resolved`
-      - `outcome` / `summary` 必须原样来自 marker 内 `suggestedJsonPatch`
+      - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
+      - 对应条目只标记为 `resolved`，不删除数组项
   world.act.crisis:
     type: number
     check:
-      - 仅在交锋点结算 marker 明确给出危机增加时用 `delta`
-      - 不要自行按输赢脑补危机值
+      - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
+      - 只用 `delta`
   world.act.crisisSignals:
     type: array
     check:
-      - 仅在交锋点结算 marker 明确给出时，原样复制 `/world/act/crisisSignals/-` 的 `add`
+      - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 追加 `/world/act/crisisSignals/-`
       - 禁止整段替换数组
-  hero.cast.${角色名}.introduced:
-    type: boolean
-    check:
-      - 仅在正式认识/入场时设为 true
   hero.cast.${角色名}.present:
     type: boolean
     check:
-      - 仅在当前同场、同镜头、可直接动作/对话(包括远程通话等)时设为 true
-      - 离场、切场、未同行、仅剩远程影响时设为 false
-      - 正文直接出场/发言时同步更新
+      - 仅在当前同场、同镜头、可直接动作/对话时设为 true
+      - 离场、切场、未同行时设为 false
+      - 只有 `activated=true` 时才有意义
   hero.cast.${角色名}.inParty:
     type: boolean
     check:
       - 仅在正式同行/入队时设为 true
+      - 只有 `activated=true` 时才有意义
   hero.relationship.${角色名}.entanglement:
     type: number
     range: 0~100
@@ -164,6 +185,7 @@ ACE0 MVU 变量规则
 - 末尾输出 `<UpdateVariable>`
 - 无变化则不输出
 - 使用 JSONPatch
+- 只写最小必要改动
 
 参考格式:
 ```xml
@@ -171,22 +193,14 @@ ACE0 MVU 变量规则
 <Analysis>short summary in English</Analysis>
 <JSONPatch>
 [
-  { "op": "replace/delta/add", "path": "/path", "value": "..." },
-  { "op": "replace/delta/add", "path": "/path", "value": 1 },
-  {
-    "op": "add",
-    "path": "/world/event_log/-",
-    "value": {
-      "id": "",
-      "day": 12,
-      "phase": "NIGHT",
-      "source": "player",
-      "summary": "Kazu 在下街公开了零号异常的部分信息。",
-      "priority": "major",
-      "tags": ["main", "exchange", "rumor"]
-    }
-  }
-  ……………………
+  { "op": "delta", "path": "/hero/funds", "value": -2.5 },
+  { "op": "delta", "path": "/hero/assets", "value": 2.5 },
+  { "op": "delta", "path": "/hero/debt", "value": 10 },
+  { "op": "delta", "path": "/hero/majorDebt", "value": -1000 },
+  { "op": "delta", "path": "/world/act/reserve/combat", "value": 1 },
+  { "op": "replace", "path": "/world/act/pendingResolutions/0/status", "value": "resolved" },
+  { "op": "replace", "path": "/world/act/phase_advance", "value": 1 },
+  { "op": "replace", "path": "/hero/cast/TRIXIE/present", "value": true }
 ]
 </JSONPatch>
 </UpdateVariable>

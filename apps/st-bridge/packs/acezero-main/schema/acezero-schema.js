@@ -572,14 +572,14 @@ const WorldActSchema = z.object({
   phase_index: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
   stage: z.string().transform(v => normalizeLowerEnumValue(v, ACT_STAGE_VALUES, 'executing')).default('executing'),
   phase_advance: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
-  controlledNodes: z.record(z.any()).default({}),
+  controlledNodes: z.record(z.string(), z.any()).default({}),
   crisis: z.coerce.number().transform(v => Math.max(0, Math.min(100, Math.round(v)))).default(0),
   crisisSignals: z.array(z.any()).default([]),
   vision: ActVisionStateSchema,
   resourceSpent: ActResourceCountsSchema,
-  characterEncounter: z.record(z.any()).default({}),
-  pendingFirstMeet: z.record(z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
-  pendingPreSignal: z.record(z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
+  characterEncounter: z.record(z.string(), z.any()).default({}),
+  pendingFirstMeet: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
+  pendingPreSignal: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
   pendingResolutions: z.array(z.any()).default([]),
   pendingAssetDeckCommands: z.array(z.any()).default([]),
   resolutionHistory: z.array(z.any()).default([]),
@@ -664,7 +664,7 @@ const WorldActSchema = z.object({
   return act;
 });
 
-const WorldAssetDeckSchema = z.record(z.any())
+const WorldAssetDeckSchema = z.record(z.string(), z.any())
   .default(makeDefaultAssetDeckState())
   .transform(value => {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -697,11 +697,11 @@ const WorldSchema = z.object({
   location: WorldLocationSchema,
   tags: z.array(z.string()).default([]).transform(v => normalizeStringList(v, { lower: true })),
   flags: z.array(z.string()).default([]).transform(v => normalizeStringList(v, { lower: true })),
-  storyFlags: z.record(z.any()).default({}).transform(v => normalizeBooleanFlagMap(v)),
+  storyFlags: z.record(z.string(), z.any()).default({}).transform(v => normalizeBooleanFlagMap(v)),
   expansion_state: WorldExpansionStateSchema,
   act: WorldActSchema,
   assetDeck: WorldAssetDeckSchema,
-  expansions: z.record(z.any()).default({})
+  expansions: z.record(z.string(), z.any()).default({})
 }).default({
   current_time: makeDefaultWorldCurrentTime(),
   clockPressure: 0,
@@ -767,7 +767,7 @@ const HeroSchema = z.object({
   debt: z.coerce.number().transform(normalizeFunds).default(0),
   majorDebt: z.coerce.number().transform(normalizeFunds).default(395000000),
   aliases: HeroAliasSchema,
-  expansions: z.record(z.any()).default({}),
+  expansions: z.record(z.string(), z.any()).default({}),
 
   cast: CastSchema,
   roster: RosterSchema,

@@ -150,8 +150,8 @@ world:
       - node1-entry
     limited:
       combat: 1
-      rest: 0
-      asset: 0
+      rest: 1
+      asset: 1
       vision: 1
     reserve:
       combat: 0

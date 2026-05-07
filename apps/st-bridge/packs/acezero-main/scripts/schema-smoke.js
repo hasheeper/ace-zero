@@ -22,15 +22,15 @@ includes('function normalizeStringList', 'Schema should define normalizeStringLi
 includes('function normalizeBooleanFlagMap', 'Schema should define normalizeBooleanFlagMap');
 includes('tags: z.array(z.string()).default([]).transform(v => normalizeStringList(v, { lower: true }))', 'world.tags should normalize as lower-case list');
 includes('flags: z.array(z.string()).default([]).transform(v => normalizeStringList(v, { lower: true }))', 'world.flags should normalize as lower-case list');
-includes('storyFlags: z.record(z.any()).default({}).transform(v => normalizeBooleanFlagMap(v))', 'world.storyFlags should normalize boolean map');
+includes('storyFlags: z.record(z.string(), z.any()).default({}).transform(v => normalizeBooleanFlagMap(v))', 'world.storyFlags should normalize boolean map');
 includes('world.tags = normalizeStringList(world.tags, { lower: true });', 'World transform should normalize world.tags');
 includes('world.flags = normalizeStringList(world.flags, { lower: true });', 'World transform should normalize world.flags');
 includes('world.storyFlags = normalizeBooleanFlagMap(world.storyFlags);', 'World transform should normalize world.storyFlags');
 
-includes('pendingFirstMeet: z.record(z.any()).default({}).transform(v => normalizePendingFirstMeet(v))', 'WorldActSchema should normalize pendingFirstMeet');
-includes('pendingPreSignal: z.record(z.any()).default({}).transform(v => normalizePendingFirstMeet(v))', 'WorldActSchema should normalize pendingPreSignal');
+includes('pendingFirstMeet: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v))', 'WorldActSchema should normalize pendingFirstMeet');
+includes('pendingPreSignal: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v))', 'WorldActSchema should normalize pendingPreSignal');
 includes('pendingAssetDeckCommands: z.array(z.any()).default([])', 'WorldActSchema should preserve pending AssetDeck commands');
-includes('characterEncounter: z.record(z.any()).default({})', 'WorldActSchema should preserve characterEncounter object');
+includes('characterEncounter: z.record(z.string(), z.any()).default({})', 'WorldActSchema should preserve characterEncounter object');
 includes('pendingPreSignal: {},', 'makeDefaultActState should include pendingPreSignal default');
 includes('pendingAssetDeckCommands: [],', 'makeDefaultActState should include pending AssetDeck commands default');
 includes('function makeDefaultAssetDeckState', 'Schema should define makeDefaultAssetDeckState');

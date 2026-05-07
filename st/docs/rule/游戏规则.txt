@@ -1,6 +1,6 @@
 <ace0_battle_rules>
 [ACE0 博弈引擎协议]
-仅当判定进入”牌局/战斗”时，生成纯 JSON 数据并包裹在 <ACE0_BATTLE> 标签中，所有的牌局都在引擎中进行输出，禁止自行演绎任何牌局内容，ACE0_BATTLE是渗透世界观的核心玩法，宁多误少
+仅当判定进入”牌局/战斗”时，生成纯 JSON 数据并包裹在 <ACE0_BATTLE> 标签中。牌面、行动与胜负以对局日志为准，正文不自行演绎牌局内容。ACE0_BATTLE 是渗透世界观的核心玩法，宁多误少
 
 [0. 游戏模式选择]
 默认为德州扑克（支持多人或重要1v1，用于正式对决、重要赌局）。
@@ -15,20 +15,27 @@
 - “dragon-tiger” : 龙凤决（比大小）
 
 小游戏规则：
-- 无需 seats 字段（自动对抗庄家）
-- 技能由主手/副手属性自动配置（moirai/chaos/psyche）
+- 无需 seats 字段（默认对抗庄家）
+- 技能由主手/副手属性决定（moirai/chaos/psyche）
 - 副手存在时使用副手属性，否则使用主手属性
+
+[0.5. 交锋点]
+若本轮存在 `<ace0_combat_request>`，本次牌局是交锋点。
+- 参战者以请求与当前场景指定为准。
+- 在 `<ACE0_BATTLE>` 顶层原样带入请求给出的 `ace0Combat`。
+- `level 1/2/3` 分别对应小交锋 / 精英交锋 / Boss交锋；筹码按请求给出的 `stakeGold` 执行。
+- `ace0Combat` 仅属于交锋点。
 
 [1. 主角阵容 (hero)]
 vanguard(先锋-主控), rearguard(后卫-辅助)。
 可用角色：`{{user}} / RINO / SIA / POPPY / VV / TRIXIE / COTA / EULALIA / KAKO / KUZUHA`
-*注：只写角色名即可，属性、技能、特质由脚本自动配置。
+*注：只写角色名即可，属性、技能、特质按角色档处理。
 
 [2. 敌人生成简写 (seats)]
 支持三种调度：
 
 A. 专属角色 (Story Boss)
-用于原著角色登场。只需 { "character": "RINO" }，插件提取专属Boss模板。
+用于原著角色登场。只需 { "character": "RINO" }。
 - 可用名: RINO, SIA, POPPY, VV, TRIXIE, COTA, EULALIA, KAKO, KUZUHA (与主角表一致)。
 
 B. 跑龙套预设 (Runner Presets)
@@ -59,11 +66,11 @@ C. 模块化组装 (Custom Generation)
 - `kernel` 只是快捷预设，不是必须项。
 - 你可以直接写 `ai + difficulty + archetype + mood`。
 - 若同时写了 `kernel` 与 `ai/difficulty`，以后者为准。
-- 脚本会自动生成心理面板、属性与技能，无需手写 `mental`。
+- 无需手写 `mental`。
 
 [3. 甚至更懒的写法]
 - 必须包含 "blinds"(盲注) 和 "chips"(两人携带的一致筹码，单位金弗，可带小数)。
-- heroSeat 可省略，自动分配。
+- heroSeat 可省略。
 
 ================ 示例模板 ================
 

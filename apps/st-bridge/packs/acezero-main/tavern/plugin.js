@@ -101,6 +101,7 @@
     resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
     characterEncounter: {},
     pendingResolutions: [],
+    pendingAssetDeckCommands: [],
     resolutionHistory: [],
     // 情节张力 0-100
     narrativeTension: 0,
