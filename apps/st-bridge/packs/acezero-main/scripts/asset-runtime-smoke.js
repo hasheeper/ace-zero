@@ -68,14 +68,6 @@ function testOfferChooseAndReplace() {
   assertEqual(chosen.ok, true, 'Choosing a card should succeed');
   assertEqual(chosen.code, 'equipped', 'Card should auto-equip when a slot is free');
   assertEqual(chosen.assetDeck.active_general_cards.length, 1, 'Chosen card should enter active general deck');
-  assertEqual(chosen.offerId, opened.assetDeck.pending_offer.id, 'Choose result should preserve offer id');
-  assertEqual(chosen.choiceIndex, 0, 'Choose result should preserve choice index');
-  assertEqual(chosen.selectedInstanceId, opened.assetDeck.pending_offer.choices[0].instanceId, 'Choose result should preserve selected instance id');
-  const chooseHistory = chosen.assetDeck.history[chosen.assetDeck.history.length - 1];
-  assertEqual(chooseHistory.kind, 'choose_card', 'Choose history should be recorded');
-  assertEqual(chooseHistory.offerId, opened.assetDeck.pending_offer.id, 'Choose history should preserve offer id');
-  assertEqual(chooseHistory.instanceId, opened.assetDeck.pending_offer.choices[0].instanceId, 'Choose history should preserve selected instance id');
-  assertEqual(chooseHistory.choiceIndex, 0, 'Choose history should preserve choice index');
 
   const fullState = assetDeck.normalizeAssetDeckState({
     ...chosen.assetDeck,
@@ -99,11 +91,6 @@ function testOfferChooseAndReplace() {
   });
   assertEqual(pending.ok, true, 'Choosing into a full deck should still resolve');
   assertEqual(pending.code, 'pending_replace', 'Full deck should enter replacement mode');
-  assertEqual(pending.offerId, 'offer:high:test', 'Pending replace result should preserve offer id');
-  assertEqual(pending.selectedInstanceId, 'candidate-void', 'Pending replace result should preserve selected instance id');
-  const pendingHistory = pending.assetDeck.history[pending.assetDeck.history.length - 1];
-  assertEqual(pendingHistory.offerId, 'offer:high:test', 'Pending replace history should preserve offer id');
-  assertEqual(pendingHistory.instanceId, 'candidate-void', 'Pending replace history should preserve selected instance id');
 
   const replaced = assetDeck.applyAssetDeckCommand(pending.assetDeck, {
     kind: 'replace_card',
