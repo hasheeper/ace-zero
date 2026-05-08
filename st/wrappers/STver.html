@@ -114,7 +114,6 @@
   <iframe
     id="app-frame"
     title="AceZero Game"
-    src="https://hasheeper.github.io/ace-zero/index.html?app=game"
     sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
     allow="fullscreen"
     allowfullscreen
@@ -128,6 +127,7 @@
       const btnExit = document.getElementById('btn-exit');
       const frame = document.getElementById('app-frame');
       const hostFrame = window.frameElement;
+      const cacheKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
       // ============================================
       // 解析注入的 JSON 数据
@@ -146,21 +146,35 @@
       }
 
       // ============================================
-      // 初始化：解析数据，缓存破坏
-      // iframe src 已在 HTML 中指向 GitPage 主引擎
+      // 初始化：解析数据并一次性指向非缓存游戏入口
       // ============================================
       const injectedData = parseInjectedData();
 
       console.log('[AceZero-ST] injectedData:', injectedData);
 
-      // 缓存破坏（不改变目标地址）
-      try {
-        const base = frame.getAttribute('src') || '';
-        if (base && !/\bv=\d+\b/.test(base)) {
-          const sep = base.includes('?') ? '&' : '?';
-          frame.src = base + sep + 'v=' + Date.now();
+      function appendNoCache(url) {
+        try {
+          const next = new URL(url, window.location.href);
+          next.searchParams.set('_ace0_st_v', cacheKey);
+          return next.href;
+        } catch (_) {
+          const sep = String(url || '').includes('?') ? '&' : '?';
+          return String(url || '') + sep + '_ace0_st_v=' + encodeURIComponent(cacheKey);
         }
-      } catch (e) {}
+      }
+
+      function resolveGameUrl() {
+        try {
+          const root = window.parent && window.parent !== window ? window.parent : window;
+          if (root.ACE0_GAME_APP_URL) return root.ACE0_GAME_APP_URL;
+          if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveUrl === 'function') {
+            return root.STBridge.utils.resolveUrl('../../index.html?app=game');
+          }
+        } catch (_) {}
+        return 'https://hasheeper.github.io/ace-zero/index.html?app=game';
+      }
+
+      frame.src = appendNoCache(resolveGameUrl());
 
       // ============================================
       // 调整宿主 iframe 尺寸（被 ST 嵌入时）

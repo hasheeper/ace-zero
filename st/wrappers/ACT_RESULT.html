@@ -140,6 +140,14 @@
           forwardToFrame(message);
           return;
         }
+        if (message.type === 'acezero-act-result-route-command') {
+          forwardToHost(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-route-command-result') {
+          forwardToFrame(message);
+          return;
+        }
         if (message.type === 'acezero-act-result-era-vars-request') {
           forwardToHost(message);
           return;

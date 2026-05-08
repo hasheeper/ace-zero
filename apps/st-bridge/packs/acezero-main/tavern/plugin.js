@@ -1836,6 +1836,26 @@
       }
       return;
     }
+    if (message.type === 'acezero-act-result-route-command') {
+      const payload = message.payload || message.data || {};
+      const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
+      const nodeId = typeof payload.nodeId === 'string' ? payload.nodeId : '';
+      try {
+        const result = await hostRoot.ACE0Plugin.chooseActRoute(nodeId);
+        postActResultMessage(event.source, 'acezero-act-result-route-command-result', {
+          ...(result && typeof result === 'object' ? result : { ok: false, reason: 'empty_result' }),
+          requestId
+        }, 'route command');
+      } catch (error) {
+        postActResultMessage(event.source, 'acezero-act-result-route-command-result', {
+          ok: false,
+          requestId,
+          reason: 'route_command_error',
+          error: error?.message || String(error)
+        }, 'route command');
+      }
+      return;
+    }
     if (message.type !== 'acezero-act-result-asset-command') return;
 
     const payload = message.payload || message.data || {};

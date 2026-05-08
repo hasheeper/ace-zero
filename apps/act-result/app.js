@@ -4,6 +4,7 @@
       var LOCAL_TEST_PAYLOAD_URL = './local-test-payload.json';
       var pendingAssetCommand = null;
       var pendingEraVarsRequest = null;
+      var pendingRouteCommand = null;
 
       function readInlinePayload() {
         try {
@@ -439,6 +440,32 @@
         });
       }
 
+      function postActResultRouteCommand(nodeId) {
+        var targets = getHostMessageTargets();
+        if (!targets.length) return Promise.resolve({ ok: false, error: 'No parent/top host window available.' });
+
+        var requestId = 'act-result-route-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        return new Promise(function (resolve) {
+          var timer = window.setTimeout(function () {
+            if (!pendingRouteCommand || pendingRouteCommand.requestId !== requestId) return;
+            pendingRouteCommand = null;
+            resolve({ ok: false, requestId: requestId, error: 'No ACK from host.' });
+          }, 4000);
+          pendingRouteCommand = { requestId: requestId, resolve: resolve, timer: timer };
+          targets.forEach(function (target) {
+            try {
+              target.postMessage({
+                type: 'acezero-act-result-route-command',
+                payload: {
+                  requestId: requestId,
+                  nodeId: nodeId
+                }
+              }, '*');
+            } catch (e) {}
+          });
+        });
+      }
+
       function getAssetOfferClearKey(offer) {
         return String((offer && (offer.clearKey || offer.offerId || offer.id)) || '');
       }
@@ -725,9 +752,11 @@
 
       async function syncRoutePanelStateToMvu(data) {
         var api = resolveAce0Api();
-        if (!api || typeof api.getEraVars !== 'function') return;
         try {
-          var v = await api.getEraVars(); var act = v && v.world && v.world.act; if(!act) return;
+          var v = api && typeof api.getEraVars === 'function'
+            ? await api.getEraVars()
+            : await postActResultEraVarsRequest();
+          var act = v && v.world && v.world.act; if(!act) return;
           var cNi = Number(act.nodeIndex)||0; var stage = String(act.stage||'');
           if (stage !== 'route' || cNi > Number(data.toNodeIndex||0)) {
             lockRoutePanel(act.route_history ? act.route_history[Number(data.toNodeIndex)||0] : null, cNi);
@@ -748,13 +777,14 @@
       async function handleRouteClick(btn, data) {
         var nId = btn.getAttribute('data-node-id'); if(!nId) return;
         var api = resolveAce0Api();
-        if (!api || !api.chooseActRoute) { document.getElementById('ui-route-hint').textContent = '! API 缺失'; return; }
         
         btn.classList.add('is-chosen');
         document.querySelectorAll('.route-btn').forEach(function(e){ if(e!==btn) e.classList.add('is-disabled'); });
         
         try {
-           var r = await api.chooseActRoute(nId);
+           var r = api && typeof api.chooseActRoute === 'function'
+             ? await api.chooseActRoute(nId)
+             : await postActResultRouteCommand(nId);
            var hint = document.getElementById('ui-route-hint');
            if(r && r.ok) { hint.textContent = '命运已推演 ✓'; hint.className = 'route-panel-hint success'; }
            else { 
@@ -835,6 +865,16 @@
           var varsResolve = pendingEraVarsRequest.resolve;
           pendingEraVarsRequest = null;
           varsResolve(varsPayload.eraVars || null);
+          return;
+        }
+        if (msg && msg.type === 'acezero-act-result-route-command-result') {
+          var routePayload = msg.payload || msg.data || msg;
+          var routeRequestId = typeof routePayload.requestId === 'string' ? routePayload.requestId : '';
+          if (!pendingRouteCommand || pendingRouteCommand.requestId !== routeRequestId) return;
+          window.clearTimeout(pendingRouteCommand.timer);
+          var routeResolve = pendingRouteCommand.resolve;
+          pendingRouteCommand = null;
+          routeResolve(routePayload);
           return;
         }
         if (!msg || msg.type !== 'acezero-act-result-data') return;
