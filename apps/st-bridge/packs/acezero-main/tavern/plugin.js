@@ -1738,27 +1738,15 @@
 
   const actResultAssetCommandRequestCache = new Map();
 
-  function postActResultAssetCommandResult(sourceWindow, resultPayload) {
+  function postActResultMessage(sourceWindow, type, payload, warnLabel) {
     if (!sourceWindow || typeof sourceWindow.postMessage !== 'function') return;
     try {
       sourceWindow.postMessage({
-        type: 'acezero-act-result-asset-command-result',
-        payload: resultPayload
+        type,
+        payload
       }, '*');
     } catch (error) {
-      console.warn(`${PLUGIN_NAME} ACT_RESULT asset command 回包失败:`, error);
-    }
-  }
-
-  function postActResultEraVarsResult(sourceWindow, resultPayload) {
-    if (!sourceWindow || typeof sourceWindow.postMessage !== 'function') return;
-    try {
-      sourceWindow.postMessage({
-        type: 'acezero-act-result-era-vars-result',
-        payload: resultPayload
-      }, '*');
-    } catch (error) {
-      console.warn(`${PLUGIN_NAME} ACT_RESULT MVU 回包失败:`, error);
+      console.warn(`${PLUGIN_NAME} ACT_RESULT ${warnLabel || type} 回包失败:`, error);
     }
   }
 
@@ -1769,18 +1757,18 @@
       const payload = message.payload || message.data || {};
       const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
       try {
-        postActResultEraVarsResult(event.source, {
+        postActResultMessage(event.source, 'acezero-act-result-era-vars-result', {
           ok: true,
           requestId,
           eraVars: await getEraVars()
-        });
+        }, 'MVU');
       } catch (error) {
-        postActResultEraVarsResult(event.source, {
+        postActResultMessage(event.source, 'acezero-act-result-era-vars-result', {
           ok: false,
           requestId,
           reason: 'era_vars_request_failed',
           error: error?.message || String(error)
-        });
+        }, 'MVU');
       }
       return;
     }
@@ -1795,10 +1783,10 @@
     if (requestId && actResultAssetCommandRequestCache.has(requestId)) {
       const cached = actResultAssetCommandRequestCache.get(requestId);
       const cachedResult = cached?.promise ? await cached.promise : cached?.result;
-      postActResultAssetCommandResult(event.source, {
+      postActResultMessage(event.source, 'acezero-act-result-asset-command-result', {
         ...(cachedResult && typeof cachedResult === 'object' ? cachedResult : { ok: false, reason: 'empty_result' }),
         requestId
-      });
+      }, 'asset command');
       return;
     }
 
@@ -1829,10 +1817,10 @@
       }, 30000);
     }
 
-    postActResultAssetCommandResult(event.source, {
+    postActResultMessage(event.source, 'acezero-act-result-asset-command-result', {
       ...(result && typeof result === 'object' ? result : { ok: false, reason: 'empty_result' }),
       requestId
-    });
+    }, 'asset command');
   }
 
   try {

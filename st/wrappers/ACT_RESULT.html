@@ -144,9 +144,6 @@
           forwardToFrame(message);
           return;
         }
-        if (message.type === 'acezero-act-result-asset-choice-complete') {
-          forwardToHost(message);
-        }
       });
       window.addEventListener('resize', resizeHostFrame);
       resizeHostFrame();

@@ -383,10 +383,15 @@
         return null;
       }
 
-      function postActResultAssetCommand(command) {
+      function getHostMessageTargets() {
         var targets = [];
         try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
         try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
+        return targets;
+      }
+
+      function postActResultAssetCommand(command) {
+        var targets = getHostMessageTargets();
         if (!targets.length) return Promise.resolve({ ok: false, error: 'No parent/top host window available.' });
 
         var requestId = 'act-result-asset-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -412,9 +417,7 @@
       }
 
       function postActResultEraVarsRequest() {
-        var targets = [];
-        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
-        try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
+        var targets = getHostMessageTargets();
         if (!targets.length) return Promise.resolve(null);
 
         var requestId = 'act-result-vars-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -433,19 +436,6 @@
               }, '*');
             } catch (e) {}
           });
-        });
-      }
-
-      function notifyAssetChoiceComplete(result) {
-        var message = {
-          type: 'acezero-act-result-asset-choice-complete',
-          payload: result && typeof result === 'object' ? result : {}
-        };
-        var targets = [];
-        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
-        try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
-        targets.forEach(function (target) {
-          try { target.postMessage(message, '*'); } catch (e) {}
         });
       }
 
@@ -667,7 +657,6 @@
                 : '契约卡已写入 ✓';
               hint.className = 'asset-panel-hint success';
             }
-            notifyAssetChoiceComplete(result);
           } else {
             var reason = String((result && (result.reason || result.error || result.code)) || 'Error');
             if (reason === 'no_pending_offer' || reason === 'stale_asset_offer') {
