@@ -14,16 +14,16 @@
 
 /* 给技能区腾空间：收紧左右面板与主按钮宽度 */
 .ui-dashboard {
-  grid-template-columns: minmax(190px, 230px) minmax(0, 1fr) minmax(160px, 220px);
+  grid-template-columns: 220px 1fr 220px;
 }
 .controls-center .btn-cmd {
-  min-width: clamp(96px, 10vw, 126px);
+  min-width: 108px;
 }
 .controls-center .btn-cmd.primary {
-  min-width: clamp(118px, 12vw, 150px);
+  min-width: 132px;
 }
 .controls-center .controls-skills {
-  margin-left: 2px;
+  margin-left: 6px;
   max-width: none;
 }
 
@@ -48,10 +48,4 @@
 .split-label {
   font-family: 'JetBrains Mono', monospace; font-size: 9px;
   color: #555; letter-spacing: 2px; text-align: center; margin-top: 2px;
-}
-
-@media (max-width: 800px) {
-  .ui-dashboard {
-    grid-template-columns: 1fr;
-  }
 }

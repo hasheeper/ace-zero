@@ -181,6 +181,26 @@
       .replace(/'/g, '&#39;');
   }
 
+  function fitMiniGameStageToScreen() {
+    if (typeof document === 'undefined') return;
+    var stage = document.querySelector('.mini-game-stage');
+    if (!stage) return;
+    var stageW = 1100;
+    var stageH = 850;
+    var stageScale = Math.min(
+      global.innerWidth / stageW,
+      global.innerHeight / stageH,
+      1
+    );
+    var safeStageScale = Number.isFinite(stageScale) ? stageScale : 1;
+    document.documentElement.style.setProperty('--mini-game-stage-scale', safeStageScale.toFixed(4));
+  }
+
+  fitMiniGameStageToScreen();
+  if (global && typeof global.addEventListener === 'function') {
+    global.addEventListener('resize', fitMiniGameStageToScreen);
+  }
+
   function renderAssetStatus(config) {
     var dashboard = document.querySelector('.ui-dashboard');
     if (!dashboard) return;
@@ -642,7 +662,8 @@
     updateMessage: updateMessage,
     updateChipDisplay: updateChipDisplay,
     wait: wait,
-    createStartSplash: createStartSplash
+    createStartSplash: createStartSplash,
+    fitMiniGameStageToScreen: fitMiniGameStageToScreen
   };
 
 })(typeof window !== 'undefined' ? window : global);
