@@ -571,6 +571,8 @@
         panel.appendChild(hint);
 
         syncAssetPanelStateToMvu(data);
+        setTimeout(function () { syncAssetPanelStateToMvu(data); }, 250);
+        setTimeout(function () { syncAssetPanelStateToMvu(data); }, 900);
       }
 
       async function syncAssetPanelStateToMvu(data) {
@@ -639,9 +641,14 @@
             }
             notifyAssetChoiceComplete(result);
           } else {
+            var reason = String((result && (result.reason || result.error || result.code)) || 'Error');
+            if (reason === 'no_pending_offer' || reason === 'stale_asset_offer') {
+              lockAssetPanel('', '契约已结算');
+              return;
+            }
             btn.classList.remove('is-chosen');
             document.querySelectorAll('.asset-card-btn').forEach(function (item) { item.classList.remove('is-disabled'); });
-            if (hint) hint.textContent = '! 驳回: ' + String((result && (result.reason || result.error || result.code)) || 'Error');
+            if (hint) hint.textContent = '! 驳回: ' + reason;
           }
         } catch (e) {
           btn.classList.remove('is-chosen');
