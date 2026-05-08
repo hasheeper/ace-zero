@@ -1750,9 +1750,40 @@
     }
   }
 
+  function postActResultEraVarsResult(sourceWindow, resultPayload) {
+    if (!sourceWindow || typeof sourceWindow.postMessage !== 'function') return;
+    try {
+      sourceWindow.postMessage({
+        type: 'acezero-act-result-era-vars-result',
+        payload: resultPayload
+      }, '*');
+    } catch (error) {
+      console.warn(`${PLUGIN_NAME} ACT_RESULT MVU 回包失败:`, error);
+    }
+  }
+
   async function handleActResultAssetCommandMessage(event) {
     const message = event?.data;
     if (!message || typeof message !== 'object') return;
+    if (message.type === 'acezero-act-result-era-vars-request') {
+      const payload = message.payload || message.data || {};
+      const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
+      try {
+        postActResultEraVarsResult(event.source, {
+          ok: true,
+          requestId,
+          eraVars: await getEraVars()
+        });
+      } catch (error) {
+        postActResultEraVarsResult(event.source, {
+          ok: false,
+          requestId,
+          reason: 'era_vars_request_failed',
+          error: error?.message || String(error)
+        });
+      }
+      return;
+    }
     if (message.type !== 'acezero-act-result-asset-command') return;
 
     const payload = message.payload || message.data || {};

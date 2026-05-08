@@ -3,6 +3,7 @@
       var localTestPayload = null;
       var LOCAL_TEST_PAYLOAD_URL = './local-test-payload.json';
       var pendingAssetCommand = null;
+      var pendingEraVarsRequest = null;
 
       function readInlinePayload() {
         try {
@@ -410,6 +411,31 @@
         });
       }
 
+      function postActResultEraVarsRequest() {
+        var targets = [];
+        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
+        try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
+        if (!targets.length) return Promise.resolve(null);
+
+        var requestId = 'act-result-vars-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        return new Promise(function (resolve) {
+          var timer = window.setTimeout(function () {
+            if (!pendingEraVarsRequest || pendingEraVarsRequest.requestId !== requestId) return;
+            pendingEraVarsRequest = null;
+            resolve(null);
+          }, 2500);
+          pendingEraVarsRequest = { requestId: requestId, resolve: resolve, timer: timer };
+          targets.forEach(function (target) {
+            try {
+              target.postMessage({
+                type: 'acezero-act-result-era-vars-request',
+                payload: { requestId: requestId }
+              }, '*');
+            } catch (e) {}
+          });
+        });
+      }
+
       function notifyAssetChoiceComplete(result) {
         var message = {
           type: 'acezero-act-result-asset-choice-complete',
@@ -550,9 +576,12 @@
       async function syncAssetPanelStateToMvu(data) {
         var api = resolveAce0Api();
         var offer = data && data.assetOffer && typeof data.assetOffer === 'object' ? data.assetOffer : null;
-        if (!api || typeof api.getEraVars !== 'function' || !offer) return;
+        if (!offer) return;
         try {
-          var v = await api.getEraVars();
+          var v = api && typeof api.getEraVars === 'function'
+            ? await api.getEraVars()
+            : await postActResultEraVarsRequest();
+          if (!v || typeof v !== 'object') return;
           var act = v && v.world && v.world.act;
           if (isAssetOfferCleared(act, offer)) {
             lockAssetPanel('', '契约已结算');
@@ -761,6 +790,16 @@
           var resolve = pendingAssetCommand.resolve;
           pendingAssetCommand = null;
           resolve(payload);
+          return;
+        }
+        if (msg && msg.type === 'acezero-act-result-era-vars-result') {
+          var varsPayload = msg.payload || msg.data || msg;
+          var varsRequestId = typeof varsPayload.requestId === 'string' ? varsPayload.requestId : '';
+          if (!pendingEraVarsRequest || pendingEraVarsRequest.requestId !== varsRequestId) return;
+          window.clearTimeout(pendingEraVarsRequest.timer);
+          var varsResolve = pendingEraVarsRequest.resolve;
+          pendingEraVarsRequest = null;
+          varsResolve(varsPayload.eraVars || null);
           return;
         }
         if (!msg || msg.type !== 'acezero-act-result-data') return;

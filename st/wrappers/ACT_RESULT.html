@@ -136,6 +136,14 @@
           forwardToFrame(message);
           return;
         }
+        if (message.type === 'acezero-act-result-era-vars-request') {
+          forwardToHost(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-era-vars-result') {
+          forwardToFrame(message);
+          return;
+        }
         if (message.type === 'acezero-act-result-asset-choice-complete') {
           forwardToHost(message);
         }
