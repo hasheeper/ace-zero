@@ -197,6 +197,44 @@
     return ACT_RESOURCE_KEYS.includes(migrated) ? migrated : fallback;
   }
 
+  function compactActResolutionHistoryItem(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    if (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') {
+      const clearKey = _normalizeTrimmedString(item.clearKey || item.offerId, '');
+      if (!clearKey) return null;
+      return {
+        id: _normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
+        protocol: 'ace0.assetOfferClear.v1',
+        type: 'asset_offer_clear',
+        status: _normalizeTrimmedString(item.status, 'resolved') || 'resolved',
+        clearKey,
+        offerId: _normalizeTrimmedString(item.offerId, clearKey),
+        outcome: _normalizeTrimmedString(item.outcome, '')
+      };
+    }
+    const type = normalizeActResourceKey(item.type, '');
+    if (type !== 'asset' && type !== 'combat') return null;
+    const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
+    const compact = {
+      id: _normalizeTrimmedString(item.id, ''),
+      protocol: _normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+      type,
+      level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
+      nodeId: _normalizeTrimmedString(item.nodeId, ''),
+      nodeIndex: Math.max(0, Math.round(Number(item.nodeIndex) || 0)),
+      phaseIndex: Math.max(0, Math.round(Number(item.phaseIndex) || 0)),
+      status: _normalizeTrimmedString(item.status, 'resolved') || 'resolved',
+      outcome: _normalizeTrimmedString(item.outcome, '')
+    };
+    const commandKind = _normalizeTrimmedString(item.commandKind || payload.commandKind, '');
+    const assetCount = Number(item.assetCount ?? payload.asset_count);
+    if (commandKind) compact.commandKind = commandKind;
+    if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
+    if (item.pool) compact.pool = _normalizeTrimmedString(item.pool, '');
+    if (item.error || payload.error) compact.error = _normalizeTrimmedString(item.error || payload.error, '');
+    return compact.id ? compact : null;
+  }
+
   const CHARACTER_RUNTIME = (typeof window !== 'undefined' ? window : globalThis).ACE0TavernCharacterRuntime?.create({
     pluginName: PLUGIN_NAME,
     data: TAVERN_PLUGIN_DATA,
@@ -1387,15 +1425,15 @@
           ? JSON.parse(JSON.stringify(rawAct))
           : null;
         if (actState) {
-          const history = Array.isArray(actState.resolutionHistory) ? actState.resolutionHistory : [];
+          const history = Array.isArray(actState.resolutionHistory)
+            ? actState.resolutionHistory.map(compactActResolutionHistoryItem).filter(Boolean).slice(-64)
+            : [];
           const alreadyRecorded = history.some(item =>
             item && typeof item === 'object' &&
             (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') &&
             String(item.clearKey || item.offerId || '') === offerClearKey
           );
           if (!alreadyRecorded) {
-            const nodeIndex = Math.max(0, Math.round(Number(actState.nodeIndex) || 0));
-            const phaseIndex = Math.max(0, Math.round(Number(actState.phase_index) || 0));
             history.push({
               id: `asset-offer-clear:${offerClearKey}`,
               protocol: 'ace0.assetOfferClear.v1',
@@ -1403,18 +1441,10 @@
               status: 'resolved',
               clearKey: offerClearKey,
               offerId: currentOfferId || offerClearKey,
-              choiceIndex: index,
-              selectedCardId: typeof commandResult.card?.cardId === 'string'
-                ? commandResult.card.cardId
-                : (typeof commandResult.consumed?.cardId === 'string' ? commandResult.consumed.cardId : ''),
-              nodeId: Array.isArray(actState.route_history) ? String(actState.route_history[nodeIndex - 1] || '') : '',
-              nodeIndex,
-              phaseIndex,
-              outcome: commandResult.code || 'asset_card_chosen',
-              summary: 'ACT_RESULT asset offer cleared'
+              outcome: commandResult.code || 'asset_card_chosen'
             });
           }
-          actState.resolutionHistory = history;
+          actState.resolutionHistory = history.slice(-64);
           nextWorld.act = actState;
         }
       }

@@ -17,7 +17,6 @@ const UNIVERSAL_SKILLS = {
     clarity:      { attr: 'psyche', tier: 3, threshold: 20 },
     refraction:   { attr: 'psyche', tier: 2, threshold: 40 },
     axiom:        { attr: 'psyche', tier: 1, threshold: 60 },
-    static_field: { attr: 'void',   tier: 3, threshold: 20 },
     insulation:   { attr: 'void',   tier: 2, threshold: 40 },
     reality:      { attr: 'void',   tier: 1, threshold: 60 },
     // 角色专属技能
@@ -117,7 +116,7 @@ const NAMED_CHARACTERS = {
         vanguard: { 0: null, 1: null, 2: 'crimson_crown', 3: 'crimson_crown', 4: 'crimson_crown', 5: 'crimson_crown' },
         rearguard: { 0: null, 1: null, 2: null, 3: 'obsessive_love', 4: 'obsessive_love', 5: 'obsessive_love' }
       },
-      exclusiveSkills: ['royal_decree', 'heart_read', 'minor_wish']
+      exclusiveSkills: ['royal_decree', 'heart_read']
     },
 
     // SIA (♠ 夜伽希亚) — Chaos + Moirai 特化，Cooler 风格
@@ -282,7 +281,7 @@ const NAMED_NPC_PRESETS = {
       difficulty: 'kazu',
       emotion: 'calm',
       attrs: { moirai: 10, chaos: 30, psyche: 30, void: 80 },
-      skills: ['reality', 'insulation', 'refraction', 'static_field'],
+      skills: [],
       vanguardTrait: 'null_armor',
       rearguardTrait: 'steady_hand',
       mental: { discipline: 50, composureMax: 100, resistPresence: 10, resistTaunt: 10, resistProbe: 15 },
@@ -294,7 +293,7 @@ const NAMED_NPC_PRESETS = {
       difficulty: 'rino',
       emotion: 'confident',
       attrs: { moirai: 80, chaos: 20, psyche: 30, void: 0 },
-      skills: ['royal_decree', 'grand_wish', 'minor_wish', 'heart_read'],
+      skills: ['royal_decree', 'heart_read'],
       vanguardTrait: 'crimson_crown',
       rearguardTrait: 'obsessive_love',
       mental: { discipline: 90, composureMax: 120, resistPresence: 25, resistTaunt: 20, resistProbe: 30 },

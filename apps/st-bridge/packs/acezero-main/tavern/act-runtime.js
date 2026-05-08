@@ -1405,7 +1405,7 @@
       : (nextWorld.assetDeck && typeof nextWorld.assetDeck === 'object' ? cloneJsonData(nextWorld.assetDeck, {}) : {});
     const consumedIds = new Set();
     const resolutionHistory = Array.isArray(nextActState.resolutionHistory)
-      ? cloneJsonData(nextActState.resolutionHistory, [])
+      ? nextActState.resolutionHistory.map(compactActResolutionHistoryItem).filter(Boolean).slice(-64)
       : [];
 
     commandsToApply.forEach((pending, index) => {
@@ -1440,32 +1440,82 @@
 
       const status = commandResult?.ok ? 'resolved' : 'failed';
       if (commandResult?.assetDeck) currentAssetDeck = cloneJsonData(commandResult.assetDeck, currentAssetDeck);
-      resolutionHistory.push({
-        ...cloneJsonData(pending, {}),
-        type: 'asset',
-        status,
-        outcome: commandResult?.code || (commandResult?.ok ? 'asset_command_applied' : 'asset_command_failed'),
-        summary: pending.summary || `ACT AssetDeck command ${status}`,
-        payload: {
-          commandKind: command.kind || command.type || '',
-          commandPayload: cloneJsonData(command.payload, {}),
-          resultCode: commandResult?.code || '',
-          asset_count: Math.max(0, Math.round(Number(currentAssetDeck?.asset_count) || 0)),
-          error: commandResult?.error || ''
-        }
-      });
+      resolutionHistory.push(buildCompactAssetDeckResolution(pending, command, commandResult, currentAssetDeck, status));
       if (pending.id) consumedIds.add(pending.id);
     });
 
     nextWorld.assetDeck = cloneJsonData(currentAssetDeck, currentAssetDeck);
     nextActState.pendingAssetDeckCommands = pendingCommands.filter((item) => !item.id || !consumedIds.has(item.id));
-    nextActState.resolutionHistory = resolutionHistory;
+    nextActState.resolutionHistory = resolutionHistory.slice(-64);
 
     return {
       world: nextWorld,
       actState: nextActState,
       changed: true
     };
+  }
+
+  function buildCompactAssetDeckResolution(pending, command, commandResult, currentAssetDeck, status) {
+    const commandPayload = command && typeof command.payload === 'object' && !Array.isArray(command.payload)
+      ? command.payload
+      : {};
+    const source = commandPayload.source && typeof commandPayload.source === 'object' && !Array.isArray(commandPayload.source)
+      ? commandPayload.source
+      : {};
+    const out = {
+      id: normalizeTrimmedString(pending.id, ''),
+      protocol: 'ace0.assetDeckCommand.v1',
+      type: 'asset',
+      level: Math.max(1, Math.min(3, Math.round(Number(pending.level) || Number(commandPayload.amount) || 1))),
+      nodeId: normalizeTrimmedString(pending.nodeId || source.nodeId, ''),
+      nodeIndex: Math.max(0, Math.round(Number(pending.nodeIndex ?? source.nodeIndex) || 0)),
+      phaseIndex: Math.max(0, Math.round(Number(pending.phaseIndex ?? source.phaseIndex) || 0)),
+      status,
+      outcome: commandResult?.code || (commandResult?.ok ? 'asset_command_applied' : 'asset_command_failed'),
+      commandKind: normalizeTrimmedString(command.kind || command.type, ''),
+      assetCount: Math.max(0, Math.round(Number(currentAssetDeck?.asset_count) || 0))
+    };
+    if (commandResult?.error) out.error = normalizeTrimmedString(commandResult.error, '');
+    if (commandPayload.pool) out.pool = normalizeTrimmedString(commandPayload.pool, '');
+    return out;
+  }
+
+  function compactActResolutionHistoryItem(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    if (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') {
+      const clearKey = normalizeTrimmedString(item.clearKey || item.offerId, '');
+      if (!clearKey) return null;
+      return {
+        id: normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
+        protocol: 'ace0.assetOfferClear.v1',
+        type: 'asset_offer_clear',
+        status: normalizeTrimmedString(item.status, 'resolved') || 'resolved',
+        clearKey,
+        offerId: normalizeTrimmedString(item.offerId, clearKey),
+        outcome: normalizeTrimmedString(item.outcome, '')
+      };
+    }
+    const type = normalizeTrimmedString(item.type, '');
+    if (type !== 'asset' && type !== 'combat') return null;
+    const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
+    const compact = {
+      id: normalizeTrimmedString(item.id, ''),
+      protocol: normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+      type,
+      level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
+      nodeId: normalizeTrimmedString(item.nodeId, ''),
+      nodeIndex: Math.max(0, Math.round(Number(item.nodeIndex) || 0)),
+      phaseIndex: Math.max(0, Math.round(Number(item.phaseIndex) || 0)),
+      status: normalizeTrimmedString(item.status, 'resolved') || 'resolved',
+      outcome: normalizeTrimmedString(item.outcome, '')
+    };
+    const commandKind = normalizeTrimmedString(item.commandKind || payload.commandKind, '');
+    const assetCount = Number(item.assetCount ?? payload.asset_count);
+    if (commandKind) compact.commandKind = commandKind;
+    if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
+    if (item.pool) compact.pool = normalizeTrimmedString(item.pool, '');
+    if (item.error || payload.error) compact.error = normalizeTrimmedString(item.error || payload.error, '');
+    return compact.id ? compact : null;
   }
 
   async function resolvePendingActAdvance(eraVars) {

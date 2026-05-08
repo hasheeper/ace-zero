@@ -209,8 +209,47 @@ world:
     asset_count: 0
     general_slots_unlocked: 4
     void_slots_unlocked: 2
-    active_general_cards: []
-    active_void_cards: []
+    active_general_cards:
+      - instanceId: asset_skill_minor_wish_l1:init
+        cardId: asset_skill_minor_wish_l1
+        rarity: bronze
+        kind: skill
+        system: fortune
+        skillKey: minor_wish
+        level: 1
+        targetTags:
+          - RINO
+        gameTags:
+          - texas-holdem
+        slotTags:
+          - general
+        modifiers:
+          - type: skill_level
+            key: minor_wish
+            value: 1
+        source: init
+        addedAt: 0
+    active_void_cards:
+      - instanceId: asset_skill_insulation_l1:init_void
+        cardId: asset_skill_insulation_l1
+        rarity: bronze
+        kind: skill
+        system: void
+        skillKey: insulation
+        level: 1
+        targetTags:
+          - KAZU
+        gameTags:
+          - texas-holdem
+        slotTags:
+          - general
+          - void
+        modifiers:
+          - type: skill_level
+            key: insulation
+            value: 1
+        source: init
+        addedAt: 0
     pending_offer: null
     pending_offer_queue: []
     pending_replace: null

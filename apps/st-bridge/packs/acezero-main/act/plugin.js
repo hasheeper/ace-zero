@@ -797,16 +797,45 @@
     const list = Array.isArray(value) ? value : [];
     return list
       .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
-      .map((item) => ({
-        ...deepClone(item),
-        id: normalizeTrimmedString(item.id, ''),
-        type: normalizeActResourceKey(item.type, ''),
-        level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
-        status: normalizeResolutionResultStatus(item.status),
-        outcome: normalizeTrimmedString(item.outcome, ''),
-        summary: normalizeTrimmedString(item.summary, '')
-      }))
-      .filter((item) => item.id && (item.type === 'combat' || item.type === 'asset'));
+      .map((item) => {
+        const rawType = normalizeTrimmedString(item.type, '');
+        if (item.protocol === 'ace0.assetOfferClear.v1' || rawType === 'asset_offer_clear') {
+          const clearKey = normalizeTrimmedString(item.clearKey || item.offerId, '');
+          if (!clearKey) return null;
+          return {
+            id: normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
+            protocol: 'ace0.assetOfferClear.v1',
+            type: 'asset_offer_clear',
+            status: normalizeResolutionResultStatus(item.status),
+            clearKey,
+            offerId: normalizeTrimmedString(item.offerId, clearKey),
+            outcome: normalizeTrimmedString(item.outcome, '')
+          };
+        }
+        const type = normalizeActResourceKey(rawType, '');
+        if (type !== 'combat' && type !== 'asset') return null;
+        const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
+        const compact = {
+          id: normalizeTrimmedString(item.id, ''),
+          protocol: normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+          type,
+          level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
+          nodeId: normalizeTrimmedString(item.nodeId, ''),
+          nodeIndex: Math.max(0, Math.round(Number(item.nodeIndex) || 0)),
+          phaseIndex: Math.max(0, Math.round(Number(item.phaseIndex) || 0)),
+          status: normalizeResolutionResultStatus(item.status),
+          outcome: normalizeTrimmedString(item.outcome, '')
+        };
+        const commandKind = normalizeTrimmedString(item.commandKind || payload.commandKind, '');
+        const assetCount = Number(item.assetCount ?? payload.asset_count);
+        if (commandKind) compact.commandKind = commandKind;
+        if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
+        if (item.pool) compact.pool = normalizeTrimmedString(item.pool, '');
+        if (item.error || payload.error) compact.error = normalizeTrimmedString(item.error || payload.error, '');
+        return compact.id ? compact : null;
+      })
+      .filter(Boolean)
+      .slice(-64);
   }
 
   function normalizeCrisisSignalStatus(value) {

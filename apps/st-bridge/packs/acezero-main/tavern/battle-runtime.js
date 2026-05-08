@@ -79,6 +79,7 @@
    * @returns {string[]} - 技能ID列表
    */
   function deriveSkillsFromAttrs(attrs, charName) {
+    const namedHeroKey = charName === 'KAZU' || charName === 'RINO';
     const total = (attrs.moirai || 0) + (attrs.chaos || 0) +
                   (attrs.psyche || 0) + (attrs.void || 0);
     let maxSlots = total >= 120 ? 4 : total >= 80 ? 3 : total >= 40 ? 2 : 1;
@@ -89,6 +90,7 @@
       const def = UNIVERSAL_SKILLS[key];
       if (!def.attr) continue;
       if (def.exclusive && def.exclusive !== charName) continue;
+      if (namedHeroKey && !def.exclusive) continue;
       if ((attrs[def.attr] || 0) >= def.threshold) {
         available.push({ key, ...def });
       }

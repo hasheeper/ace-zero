@@ -52,13 +52,18 @@ const ASSET_DECK_CARD_SLOT_TAGS = {
   asset_skill_minor_wish_l1: ['general'],
   asset_skill_minor_wish_l2: ['general'],
   asset_skill_minor_wish_l3: ['general'],
+  asset_skill_minor_wish_l4: ['general'],
   asset_skill_hex_l1: ['general'],
   asset_skill_hex_l2: ['general'],
+  asset_skill_hex_l3: ['general'],
   asset_skill_analysis_l1: ['general'],
   asset_skill_analysis_l2: ['general'],
+  asset_skill_analysis_l3: ['general'],
+  asset_skill_premonition_l2: ['general'],
   asset_psyche_refraction: ['general'],
   asset_skill_insulation_l1: ['general', 'void'],
   asset_skill_insulation_l2: ['general', 'void'],
+  asset_skill_insulation_l3: ['general', 'void'],
   asset_skill_reality_l2: ['general', 'void'],
   asset_texas_mana_cell: ['general'],
   asset_texas_mana_core: ['general'],
@@ -446,6 +451,52 @@ function normalizeActResourceKey(value, fallback = 'vision') {
   return ACT_RESOURCE_KEYS.includes(migrated) ? migrated : fallback;
 }
 
+function normalizeActResolutionHistory(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .map(item => {
+      const rawType = normalizeTrimmedString(item.type, '');
+      if (item.protocol === 'ace0.assetOfferClear.v1' || rawType === 'asset_offer_clear') {
+        const clearKey = normalizeTrimmedString(item.clearKey || item.offerId, '');
+        if (!clearKey) return null;
+        return {
+          id: normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
+          protocol: 'ace0.assetOfferClear.v1',
+          type: 'asset_offer_clear',
+          status: normalizeTrimmedString(item.status, 'resolved') || 'resolved',
+          clearKey,
+          offerId: normalizeTrimmedString(item.offerId, clearKey),
+          outcome: normalizeTrimmedString(item.outcome, '')
+        };
+      }
+
+      const type = normalizeActResourceKey(rawType, '');
+      if (type !== 'combat' && type !== 'asset') return null;
+      const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
+      const compact = {
+        id: normalizeTrimmedString(item.id, ''),
+        protocol: normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+        type,
+        level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
+        nodeId: normalizeTrimmedString(item.nodeId, ''),
+        nodeIndex: Math.max(0, Math.round(Number(item.nodeIndex) || 0)),
+        phaseIndex: Math.max(0, Math.round(Number(item.phaseIndex) || 0)),
+        status: normalizeTrimmedString(item.status, 'resolved') || 'resolved',
+        outcome: normalizeTrimmedString(item.outcome, '')
+      };
+      const commandKind = normalizeTrimmedString(item.commandKind || payload.commandKind, '');
+      const assetCount = Number(item.assetCount ?? payload.asset_count);
+      if (commandKind) compact.commandKind = commandKind;
+      if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
+      if (item.pool) compact.pool = normalizeTrimmedString(item.pool, '');
+      if (item.error || payload.error) compact.error = normalizeTrimmedString(item.error || payload.error, '');
+      return compact.id ? compact : null;
+    })
+    .filter(Boolean)
+    .slice(-64);
+}
+
 function normalizeActResourceCounts(value, options = {}) {
   const { allowDecimal = false, defaultValue = 0 } = options;
   const source = value && typeof value === 'object' ? value : {};
@@ -654,9 +705,7 @@ const WorldActSchema = z.object({
   act.crisisSignals = Array.isArray(act.crisisSignals)
     ? act.crisisSignals.filter(item => item && typeof item === 'object' && !Array.isArray(item))
     : [];
-  act.resolutionHistory = Array.isArray(act.resolutionHistory)
-    ? act.resolutionHistory.filter(item => item && typeof item === 'object' && !Array.isArray(item))
-    : [];
+  act.resolutionHistory = normalizeActResolutionHistory(act.resolutionHistory);
   act.pendingTransitionTarget = normalizeTrimmedString(act.pendingTransitionTarget, '');
   act.transitionRequestTarget = normalizeTrimmedString(act.transitionRequestTarget, '');
   act.pendingTransitionPrompt = normalizeTrimmedString(act.pendingTransitionPrompt, '');

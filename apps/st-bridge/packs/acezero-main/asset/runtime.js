@@ -39,6 +39,7 @@
       const KIND_VALUES = ['numeric', 'passive', 'skill', 'god'];
       const SLOT_TYPES = ['general', 'void'];
       const POOL_VALUES = ['low', 'mid', 'high'];
+      const HISTORY_LIMIT = 24;
 
       function normalizeId(value, fallback = '') {
         const normalized = typeof value === 'string' ? value.trim() : '';
@@ -72,6 +73,53 @@
           if (upper) normalized = normalized.toUpperCase();
           if (!out.includes(normalized)) out.push(normalized);
         });
+        return out;
+      }
+
+      function compactHistorySource(source) {
+        const raw = source && typeof source === 'object' && !Array.isArray(source) ? source : null;
+        if (!raw) return null;
+        const out = {};
+        const type = normalizeId(raw.type, '');
+        const actId = normalizeId(raw.actId, '');
+        const nodeId = normalizeId(raw.nodeId, '');
+        const pool = normalizeId(raw.pool, '');
+        const nodeIndex = Math.max(0, Math.round(Number(raw.nodeIndex) || 0));
+        const phaseIndex = Math.max(0, Math.round(Number(raw.phaseIndex) || 0));
+        const level = Math.max(0, Math.round(Number(raw.level) || 0));
+        if (type) out.type = type;
+        if (actId) out.actId = actId;
+        if (nodeId) out.nodeId = nodeId;
+        if (nodeIndex) out.nodeIndex = nodeIndex;
+        if (phaseIndex) out.phaseIndex = phaseIndex;
+        if (level) out.level = level;
+        if (pool) out.pool = pool;
+        return Object.keys(out).length ? out : null;
+      }
+
+      function compactHistoryEvent(event) {
+        const raw = event && typeof event === 'object' && !Array.isArray(event) ? event : {};
+        const out = {};
+        const kind = normalizeId(raw.kind || raw.type, '');
+        const status = normalizeId(raw.status, '');
+        const cardId = normalizeId(raw.cardId, '');
+        const removedCardId = normalizeId(raw.removedCardId, '');
+        const requestId = normalizeId(raw.requestId, '');
+        const pool = normalizeId(raw.pool, '');
+        const slotType = normalizeId(raw.slotType, '');
+        const source = compactHistorySource(raw.source);
+        if (kind) out.kind = kind;
+        if (status) out.status = status;
+        if (cardId) out.cardId = cardId;
+        if (removedCardId) out.removedCardId = removedCardId;
+        if (requestId) out.requestId = requestId;
+        if (pool) out.pool = pool;
+        if (slotType) out.slotType = slotType;
+        if (source) out.source = source;
+        ['amount', 'cost', 'free', 'general_slots_unlocked', 'fromLevel', 'toLevel'].forEach(key => {
+          if (raw[key] != null && raw[key] !== '') out[key] = raw[key];
+        });
+        if (raw.at != null && raw.at !== '') out.at = normalizeNonNegativeInt(raw.at, 0);
         return out;
       }
 
@@ -288,7 +336,7 @@
           pending_offer: normalizePendingOffer(source.pending_offer || source.pendingOffer),
           pending_offer_queue: normalizePendingOfferQueue(source.pending_offer_queue || source.pendingOfferQueue),
           pending_replace: normalizePendingReplace(source.pending_replace || source.pendingReplace),
-          history: Array.isArray(source.history) ? source.history.slice(-50).map(item => deepClone(item)) : [],
+          history: Array.isArray(source.history) ? source.history.slice(-HISTORY_LIMIT).map(compactHistoryEvent) : [],
           debug: source.debug && typeof source.debug === 'object' && !Array.isArray(source.debug) ? deepClone(source.debug) : {}
         };
       }
@@ -506,9 +554,9 @@
           ...assetDeck.history,
           {
             at: normalizeNonNegativeInt(now(), 0),
-            ...event
+            ...compactHistoryEvent(event)
           }
-        ].slice(-50);
+        ].slice(-HISTORY_LIMIT);
       }
 
       function result(assetDeck, ok, code, extra = {}) {
@@ -627,7 +675,7 @@
           const amount = normalizeNonNegativeInt(payload.amount, 0);
           assetDeck.asset_count += amount;
           const source = payload.source && typeof payload.source === 'object' && !Array.isArray(payload.source)
-            ? deepClone(payload.source)
+            ? compactHistorySource(payload.source)
             : null;
           const requestId = normalizeId(payload.requestId || command.requestId, '');
           pushHistory(assetDeck, {
@@ -669,7 +717,7 @@
           enqueueOrActivatePendingOffer(assetDeck, offer);
           assetDeck.pending_replace = null;
           const source = payload.source && typeof payload.source === 'object' && !Array.isArray(payload.source)
-            ? deepClone(payload.source)
+            ? compactHistorySource(payload.source)
             : null;
           const requestId = normalizeId(payload.requestId || command.requestId, '');
           pushHistory(assetDeck, {
