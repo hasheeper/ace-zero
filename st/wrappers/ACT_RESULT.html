@@ -68,6 +68,10 @@
       }
 
       const payload = parsePayload();
+      const floorKey = `act-result-floor:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
+      if (payload && typeof payload === 'object') {
+        payload.floorKey = payload.floorKey || floorKey;
+      }
 
       function resizeHostFrame() {
         if (!hostFrame) return;
