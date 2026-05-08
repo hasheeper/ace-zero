@@ -1378,12 +1378,20 @@
         ok: commandResult.ok === true,
         code: commandResult.code || '',
         pendingReplace: !!commandResult.assetDeck.pending_replace,
-        selectedCardId: typeof commandResult.card?.cardId === 'string'
+        offerId: typeof commandResult.offerId === 'string' ? commandResult.offerId : '',
+        choiceIndex: Number.isFinite(Number(commandResult.choiceIndex)) ? Math.max(0, Math.round(Number(commandResult.choiceIndex))) : -1,
+        selectedCardId: typeof commandResult.selectedCardId === 'string'
+          ? commandResult.selectedCardId
+          : typeof commandResult.card?.cardId === 'string'
           ? commandResult.card.cardId
           : (typeof commandResult.consumed?.cardId === 'string' ? commandResult.consumed.cardId : ''),
-        selectedInstanceId: typeof commandResult.card?.instanceId === 'string'
+        selectedInstanceId: typeof commandResult.selectedInstanceId === 'string'
+          ? commandResult.selectedInstanceId
+          : typeof commandResult.consumed?.instanceId === 'string'
+          ? commandResult.consumed.instanceId
+          : typeof commandResult.card?.instanceId === 'string'
           ? commandResult.card.instanceId
-          : (typeof commandResult.consumed?.instanceId === 'string' ? commandResult.consumed.instanceId : ''),
+          : '',
         assetDeck: commandResult.assetDeck
       };
     },

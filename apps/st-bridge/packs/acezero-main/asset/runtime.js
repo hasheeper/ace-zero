@@ -457,7 +457,7 @@
         };
       }
 
-      function resolveSkillCardSelection(assetDeck, card) {
+      function resolveSkillCardSelection(assetDeck, card, choiceMeta = {}) {
         const skillKey = getCardSkillKey(card);
         if (!skillKey) return null;
         const active = findActiveSkillRef(assetDeck, skillKey);
@@ -468,14 +468,14 @@
         if (activeLevel >= 4) {
           clearCurrentPendingOffer(assetDeck);
           assetDeck.pending_replace = null;
-          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, skillKey, status: 'skill_max_ignored' });
-          return result(assetDeck, true, 'skill_max_ignored', { card: active.card, consumed: card });
+          pushHistory(assetDeck, { ...choiceMeta, kind: 'choose_card', cardId: card.cardId, instanceId: card.instanceId, skillKey, status: 'skill_max_ignored' });
+          return result(assetDeck, true, 'skill_max_ignored', { ...choiceMeta, card: active.card, consumed: card, selectedCardId: card.cardId, selectedInstanceId: card.instanceId });
         }
         if (candidateLevel < activeLevel) {
           clearCurrentPendingOffer(assetDeck);
           assetDeck.pending_replace = null;
-          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, skillKey, status: 'skill_lower_ignored' });
-          return result(assetDeck, true, 'skill_lower_ignored', { card: active.card, consumed: card });
+          pushHistory(assetDeck, { ...choiceMeta, kind: 'choose_card', cardId: card.cardId, instanceId: card.instanceId, skillKey, status: 'skill_lower_ignored' });
+          return result(assetDeck, true, 'skill_lower_ignored', { ...choiceMeta, card: active.card, consumed: card, selectedCardId: card.cardId, selectedInstanceId: card.instanceId });
         }
 
         const nextLevel = candidateLevel === activeLevel
@@ -488,14 +488,19 @@
         pushHistory(assetDeck, {
           kind: 'choose_card',
           cardId: card.cardId,
+          instanceId: card.instanceId,
+          ...choiceMeta,
           skillKey,
           fromLevel: activeLevel,
           toLevel: nextLevel,
           status: candidateLevel === activeLevel ? 'skill_merged' : 'skill_upgraded'
         });
         return result(assetDeck, true, candidateLevel === activeLevel ? 'skill_merged' : 'skill_upgraded', {
+          ...choiceMeta,
           card: upgraded,
           consumed: card,
+          selectedCardId: card.cardId,
+          selectedInstanceId: card.instanceId,
           fromLevel: activeLevel,
           toLevel: nextLevel
         });
@@ -520,6 +525,18 @@
         };
       }
 
+      function buildChooseCardMeta(offer, card, payload) {
+        const choiceIndex = Array.isArray(offer?.choices) ? offer.choices.indexOf(card) : -1;
+        return {
+          offerId: normalizeId(offer?.id, ''),
+          offerPool: normalizeEnum(offer?.pool, POOL_VALUES, 'low'),
+          choiceIndex: choiceIndex >= 0 ? choiceIndex : Math.max(0, Math.round(Number(payload?.choiceIndex) || 0)),
+          cardId: normalizeId(card?.cardId, ''),
+          instanceId: normalizeId(card?.instanceId, ''),
+          requestedSlotType: normalizeEnum(payload?.slotType, SLOT_TYPES, 'general')
+        };
+      }
+
       function chooseOfferCard(assetDeck, payload) {
         const offer = assetDeck.pending_offer;
         if (!offer) return result(assetDeck, false, 'no_pending_offer');
@@ -529,20 +546,23 @@
           || offer.choices[requestedIndex]
           || null;
         if (!card) return result(assetDeck, false, 'invalid_choice');
+        const choiceMeta = buildChooseCardMeta(offer, card, payload);
 
         const activeUnique = findActiveUniqueRef(assetDeck, card);
         if (activeUnique) {
           clearCurrentPendingOffer(assetDeck);
           assetDeck.pending_replace = null;
           pushHistory(assetDeck, {
+            ...choiceMeta,
             kind: 'choose_card',
             cardId: card.cardId,
+            instanceId: card.instanceId,
             status: 'unique_already_active'
           });
-          return result(assetDeck, true, 'unique_already_active', { card: activeUnique.card, consumed: card });
+          return result(assetDeck, true, 'unique_already_active', { ...choiceMeta, card: activeUnique.card, consumed: card, selectedCardId: card.cardId, selectedInstanceId: card.instanceId });
         }
 
-        const skillResult = resolveSkillCardSelection(assetDeck, card);
+        const skillResult = resolveSkillCardSelection(assetDeck, card, choiceMeta);
         if (skillResult) return skillResult;
 
         const allowedSlots = getAllowedSlotsForCard(card);
@@ -560,15 +580,15 @@
             confirm_destroy: false
           };
           clearCurrentPendingOffer(assetDeck);
-          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, status: 'pending_replace' });
-          return result(assetDeck, true, 'pending_replace', { card });
+          pushHistory(assetDeck, { ...choiceMeta, kind: 'choose_card', cardId: card.cardId, instanceId: card.instanceId, slotType, status: 'pending_replace' });
+          return result(assetDeck, true, 'pending_replace', { ...choiceMeta, card, selectedCardId: card.cardId, selectedInstanceId: card.instanceId });
         }
 
         assetDeck[targetListKey] = [...assetDeck[targetListKey], card];
         clearCurrentPendingOffer(assetDeck);
         assetDeck.pending_replace = null;
-        pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, slotType, status: 'equipped' });
-        return result(assetDeck, true, 'equipped', { card, slotType });
+        pushHistory(assetDeck, { ...choiceMeta, kind: 'choose_card', cardId: card.cardId, instanceId: card.instanceId, slotType, status: 'equipped' });
+        return result(assetDeck, true, 'equipped', { ...choiceMeta, card, slotType, selectedCardId: card.cardId, selectedInstanceId: card.instanceId });
       }
 
       function replaceCard(assetDeck, payload) {

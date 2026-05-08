@@ -115,13 +115,6 @@
         } catch (_) {}
       }
 
-      function collapseResultFrame() {
-        lastHeight = 1;
-        resizeHostFrame();
-        frame.style.display = 'none';
-        if (hostFrame) hostFrame.style.display = 'none';
-      }
-
       frame.src = resolveActResultUrl();
       frame.addEventListener('load', postPayload);
       window.addEventListener('message', (event) => {
@@ -145,7 +138,6 @@
         }
         if (message.type === 'acezero-act-result-asset-choice-complete') {
           forwardToHost(message);
-          collapseResultFrame();
         }
       });
       window.addEventListener('resize', resizeHostFrame);

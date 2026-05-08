@@ -423,15 +423,39 @@
         });
       }
 
+      function normalizeAssetChoiceLock(choice) {
+        if (!choice || typeof choice !== 'object') {
+          return { cardId: typeof choice === 'string' ? choice : '', instanceId: '', offerId: '' };
+        }
+        return {
+          cardId: String(choice.cardId || choice.selectedCardId || ''),
+          instanceId: String(choice.instanceId || choice.selectedInstanceId || ''),
+          offerId: String(choice.offerId || '')
+        };
+      }
+
       function getLatestAssetChoiceFromDeck(assetDeck, offer) {
+        var offerId = String((offer && (offer.offerId || offer.id)) || '');
+        var choices = Array.isArray(offer && offer.choices) ? offer.choices : [];
         var history = Array.isArray(assetDeck && assetDeck.history) ? assetDeck.history : [];
+        var fallback = null;
         for (var i = history.length - 1; i >= 0; i--) {
           var item = history[i];
           if (!item || item.kind !== 'choose_card') continue;
-          if (!item.cardId) continue;
-          return String(item.cardId);
+          if (!item.cardId && !item.instanceId) continue;
+          var lock = {
+            cardId: String(item.cardId || ''),
+            instanceId: String(item.instanceId || ''),
+            offerId: String(item.offerId || '')
+          };
+          if (offerId && lock.offerId === offerId) return lock;
+          if (!fallback && (!offerId || choices.some(function (choice) {
+            return choice && (
+              (lock.instanceId && choice.instanceId === lock.instanceId) ||
+              (lock.cardId && choice.cardId === lock.cardId)
+            );
+          }))) fallback = lock;
         }
-        var choices = Array.isArray(offer && offer.choices) ? offer.choices : [];
         var active = []
           .concat(Array.isArray(assetDeck && assetDeck.active_general_cards) ? assetDeck.active_general_cards : [])
           .concat(Array.isArray(assetDeck && assetDeck.active_void_cards) ? assetDeck.active_void_cards : []);
@@ -439,18 +463,26 @@
           var card = active[a];
           if (!card) continue;
           for (var c = 0; c < choices.length; c++) {
-            if (choices[c] && choices[c].cardId && choices[c].cardId === card.cardId) return String(card.cardId);
+            if (!choices[c]) continue;
+            if (choices[c].instanceId && choices[c].instanceId === card.instanceId) {
+              return { cardId: String(card.cardId || ''), instanceId: String(card.instanceId || ''), offerId: offerId };
+            }
+            if (choices[c].cardId && choices[c].cardId === card.cardId) {
+              return { cardId: String(card.cardId || ''), instanceId: String(card.instanceId || ''), offerId: offerId };
+            }
           }
         }
-        return '';
+        return fallback || { cardId: '', instanceId: '', offerId: '' };
       }
 
-      function lockAssetPanel(chosenCardId, text) {
+      function lockAssetPanel(chosenChoice, text) {
         var panel = document.getElementById('ui-asset-panel');
         if (!panel) return;
+        var lock = normalizeAssetChoiceLock(chosenChoice);
         panel.querySelectorAll('.asset-card-btn').forEach(function (btn) {
           var cardId = btn.getAttribute('data-card-id') || '';
-          if (chosenCardId && cardId === chosenCardId) btn.classList.add('is-chosen');
+          var instanceId = btn.getAttribute('data-instance-id') || '';
+          if ((lock.instanceId && instanceId === lock.instanceId) || (!lock.instanceId && lock.cardId && cardId === lock.cardId)) btn.classList.add('is-chosen');
           else btn.classList.add('is-disabled');
         });
         var hint = document.getElementById('ui-asset-hint');
@@ -507,6 +539,7 @@
           btn.setAttribute('data-choice-index', String(Number(card.choiceIndex != null ? card.choiceIndex : index) || 0));
           btn.setAttribute('data-slot-type', getDefaultAssetSlot(card));
           btn.setAttribute('data-card-id', String(card.cardId || ''));
+          btn.setAttribute('data-instance-id', String(card.instanceId || ''));
 
           var glyph = document.createElement('span');
           glyph.className = 'asset-card-glyph';
@@ -559,8 +592,8 @@
           var liveOfferId = liveOffer && typeof liveOffer.id === 'string' ? liveOffer.id : '';
           var offerId = typeof offer.offerId === 'string' ? offer.offerId : '';
           if (!liveOffer || (offerId && liveOfferId && liveOfferId !== offerId)) {
-            var chosenCardId = getLatestAssetChoiceFromDeck(assetDeck, offer);
-            lockAssetPanel(chosenCardId, assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已确立');
+            var chosenChoice = getLatestAssetChoiceFromDeck(assetDeck, offer);
+            lockAssetPanel(chosenChoice, assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已确立');
           }
         } catch (e) {}
       }
@@ -596,7 +629,11 @@
           if (result && result.ok) {
             var topStatus = document.getElementById('ui-top-status');
             if (topStatus) topStatus.textContent = result.pendingReplace ? '等待替换' : '契约入库';
-            lockAssetPanel(result.selectedCardId || getLatestAssetChoiceFromDeck(result.assetDeck, getPayload() && getPayload().assetOffer), result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
+            lockAssetPanel({
+              offerId: result.offerId,
+              cardId: result.selectedCardId,
+              instanceId: result.selectedInstanceId
+            }, result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
             if (hint) {
               hint.textContent = result.pendingReplace || result.code === 'pending_replace'
                 ? '契约已暂存：需要在仓库选择替换槽位'
