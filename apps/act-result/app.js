@@ -453,6 +453,28 @@
         return String((offer && (offer.clearKey || offer.offerId || offer.id)) || '');
       }
 
+      function getAssetOfferClearStorageKey(clearKey) {
+        return 'ace0.actResult.assetOfferCleared:' + String(clearKey || '');
+      }
+
+      function rememberAssetOfferCleared(offerOrClearKey) {
+        var clearKey = typeof offerOrClearKey === 'string' ? offerOrClearKey : getAssetOfferClearKey(offerOrClearKey);
+        if (!clearKey) return;
+        try {
+          window.localStorage.setItem(getAssetOfferClearStorageKey(clearKey), '1');
+        } catch (e) {}
+      }
+
+      function isAssetOfferClearedLocally(offer) {
+        var clearKey = getAssetOfferClearKey(offer);
+        if (!clearKey) return false;
+        try {
+          return window.localStorage.getItem(getAssetOfferClearStorageKey(clearKey)) === '1';
+        } catch (e) {
+          return false;
+        }
+      }
+
       function isAssetOfferCleared(act, offer) {
         var clearKey = getAssetOfferClearKey(offer);
         if (!clearKey) return false;
@@ -570,6 +592,10 @@
         hint.textContent = '>> 点击一张契约卡并写入仓库 <<';
         panel.appendChild(hint);
 
+        if (isAssetOfferClearedLocally(offer)) {
+          lockAssetPanel('', '契约已结算');
+          return;
+        }
         syncAssetPanelStateToMvu(data);
         setTimeout(function () { syncAssetPanelStateToMvu(data); }, 250);
         setTimeout(function () { syncAssetPanelStateToMvu(data); }, 900);
@@ -586,6 +612,7 @@
           if (!v || typeof v !== 'object') return;
           var act = v && v.world && v.world.act;
           if (isAssetOfferCleared(act, offer)) {
+            rememberAssetOfferCleared(offer);
             lockAssetPanel('', '契约已结算');
             return;
           }
@@ -632,6 +659,7 @@
           if (result && result.ok) {
             var topStatus = document.getElementById('ui-top-status');
             if (topStatus) topStatus.textContent = result.pendingReplace ? '等待替换' : '契约入库';
+            rememberAssetOfferCleared(result.clearKey || result.offerId || clearKey);
             lockAssetPanel(result.selectedCardId || btn.getAttribute('data-card-id') || '', result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
             if (hint) {
               hint.textContent = result.pendingReplace || result.code === 'pending_replace'
@@ -643,6 +671,7 @@
           } else {
             var reason = String((result && (result.reason || result.error || result.code)) || 'Error');
             if (reason === 'no_pending_offer' || reason === 'stale_asset_offer') {
+              rememberAssetOfferCleared(clearKey);
               lockAssetPanel('', '契约已结算');
               return;
             }
