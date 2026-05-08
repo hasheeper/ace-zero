@@ -197,6 +197,38 @@
     return ACT_RESOURCE_KEYS.includes(migrated) ? migrated : fallback;
   }
 
+  function normalizeBattleAssetDeckForFrontend(eraVars) {
+    const rawAssetDeck = eraVars?.world?.assetDeck;
+    if (!rawAssetDeck || typeof rawAssetDeck !== 'object' || Array.isArray(rawAssetDeck)) return null;
+
+    let normalizedDeck = null;
+    const assetDeckModule = getAssetDeckModuleApi();
+    if (assetDeckModule && typeof assetDeckModule.normalizeAssetDeckState === 'function') {
+      try {
+        normalizedDeck = assetDeckModule.normalizeAssetDeckState(rawAssetDeck);
+      } catch (error) {
+        console.warn(`${PLUGIN_NAME} AssetDeck 规范化失败，降级透传原始卡组:`, error);
+      }
+    }
+
+    if (!normalizedDeck) {
+      try {
+        normalizedDeck = JSON.parse(JSON.stringify(rawAssetDeck));
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return {
+      version: Math.max(1, Math.round(Number(normalizedDeck.version) || 1)),
+      asset_count: Math.max(0, Math.round(Number(normalizedDeck.asset_count) || 0)),
+      general_slots_unlocked: Math.max(0, Math.round(Number(normalizedDeck.general_slots_unlocked) || 0)),
+      void_slots_unlocked: Math.max(0, Math.round(Number(normalizedDeck.void_slots_unlocked) || 0)),
+      active_general_cards: Array.isArray(normalizedDeck.active_general_cards) ? normalizedDeck.active_general_cards : [],
+      active_void_cards: Array.isArray(normalizedDeck.active_void_cards) ? normalizedDeck.active_void_cards : []
+    };
+  }
+
   function compactActResolutionHistoryItem(item) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
     if (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') {
@@ -461,6 +493,8 @@
       hero: heroConfig,
       seats: battle.seats || {}
     };
+    const assetDeck = normalizeBattleAssetDeckForFrontend(eraVars);
+    if (assetDeck) result.assetDeck = assetDeck;
 
     // hero 的座位位置（BTN/SB/BB/UTG/HJ/CO）
     // 必须是 seats 中未被 NPC 占用的位置

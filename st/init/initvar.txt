@@ -66,8 +66,8 @@ hero:
       maxMana: 0
     RINO:
       level: 5
-      mana: 140
-      maxMana: 140
+      mana: 100
+      maxMana: 100
     SIA:
       level: 5
       mana: 100
