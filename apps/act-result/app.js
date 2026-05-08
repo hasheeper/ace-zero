@@ -423,12 +423,34 @@
         });
       }
 
-      function lockAssetPanel(text) {
+      function getAssetOfferClearKey(offer) {
+        return String((offer && (offer.clearKey || offer.offerId || offer.id)) || '');
+      }
+
+      function isAssetOfferCleared(act, offer) {
+        var clearKey = getAssetOfferClearKey(offer);
+        if (!clearKey) return false;
+        var history = Array.isArray(act && act.resolutionHistory) ? act.resolutionHistory : [];
+        return history.some(function (item) {
+          if (!item || typeof item !== 'object') return false;
+          if (item.protocol !== 'ace0.assetOfferClear.v1' && item.type !== 'asset_offer_clear') return false;
+          if (item.status && item.status !== 'resolved') return false;
+          return String(item.clearKey || item.offerId || '') === clearKey;
+        });
+      }
+
+      function lockAssetPanel(chosenCardId, text) {
         var panel = document.getElementById('ui-asset-panel');
         if (!panel) return;
         panel.querySelectorAll('.asset-card-btn').forEach(function (btn) {
-          btn.classList.remove('is-chosen');
-          btn.classList.add('is-disabled');
+          var cardId = btn.getAttribute('data-card-id') || '';
+          if (chosenCardId && cardId === chosenCardId) {
+            btn.classList.add('is-chosen');
+            btn.classList.remove('is-disabled');
+          } else {
+            btn.classList.remove('is-chosen');
+            btn.classList.add('is-disabled');
+          }
         });
         var hint = document.getElementById('ui-asset-hint');
         if (hint) {
@@ -483,7 +505,8 @@
           btn.type = 'button';
           btn.setAttribute('data-choice-index', String(Number(card.choiceIndex != null ? card.choiceIndex : index) || 0));
           btn.setAttribute('data-slot-type', getDefaultAssetSlot(card));
-          btn.setAttribute('data-clear-key', String(offer.offerId || ''));
+          btn.setAttribute('data-card-id', String(card.cardId || ''));
+          btn.setAttribute('data-clear-key', getAssetOfferClearKey(offer));
 
           var glyph = document.createElement('span');
           glyph.className = 'asset-card-glyph';
@@ -530,13 +553,18 @@
         if (!api || typeof api.getEraVars !== 'function' || !offer) return;
         try {
           var v = await api.getEraVars();
+          var act = v && v.world && v.world.act;
+          if (isAssetOfferCleared(act, offer)) {
+            lockAssetPanel('', '契约已结算');
+            return;
+          }
           var assetDeck = v && v.world && v.world.assetDeck;
           if (!assetDeck || typeof assetDeck !== 'object') return;
           var liveOffer = assetDeck.pending_offer && typeof assetDeck.pending_offer === 'object' ? assetDeck.pending_offer : null;
           var liveOfferId = liveOffer && typeof liveOffer.id === 'string' ? liveOffer.id : '';
           var offerId = typeof offer.offerId === 'string' ? offer.offerId : '';
           if (!liveOffer || (offerId && liveOfferId && liveOfferId !== offerId)) {
-            lockAssetPanel(assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
+            lockAssetPanel('', assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
           }
         } catch (e) {}
       }
@@ -545,6 +573,7 @@
         if (!btn || btn.classList.contains('is-disabled') || btn.classList.contains('is-chosen')) return;
         var choiceIndex = Math.max(0, Math.round(Number(btn.getAttribute('data-choice-index')) || 0));
         var slotType = btn.getAttribute('data-slot-type') || 'general';
+        var clearKey = btn.getAttribute('data-clear-key') || '';
         var hint = document.getElementById('ui-asset-hint');
         var api = resolveAce0Api();
 
@@ -557,12 +586,12 @@
         try {
           var result;
           if (api && typeof api.chooseAssetCard === 'function') {
-            result = await api.chooseAssetCard(choiceIndex, slotType);
+            result = await api.chooseAssetCard(choiceIndex, slotType, clearKey);
           } else {
             var bridge = resolveAssetDeckBridge();
             var command = {
                 kind: 'choose_card',
-                payload: { choiceIndex: choiceIndex, slotType: slotType }
+                payload: { choiceIndex: choiceIndex, slotType: slotType, clearKey: clearKey }
             };
             result = bridge
               ? await bridge({ requestId: 'act-result-asset-direct-' + Date.now().toString(36), command: command })
@@ -572,7 +601,7 @@
           if (result && result.ok) {
             var topStatus = document.getElementById('ui-top-status');
             if (topStatus) topStatus.textContent = result.pendingReplace ? '等待替换' : '契约入库';
-            lockAssetPanel(result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
+            lockAssetPanel(result.selectedCardId || btn.getAttribute('data-card-id') || '', result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
             if (hint) {
               hint.textContent = result.pendingReplace || result.code === 'pending_replace'
                 ? '契约已暂存：需要在仓库选择替换槽位'

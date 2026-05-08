@@ -1329,9 +1329,10 @@
 
     // 契约卡选择 API：由 ACT_RESULT 卡片直接调用。
     // 只处理当前 pending_offer 的 choose_card，不打开 Dashboard 悬浮窗。
-    async chooseAssetCard(choiceIndex, slotType = 'general') {
+    async chooseAssetCard(choiceIndex, slotType = 'general', clearKey = '') {
       const index = Math.max(0, Math.round(Number(choiceIndex) || 0));
       const normalizedSlot = String(slotType || 'general').trim().toLowerCase() === 'void' ? 'void' : 'general';
+      const requestedClearKey = String(clearKey || '').trim();
       const assetDeckModule = getAssetDeckModuleApi();
       if (!assetDeckModule || typeof assetDeckModule.applyAssetDeckCommand !== 'function') {
         return { ok: false, reason: 'asset_runtime_missing' };
@@ -1343,6 +1344,10 @@
         : (eraVars?.world?.assetDeck || {});
       if (!currentAssetDeck?.pending_offer) {
         return { ok: false, reason: 'no_pending_offer' };
+      }
+      const currentOfferId = typeof currentAssetDeck.pending_offer.id === 'string' ? currentAssetDeck.pending_offer.id : '';
+      if (requestedClearKey && currentOfferId && requestedClearKey !== currentOfferId) {
+        return { ok: false, reason: 'stale_asset_offer', clearKey: requestedClearKey, offerId: currentOfferId };
       }
 
       let commandResult;
@@ -1366,11 +1371,56 @@
           reason: commandResult?.code || 'asset_command_failed'
         };
       }
+      if (commandResult.ok !== true) {
+        return {
+          ok: false,
+          reason: commandResult.code || 'asset_command_failed',
+          code: commandResult.code || ''
+        };
+      }
+
+      const nextWorld = { assetDeck: commandResult.assetDeck };
+      const offerClearKey = requestedClearKey || currentOfferId;
+      if (offerClearKey) {
+        const rawAct = eraVars?.world?.act;
+        const actState = rawAct && typeof rawAct === 'object' && !Array.isArray(rawAct)
+          ? JSON.parse(JSON.stringify(rawAct))
+          : null;
+        if (actState) {
+          const history = Array.isArray(actState.resolutionHistory) ? actState.resolutionHistory : [];
+          const alreadyRecorded = history.some(item =>
+            item && typeof item === 'object' &&
+            (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') &&
+            String(item.clearKey || item.offerId || '') === offerClearKey
+          );
+          if (!alreadyRecorded) {
+            const nodeIndex = Math.max(0, Math.round(Number(actState.nodeIndex) || 0));
+            const phaseIndex = Math.max(0, Math.round(Number(actState.phase_index) || 0));
+            history.push({
+              id: `asset-offer-clear:${offerClearKey}`,
+              protocol: 'ace0.assetOfferClear.v1',
+              type: 'asset_offer_clear',
+              status: 'resolved',
+              clearKey: offerClearKey,
+              offerId: currentOfferId || offerClearKey,
+              choiceIndex: index,
+              selectedCardId: typeof commandResult.card?.cardId === 'string'
+                ? commandResult.card.cardId
+                : (typeof commandResult.consumed?.cardId === 'string' ? commandResult.consumed.cardId : ''),
+              nodeId: Array.isArray(actState.route_history) ? String(actState.route_history[nodeIndex - 1] || '') : '',
+              nodeIndex,
+              phaseIndex,
+              outcome: commandResult.code || 'asset_card_chosen',
+              summary: 'ACT_RESULT asset offer cleared'
+            });
+          }
+          actState.resolutionHistory = history;
+          nextWorld.act = actState;
+        }
+      }
 
       await updateEraVars({
-        world: {
-          assetDeck: commandResult.assetDeck
-        }
+        world: nextWorld
       });
       refreshDashboardUiAfterExternalWrite();
 
@@ -1378,6 +1428,8 @@
         ok: commandResult.ok === true,
         code: commandResult.code || '',
         pendingReplace: !!commandResult.assetDeck.pending_replace,
+        clearKey: offerClearKey,
+        offerId: currentOfferId || offerClearKey,
         selectedCardId: typeof commandResult.card?.cardId === 'string'
           ? commandResult.card.cardId
           : (typeof commandResult.consumed?.cardId === 'string' ? commandResult.consumed.cardId : ''),
@@ -1724,7 +1776,7 @@
         if (commandKind !== 'choose_card') {
           return { ok: false, reason: 'unsupported_asset_command' };
         }
-        return await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general');
+        return await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general', commandPayload.clearKey || commandPayload.offerId || '');
       } catch (error) {
         return { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };
       }
