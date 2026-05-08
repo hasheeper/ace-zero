@@ -31,7 +31,6 @@
   <iframe
     id="act-result-frame"
     title="AceZero ACT Result"
-    src="https://hasheeper.github.io/ace-zero/apps/act-result/index.html"
     sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
     allow="fullscreen"
     referrerpolicy="no-referrer"
@@ -44,6 +43,16 @@
       const frame = document.getElementById('act-result-frame');
       const hostFrame = window.frameElement;
       let lastHeight = 1;
+
+      function resolveActResultUrl() {
+        try {
+          const root = window.parent && window.parent !== window ? window.parent : window;
+          if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveUrl === 'function') {
+            return root.STBridge.utils.resolveUrl('../../../../apps/act-result/index.html');
+          }
+        } catch (_) {}
+        return 'https://hasheeper.github.io/ace-zero/apps/act-result/index.html';
+      }
 
       function parsePayload() {
         try {
@@ -113,6 +122,7 @@
         if (hostFrame) hostFrame.style.display = 'none';
       }
 
+      frame.src = resolveActResultUrl();
       frame.addEventListener('load', postPayload);
       window.addEventListener('message', (event) => {
         const message = event && event.data;

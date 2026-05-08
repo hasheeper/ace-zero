@@ -1753,10 +1753,25 @@
   }
 
   try {
-    window.removeEventListener('message', window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER__);
+    const previousHandler = window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER__;
+    const previousTargets = Array.isArray(window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER_TARGETS__)
+      ? window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER_TARGETS__
+      : [window];
+    previousTargets.forEach((targetWindow) => {
+      try {
+        if (targetWindow && previousHandler) targetWindow.removeEventListener('message', previousHandler);
+      } catch (_) {}
+    });
   } catch (_) {}
   window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER__ = handleActResultAssetCommandMessage;
-  window.addEventListener('message', handleActResultAssetCommandMessage);
+  window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER_TARGETS__ = [];
+  [window, getAce0HostRoot()].forEach((targetWindow) => {
+    try {
+      if (!targetWindow || window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER_TARGETS__.includes(targetWindow)) return;
+      targetWindow.addEventListener('message', handleActResultAssetCommandMessage);
+      window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER_TARGETS__.push(targetWindow);
+    } catch (_) {}
+  });
 
   // ==========================================================
   //  初始化完成
