@@ -261,6 +261,21 @@
     }
   }
 
+  function refreshDashboardUiAfterExternalWrite() {
+    const root = getAce0HostRoot();
+    try {
+      if (root && typeof root.__ACE0_DASHBOARD_FORCE_REFRESH__ === 'function') {
+        root.__ACE0_DASHBOARD_FORCE_REFRESH__();
+        return;
+      }
+    } catch (_) {}
+    try {
+      const evt = new CustomEvent('ace0:dashboard-force-refresh');
+      if (root && typeof root.dispatchEvent === 'function') root.dispatchEvent(evt);
+      else if (typeof window.dispatchEvent === 'function') window.dispatchEvent(evt);
+    } catch (_) {}
+  }
+
   function getExpansionRegistry() {
     const hostRoot = getAce0HostRoot();
     return hostRoot.ACE0ExpansionRegistry && typeof hostRoot.ACE0ExpansionRegistry === 'object'
@@ -1357,6 +1372,7 @@
           assetDeck: commandResult.assetDeck
         }
       });
+      refreshDashboardUiAfterExternalWrite();
 
       return {
         ok: commandResult.ok === true,

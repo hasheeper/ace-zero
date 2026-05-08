@@ -384,8 +384,10 @@
 
       function postActResultAssetCommand(command) {
         var targets = [];
-        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
-        try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
+        try {
+          if (window.parent && window.parent !== window) targets.push(window.parent);
+          else if (window.top && window.top !== window) targets.push(window.top);
+        } catch (e) {}
         if (!targets.length) return Promise.resolve({ ok: false, error: 'No parent/top host window available.' });
 
         var requestId = 'act-result-asset-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -407,6 +409,21 @@
               }, '*');
             } catch (e) {}
           });
+        });
+      }
+
+      function notifyAssetChoiceComplete(result) {
+        var message = {
+          type: 'acezero-act-result-asset-choice-complete',
+          payload: result && typeof result === 'object' ? result : {}
+        };
+        var targets = [];
+        try {
+          if (window.parent && window.parent !== window) targets.push(window.parent);
+          else if (window.top && window.top !== window) targets.push(window.top);
+        } catch (e) {}
+        targets.forEach(function (target) {
+          try { target.postMessage(message, '*'); } catch (e) {}
         });
       }
 
@@ -521,12 +538,15 @@
           }
 
           if (result && result.ok) {
+            var topStatus = document.getElementById('ui-top-status');
+            if (topStatus) topStatus.textContent = result.pendingReplace ? '等待替换' : '契约入库';
             if (hint) {
               hint.textContent = result.pendingReplace || result.code === 'pending_replace'
                 ? '契约已暂存：需要在仓库选择替换槽位'
                 : '契约卡已写入 ✓';
               hint.className = 'asset-panel-hint success';
             }
+            notifyAssetChoiceComplete(result);
           } else {
             btn.classList.remove('is-chosen');
             document.querySelectorAll('.asset-card-btn').forEach(function (item) { item.classList.remove('is-disabled'); });

@@ -91,6 +91,30 @@
         }, '*');
       }
 
+      function forwardToHost(message) {
+        const targets = [];
+        try {
+          if (window.parent && window.parent !== window) targets.push(window.parent);
+          else if (window.top && window.top !== window) targets.push(window.top);
+        } catch (_) {}
+        targets.forEach((target) => {
+          try { target.postMessage(message, '*'); } catch (_) {}
+        });
+      }
+
+      function forwardToFrame(message) {
+        try {
+          if (frame && frame.contentWindow) frame.contentWindow.postMessage(message, '*');
+        } catch (_) {}
+      }
+
+      function collapseResultFrame() {
+        lastHeight = 1;
+        resizeHostFrame();
+        frame.style.display = 'none';
+        if (hostFrame) hostFrame.style.display = 'none';
+      }
+
       frame.addEventListener('load', postPayload);
       window.addEventListener('message', (event) => {
         const message = event && event.data;
@@ -101,6 +125,19 @@
         }
         if (message.type === 'acezero-act-result-request') {
           postPayload();
+          return;
+        }
+        if (message.type === 'acezero-act-result-asset-command') {
+          forwardToHost(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-asset-command-result') {
+          forwardToFrame(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-asset-choice-complete') {
+          forwardToHost(message);
+          collapseResultFrame();
         }
       });
       window.addEventListener('resize', resizeHostFrame);
