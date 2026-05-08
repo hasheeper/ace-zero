@@ -1089,6 +1089,15 @@
     const clock = getWorldClock(eraVars);
     const clockPressure = getWorldClockPressure(eraVars);
     const location = getWorldLocation(eraVars);
+    const world = getWorldState(eraVars);
+    const assetDeckModule = getAssetDeckModuleApi();
+    const assetDeck = assetDeckModule && typeof assetDeckModule.normalizeAssetDeckState === 'function'
+      ? assetDeckModule.normalizeAssetDeckState(world?.assetDeck)
+      : cloneJsonData(world?.assetDeck, null);
+    const locationMeta = LOCATION_LAYER_META[location.layer] || LOCATION_LAYER_META.THE_STREET || {
+      label: location.layer || '下街层',
+      english: location.layer || 'THE_STREET'
+    };
 
     return {
       id: act.id,
@@ -1133,14 +1142,15 @@
         site: location.site,
         // layerIndex：底锈=0 → 下街=1 → 中市=2 → 上庭=3（视觉上"向上爬升"）
         layerIndex: Math.max(0, ['THE_RUST', 'THE_STREET', 'THE_EXCHANGE', 'THE_COURT'].indexOf(location.layer)),
-        label: (LOCATION_LAYER_META[location.layer] || LOCATION_LAYER_META.THE_STREET).label,
-        english: (LOCATION_LAYER_META[location.layer] || LOCATION_LAYER_META.THE_STREET).english
+        label: locationMeta.label,
+        english: locationMeta.english
       },
       worldClock: {
         day: clock.day,
         phase: clock.phase,
         phaseIndex: Math.max(0, WORLD_CLOCK_SLOTS.indexOf(clock.phase))
-      }
+      },
+      assetDeck
     };
   }
 

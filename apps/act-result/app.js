@@ -357,6 +357,7 @@
         });
 
         if (hasLoot) { lootList.innerHTML = listHtml; } else { lootList.style.display = 'none'; }
+        buildAssetOfferPanel(data);
         buildRoutePanel(data);
       }
 
@@ -366,6 +367,152 @@
            try{ if(targets[i] && targets[i].ACE0Plugin) return targets[i].ACE0Plugin; }catch(e){}
         }
         return null;
+      }
+
+      function resolveAssetDeckBridge() {
+        var targets = [window, window.parent, window.top];
+        for (var i = 0; i < targets.length; i++) {
+          try {
+            if (targets[i] && typeof targets[i].ACE0DashboardApplyAssetDeckCommand === 'function') {
+              return targets[i].ACE0DashboardApplyAssetDeckCommand.bind(targets[i]);
+            }
+          } catch (e) {}
+        }
+        return null;
+      }
+
+      function getAssetCardTitle(card, index) {
+        return String(card && (card.name || card.cardId) || ('CARD ' + (index + 1)));
+      }
+
+      function getAssetCardMeta(card) {
+        var parts = [];
+        if (card && card.rarity) parts.push(String(card.rarity).toUpperCase());
+        if (card && card.kind) parts.push(String(card.kind).toUpperCase());
+        if (card && Number(card.level) > 0) parts.push('LV ' + String(Number(card.level) || 0));
+        return parts.join(' · ') || 'CONTRACT';
+      }
+
+      function getDefaultAssetSlot(card) {
+        var tags = Array.isArray(card && card.slotTags) ? card.slotTags.map(function (tag) { return String(tag).toLowerCase(); }) : [];
+        if (tags.indexOf('general') >= 0) return 'general';
+        if (tags.indexOf('void') >= 0) return 'void';
+        return 'general';
+      }
+
+      function buildAssetOfferPanel(data) {
+        var panel = document.getElementById('ui-asset-panel');
+        var offer = data && data.assetOffer && typeof data.assetOffer === 'object' ? data.assetOffer : null;
+        var choices = Array.isArray(offer && offer.choices) ? offer.choices : [];
+        if (!panel) return;
+        if (!offer || !choices.length) { panel.style.display = 'none'; return; }
+
+        panel.style.display = '';
+        panel.className = 'asset-panel';
+        while (panel.firstChild) panel.removeChild(panel.firstChild);
+
+        var titleEl = document.createElement('div');
+        titleEl.className = 'asset-panel-title';
+        titleEl.textContent = 'CONTRACT EXTRACT · ' + String(offer.pool || 'POOL').toUpperCase();
+        panel.appendChild(titleEl);
+
+        var listEl = document.createElement('div');
+        listEl.className = 'asset-options';
+
+        choices.slice(0, 3).forEach(function (card, index) {
+          var btn = document.createElement('button');
+          btn.className = 'asset-card-btn rarity-' + String(card.rarity || 'bronze').toLowerCase();
+          btn.type = 'button';
+          btn.setAttribute('data-choice-index', String(Number(card.choiceIndex != null ? card.choiceIndex : index) || 0));
+          btn.setAttribute('data-slot-type', getDefaultAssetSlot(card));
+
+          var glyph = document.createElement('span');
+          glyph.className = 'asset-card-glyph';
+          glyph.textContent = String(card.system || card.kind || 'A').slice(0, 1).toUpperCase();
+
+          var meta = document.createElement('span');
+          meta.className = 'asset-card-meta';
+          meta.textContent = getAssetCardMeta(card);
+
+          var name = document.createElement('span');
+          name.className = 'asset-card-name';
+          name.textContent = getAssetCardTitle(card, index);
+
+          var desc = document.createElement('span');
+          desc.className = 'asset-card-desc';
+          desc.textContent = String(card.skillKey || card.system || card.cardId || '').replace(/_/g, ' ') || 'READY';
+
+          var slot = document.createElement('span');
+          slot.className = 'asset-card-slot';
+          slot.textContent = getDefaultAssetSlot(card).toUpperCase();
+
+          btn.appendChild(glyph);
+          btn.appendChild(meta);
+          btn.appendChild(name);
+          btn.appendChild(desc);
+          btn.appendChild(slot);
+          btn.addEventListener('click', function () { handleAssetCardClick(btn); });
+          listEl.appendChild(btn);
+        });
+        panel.appendChild(listEl);
+
+        var hint = document.createElement('div');
+        hint.className = 'asset-panel-hint';
+        hint.id = 'ui-asset-hint';
+        hint.textContent = '>> 点击一张契约卡并写入仓库 <<';
+        panel.appendChild(hint);
+      }
+
+      async function handleAssetCardClick(btn) {
+        if (!btn || btn.classList.contains('is-disabled') || btn.classList.contains('is-chosen')) return;
+        var choiceIndex = Math.max(0, Math.round(Number(btn.getAttribute('data-choice-index')) || 0));
+        var slotType = btn.getAttribute('data-slot-type') || 'general';
+        var hint = document.getElementById('ui-asset-hint');
+        var api = resolveAce0Api();
+
+        btn.classList.add('is-chosen');
+        document.querySelectorAll('.asset-card-btn').forEach(function (item) {
+          if (item !== btn) item.classList.add('is-disabled');
+        });
+        if (hint) hint.textContent = '写入契约卡...';
+
+        try {
+          var result;
+          if (api && typeof api.chooseAssetCard === 'function') {
+            result = await api.chooseAssetCard(choiceIndex, slotType);
+          } else {
+            var bridge = resolveAssetDeckBridge();
+            if (!bridge) {
+              if (hint) hint.textContent = '! API 缺失';
+              throw new Error('asset_api_missing');
+            }
+            result = await bridge({
+              requestId: 'act-result-asset-' + Date.now().toString(36),
+              command: {
+                kind: 'choose_card',
+                payload: { choiceIndex: choiceIndex, slotType: slotType }
+              }
+            });
+          }
+
+          if (result && result.ok) {
+            if (hint) {
+              hint.textContent = result.pendingReplace || result.code === 'pending_replace'
+                ? '契约已暂存：需要在仓库选择替换槽位'
+                : '契约卡已写入 ✓';
+              hint.className = 'asset-panel-hint success';
+            }
+          } else {
+            btn.classList.remove('is-chosen');
+            document.querySelectorAll('.asset-card-btn').forEach(function (item) { item.classList.remove('is-disabled'); });
+            if (hint) hint.textContent = '! 驳回: ' + String((result && (result.reason || result.error || result.code)) || 'Error');
+          }
+        } catch (e) {
+          btn.classList.remove('is-chosen');
+          document.querySelectorAll('.asset-card-btn').forEach(function (item) { item.classList.remove('is-disabled'); });
+          if (hint && hint.textContent !== '! API 缺失') hint.textContent = '! 系统拒绝';
+        }
+        scheduleContentReports();
       }
 
       function buildRoutePanel(data) {

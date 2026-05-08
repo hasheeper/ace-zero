@@ -47,8 +47,9 @@
     #ui-tracker-time { order: 1; }
     .strata-loot-row { order: 2; }
     #ui-tracker-node { order: 3; }
-    #ui-route-panel { order: 4; }
-    #ui-log-port { order: 5; }
+    #ui-asset-panel { order: 4; }
+    #ui-route-panel { order: 5; }
+    #ui-log-port { order: 6; }
 
     /* =========================================================
        顶部状态栏
@@ -971,3 +972,166 @@
         text-transform: uppercase;
     }
     .route-panel-hint.success { color: var(--flow-up); text-shadow: 0 0 8px rgba(58, 235, 200, 0.4); }
+
+    .asset-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px;
+        position: relative;
+    }
+    .asset-panel-title {
+        font-family: var(--font-title);
+        font-size: 10px;
+        font-weight: 900;
+        color: rgba(207, 181, 59, 0.66);
+        letter-spacing: 4px;
+        text-align: center;
+        position: relative;
+        text-shadow: 0 0 8px rgba(207, 181, 59, 0.22);
+    }
+    .asset-panel-title::before,
+    .asset-panel-title::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        width: 26%;
+        height: 1px;
+    }
+    .asset-panel-title::before { left: 0; background: linear-gradient(90deg, transparent, rgba(207, 181, 59, 0.3)); }
+    .asset-panel-title::after { right: 0; background: linear-gradient(270deg, transparent, rgba(207, 181, 59, 0.3)); }
+
+    .asset-options {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .asset-card-btn {
+        position: relative;
+        min-height: 112px;
+        padding: 12px 13px 28px;
+        border: 1px solid rgba(207,181,59,0.12);
+        border-top-color: rgba(207,181,59,0.38);
+        background:
+            radial-gradient(circle at 15% 0%, rgba(207,181,59,0.14), transparent 36%),
+            linear-gradient(145deg, rgba(255,255,255,0.045), rgba(255,255,255,0.004) 58%, rgba(0,0,0,0.22));
+        color: rgba(255,255,255,0.82);
+        text-align: left;
+        cursor: pointer;
+        overflow: hidden;
+        clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+        transition: transform 0.24s ease, border-color 0.24s ease, opacity 0.24s ease, filter 0.24s ease;
+        font: inherit;
+    }
+    .asset-card-btn::after {
+        content: '';
+        position: absolute;
+        z-index: 0;
+        left: 12px;
+        right: 70%;
+        bottom: 3px;
+        height: 1px;
+        background: rgba(207,181,59,0.38);
+        transition: right 0.3s ease, background 0.3s ease;
+    }
+    .asset-card-btn:hover {
+        transform: translateY(-2px);
+        border-color: var(--gold-main);
+        background:
+            radial-gradient(circle at 15% 0%, rgba(207,181,59,0.22), transparent 38%),
+            linear-gradient(145deg, rgba(255,255,255,0.065), rgba(255,255,255,0.006) 58%, rgba(0,0,0,0.18));
+    }
+    .asset-card-btn:hover::after {
+        right: 12px;
+        background: var(--gold-main);
+        box-shadow: 0 0 8px var(--gold-glow);
+    }
+    .asset-card-glyph {
+        position: absolute;
+        right: -6px;
+        bottom: -17px;
+        color: transparent;
+        -webkit-text-stroke: 1px rgba(207,181,59,0.44);
+        opacity: 0.22;
+        font: italic 900 82px/1 var(--font-title);
+        pointer-events: none;
+    }
+    .asset-card-meta,
+    .asset-card-name,
+    .asset-card-desc,
+    .asset-card-slot {
+        position: relative;
+        z-index: 1;
+        display: block;
+        min-width: 0;
+    }
+    .asset-card-meta {
+        color: var(--gold-main);
+        font: 900 8px/1.2 var(--font-ui);
+        letter-spacing: 1.4px;
+        opacity: 0.84;
+    }
+    .asset-card-name {
+        margin-top: 9px;
+        color: #fff;
+        font: 900 15px/1.2 var(--font-cn);
+        letter-spacing: 0.5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .asset-card-desc {
+        margin-top: 7px;
+        color: rgba(255,255,255,0.48);
+        font: 800 9px/1.35 var(--font-cn);
+        letter-spacing: 0.4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .asset-card-slot {
+        position: absolute;
+        right: 12px;
+        bottom: 11px;
+        color: rgba(255,255,255,0.38);
+        font: 900 8px/1 var(--font-ui);
+        letter-spacing: 1.5px;
+    }
+    .asset-card-btn.is-chosen {
+        border-color: var(--flow-up);
+        background: linear-gradient(145deg, rgba(58,235,200,0.12), rgba(255,255,255,0.006) 58%, rgba(0,0,0,0.18));
+        cursor: default;
+        pointer-events: none;
+    }
+    .asset-card-btn.is-chosen::after {
+        right: 12px;
+        background: var(--flow-up);
+        box-shadow: 0 0 8px rgba(58,235,200,0.5);
+    }
+    .asset-card-btn.is-chosen .asset-card-meta,
+    .asset-card-btn.is-chosen .asset-card-name { color: var(--flow-up); text-shadow: 0 0 10px rgba(58,235,200,0.35); }
+    .asset-card-btn.is-disabled {
+        opacity: 0.28;
+        filter: grayscale(1);
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+    .asset-panel-hint {
+        text-align: center;
+        font-family: var(--font-ui);
+        font-size: 9px;
+        letter-spacing: 3px;
+        color: rgba(255, 255, 255, 0.22);
+        margin-top: 3px;
+        text-transform: uppercase;
+    }
+    .asset-panel-hint.success { color: var(--flow-up); text-shadow: 0 0 8px rgba(58, 235, 200, 0.4); }
+
+    @media (max-width: 560px) {
+        .asset-options {
+            grid-template-columns: 1fr;
+        }
+        .asset-card-btn {
+            min-height: 88px;
+        }
+    }

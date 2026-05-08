@@ -701,6 +701,7 @@
   function getHeroResourceSnapshot(eraVars) { return ACT_RUNTIME.getHeroResourceSnapshot(eraVars); }
   function getHeroCastStateSnapshot(eraVars, managedCharacters, states) { return ACT_RUNTIME.getHeroCastStateSnapshot(eraVars, managedCharacters, states); }
   function createActRuntimeSnapshot(eraVars, derivedActState = null) { return ACT_RUNTIME.createActRuntimeSnapshot(eraVars, derivedActState); }
+  function getAssetDeckModuleApi() { return ACT_RUNTIME.getAssetDeckModuleApi(); }
   function applyReserveGrowthToAct(actState, config, nodeIndex) { return ACT_RUNTIME.applyReserveGrowthToAct(actState, config, nodeIndex); }
   function clearLimitedActTokens(actState) { return ACT_RUNTIME.clearLimitedActTokens(actState); }
   function resetActPhaseSlots(actState, phaseIndex = 0) { return ACT_RUNTIME.resetActPhaseSlots(actState, phaseIndex); }
@@ -820,6 +821,7 @@
       resolvePendingActAdvance,
       synchronizeActCharacterState,
       createActRuntimeSnapshot,
+      getAssetDeckModuleApi,
       getNonRelationshipPatchesFromContent,
       areActSnapshotsEqual,
       getPendingActBaselineSnapshot: () => pendingActBaselineSnapshot,
@@ -1307,6 +1309,60 @@
         ok: true,
         nextNodeIndex: actState.nodeIndex,
         nextNodeId: actState.route_history[actState.nodeIndex - 1] || null
+      };
+    },
+
+    // 契约卡选择 API：由 ACT_RESULT 卡片直接调用。
+    // 只处理当前 pending_offer 的 choose_card，不打开 Dashboard 悬浮窗。
+    async chooseAssetCard(choiceIndex, slotType = 'general') {
+      const index = Math.max(0, Math.round(Number(choiceIndex) || 0));
+      const normalizedSlot = String(slotType || 'general').trim().toLowerCase() === 'void' ? 'void' : 'general';
+      const assetDeckModule = getAssetDeckModuleApi();
+      if (!assetDeckModule || typeof assetDeckModule.applyAssetDeckCommand !== 'function') {
+        return { ok: false, reason: 'asset_runtime_missing' };
+      }
+
+      const eraVars = await getEraVars();
+      const currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
+        ? assetDeckModule.normalizeAssetDeckState(eraVars?.world?.assetDeck)
+        : (eraVars?.world?.assetDeck || {});
+      if (!currentAssetDeck?.pending_offer) {
+        return { ok: false, reason: 'no_pending_offer' };
+      }
+
+      let commandResult;
+      try {
+        commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, {
+          kind: 'choose_card',
+          payload: {
+            choiceIndex: index,
+            slotType: normalizedSlot
+          }
+        }, {
+          seed: `act-result:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+        });
+      } catch (error) {
+        return { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };
+      }
+
+      if (!commandResult?.assetDeck) {
+        return {
+          ok: false,
+          reason: commandResult?.code || 'asset_command_failed'
+        };
+      }
+
+      await updateEraVars({
+        world: {
+          assetDeck: commandResult.assetDeck
+        }
+      });
+
+      return {
+        ok: commandResult.ok === true,
+        code: commandResult.code || '',
+        pendingReplace: !!commandResult.assetDeck.pending_replace,
+        assetDeck: commandResult.assetDeck
       };
     },
 

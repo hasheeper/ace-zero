@@ -34,6 +34,47 @@
     "event": 0
   },
   "reserveDelta": {},
+  "assetOffer": {
+    "protocol": "ace0.assetOffer.v1",
+    "offerId": "offer:low:demo",
+    "pool": "low",
+    "points": 0,
+    "choices": [
+      {
+        "choiceIndex": 0,
+        "cardId": "asset_seed_funds",
+        "name": "启动资金",
+        "kind": "numeric",
+        "rarity": "bronze",
+        "system": "asset",
+        "skillKey": "",
+        "level": 1,
+        "slotTags": ["general"]
+      },
+      {
+        "choiceIndex": 1,
+        "cardId": "asset_clear_signal",
+        "name": "清晰信号",
+        "kind": "numeric",
+        "rarity": "silver",
+        "system": "vision",
+        "skillKey": "",
+        "level": 1,
+        "slotTags": ["general"]
+      },
+      {
+        "choiceIndex": 2,
+        "cardId": "asset_void_anchor",
+        "name": "虚空锚点",
+        "kind": "unique",
+        "rarity": "gold",
+        "system": "void",
+        "skillKey": "",
+        "level": 1,
+        "slotTags": ["void"]
+      }
+    ]
+  },
   "needsRouteChoice": false,
   "routeOptions": [],
   "routeOptionLabels": {}

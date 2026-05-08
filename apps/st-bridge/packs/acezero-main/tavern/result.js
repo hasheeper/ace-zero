@@ -35,6 +35,56 @@
     const setPendingActBaselineSnapshot = deps.setPendingActBaselineSnapshot || (() => {});
     const resolveBattleData = deps.resolveBattleData || ((value) => value);
     const buildCompleteGameConfig = deps.buildCompleteGameConfig || ((eraVars, battleData) => ({ eraVars, battleData }));
+    const getAssetDeckModuleApi = deps.getAssetDeckModuleApi || (() => null);
+
+  function getAssetCatalogCard(cardId) {
+    const id = typeof cardId === 'string' ? cardId.trim() : '';
+    if (!id) return null;
+    const assetDeckModule = getAssetDeckModuleApi();
+    if (!assetDeckModule || typeof assetDeckModule.getCatalog !== 'function') return null;
+    try {
+      const catalog = assetDeckModule.getCatalog();
+      return Array.isArray(catalog) ? catalog.find(card => card && card.id === id) || null : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function buildAssetOfferResultPayload(assetDeckInput) {
+    const assetDeck = assetDeckInput && typeof assetDeckInput === 'object' && !Array.isArray(assetDeckInput)
+      ? assetDeckInput
+      : null;
+    const offer = assetDeck?.pending_offer && typeof assetDeck.pending_offer === 'object' && !Array.isArray(assetDeck.pending_offer)
+      ? assetDeck.pending_offer
+      : null;
+    const choices = Array.isArray(offer?.choices) ? offer.choices : [];
+    if (!offer || !choices.length) return null;
+
+    return {
+      protocol: 'ace0.assetOffer.v1',
+      offerId: typeof offer.id === 'string' ? offer.id : '',
+      pool: typeof offer.pool === 'string' ? offer.pool : 'low',
+      points: Math.max(0, Math.round(Number(assetDeck.asset_count) || 0)),
+      choices: choices.slice(0, 3).map((choice, index) => {
+        const card = choice && typeof choice === 'object' && !Array.isArray(choice) ? choice : {};
+        const catalogCard = getAssetCatalogCard(card.cardId);
+        return {
+          choiceIndex: index,
+          instanceId: typeof card.instanceId === 'string' ? card.instanceId : '',
+          cardId: typeof card.cardId === 'string' ? card.cardId : '',
+          name: typeof catalogCard?.name === 'string' && catalogCard.name.trim()
+            ? catalogCard.name.trim()
+            : (typeof card.name === 'string' ? card.name : card.cardId || `CARD ${index + 1}`),
+          kind: typeof card.kind === 'string' ? card.kind : '',
+          rarity: typeof card.rarity === 'string' ? card.rarity : '',
+          system: typeof card.system === 'string' ? card.system : '',
+          skillKey: typeof card.skillKey === 'string' ? card.skillKey : '',
+          level: Math.max(0, Math.round(Number(card.level) || 0)),
+          slotTags: Array.isArray(card.slotTags) ? card.slotTags.filter(tag => typeof tag === 'string') : []
+        };
+      })
+    };
+  }
 
   function buildStateUpdateSummary(before, after, changedPaths = []) {
     const summaryParts = [];
@@ -171,7 +221,8 @@
       reserveDelta,
       activated: getArrayDiff(after.activated, before.activated),
       present: after.present,
-      summary: buildActResultSummary(resultType, before, after, changedPaths)
+      summary: buildActResultSummary(resultType, before, after, changedPaths),
+      assetOffer: buildAssetOfferResultPayload(after.assetDeck)
     };
   }
 
