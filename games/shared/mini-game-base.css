@@ -32,6 +32,10 @@
   --text-main: #e5e5e5;
   --win-green: #2ecc71;
   --lose-red: #c0392b;
+  --mg-dashboard-height: 100px;
+  --mg-table-gap: 16px;
+  --mg-card-width: 84px;
+  --mg-card-height: 118px;
 }
 
 * { box-sizing: border-box; }
@@ -45,7 +49,7 @@ body {
   font-family: 'Cinzel', serif;
   color: var(--text-main);
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
+  align-items: center; justify-content: flex-start;
 }
 
 body::before {
@@ -58,14 +62,15 @@ body::before {
 /* ======== 椭圆牌桌 ======== */
 .table-frame {
   position: relative;
-  width: min(1000px, 95vw); height: min(600px, 80vh);
-  margin-bottom: 88px;
+  width: min(1060px, calc(100vw - 48px));
+  height: clamp(440px, calc(100vh - var(--mg-dashboard-height) - (var(--mg-table-gap) * 2)), 600px);
+  margin: var(--mg-table-gap) auto calc(var(--mg-dashboard-height) + var(--mg-table-gap));
   background: var(--bg-felt);
   border: 4px solid #151515; border-radius: 300px;
   box-shadow: inset 0 0 100px rgba(0,0,0,0.9), 0 0 0 2px var(--gold-dim), 0 0 50px rgba(0,0,0,0.8);
   z-index: 10;
-  display: grid; grid-template-rows: 1fr auto 1fr;
-  overflow: hidden;
+  display: grid; grid-template-rows: minmax(150px, 1fr) minmax(92px, auto) minmax(150px, 1fr);
+  overflow: visible;
 }
 .table-frame::after {
   content: ''; position: absolute; inset: 40px;
@@ -89,10 +94,10 @@ body::before {
   align-items: center; justify-content: center;
   z-index: 20;
 }
-.zone-dealer { padding-top: 40px; justify-content: flex-start; }
-.zone-player { padding-bottom: 40px; justify-content: flex-end; }
+.zone-dealer { padding-top: clamp(18px, 4vh, 40px); justify-content: flex-start; }
+.zone-player { padding-bottom: clamp(18px, 4vh, 40px); justify-content: flex-end; }
 .zone-center {
-  height: 60px;
+  min-height: 92px;
   display: flex; flex-direction: column;
   justify-content: center; align-items: center;
 }
@@ -102,7 +107,7 @@ body::before {
 
 /* ======== 中央 Logo / Payout / Pot ======== */
 .logo-text {
-  font-size: 24px; font-weight: 800;
+  font-size: clamp(20px, 2.4vw, 28px); font-weight: 800;
   background: linear-gradient(135deg, #cfb53b, #f1c40f);
   background-clip: text; -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -110,7 +115,7 @@ body::before {
   margin-bottom: 4px;
 }
 .payout-text {
-  font-size: 14px; color: var(--gold-dim);
+  font-size: clamp(10px, 1.3vw, 14px); color: var(--gold-dim);
   letter-spacing: 2px; text-transform: uppercase; opacity: 0.7;
 }
 
@@ -143,7 +148,7 @@ body::before {
 
 /* ======== 牌堆 (deck.js) ======== */
 .deck-shoe {
-  position: absolute; top: 30%; right: 40px;
+  position: absolute; top: 30%; right: clamp(28px, 5vw, 64px);
   width: 80px; height: 120px;
   background: linear-gradient(135deg, #222, #0f0f0f);
   border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
@@ -157,7 +162,7 @@ body::before {
 }
 
 .deck-origin {
-  position: absolute; top: 30%; right: 40px;
+  position: absolute; top: 30%; right: clamp(28px, 5vw, 64px);
   width: 104px; height: 146px; z-index: 30;
   overflow: visible !important;
 }
@@ -166,21 +171,21 @@ body::before {
   display: flex; justify-content: center; align-items: center;
   overflow: visible !important;
 }
-#deck-mount .deck { position: relative; width: 84px; height: 118px; }
+#deck-mount .deck { position: relative; width: var(--mg-card-width); height: var(--mg-card-height); }
 #deck-mount .deck .card { left: 0 !important; top: 0 !important; }
-#deck-mount .card { width: 84px !important; height: 118px !important; }
+#deck-mount .card { width: var(--mg-card-width) !important; height: var(--mg-card-height) !important; }
 #deck-mount .card .face,
 #deck-mount .card .back { width: 100% !important; height: 100% !important; background-size: cover; }
 
 /* ======== 手牌 ======== */
 .hand-wrapper { position: relative; }
 .hand-container {
-  display: flex; gap: 10px; align-items: center; justify-content: center;
-  min-width: 320px; min-height: 128px; padding: 10px; position: relative;
+  display: flex; gap: clamp(6px, 1vw, 10px); align-items: center; justify-content: center;
+  min-width: min(320px, calc(100vw - 120px)); min-height: calc(var(--mg-card-height) + 10px); padding: 5px 10px; position: relative;
 }
 .hand-container .card {
   position: relative !important; top: auto !important; left: auto !important;
-  transform: none !important; width: 84px !important; height: 118px !important;
+  transform: none !important; width: var(--mg-card-width) !important; height: var(--mg-card-height) !important;
   box-shadow: 0 3px 10px rgba(0,0,0,0.5); flex-shrink: 0;
 }
 .hand-container .card .face,
@@ -199,25 +204,27 @@ body::before {
 /* ======== Dashboard ======== */
 .ui-dashboard {
   position: fixed; bottom: 0; left: 0; width: 100%;
-  height: auto; min-height: 90px;
+  height: var(--mg-dashboard-height); min-height: var(--mg-dashboard-height);
   background: linear-gradient(180deg, rgba(18,16,19,0.95) 0%, #000 100%);
   border-top: 1px solid rgba(207,181,59,0.3);
   display: grid;
-  grid-template-columns: 280px 1fr 280px;
+  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr) minmax(180px, 260px);
   grid-template-rows: auto auto;
   align-items: center;
-  padding: 8px 40px 10px;
+  padding: 0 clamp(14px, 3vw, 40px);
   z-index: 100;
   backdrop-filter: blur(10px);
-  gap: 4px 0;
+  gap: 4px 12px;
+  overflow: hidden;
 }
-.info-panel { display: flex; gap: 20px; }
+.info-panel { display: flex; gap: clamp(12px, 2vw, 20px); min-width: 0; }
 .stat-box { border-left: 2px solid #555; padding-left: 10px; }
 .stat-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #666; letter-spacing: 1px; }
-.stat-val { font-size: 20px; font-weight: 700; color: #ddd; }
+.stat-val { font-size: clamp(18px, 2.2vw, 24px); font-weight: 700; color: #ddd; line-height: 1.05; }
 .stat-val.gold { color: var(--gold-main); }
 .controls-center {
-  display: flex; justify-content: center; gap: 15px; align-items: center;
+  display: flex; justify-content: center; gap: clamp(8px, 1.2vw, 14px); align-items: center;
+  min-width: 0;
 }
 .controls-skills {
   display: flex; justify-content: center; gap: 8px; margin-top: 4px; grid-column: 2;
@@ -227,6 +234,8 @@ body::before {
   margin-top: 0;
   grid-column: auto;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .status-panel { text-align: right; overflow: hidden; }
 .status-msg {
@@ -279,7 +288,7 @@ body::before {
 
 /* ======== 按钮 ======== */
 .btn-cmd {
-  height: 50px; min-width: 120px;
+  height: 52px; min-width: clamp(104px, 11vw, 135px);
   background: rgba(255,255,255,0.05); border: none; color: #aaa;
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 14px;
   letter-spacing: 1px; cursor: pointer; position: relative;
@@ -628,15 +637,65 @@ body::before {
 .hidden { display: none !important; }
 
 /* ======== 响应式 ======== */
+@media (max-height: 760px) {
+  :root {
+    --mg-dashboard-height: 92px;
+    --mg-table-gap: 10px;
+    --mg-card-width: 76px;
+    --mg-card-height: 107px;
+  }
+
+  .table-frame {
+    grid-template-rows: minmax(130px, 1fr) minmax(78px, auto) minmax(130px, 1fr);
+  }
+
+  .table-frame::after { inset: 30px; }
+  .zone-center { min-height: 78px; }
+  #main-pot-area { width: 78px; height: 78px; margin-top: 2px; }
+  #pot-clusters { transform: scale(0.86); transform-origin: center bottom; }
+  .zone-tag { margin-top: 4px; }
+  .player-tag { margin-bottom: 4px; }
+  .score-bubble { width: 34px; height: 34px; font-size: 14px; right: -48px; }
+  .btn-cmd { height: 46px; font-size: 13px; }
+  .btn-skill { height: 32px; min-width: 32px; padding: 0 8px; }
+  .status-msg { font-size: 11px; padding: 4px 8px; }
+  .mg-asset-status { padding-top: 3px; padding-bottom: 3px; }
+}
+
 @media (max-width: 800px) {
-  .table-frame { width: 100vw; height: 62vh; border-radius: 0; border: none; border-bottom: 2px solid var(--gold-dim); margin-bottom: 110px; }
-  .ui-dashboard { grid-template-columns: 1fr; height: auto; padding: 10px; gap: 10px; }
+  :root {
+    --mg-dashboard-height: 142px;
+    --mg-table-gap: 0px;
+    --mg-card-width: 70px;
+    --mg-card-height: 98px;
+  }
+
+  .table-frame {
+    width: 100vw;
+    height: calc(100vh - var(--mg-dashboard-height));
+    min-height: 0;
+    border-radius: 0;
+    border: none;
+    border-bottom: 2px solid var(--gold-dim);
+    margin: 0 0 var(--mg-dashboard-height);
+    grid-template-rows: minmax(116px, 1fr) minmax(72px, auto) minmax(116px, 1fr);
+    overflow: hidden;
+  }
+
+  .ui-dashboard {
+    grid-template-columns: 1fr;
+    height: var(--mg-dashboard-height);
+    min-height: var(--mg-dashboard-height);
+    padding: 8px 10px;
+    gap: 8px;
+  }
   .info-panel { justify-content: space-between; width: 100%; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; }
   .status-panel { display: none; }
   .mg-asset-status { display: none; }
   .score-bubble { right: -18px; }
-  .controls-center { gap: 10px; }
+  .controls-center { gap: 8px; flex-wrap: wrap; }
   .controls-skills { gap: 6px; }
+  .btn-cmd { min-width: 96px; height: 42px; }
   .btn-skill { height: 34px; min-width: 34px; padding: 0 8px; gap: 3px; }
   .btn-skill .skill-icon { font-size: 14px; }
   .btn-skill .skill-name { font-size: 10px; }
