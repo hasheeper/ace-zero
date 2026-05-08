@@ -1378,6 +1378,12 @@
         ok: commandResult.ok === true,
         code: commandResult.code || '',
         pendingReplace: !!commandResult.assetDeck.pending_replace,
+        selectedCardId: typeof commandResult.card?.cardId === 'string'
+          ? commandResult.card.cardId
+          : (typeof commandResult.consumed?.cardId === 'string' ? commandResult.consumed.cardId : ''),
+        selectedInstanceId: typeof commandResult.card?.instanceId === 'string'
+          ? commandResult.card.instanceId
+          : (typeof commandResult.consumed?.instanceId === 'string' ? commandResult.consumed.instanceId : ''),
         assetDeck: commandResult.assetDeck
       };
     },
@@ -1678,6 +1684,8 @@
 
   window.ACE0Plugin = hostRoot.ACE0Plugin;
 
+  const actResultAssetCommandRequestCache = new Map();
+
   function postActResultAssetCommandResult(sourceWindow, resultPayload) {
     if (!sourceWindow || typeof sourceWindow.postMessage !== 'function') return;
     try {
@@ -1701,15 +1709,41 @@
     const commandKind = String(command.kind || command.type || '').trim().toLowerCase();
     const commandPayload = command.payload && typeof command.payload === 'object' ? command.payload : {};
 
-    let result;
-    try {
-      if (commandKind !== 'choose_card') {
-        result = { ok: false, reason: 'unsupported_asset_command' };
-      } else {
-        result = await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general');
+    if (requestId && actResultAssetCommandRequestCache.has(requestId)) {
+      const cached = actResultAssetCommandRequestCache.get(requestId);
+      const cachedResult = cached?.promise ? await cached.promise : cached?.result;
+      postActResultAssetCommandResult(event.source, {
+        ...(cachedResult && typeof cachedResult === 'object' ? cachedResult : { ok: false, reason: 'empty_result' }),
+        requestId
+      });
+      return;
+    }
+
+    const executeCommand = async () => {
+      try {
+        if (commandKind !== 'choose_card') {
+          return { ok: false, reason: 'unsupported_asset_command' };
+        }
+        return await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general');
+      } catch (error) {
+        return { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };
       }
-    } catch (error) {
-      result = { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };
+    };
+
+    const record = {};
+    if (requestId) {
+      record.promise = executeCommand();
+      actResultAssetCommandRequestCache.set(requestId, record);
+    }
+    const result = requestId ? await record.promise : await executeCommand();
+    if (requestId) {
+      record.result = result;
+      record.promise = null;
+      window.setTimeout(() => {
+        if (actResultAssetCommandRequestCache.get(requestId) === record) {
+          actResultAssetCommandRequestCache.delete(requestId);
+        }
+      }, 30000);
     }
 
     postActResultAssetCommandResult(event.source, {

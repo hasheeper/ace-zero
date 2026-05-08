@@ -384,10 +384,8 @@
 
       function postActResultAssetCommand(command) {
         var targets = [];
-        try {
-          if (window.parent && window.parent !== window) targets.push(window.parent);
-          else if (window.top && window.top !== window) targets.push(window.top);
-        } catch (e) {}
+        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
+        try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
         if (!targets.length) return Promise.resolve({ ok: false, error: 'No parent/top host window available.' });
 
         var requestId = 'act-result-asset-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -418,13 +416,50 @@
           payload: result && typeof result === 'object' ? result : {}
         };
         var targets = [];
-        try {
-          if (window.parent && window.parent !== window) targets.push(window.parent);
-          else if (window.top && window.top !== window) targets.push(window.top);
-        } catch (e) {}
+        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
+        try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
         targets.forEach(function (target) {
           try { target.postMessage(message, '*'); } catch (e) {}
         });
+      }
+
+      function getLatestAssetChoiceFromDeck(assetDeck, offer) {
+        var history = Array.isArray(assetDeck && assetDeck.history) ? assetDeck.history : [];
+        for (var i = history.length - 1; i >= 0; i--) {
+          var item = history[i];
+          if (!item || item.kind !== 'choose_card') continue;
+          if (!item.cardId) continue;
+          return String(item.cardId);
+        }
+        var choices = Array.isArray(offer && offer.choices) ? offer.choices : [];
+        var active = []
+          .concat(Array.isArray(assetDeck && assetDeck.active_general_cards) ? assetDeck.active_general_cards : [])
+          .concat(Array.isArray(assetDeck && assetDeck.active_void_cards) ? assetDeck.active_void_cards : []);
+        for (var a = active.length - 1; a >= 0; a--) {
+          var card = active[a];
+          if (!card) continue;
+          for (var c = 0; c < choices.length; c++) {
+            if (choices[c] && choices[c].cardId && choices[c].cardId === card.cardId) return String(card.cardId);
+          }
+        }
+        return '';
+      }
+
+      function lockAssetPanel(chosenCardId, text) {
+        var panel = document.getElementById('ui-asset-panel');
+        if (!panel) return;
+        panel.querySelectorAll('.asset-card-btn').forEach(function (btn) {
+          var cardId = btn.getAttribute('data-card-id') || '';
+          if (chosenCardId && cardId === chosenCardId) btn.classList.add('is-chosen');
+          else btn.classList.add('is-disabled');
+        });
+        var hint = document.getElementById('ui-asset-hint');
+        if (hint) {
+          hint.textContent = text || '契约已确立';
+          hint.className = 'asset-panel-hint success';
+        }
+        var topStatus = document.getElementById('ui-top-status');
+        if (topStatus) topStatus.textContent = '契约锁定';
       }
 
       function getAssetCardTitle(card, index) {
@@ -471,6 +506,7 @@
           btn.type = 'button';
           btn.setAttribute('data-choice-index', String(Number(card.choiceIndex != null ? card.choiceIndex : index) || 0));
           btn.setAttribute('data-slot-type', getDefaultAssetSlot(card));
+          btn.setAttribute('data-card-id', String(card.cardId || ''));
 
           var glyph = document.createElement('span');
           glyph.className = 'asset-card-glyph';
@@ -507,6 +543,26 @@
         hint.id = 'ui-asset-hint';
         hint.textContent = '>> 点击一张契约卡并写入仓库 <<';
         panel.appendChild(hint);
+
+        syncAssetPanelStateToMvu(data);
+      }
+
+      async function syncAssetPanelStateToMvu(data) {
+        var api = resolveAce0Api();
+        var offer = data && data.assetOffer && typeof data.assetOffer === 'object' ? data.assetOffer : null;
+        if (!api || typeof api.getEraVars !== 'function' || !offer) return;
+        try {
+          var v = await api.getEraVars();
+          var assetDeck = v && v.world && v.world.assetDeck;
+          if (!assetDeck || typeof assetDeck !== 'object') return;
+          var liveOffer = assetDeck.pending_offer && typeof assetDeck.pending_offer === 'object' ? assetDeck.pending_offer : null;
+          var liveOfferId = liveOffer && typeof liveOffer.id === 'string' ? liveOffer.id : '';
+          var offerId = typeof offer.offerId === 'string' ? offer.offerId : '';
+          if (!liveOffer || (offerId && liveOfferId && liveOfferId !== offerId)) {
+            var chosenCardId = getLatestAssetChoiceFromDeck(assetDeck, offer);
+            lockAssetPanel(chosenCardId, assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已确立');
+          }
+        } catch (e) {}
       }
 
       async function handleAssetCardClick(btn) {
@@ -540,6 +596,7 @@
           if (result && result.ok) {
             var topStatus = document.getElementById('ui-top-status');
             if (topStatus) topStatus.textContent = result.pendingReplace ? '等待替换' : '契约入库';
+            lockAssetPanel(result.selectedCardId || getLatestAssetChoiceFromDeck(result.assetDeck, getPayload() && getPayload().assetOffer), result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
             if (hint) {
               hint.textContent = result.pendingReplace || result.code === 'pending_replace'
                 ? '契约已暂存：需要在仓库选择替换槽位'

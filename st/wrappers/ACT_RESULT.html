@@ -93,10 +93,8 @@
 
       function forwardToHost(message) {
         const targets = [];
-        try {
-          if (window.parent && window.parent !== window) targets.push(window.parent);
-          else if (window.top && window.top !== window) targets.push(window.top);
-        } catch (_) {}
+        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (_) {}
+        try { if (window.top && window.top !== window && !targets.includes(window.top)) targets.push(window.top); } catch (_) {}
         targets.forEach((target) => {
           try { target.postMessage(message, '*'); } catch (_) {}
         });
