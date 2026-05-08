@@ -2,6 +2,7 @@
       var runtimePayload = null;
       var localTestPayload = null;
       var LOCAL_TEST_PAYLOAD_URL = './local-test-payload.json';
+      var pendingAssetCommand = null;
 
       function readInlinePayload() {
         try {
@@ -381,6 +382,34 @@
         return null;
       }
 
+      function postActResultAssetCommand(command) {
+        var targets = [];
+        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (e) {}
+        try { if (window.top && window.top !== window && targets.indexOf(window.top) < 0) targets.push(window.top); } catch (e) {}
+        if (!targets.length) return Promise.resolve({ ok: false, error: 'No parent/top host window available.' });
+
+        var requestId = 'act-result-asset-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        return new Promise(function (resolve) {
+          var timer = window.setTimeout(function () {
+            if (!pendingAssetCommand || pendingAssetCommand.requestId !== requestId) return;
+            pendingAssetCommand = null;
+            resolve({ ok: false, requestId: requestId, error: 'No ACK from host.' });
+          }, 4000);
+          pendingAssetCommand = { requestId: requestId, resolve: resolve, timer: timer };
+          targets.forEach(function (target) {
+            try {
+              target.postMessage({
+                type: 'acezero-act-result-asset-command',
+                payload: {
+                  requestId: requestId,
+                  command: command
+                }
+              }, '*');
+            } catch (e) {}
+          });
+        });
+      }
+
       function getAssetCardTitle(card, index) {
         return String(card && (card.name || card.cardId) || ('CARD ' + (index + 1)));
       }
@@ -482,17 +511,13 @@
             result = await api.chooseAssetCard(choiceIndex, slotType);
           } else {
             var bridge = resolveAssetDeckBridge();
-            if (!bridge) {
-              if (hint) hint.textContent = '! API 缺失';
-              throw new Error('asset_api_missing');
-            }
-            result = await bridge({
-              requestId: 'act-result-asset-' + Date.now().toString(36),
-              command: {
+            var command = {
                 kind: 'choose_card',
                 payload: { choiceIndex: choiceIndex, slotType: slotType }
-              }
-            });
+            };
+            result = bridge
+              ? await bridge({ requestId: 'act-result-asset-direct-' + Date.now().toString(36), command: command })
+              : await postActResultAssetCommand(command);
           }
 
           if (result && result.ok) {
@@ -646,6 +671,16 @@
 
       window.addEventListener('message', function (event) {
         var msg = event && event.data;
+        if (msg && msg.type === 'acezero-act-result-asset-command-result') {
+          var payload = msg.payload || msg.data || msg;
+          var requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
+          if (!pendingAssetCommand || pendingAssetCommand.requestId !== requestId) return;
+          window.clearTimeout(pendingAssetCommand.timer);
+          var resolve = pendingAssetCommand.resolve;
+          pendingAssetCommand = null;
+          resolve(payload);
+          return;
+        }
         if (!msg || msg.type !== 'acezero-act-result-data') return;
         applyPayload(msg.payload);
       });

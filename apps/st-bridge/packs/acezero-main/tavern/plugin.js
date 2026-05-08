@@ -1662,6 +1662,52 @@
 
   window.ACE0Plugin = hostRoot.ACE0Plugin;
 
+  function postActResultAssetCommandResult(sourceWindow, resultPayload) {
+    if (!sourceWindow || typeof sourceWindow.postMessage !== 'function') return;
+    try {
+      sourceWindow.postMessage({
+        type: 'acezero-act-result-asset-command-result',
+        payload: resultPayload
+      }, '*');
+    } catch (error) {
+      console.warn(`${PLUGIN_NAME} ACT_RESULT asset command 回包失败:`, error);
+    }
+  }
+
+  async function handleActResultAssetCommandMessage(event) {
+    const message = event?.data;
+    if (!message || typeof message !== 'object') return;
+    if (message.type !== 'acezero-act-result-asset-command') return;
+
+    const payload = message.payload || message.data || {};
+    const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
+    const command = payload.command && typeof payload.command === 'object' ? payload.command : {};
+    const commandKind = String(command.kind || command.type || '').trim().toLowerCase();
+    const commandPayload = command.payload && typeof command.payload === 'object' ? command.payload : {};
+
+    let result;
+    try {
+      if (commandKind !== 'choose_card') {
+        result = { ok: false, reason: 'unsupported_asset_command' };
+      } else {
+        result = await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general');
+      }
+    } catch (error) {
+      result = { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };
+    }
+
+    postActResultAssetCommandResult(event.source, {
+      ...(result && typeof result === 'object' ? result : { ok: false, reason: 'empty_result' }),
+      requestId
+    });
+  }
+
+  try {
+    window.removeEventListener('message', window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER__);
+  } catch (_) {}
+  window.__ACE0_ACT_RESULT_ASSET_COMMAND_HANDLER__ = handleActResultAssetCommandMessage;
+  window.addEventListener('message', handleActResultAssetCommandMessage);
+
   // ==========================================================
   //  初始化完成
   // ==========================================================
