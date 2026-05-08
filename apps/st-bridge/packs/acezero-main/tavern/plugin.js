@@ -64,10 +64,6 @@
   const DEFAULT_WORLD_LOCATION = TAVERN_PLUGIN_DATA.DEFAULT_WORLD_LOCATION || { layer: 'THE_STREET', site: '' };
   const LOCATION_LAYER_META = TAVERN_PLUGIN_DATA.LOCATION_LAYER_META || {};
   const ACT_RESOURCE_KEYS = ['combat', 'rest', 'asset', 'vision'];
-  const ACT_RESOURCE_ALIASES = {
-    contract: 'asset',
-    event: 'vision'
-  };
   const ACT_STAGE_VALUES = ['planning', 'executing', 'route', 'complete'];
   // 节点内四段，与 world.clock 晨昼暮夜解耦
   const ACT_PHASE_LABELS = ['一段', '二段', '三段', '四段'];
@@ -193,8 +189,7 @@
 
   function normalizeActResourceKey(value, fallback = 'vision') {
     const normalized = _normalizeTrimmedString(value, fallback).toLowerCase();
-    const migrated = ACT_RESOURCE_ALIASES[normalized] || normalized;
-    return ACT_RESOURCE_KEYS.includes(migrated) ? migrated : fallback;
+    return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
   }
 
   function normalizeBattleAssetDeckForFrontend(eraVars) {

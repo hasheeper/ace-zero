@@ -237,15 +237,11 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
     'node1-entry': {
       id: 'node1-entry',
       nodeIndex: 1,
-      kind: 'vision',
-      key: 'vision',
+      kind: 'random',
+      key: 'random',
       ui: {
         label: 'NODE_01',
         subtitle: 'ENTRY NIGHT'
-      },
-      rewards: { vision: 1, combat: 1 },
-      planner: {
-        limited: []
       },
       next: {
         mode: 'choice',
@@ -265,8 +261,8 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       phases: [
         {
           index: 0,
-          slot: 'vision',
-          fixed: true,
+          slot: null,
+          fixed: false,
           cast: { present: ['RINO'] },
           event: {
             id: 'entry_target',
@@ -302,10 +298,6 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       ui: {
         label: 'NODE_02_A',
         subtitle: 'HOT FLOOR'
-      },
-      rewards: { combat: 1, vision: 1 },
-      planner: {
-        limited: []
       },
       next: { mode: 'forced', nodeId: 'node3-descent' },
       cast: {
@@ -352,10 +344,6 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
         label: 'NODE_02_B',
         subtitle: 'SIDE MACHINES'
       },
-      rewards: { vision: 1, combat: 1 },
-      planner: {
-        limited: []
-      },
       next: { mode: 'forced', nodeId: 'node3-descent' },
       cast: {
         onEnter: {
@@ -395,15 +383,11 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
     'node3-descent': {
       id: 'node3-descent',
       nodeIndex: 3,
-      kind: 'vision',
-      key: 'vision',
+      kind: 'random',
+      key: 'random',
       ui: {
         label: 'NODE_03',
         subtitle: 'LAST RECEIPT'
-      },
-      rewards: { vision: 1 },
-      planner: {
-        limited: []
       },
       next: { mode: 'none' },
       cast: {
@@ -429,8 +413,8 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
         },
         {
           index: 2,
-          slot: 'vision',
-          fixed: true,
+          slot: null,
+          fixed: false,
           cast: { present: ['RINO'] },
           event: {
             id: 'descent_drop',

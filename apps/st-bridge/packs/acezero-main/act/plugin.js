@@ -8,10 +8,6 @@
   // 节点内四段（处理槽），与世界时间（晨昼暮夜）解耦
   const ACT_PHASE_LABELS = ['一段', '二段', '三段', '四段'];
   const ACT_RESOURCE_KEYS = ['combat', 'rest', 'asset', 'vision'];
-  const ACT_RESOURCE_ALIASES = {
-    contract: 'asset',
-    event: 'vision'
-  };
   const ACT_RESOURCE_TYPE_MAP = {
     combat: 'COMBAT',
     rest: 'REST',
@@ -274,8 +270,7 @@
 
   function normalizeActResourceKey(value, fallback = 'vision') {
     const normalized = normalizeTrimmedString(value, fallback).toLowerCase();
-    const migrated = ACT_RESOURCE_ALIASES[normalized] || normalized;
-    return ACT_RESOURCE_KEYS.includes(migrated) ? migrated : fallback;
+    return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
   }
 
   function normalizeRules(value) {

@@ -707,7 +707,7 @@
         var behavior = btnInfo.behavior;
         if (!btn) continue;
 
-        var cost = liveSkill.manaCost || 0;
+        var cost = Number(this._getRenderedManaCost(liveSkill) || 0);
         var disabled = true;
 
         // 整局使用次数限制
@@ -768,8 +768,8 @@
           if (costBadge && !liveSkill.showAsPassiveCard) costBadge.textContent = '🔒' + liveSkill._sealed;
         } else {
           var costBadge2 = btn.querySelector('.cost-badge');
-          if (costBadge2 && !liveSkill.showAsPassiveCard && !costBadge2.classList.contains('uses-badge') && !costBadge2.classList.contains('toggle-badge')) {
-            costBadge2.textContent = cost + ' MP';
+          if (costBadge2 && !liveSkill.showAsPassiveCard) {
+            costBadge2.textContent = this._getSkillBadgeText(liveSkill, cost);
           }
         }
 
@@ -3777,7 +3777,21 @@
       if (this.skillSystem && typeof this.skillSystem.getSkillActualManaCost === 'function') {
         return this.skillSystem.getSkillActualManaCost(skill, {});
       }
-      return skill.manaCost || null;
+      return skill.manaCost != null ? Number(skill.manaCost) || 0 : null;
+    }
+
+    _getSkillBadgeText(skill, actualCost) {
+      if (!skill) return '--';
+      var cost = Number(actualCost != null ? actualCost : this._getRenderedManaCost(skill) || 0);
+      if (skill.showAsPassiveCard) return '被动';
+      if (cost > 0) return cost + ' MP';
+      if (skill.usesPerGame > 0) return '限' + skill.usesPerGame + '次';
+      if (skill.activation === 'toggle') return '开关';
+      if (skill.system === 'void' || skill.effect === 'void') {
+        return skill.cooldown > 0 ? 'CD ' + skill.cooldown : 'VOID';
+      }
+      if (skill.cooldown > 0) return 'CD ' + skill.cooldown;
+      return '--';
     }
 
     _getAssetSummaryGameplay() {
@@ -3910,7 +3924,7 @@
       btn.disabled = true;
 
       var title = (visual.name || skill.skillKey);
-      if (visual.cost) title += ' (' + visual.cost + ' Mana)';
+      if (visual.cost > 0) title += ' (' + visual.cost + ' Mana)';
       if (skill.description) title += '\n' + skill.description;
       var assetMeta = this._getAssetSkillMeta(skill);
       if (assetMeta.titleLines.length) title += '\n' + assetMeta.titleLines.join('\n');
@@ -3936,12 +3950,14 @@
       var costHtml;
       if (skill.showAsPassiveCard) {
         costHtml = '<div class="cost-badge passive-badge">被动</div>';
-      } else if (visual.cost) {
+      } else if (visual.cost > 0) {
         costHtml = '<div class="cost-badge">' + visual.cost + ' MP</div>';
       } else if (skill.usesPerGame > 0) {
         costHtml = '<div class="cost-badge uses-badge">限' + skill.usesPerGame + '次</div>';
       } else if (skill.activation === 'toggle') {
         costHtml = '<div class="cost-badge toggle-badge">开关</div>';
+      } else if (skill.system === 'void' || skill.effect === 'void') {
+        costHtml = '<div class="cost-badge cooldown-badge">' + this._getSkillBadgeText(skill, visual.cost) + '</div>';
       } else {
         costHtml = '<div class="cost-badge">--</div>';
       }

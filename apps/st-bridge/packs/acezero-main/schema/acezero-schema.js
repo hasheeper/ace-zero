@@ -429,10 +429,6 @@ const WorldExpansionStateSchema = z.object({
 }));
 
 const ACT_RESOURCE_KEYS = ['combat', 'rest', 'asset', 'vision'];
-const ACT_RESOURCE_ALIASES = {
-  contract: 'asset',
-  event: 'vision'
-};
 const ACT_SLOT_SOURCES = ['limited', 'reserve'];
 const ACT_STAGE_VALUES = ['planning', 'executing', 'route', 'complete'];
 
@@ -447,8 +443,7 @@ function makeDefaultActResourceCounts(defaultValue = 0) {
 
 function normalizeActResourceKey(value, fallback = 'vision') {
   const normalized = normalizeTrimmedString(value, fallback).toLowerCase();
-  const migrated = ACT_RESOURCE_ALIASES[normalized] || normalized;
-  return ACT_RESOURCE_KEYS.includes(migrated) ? migrated : fallback;
+  return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
 }
 
 function normalizeActResolutionHistory(value) {

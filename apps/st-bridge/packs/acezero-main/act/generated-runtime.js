@@ -166,6 +166,10 @@
         if (normalizeTrimmedString(targetNode.key, '').toLowerCase() === 'random') {
           targetNode.key = generatedType;
         }
+        targetNode.rewards = { [generatedType]: 1 };
+        if (targetNode.planner && typeof targetNode.planner === 'object' && Array.isArray(targetNode.planner.limited)) {
+          targetNode.planner.limited = [];
+        }
       });
     });
 

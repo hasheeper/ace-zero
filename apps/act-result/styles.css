@@ -823,8 +823,8 @@
     .c-debt { color: rgba(255, 162, 106, 0.9); }
     .c-major-debt { color: var(--warn-red); }
     .c-combat { color: var(--warn-red); }
-    .c-contract { color: var(--gold-main); }
-    .c-event { color: var(--flow-up); }
+    .c-asset { color: var(--gold-main); }
+    .c-vision { color: var(--flow-up); }
     .c-rest { color: var(--future-pale); }
 
     .loot-name {

@@ -5,7 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ACE0 MACRO RESOLUTION</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=JetBrains+Mono:wght@400;700;800&family=Noto+Serif+SC:wght@500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css">
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search || '');
+      var cacheKey = params.get('_ace0_act_result_v') || params.get('v') || String(Date.now());
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = './styles.css?_ace0_act_result_v=' + encodeURIComponent(cacheKey);
+      document.head.appendChild(link);
+      window.__ACE0_ACT_RESULT_CACHE_KEY__ = cacheKey;
+    })();
+  </script>
 </head>
   <body>
   <div class="mech-widget">
@@ -98,6 +108,14 @@
   </div>
 
   <script id="ace0-raw" type="application/json">$1</script>
-  <script src="./app.js"></script>
+  <script>
+    (function () {
+      var cacheKey = window.__ACE0_ACT_RESULT_CACHE_KEY__ || String(Date.now());
+      var script = document.createElement('script');
+      script.src = './app.js?_ace0_act_result_v=' + encodeURIComponent(cacheKey);
+      script.async = false;
+      document.body.appendChild(script);
+    })();
+  </script>
 </body>
 </html>

@@ -87,7 +87,7 @@
   }
 
   function buildLimitedRewardsForNode(nodeRuntime) {
-    const explicitLimited = Array.isArray(nodeRuntime?.planner?.limited)
+    const explicitLimited = Array.isArray(nodeRuntime?.planner?.limited) && nodeRuntime.planner.limited.length > 0
       ? nodeRuntime.planner.limited
       : null;
     if (explicitLimited) {

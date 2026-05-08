@@ -42,7 +42,19 @@
 
       const frame = document.getElementById('act-result-frame');
       const hostFrame = window.frameElement;
+      const cacheKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       let lastHeight = 1;
+
+      function appendNoCache(url) {
+        try {
+          const next = new URL(url, window.location.href);
+          next.searchParams.set('_ace0_act_result_v', cacheKey);
+          return next.href;
+        } catch (_) {
+          const sep = String(url || '').includes('?') ? '&' : '?';
+          return String(url || '') + sep + '_ace0_act_result_v=' + encodeURIComponent(cacheKey);
+        }
+      }
 
       function resolveActResultUrl() {
         try {
@@ -119,7 +131,7 @@
         } catch (_) {}
       }
 
-      frame.src = resolveActResultUrl();
+      frame.src = appendNoCache(resolveActResultUrl());
       frame.addEventListener('load', postPayload);
       window.addEventListener('message', (event) => {
         const message = event && event.data;

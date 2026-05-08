@@ -348,7 +348,12 @@
                 hasLoot=true; listHtml += `<div class="loot-card c-mana" style="--i:${oIdx++}"><div class="loot-left"><div class="loot-icon">❖</div><div class="loot-name">储能 · ${e[0]}<span>(MANA)</span></div></div><div class="loot-val ${e[1]>0?'is-pos':'is-neg'}">${e[1]>0?'+':''}${e[1]}</div></div>`;
             });
         }
-        var dict = {'combat':'限定交锋点','contract':'限定契约点','rest':'限定休整点','event':'限定事件点'};
+        var dict = {
+            'combat':'限定交锋点',
+            'rest':'限定休整点',
+            'asset':'限定资产点',
+            'vision':'限定情报点'
+        };
         nonZeroEntries(data.limitedDelta||{}).forEach(function(e){ 
             var delta = Number(e[1]) || 0;
             hasLoot=true; listHtml+=`<div class="loot-card c-${e[0]}" style="--i:${oIdx++}"><div class="loot-left"><div class="loot-icon"><div class="shape-core"></div></div><div class="loot-name">${dict[e[0]]||e[0]}<span>(LIMITED)</span></div></div><div class="loot-val ${delta>0?'is-pos':'is-neg'}">${delta>0?'+':''}${delta}</div></div>`;

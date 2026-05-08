@@ -234,10 +234,10 @@
       name: '绝缘',
       description: 'KAZU 主动防守技，当前街内降低魔运干涉。',
       levels: {
-        1: { manaCost: 15, power: 0, cooldown: 2, special: { enemyCurse: -0.3, enemyFortune: -0.2, allyFortune: -0.15 } },
-        2: { manaCost: 12, power: 0, cooldown: 2, special: { enemyCurse: -0.4, enemyFortune: -0.25, allyFortune: -0.12 } },
-        3: { manaCost: 10, power: 0, cooldown: 1, special: { enemyCurse: -0.5, enemyFortune: -0.3, allyFortune: -0.1 } },
-        4: { manaCost: 10, power: 0, cooldown: 1, special: { enemyCurse: -0.6, enemyFortune: -0.35, allyFortune: -0.08 } }
+        1: { manaCost: 0, power: 0, cooldown: 4, special: { enemyCurse: -0.3, enemyFortune: -0.2, allyFortune: -0.15 } },
+        2: { manaCost: 0, power: 0, cooldown: 3, special: { enemyCurse: -0.4, enemyFortune: -0.25, allyFortune: -0.12 } },
+        3: { manaCost: 0, power: 0, cooldown: 2, special: { enemyCurse: -0.5, enemyFortune: -0.3, allyFortune: -0.1 } },
+        4: { manaCost: 0, power: 0, cooldown: 2, special: { enemyCurse: -0.6, enemyFortune: -0.35, allyFortune: -0.08 } }
       }
     },
     reality: {
@@ -276,7 +276,7 @@
     presence: { system: 'moirai', kind: 'mental', effect: 'psych_pressure', activation: 'active', manaCost: 15, cooldown: 2, level: 1, basePower: 18, equityBias: -15, pressureType: 'presence', icon: '', description: '压场 — 让对方退缩、保守' },
     taunt: { system: 'chaos', kind: 'mental', effect: 'psych_pressure', activation: 'active', manaCost: 15, cooldown: 2, level: 1, basePower: 18, equityBias: 15, pressureType: 'taunt', icon: '', description: '挑衅 — 让对方上头、冒进' },
     probe: { system: 'psyche', kind: 'mental', effect: 'psych_probe', activation: 'active', manaCost: 12, cooldown: 1, level: 1, basePower: 15, confidenceDelta: -30, pressureType: 'probe', icon: '', description: '试探 — 让对方失准，读取心理状态' },
-    center_self: { system: 'void', kind: 'mental', effect: 'psych_recover', activation: 'active', manaCost: 10, cooldown: 3, level: 1, baseRecover: 20, confidenceDelta: 20, clearBias: true, icon: '', description: '定神 — 稳住自己，恢复定力' }
+    center_self: { system: 'void', kind: 'mental', effect: 'psych_recover', activation: 'active', manaCost: 0, cooldown: 4, level: 1, baseRecover: 20, confidenceDelta: 20, clearBias: true, icon: '', description: '定神 — 稳住自己，恢复定力' }
   };
 
   function clampSkillLevel(rawLevel, maxLevel) {
