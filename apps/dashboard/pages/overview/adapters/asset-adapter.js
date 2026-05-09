@@ -67,8 +67,7 @@
             pending_offer: null,
             pending_offer_queue: [],
             pending_replace: null,
-            history: [],
-            debug: {}
+            history: []
         };
     }
 

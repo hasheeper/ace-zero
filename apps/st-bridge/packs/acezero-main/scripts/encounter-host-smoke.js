@@ -28,9 +28,7 @@ function makePlacedCotaAct() {
     nodeIndex: 5,
     route_history: currentRouteToNode5A(),
     phase_index: forced.placed.targetPhaseIndex,
-    phase_advance: 1,
-    pendingFirstMeet: { OLD: 'old first meet should be cleared' },
-    pendingPreSignal: { OLD: 'old pre signal should be cleared' }
+    phase_advance: 1
   };
 }
 
@@ -198,11 +196,7 @@ async function testFirstMeetPendingAndDossierWriteback() {
   const { runtime } = makeRuntimeWithEra(eraVars);
 
   const resolved = await runtime.resolvePendingActAdvance(eraVars);
-  const resolvedAct = resolved.eraVars.world.act;
   assert(resolved.changed, 'resolvePendingActAdvance should advance and consume target phase');
-  assert(!resolvedAct.pendingFirstMeet.COTA, 'Consumed first_meet should not survive as a pending prompt');
-  assert(!resolvedAct.pendingFirstMeet.OLD, 'Old pendingFirstMeet should be cleared during phase advance');
-  assert(!resolvedAct.pendingPreSignal.OLD, 'Old pendingPreSignal should be cleared during phase advance');
 
   const synced = await runtime.synchronizeActCharacterState(resolved.eraVars);
   assert(synced.changed, 'synchronizeActCharacterState should write first-meet cast patch');
@@ -210,12 +204,7 @@ async function testFirstMeetPendingAndDossierWriteback() {
   assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'COTA should be introduced in Dossier after first meet');
   assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'COTA present should remain LLM-controlled after first meet consumption');
 
-  const prompts = runtime.buildActNarrativePrompts(
-    synced.eraVars,
-    null,
-    synced.eraVars.world.act.pendingFirstMeet,
-    synced.eraVars.world.act.pendingPreSignal
-  );
+  const prompts = runtime.buildActNarrativePrompts(synced.eraVars);
   const firstMeetPrompt = prompts.find((prompt) => prompt.id === 'ace0_first_meet');
   assert(!firstMeetPrompt, 'Consumed first_meet should not inject ace0_first_meet again');
 }
@@ -240,7 +229,6 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
       clockPressure: 0,
       act: {
         ...baseAct,
-        pendingFirstMeet: {},
         phase_advance: 0
       }
     }
@@ -250,12 +238,7 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
   assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'Placed first_meet should unlock introduced during the appearance phase');
   assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'Placed first_meet should keep present locked before phase consumption');
 
-  const prompts = runtime.buildActNarrativePrompts(
-    synced.eraVars,
-    null,
-    synced.eraVars.world.act.pendingFirstMeet,
-    synced.eraVars.world.act.pendingPreSignal
-  );
+  const prompts = runtime.buildActNarrativePrompts(synced.eraVars);
   const firstMeetPrompt = prompts.find((prompt) => prompt.id === 'ace0_first_meet');
   assert(firstMeetPrompt, 'Placed current-phase first_meet should produce ace0_first_meet before phase consumption');
   assert(firstMeetPrompt.content.includes('COTA'), 'Placed current-phase first_meet should mention COTA');
@@ -322,7 +305,6 @@ async function testIntroducedEncounterPreservesManualPresentAfterFirstMeetPendin
         nodeIndex: 6,
         route_history: [...currentRouteToNode5A(), 'node06-a-route'],
         phase_advance: 0,
-        pendingFirstMeet: {},
         characterEncounter: {
           queue: [],
           characters: {
@@ -410,30 +392,18 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
         nodeIndex: placed.placed.targetNodeIndex,
         route_history: [...route, placed.placed.targetNodeId],
         phase_index: placed.placed.targetPhaseIndex,
-        phase_advance: 1,
-        pendingFirstMeet: { OLD: 'old first meet should be cleared' },
-        pendingPreSignal: { OLD: 'old pre signal should be cleared' }
+        phase_advance: 1
       }
     }
   };
   const { runtime } = makeRuntimeWithEra(eraVars);
 
   const resolved = await runtime.resolvePendingActAdvance(eraVars);
-  const resolvedAct = resolved.eraVars.world.act;
-  assert(resolvedAct.pendingPreSignal.VV, 'New pre_signal pending should survive phase advance');
-  assert(!resolvedAct.pendingPreSignal.OLD, 'Old pendingPreSignal should be cleared');
-  assert(!resolvedAct.pendingFirstMeet.OLD, 'Old pendingFirstMeet should be cleared');
-  assert(!resolvedAct.pendingFirstMeet.VV, 'pre_signal should not create first_meet pending');
 
   const synced = await runtime.synchronizeActCharacterState(resolved.eraVars);
   assertEqual(synced.eraVars.hero.cast.VV.introduced, false, 'pre_signal should not unlock VV Dossier');
 
-  const prompts = runtime.buildActNarrativePrompts(
-    synced.eraVars,
-    null,
-    synced.eraVars.world.act.pendingFirstMeet,
-    synced.eraVars.world.act.pendingPreSignal
-  );
+  const prompts = runtime.buildActNarrativePrompts(synced.eraVars);
   const preSignalPrompt = prompts.find((prompt) => prompt.id === 'ace0_pre_signal');
   assert(preSignalPrompt, 'pre_signal pending should produce ace0_pre_signal prompt');
   assert(preSignalPrompt.content.includes('<ace0_pre_signal>'), 'pre_signal prompt should include XML wrapper');

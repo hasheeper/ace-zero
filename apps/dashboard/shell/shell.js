@@ -385,15 +385,13 @@ function getEncounterDashboardStateFromWorld(world, heroCode) {
   const introducedNodeId = typeof encounterChar.introducedNodeId === 'string' ? encounterChar.introducedNodeId : '';
   const isIntroduced = encounterChar.firstMeetDone === true
     || encounterChar.status === 'introduced'
-    || encounterChar.status === 'first_meet'
-    || Boolean(act.pendingFirstMeet?.[heroCode]);
+    || encounterChar.status === 'first_meet';
   if (!isIntroduced) return null;
 
   return {
     activated: true,
     introduced: true,
     present: encounterChar.status === 'first_meet'
-      || Boolean(act.pendingFirstMeet?.[heroCode])
       || (introducedNodeId && introducedNodeId === currentNodeId),
     inParty: false,
     miniKnown: false
@@ -415,14 +413,14 @@ function applyMvuHero(hero, world = null) {
 
     character.dashboardState = {
       ...defaults.dashboardState,
+      ...(encounterState || {}),
       ...(castNode && typeof castNode === 'object' ? {
         activated: true,
         introduced: castNode.introduced === true,
         present: castNode.present === true,
         inParty: castNode.inParty === true,
         miniKnown: castNode.miniKnown === true
-      } : {}),
-      ...(encounterState || {})
+      } : {})
     };
 
     character.level = rosterNode?.level != null ? Math.max(0, Math.round(Number(rosterNode.level) || 0)) : defaults.level;

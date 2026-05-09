@@ -155,7 +155,6 @@
           deepClone,
           normalizeTrimmedString,
           normalizeActState,
-          normalizePendingFirstMeet,
           normalizeCountMap,
           getChapter,
           getCurrentActNodeId,
@@ -179,6 +178,7 @@
   function normalizeCharacterEncounterState(value) { return ACT_ENCOUNTER_RUNTIME.normalizeCharacterEncounterState(value); }
   function getActiveEncounterCharacterKeys(characterEncounterInput) { return ACT_ENCOUNTER_RUNTIME.getActiveEncounterCharacterKeys(characterEncounterInput); }
   function getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId); }
+  function getCharacterEncounterPreSignalMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterPreSignalMap(actStateInput, currentNodeId); }
   function calculateEncounterSpentScore(actStateInput, weightsInput) { return ACT_ENCOUNTER_RUNTIME.calculateEncounterSpentScore(actStateInput, weightsInput); }
   function getEncounterRuntimeDay(contextInput) { return ACT_ENCOUNTER_RUNTIME.getEncounterRuntimeDay(contextInput); }
   function getEncounterRuntimeGeo(contextInput) { return ACT_ENCOUNTER_RUNTIME.getEncounterRuntimeGeo(contextInput); }
@@ -319,18 +319,6 @@
     return ACT_STAGE_VALUES.includes(normalized) ? normalized : DEFAULT_WORLD_ACT.stage;
   }
 
-  function normalizePendingFirstMeet(value) {
-    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    const out = {};
-    Object.entries(source).forEach(([rawKey, rawHint]) => {
-      const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
-      const hint = normalizeTrimmedString(rawHint, '');
-      if (!charKey || !hint) return;
-      out[charKey] = hint;
-    });
-    return out;
-  }
-
   function getVisionReplacementForPhase(actStateInput, nodeId, phaseIndex) {
     const vision = normalizeVisionState(actStateInput?.vision);
     const pending = vision.pendingReplace;
@@ -453,8 +441,6 @@
       vision: normalizeVisionState(raw.vision),
       resourceSpent: normalizeCountMap(raw.resourceSpent, false),
       characterEncounter: normalizeCharacterEncounterState(raw.characterEncounter),
-      pendingFirstMeet: normalizePendingFirstMeet(raw.pendingFirstMeet),
-      pendingPreSignal: normalizePendingFirstMeet(raw.pendingPreSignal),
       pendingResolutions: normalizePendingResolutions(raw.pendingResolutions),
       pendingAssetDeckCommands: normalizePendingAssetDeckCommands(raw.pendingAssetDeckCommands, raw.pendingResolutions),
       resolutionHistory: normalizeResolutionHistory(raw.resolutionHistory),
@@ -543,8 +529,6 @@
       vision: normalizeVisionState(source.vision || base.vision),
       resourceSpent: normalizeCountMap(source.resourceSpent, false),
       characterEncounter: normalizeCharacterEncounterState(source.characterEncounter),
-      pendingFirstMeet: normalizePendingFirstMeet(source.pendingFirstMeet),
-      pendingPreSignal: normalizePendingFirstMeet(source.pendingPreSignal),
       pendingResolutions: normalizePendingResolutions(source.pendingResolutions),
       pendingAssetDeckCommands: normalizePendingAssetDeckCommands(source.pendingAssetDeckCommands, source.pendingResolutions),
       resolutionHistory: normalizeResolutionHistory(source.resolutionHistory),
@@ -1291,10 +1275,10 @@
       ? mergePlainObjects(originalActState, result.actPatch, ['pendingResolutions', 'resolutionHistory', 'crisisSignals'])
       : deepClone(originalActState);
     patchedActState.pendingResolutions = nextPending;
-    patchedActState.resolutionHistory = [
+    patchedActState.resolutionHistory = normalizeResolutionHistory([
       ...normalizeResolutionHistory(originalActState.resolutionHistory),
       historyEntry
-    ];
+    ]);
     if (Array.isArray(result.crisisSignals) && result.crisisSignals.length) {
       let signalActState = patchedActState;
       result.crisisSignals.forEach((signalInput) => {
@@ -1623,6 +1607,7 @@
     // 首见帧来源只允许来自 characterEncounter 运行时状态。
     // 真正是否首见，仍在 createCharacterCastPatch 里比对 currentCast 旧态。
     const encounterFirstMeetHints = getCharacterEncounterFirstMeetMap(act, currentNodeId);
+    const encounterPreSignalHints = getCharacterEncounterPreSignalMap(act, currentNodeId);
 
     return {
       act,
@@ -1632,7 +1617,8 @@
       currentNodeId,
       currentNodeEffects,
       states,
-      encounterFirstMeetHints
+      encounterFirstMeetHints,
+      encounterPreSignalHints
     };
   }
 
@@ -1762,7 +1748,6 @@
     getChapter,
     getDefaultActState,
     normalizeActState,
-    normalizePendingFirstMeet,
     normalizeCharacterEncounterState,
     evaluateCharacterEncounterEligibility,
     enqueueEligibleCharacterEncounters,

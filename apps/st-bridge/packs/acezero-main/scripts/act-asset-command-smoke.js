@@ -126,7 +126,7 @@ function testAssetDeckGrantHistoryKeepsActSource() {
   const lastHistory = result.assetDeck.history[result.assetDeck.history.length - 1];
   assert(lastHistory, 'grant_asset should append history');
   assertEqual(lastHistory.requestId, 'act-command-1', 'AssetDeck history should keep request id');
-  assertEqual(lastHistory.source.nodeId, 'node1-entry', 'AssetDeck history should keep ACT source node');
+  assert(!('source' in lastHistory), 'AssetDeck history should not retain ACT source payload');
 }
 
 function testAssetDeckOpenOfferHistoryKeepsActSource() {
@@ -154,7 +154,29 @@ function testAssetDeckOpenOfferHistoryKeepsActSource() {
   assertEqual(result.assetDeck.pending_offer.pool, 'high', 'open_offer should create high pending offer');
   const lastHistory = result.assetDeck.history[result.assetDeck.history.length - 1];
   assertEqual(lastHistory.requestId, 'act-offer-1', 'open_offer history should keep request id');
-  assertEqual(lastHistory.source.nodeId, 'node1-entry', 'open_offer history should keep ACT source node');
+  assert(!('source' in lastHistory), 'open_offer history should not retain ACT source payload');
+}
+
+function testActResolutionHistoryKeepsStableWindow() {
+  const { act } = loadActSandbox();
+  const history = Array.from({ length: 70 }, (_, index) => ({
+    id: `history-${index}`,
+    protocol: 'ace0.assetDeckCommand.v1',
+    type: 'asset',
+    level: 1,
+    nodeId: 'node1-entry',
+    nodeIndex: 1,
+    phaseIndex: 0,
+    status: 'resolved',
+    outcome: 'asset_granted'
+  }));
+  const normalized = act.normalizeActState({
+    ...act.getDefaultActState(),
+    resolutionHistory: history
+  });
+  assertEqual(normalized.resolutionHistory.length, 64, 'ACT resolutionHistory should keep a stable 64-entry window');
+  assertEqual(normalized.resolutionHistory[0].id, 'history-6', 'ACT resolutionHistory should keep the newest 64 entries');
+  assertEqual(normalized.resolutionHistory[63].id, 'history-69', 'ACT resolutionHistory should keep the latest entry');
 }
 
 testActAssetTokenCreatesAssetDeckCommand();
@@ -181,5 +203,6 @@ testLowAssetTokenOpensLowOfferCommand();
 }
 testAssetDeckGrantHistoryKeepsActSource();
 testAssetDeckOpenOfferHistoryKeepsActSource();
+testActResolutionHistoryKeepsStableWindow();
 
 console.log('[act-asset-command-smoke] all checks passed');

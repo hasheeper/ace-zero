@@ -162,7 +162,6 @@ function testQueuePlaceConsumeFirstMeet() {
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.firstMeetDone, true, 'COTA should be marked firstMeetDone');
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.status, 'introduced', 'COTA should become introduced');
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.introducedPhaseIndex, placed.targetPhaseIndex, 'First-meet should record the phase it was introduced on');
-  assert(!consumedResult.actState.pendingFirstMeet.COTA, 'Consumed first_meet should not create a follow-up pending prompt');
 
   const afterIntroduced = act.evaluateCharacterEncounterEligibility(consumedResult.actState, hero, context);
   assert(!afterIntroduced.eligible.some((item) => item.charKey === 'COTA'), 'Introduced COTA should not become eligible again');
@@ -300,8 +299,8 @@ function testPreSignalThenFirstMeet() {
   assertEqual(consumedResult.consumed.type, 'pre_signal', 'Consumed VV event should be pre_signal');
   assertEqual(consumedResult.actState.characterEncounter.characters.VV.preSignalDone, true, 'VV should remember preSignalDone');
   assertEqual(consumedResult.actState.characterEncounter.characters.VV.firstMeetDone, false, 'pre_signal should not unlock firstMeetDone');
-  assert(consumedResult.actState.pendingPreSignal.VV, 'pre_signal should write pendingPreSignal');
-  assert(!consumedResult.actState.pendingFirstMeet.VV, 'pre_signal should not write pendingFirstMeet');
+  assertEqual(consumedResult.actState.characterEncounter.characters.VV.preSignalNodeId, placedResult.placed.targetNodeId, 'pre_signal should record its source node');
+  assertEqual(consumedResult.actState.characterEncounter.characters.VV.preSignalPhaseIndex, placedResult.placed.targetPhaseIndex, 'pre_signal should record its source phase');
   assert(consumedResult.placed, 'pre_signal should immediately place the first_meet follow-up');
   assertEqual(consumedResult.placed.type, 'first_meet', 'VV follow-up request should be first_meet');
   assertEqual(consumedResult.placed.targetNodeIndex, placedResult.placed.targetNodeIndex + 1, 'first_meet follow-up should target the next node after pre_signal');

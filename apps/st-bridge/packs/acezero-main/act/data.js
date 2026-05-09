@@ -182,8 +182,6 @@ const DEFAULT_WORLD_ACT = {
       vision: 0
     },
     characterEncounter: {},
-    pendingFirstMeet: {},
-    pendingPreSignal: {},
     pendingResolutions: [],
     pendingAssetDeckCommands: [],
     resolutionHistory: [],

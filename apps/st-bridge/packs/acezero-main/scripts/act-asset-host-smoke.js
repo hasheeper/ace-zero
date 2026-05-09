@@ -108,8 +108,8 @@ function testHostLoaderSettlesAssetThree() {
   assert(nextState.world.assetDeck.pending_offer, 'host loader should leave a pending high offer');
   assertEqual(nextState.world.assetDeck.pending_offer.pool, 'high', 'host loader should open high offer');
   assertEqual(nextState.world.assetDeck.history.length, 2, 'AssetDeck history should record both host-applied commands');
-  assertEqual(nextState.world.assetDeck.history[0].source.nodeId, 'node1-entry', 'grant history should preserve source node');
-  assertEqual(nextState.world.assetDeck.history[1].source.nodeId, 'node1-entry', 'offer history should preserve source node');
+  assert(!('source' in nextState.world.assetDeck.history[0]), 'AssetDeck history should not retain source payload');
+  assert(!('source' in nextState.world.assetDeck.history[1]), 'AssetDeck history should not retain source payload');
 }
 
 function testHostLoaderPreservesNonPendingCommands() {

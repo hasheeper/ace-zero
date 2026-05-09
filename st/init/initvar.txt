@@ -195,8 +195,6 @@ world:
       asset: 0
       vision: 0
     characterEncounter: {}
-    pendingFirstMeet: {}
-    pendingPreSignal: {}
     pendingResolutions: []
     pendingAssetDeckCommands: []
     resolutionHistory: []
@@ -212,47 +210,17 @@ world:
     active_general_cards:
       - instanceId: asset_skill_minor_wish_l1:init
         cardId: asset_skill_minor_wish_l1
-        rarity: bronze
-        kind: skill
-        system: fortune
-        skillKey: minor_wish
         level: 1
-        targetTags:
-          - RINO
-        gameTags:
-          - texas-holdem
-        slotTags:
-          - general
-        modifiers:
-          - type: skill_level
-            key: minor_wish
-            value: 1
         source: init
         addedAt: 0
     active_void_cards:
       - instanceId: asset_skill_insulation_l1:init_void
         cardId: asset_skill_insulation_l1
-        rarity: bronze
-        kind: skill
-        system: void
-        skillKey: insulation
         level: 1
-        targetTags:
-          - KAZU
-        gameTags:
-          - texas-holdem
-        slotTags:
-          - general
-          - void
-        modifiers:
-          - type: skill_level
-            key: insulation
-            value: 1
         source: init
         addedAt: 0
     pending_offer: null
     pending_offer_queue: []
     pending_replace: null
     history: []
-    debug: {}
   expansions: {}

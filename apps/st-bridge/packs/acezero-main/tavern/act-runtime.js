@@ -430,24 +430,6 @@
             .map(item => JSON.parse(JSON.stringify(item)))
         : [],
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(rawAct.narrativeTension) || 0))),
-      pendingFirstMeet: (() => {
-        const raw = rawAct.pendingFirstMeet;
-        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-        const out = {};
-        for (const [k, v] of Object.entries(raw)) {
-          if (typeof v === 'string' && v.trim()) out[k] = v;
-        }
-        return out;
-      })(),
-      pendingPreSignal: (() => {
-        const raw = rawAct.pendingPreSignal;
-        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-        const out = {};
-        for (const [k, v] of Object.entries(raw)) {
-          if (typeof v === 'string' && v.trim()) out[k] = v;
-        }
-        return out;
-      })(),
       pendingTransitionTarget: typeof rawAct.pendingTransitionTarget === 'string'
         ? rawAct.pendingTransitionTarget.trim()
         : '',
@@ -515,8 +497,6 @@
         changed: true,
         actState: {
           ...targetActState,
-          pendingFirstMeet: {},
-          pendingPreSignal: {},
           pendingTransitionTarget: '',
           transitionRequestTarget: '',
           pendingTransitionPrompt: enteredPrompt
@@ -615,6 +595,15 @@
 
   function getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState = null) {
     const derived = derivedActState || deriveActCharacterStates(eraVars);
+    if (derived?.encounterFirstMeetHints && typeof derived.encounterFirstMeetHints === 'object') {
+      const normalizedHints = {};
+      Object.entries(derived.encounterFirstMeetHints).forEach(([rawKey, rawHint]) => {
+        const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
+        const hint = normalizeTrimmedString(rawHint, '');
+        if (charKey && hint) normalizedHints[charKey] = hint;
+      });
+      if (Object.keys(normalizedHints).length) return normalizedHints;
+    }
     const act = derived?.act || getWorldActState(eraVars);
     const currentNodeId = normalizeTrimmedString(derived?.currentNodeId, '') || getCurrentActNodeId(act);
     const currentPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
@@ -944,7 +933,6 @@
     }
 
     // 首见帧 hook：当前 node/phase 的 placed first_meet 是唯一权威来源。
-    // pendingFirstMeet 只兼容旧档清理，不再参与生成。
     const activeHints = getActiveFirstMeetHintsForCurrentPhase(eraVars, derived);
     const hints = activeHints;
     if (Object.keys(hints).length > 0) {
@@ -964,7 +952,9 @@
       }
     }
 
-    const signalHints = preSignalHints && typeof preSignalHints === 'object' ? preSignalHints : {};
+    const signalHints = derived?.encounterPreSignalHints && typeof derived.encounterPreSignalHints === 'object'
+      ? derived.encounterPreSignalHints
+      : (preSignalHints && typeof preSignalHints === 'object' ? preSignalHints : {});
     if (Object.keys(signalHints).length > 0) {
       const preSignalModule = runActModuleMethod('buildPreSignalPromptContent', signalHints);
       const preSignalContent = preSignalModule.ok && typeof preSignalModule.value === 'string'
@@ -1311,28 +1301,6 @@
     return { day: null, phase: null };
   }
 
-  function normalizePendingPromptMap(value) {
-    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    const out = {};
-    Object.entries(source).forEach(([rawKey, rawHint]) => {
-      const key = normalizeTrimmedString(rawKey, '').toUpperCase();
-      const hint = normalizeTrimmedString(rawHint, '');
-      if (key && hint) out[key] = hint;
-    });
-    return out;
-  }
-
-  function keepNewPendingPrompts(currentInput, previousInput) {
-    const current = normalizePendingPromptMap(currentInput);
-    const previous = normalizePendingPromptMap(previousInput);
-    const out = {};
-    Object.entries(current).forEach(([key, hint]) => {
-      if (Object.prototype.hasOwnProperty.call(previous, key)) return;
-      out[key] = hint;
-    });
-    return out;
-  }
-
   function buildEncounterContextFromEraVars(eraVars) {
     const world = getWorldState(eraVars);
     const hero = eraVars?.hero && typeof eraVars.hero === 'object' ? eraVars.hero : {};
@@ -1547,7 +1515,6 @@
     let nextHero = hero;
     let moduleAdvance = { ok: false };
     const encounterContext = buildEncounterContextFromEraVars(eraVars);
-    const previousPendingPreSignal = normalizePendingPromptMap(act.pendingPreSignal);
 
     if (requestedSteps > 0) {
       moduleAdvance = runActModuleMethod('resolvePendingAdvanceState', act, hero, config, encounterContext);
@@ -1572,11 +1539,6 @@
         if (actState.stage === 'complete') break;
         if (actState.stage === 'route' && actState.route_history.length < actState.nodeIndex + 1) break;
       }
-    }
-
-    if (requestedSteps > 0) {
-      actState.pendingFirstMeet = {};
-      actState.pendingPreSignal = keepNewPendingPrompts(actState.pendingPreSignal, previousPendingPreSignal);
     }
 
     // 阶段推进后的两套积分独立累计：

@@ -29,7 +29,6 @@
           return normalized || fallback;
         },
         normalizeActState,
-        normalizePendingFirstMeet,
         normalizeCountMap,
         getChapter,
         getCurrentActNodeId,
@@ -61,17 +60,16 @@
       status: 'locked',
       firstMeetDone: false,
       preSignalDone: false,
+      preSignalNodeId: '',
+      preSignalAtNodeIndex: 0,
+      preSignalPhaseIndex: -1,
       cooldownUntilNodeIndex: 0,
       queuedRequestId: '',
       placedNodeId: '',
       introducedNodeId: '',
       introducedAtNodeIndex: 0,
       introducedPhaseIndex: -1,
-      lastEvaluatedNodeIndex: 0,
-      reasonCodes: [],
-      firstMeetHint: '',
-      preSignalHint: '',
-      debugLabel: normalizeTrimmedString(charKey, '').toUpperCase()
+      lastEvaluatedNodeIndex: 0
     };
   }
 
@@ -90,6 +88,11 @@
       status: normalizeEncounterCharacterStatus(source.status),
       firstMeetDone: source.firstMeetDone === true || source.status === 'introduced',
       preSignalDone: source.preSignalDone === true,
+      preSignalNodeId: normalizeTrimmedString(source.preSignalNodeId, ''),
+      preSignalAtNodeIndex: Math.max(0, Math.round(Number(source.preSignalAtNodeIndex) || 0)),
+      preSignalPhaseIndex: Number.isFinite(Number(source.preSignalPhaseIndex))
+        ? Math.max(0, Math.min(3, Math.round(Number(source.preSignalPhaseIndex))))
+        : -1,
       cooldownUntilNodeIndex: Math.max(0, Math.round(Number(source.cooldownUntilNodeIndex) || 0)),
       queuedRequestId: normalizeTrimmedString(source.queuedRequestId, ''),
       placedNodeId: normalizeTrimmedString(source.placedNodeId, ''),
@@ -98,11 +101,7 @@
       introducedPhaseIndex: Number.isFinite(Number(source.introducedPhaseIndex))
         ? Math.max(0, Math.min(3, Math.round(Number(source.introducedPhaseIndex))))
         : -1,
-      lastEvaluatedNodeIndex: Math.max(0, Math.round(Number(source.lastEvaluatedNodeIndex) || 0)),
-      reasonCodes: normalizeEncounterReasonCodes(source.reasonCodes),
-      firstMeetHint: normalizeTrimmedString(source.firstMeetHint || source.hint || source.summary, ''),
-      preSignalHint: normalizeTrimmedString(source.preSignalHint || source.signalHint, ''),
-      debugLabel: normalizeTrimmedString(source.debugLabel || source.label, normalizedCharKey)
+      lastEvaluatedNodeIndex: Math.max(0, Math.round(Number(source.lastEvaluatedNodeIndex) || 0))
     };
     if (state.firstMeetDone && state.status === 'locked') state.status = 'introduced';
     return state;
@@ -116,7 +115,6 @@
     const status = normalizeEncounterQueueStatus(rawItem.status);
     const targetNodeId = normalizeTrimmedString(rawItem.targetNodeId || rawItem.nodeId, '');
     return {
-      ...deepClone(rawItem),
       id: normalizeTrimmedString(rawItem.id, `enc:${charKey}:${type}:${targetNodeId || 'unplaced'}:${fallbackIndex}`),
       charKey,
       type,
@@ -127,11 +125,7 @@
       createdNodeIndex: Math.max(0, Math.round(Number(rawItem.createdNodeIndex) || 0)),
       expiresNodeIndex: Math.max(0, Math.round(Number(rawItem.expiresNodeIndex) || 0)),
       priority: Math.round(Number(rawItem.priority) || 0),
-      spentScore: Math.max(0, Math.round(Number(rawItem.spentScore) || 0)),
-      reasonCodes: normalizeEncounterReasonCodes(rawItem.reasonCodes),
-      debugLabel: normalizeTrimmedString(rawItem.debugLabel || rawItem.label, charKey),
-      firstMeetHint: normalizeTrimmedString(rawItem.firstMeetHint || rawItem.hint || rawItem.summary, ''),
-      preSignalHint: normalizeTrimmedString(rawItem.preSignalHint || rawItem.signalHint, '')
+      spentScore: Math.max(0, Math.round(Number(rawItem.spentScore) || 0))
     };
   }
 
@@ -146,7 +140,7 @@
     });
     const queue = (Array.isArray(source.queue) ? source.queue : [])
       .map((item, index) => normalizeEncounterQueueItem(item, index))
-      .filter(Boolean);
+      .filter(item => item && !ENCOUNTER_TERMINAL_QUEUE_STATUSES.includes(item.status));
     return {
       meta: {
         version: Math.max(1, Math.round(Number(source?.meta?.version) || 1)),
@@ -156,6 +150,11 @@
       queue,
       characters
     };
+  }
+
+  function setCharacterEncounterState(act, encounter) {
+    act.characterEncounter = normalizeCharacterEncounterState(encounter);
+    return act.characterEncounter;
   }
 
   function getActiveEncounterCharacterKeys(characterEncounterInput) {
@@ -179,8 +178,10 @@
       if (item.targetNodeId !== nodeId) return;
       const targetPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
       if (targetPhaseIndex !== phaseIndex) return;
-      if (!item.firstMeetHint) return;
-      hints[item.charKey] = item.firstMeetHint;
+      const ruleHint = normalizeTrimmedString(ENCOUNTER_RULES[item.charKey]?.firstMeetHint, '');
+      const hint = normalizeTrimmedString(item.firstMeetHint, ruleHint);
+      if (!hint) return;
+      hints[item.charKey] = hint;
     });
     Object.entries(encounter.characters).forEach(([charKey, state]) => {
       if (state.status !== 'introduced' && state.status !== 'first_meet') return;
@@ -189,8 +190,29 @@
         const introducedPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(state.introducedPhaseIndex))));
         if (introducedPhaseIndex !== phaseIndex) return;
       }
-      if (!state.firstMeetHint) return;
-      hints[charKey] = state.firstMeetHint;
+      const hint = normalizeTrimmedString(ENCOUNTER_RULES[charKey]?.firstMeetHint, '');
+      if (!hint) return;
+      hints[charKey] = hint;
+    });
+    return hints;
+  }
+
+  function getCharacterEncounterPreSignalMap(actStateInput, currentNodeId) {
+    const actState = normalizeActState(actStateInput);
+    const encounter = normalizeCharacterEncounterState(actState.characterEncounter);
+    const nodeId = normalizeTrimmedString(currentNodeId, '');
+    const phaseIndex = Math.max(0, Math.min(4, Math.round(Number(actState.phase_index) || 0)));
+    const hints = {};
+    Object.entries(encounter.characters).forEach(([charKey, state]) => {
+      if (state.preSignalDone !== true) return;
+      if (state.preSignalNodeId && state.preSignalNodeId !== nodeId) return;
+      if (Number.isFinite(Number(state.preSignalPhaseIndex))) {
+        const signalPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(state.preSignalPhaseIndex))));
+        if (phaseIndex !== Math.min(4, signalPhaseIndex + 1)) return;
+      }
+      const hint = normalizeTrimmedString(ENCOUNTER_RULES[charKey]?.preSignalHint, '');
+      if (!hint) return;
+      hints[charKey] = hint;
     });
     return hints;
   }
@@ -639,7 +661,7 @@
       && item.targetNodeId
     ));
     if (hasActivePlacedRequest) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, placed: null, reason: 'active_placement' };
     }
     const pendingRequests = encounter.queue
@@ -652,7 +674,7 @@
       .sort((left, right) => compareEncounterPriority(left, right) || left.createdNodeIndex - right.createdNodeIndex);
     const request = pendingRequests[0] || null;
     if (!request) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return {
         actState: act,
         placed: null,
@@ -664,7 +686,7 @@
       && encounter.meta.lastFirstMeetNodeIndex > 0
       && currentNodeIndex < encounter.meta.lastFirstMeetNodeIndex + Math.max(1, Math.round(Number(options.cooldownNodes) || 1))
     ) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, placed: null, reason: 'cooldown' };
     }
 
@@ -677,7 +699,7 @@
       candidates.map((item) => item.nodeId).join(',')
     ].join('|')) || null;
     if (!target) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, placed: null, reason: 'no_candidate' };
     }
 
@@ -702,7 +724,7 @@
       preSignalHint: placed.preSignalHint || charState.preSignalHint,
       debugLabel: placed.debugLabel || charState.debugLabel
     };
-    act.characterEncounter = encounter;
+    setCharacterEncounterState(act, encounter);
     return { actState: act, placed };
   }
 
@@ -712,7 +734,7 @@
     const request = requestInput || {};
     const charKey = normalizeTrimmedString(request.charKey, '').toUpperCase();
     if (!ENCOUNTER_CHARACTER_KEYS.includes(charKey)) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, queued: null, placed: null, reason: 'unknown_character' };
     }
     const existingActive = encounter.queue.find((item) => (
@@ -721,7 +743,7 @@
       !ENCOUNTER_TERMINAL_QUEUE_STATUSES.includes(item.status)
     ));
     if (existingActive) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, queued: existingActive, placed: existingActive.status === 'placed' ? existingActive : null, reason: 'existing_followup' };
     }
 
@@ -758,7 +780,7 @@
       firstMeetHint: followUpRequest.firstMeetHint,
       debugLabel: followUpRequest.debugLabel
     };
-    act.characterEncounter = encounter;
+    setCharacterEncounterState(act, encounter);
     const placedResult = placeNextCharacterEncounter(act, configInput, {
       ...options,
       requestCharKey: charKey,
@@ -815,7 +837,7 @@
       };
       queued.push(request);
     });
-    act.characterEncounter = encounter;
+    setCharacterEncounterState(act, encounter);
     if (options.place !== true) return { actState: act, queued, placed: null, evaluated };
     const placedResult = placeNextCharacterEncounter(act, options.config || getChapter(act.id), options);
     return { actState: placedResult.actState, queued, placed: placedResult.placed, evaluated };
@@ -835,7 +857,7 @@
       && (phaseIndex === null || item.targetPhaseIndex === phaseIndex)
     ));
     if (!request) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, consumed: null };
     }
 
@@ -853,8 +875,11 @@
       encounter.queue = encounter.queue.map((item) => item.id === request.id ? consumed : item);
       encounter.characters[request.charKey] = {
         ...(encounter.characters[request.charKey] || createDefaultEncounterCharacterState(request.charKey)),
-        status: 'locked',
+        status: 'pre_signal',
         preSignalDone: true,
+        preSignalNodeId: nodeId,
+        preSignalAtNodeIndex: currentNodeIndex,
+        preSignalPhaseIndex: phaseIndex === null ? request.targetPhaseIndex : phaseIndex,
         queuedRequestId: '',
         placedNodeId: '',
         lastEvaluatedNodeIndex: currentNodeIndex,
@@ -863,11 +888,7 @@
         firstMeetHint: normalizeTrimmedString(request.firstMeetHint || rule.firstMeetHint, ''),
         debugLabel: normalizeTrimmedString(request.debugLabel || rule.debugLabel, request.charKey)
       };
-      act.characterEncounter = encounter;
-      act.pendingPreSignal = {
-        ...normalizePendingFirstMeet(act.pendingPreSignal),
-        ...(preSignalHint ? { [request.charKey]: preSignalHint } : {})
-      };
+      setCharacterEncounterState(act, encounter);
       const followUp = queueFirstMeetAfterPreSignal(act, request, rule, options.config || getChapter(act.id), options);
       return {
         actState: followUp.actState,
@@ -900,8 +921,7 @@
       debugLabel: normalizeTrimmedString(request.debugLabel || rule.debugLabel, request.charKey)
     };
     encounter.meta.lastFirstMeetNodeIndex = currentNodeIndex;
-    act.characterEncounter = encounter;
-    act.pendingFirstMeet = {};
+    setCharacterEncounterState(act, encounter);
     return { actState: act, consumed };
   }
 
@@ -932,11 +952,11 @@
     const encounter = normalizeCharacterEncounterState(act.characterEncounter);
     const rule = ENCOUNTER_RULES[charKey] || null;
     if (!ENCOUNTER_CHARACTER_KEYS.includes(charKey) || !rule) {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, applied: false, reason: 'unknown_character' };
     }
     if (encounter.characters[charKey]?.firstMeetDone || encounter.characters[charKey]?.status === 'introduced') {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return { actState: act, applied: false, reason: 'already_introduced' };
     }
     const active = encounter.queue.find((item) => item.charKey === charKey && !ENCOUNTER_TERMINAL_QUEUE_STATUSES.includes(item.status));
@@ -946,7 +966,7 @@
       ? active.id
       : '';
     if (active?.status === 'placed') {
-      act.characterEncounter = encounter;
+      setCharacterEncounterState(act, encounter);
       return {
         actState: act,
         applied: true,
@@ -985,7 +1005,7 @@
         debugLabel: request.debugLabel
       };
     }
-    act.characterEncounter = encounter;
+    setCharacterEncounterState(act, encounter);
     const placedResult = placeNextCharacterEncounter(act, config, {
       ...options,
       distance: Math.max(1, Math.round(Number(options.distance) || 1)),
@@ -1006,7 +1026,7 @@
         firstMeetHint: normalizeTrimmedString(rule.firstMeetHint, ''),
         debugLabel: normalizeTrimmedString(rule.debugLabel, charKey)
       };
-      placedResult.actState.characterEncounter = nextEncounter;
+      setCharacterEncounterState(placedResult.actState, nextEncounter);
     }
     return {
       actState: placedResult.actState,
@@ -1046,6 +1066,7 @@
         normalizeCharacterEncounterState,
         getActiveEncounterCharacterKeys,
         getCharacterEncounterFirstMeetMap,
+        getCharacterEncounterPreSignalMap,
         calculateEncounterSpentScore,
         getEncounterRuntimeDay,
         getEncounterRuntimeGeo,

@@ -27,11 +27,9 @@ includes('world.tags = normalizeStringList(world.tags, { lower: true });', 'Worl
 includes('world.flags = normalizeStringList(world.flags, { lower: true });', 'World transform should normalize world.flags');
 includes('world.storyFlags = normalizeBooleanFlagMap(world.storyFlags);', 'World transform should normalize world.storyFlags');
 
-includes('pendingFirstMeet: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v))', 'WorldActSchema should normalize pendingFirstMeet');
-includes('pendingPreSignal: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v))', 'WorldActSchema should normalize pendingPreSignal');
 includes('pendingAssetDeckCommands: z.array(z.any()).default([])', 'WorldActSchema should preserve pending AssetDeck commands');
-includes('characterEncounter: z.record(z.string(), z.any()).default({})', 'WorldActSchema should preserve characterEncounter object');
-includes('pendingPreSignal: {},', 'makeDefaultActState should include pendingPreSignal default');
+includes('function normalizeCharacterEncounterState', 'Schema should compact characterEncounter');
+includes('characterEncounter: z.record(z.string(), z.any()).default({}).transform(v => normalizeCharacterEncounterState(v))', 'WorldActSchema should compact characterEncounter object');
 includes('pendingAssetDeckCommands: [],', 'makeDefaultActState should include pending AssetDeck commands default');
 includes('function makeDefaultAssetDeckState', 'Schema should define makeDefaultAssetDeckState');
 includes('const WorldAssetDeckSchema', 'Schema should define WorldAssetDeckSchema');

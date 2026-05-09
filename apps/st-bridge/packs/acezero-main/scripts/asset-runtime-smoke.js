@@ -50,6 +50,40 @@ function testUnlockSlotCostsAsset() {
   assertEqual(unlocked.assetDeck.general_slots_unlocked, 5, 'First unlock should open fifth general slot');
 }
 
+function testStorageStateStaysCompactButHydrates() {
+  let state = assetDeck.makeDefaultAssetDeckState();
+  state = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 3 } }).assetDeck;
+
+  const opened = assetDeck.applyAssetDeckCommand(state, {
+    kind: 'open_offer',
+    payload: { pool: 'low', seed: 'compact-storage-offer' }
+  });
+  assert(!('debug' in opened.assetDeck), 'Stored AssetDeck state should not include debug');
+  const storedChoice = opened.assetDeck.pending_offer.choices[0];
+  assert(storedChoice.cardId, 'Stored offer choice should keep cardId');
+  assert(storedChoice.instanceId, 'Stored offer choice should keep instanceId');
+  assert(!('rarity' in storedChoice), 'Stored offer choice should not repeat catalog rarity');
+  assert(!('modifiers' in storedChoice), 'Stored offer choice should not repeat catalog modifiers');
+
+  const hydrated = assetDeck.normalizeAssetDeckState(opened.assetDeck);
+  const hydratedChoice = hydrated.pending_offer.choices[0];
+  assert(hydratedChoice.rarity, 'Runtime normalize should hydrate card rarity from catalog');
+  assert(Array.isArray(hydratedChoice.modifiers), 'Runtime normalize should hydrate card modifiers from catalog');
+}
+
+function testHistoryKeepsStableWindow() {
+  let state = assetDeck.makeDefaultAssetDeckState();
+  for (let index = 0; index < 30; index += 1) {
+    state = assetDeck.applyAssetDeckCommand(state, {
+      kind: 'grant_asset',
+      payload: { amount: 1, requestId: `history-${index}` }
+    }).assetDeck;
+  }
+  assertEqual(state.history.length, 24, 'AssetDeck history should keep a stable 24-entry window');
+  assertEqual(state.history[0].requestId, 'history-6', 'AssetDeck history should keep the newest 24 entries');
+  assertEqual(state.history[23].requestId, 'history-29', 'AssetDeck history should keep the latest entry');
+}
+
 function testOfferChooseAndReplace() {
   let state = assetDeck.makeDefaultAssetDeckState();
   state = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 10 } }).assetDeck;
@@ -366,6 +400,8 @@ function testTexasCatalogCoverage() {
 testDefaultState();
 testNormalizeClampsUnsafeState();
 testUnlockSlotCostsAsset();
+testStorageStateStaysCompactButHydrates();
+testHistoryKeepsStableWindow();
 testOfferChooseAndReplace();
 testPoolCostsAndRefreshLimits();
 testOfferQueuePreservesMultiplePhaseOffers();

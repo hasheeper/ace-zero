@@ -76,27 +76,6 @@
         return out;
       }
 
-      function compactHistorySource(source) {
-        const raw = source && typeof source === 'object' && !Array.isArray(source) ? source : null;
-        if (!raw) return null;
-        const out = {};
-        const type = normalizeId(raw.type, '');
-        const actId = normalizeId(raw.actId, '');
-        const nodeId = normalizeId(raw.nodeId, '');
-        const pool = normalizeId(raw.pool, '');
-        const nodeIndex = Math.max(0, Math.round(Number(raw.nodeIndex) || 0));
-        const phaseIndex = Math.max(0, Math.round(Number(raw.phaseIndex) || 0));
-        const level = Math.max(0, Math.round(Number(raw.level) || 0));
-        if (type) out.type = type;
-        if (actId) out.actId = actId;
-        if (nodeId) out.nodeId = nodeId;
-        if (nodeIndex) out.nodeIndex = nodeIndex;
-        if (phaseIndex) out.phaseIndex = phaseIndex;
-        if (level) out.level = level;
-        if (pool) out.pool = pool;
-        return Object.keys(out).length ? out : null;
-      }
-
       function compactHistoryEvent(event) {
         const raw = event && typeof event === 'object' && !Array.isArray(event) ? event : {};
         const out = {};
@@ -107,7 +86,6 @@
         const requestId = normalizeId(raw.requestId, '');
         const pool = normalizeId(raw.pool, '');
         const slotType = normalizeId(raw.slotType, '');
-        const source = compactHistorySource(raw.source);
         if (kind) out.kind = kind;
         if (status) out.status = status;
         if (cardId) out.cardId = cardId;
@@ -115,7 +93,6 @@
         if (requestId) out.requestId = requestId;
         if (pool) out.pool = pool;
         if (slotType) out.slotType = slotType;
-        if (source) out.source = source;
         ['amount', 'cost', 'free', 'general_slots_unlocked', 'fromLevel', 'toLevel'].forEach(key => {
           if (raw[key] != null && raw[key] !== '') out[key] = raw[key];
         });
@@ -239,6 +216,64 @@
         };
       }
 
+      function compactCardRef(cardInput) {
+        const card = normalizeAssetCardInstance(cardInput);
+        if (!isKnownCard(card.cardId)) return null;
+        return {
+          instanceId: card.instanceId,
+          cardId: card.cardId,
+          level: card.level,
+          source: card.source,
+          addedAt: card.addedAt
+        };
+      }
+
+      function compactPendingOffer(offerInput) {
+        const offer = normalizePendingOffer(offerInput);
+        if (!offer) return null;
+        const choices = offer.choices.map(compactCardRef).filter(Boolean);
+        if (!choices.length) return null;
+        return {
+          id: offer.id,
+          pool: offer.pool,
+          cost: offer.cost,
+          refreshCount: offer.refreshCount,
+          freeRefreshUsed: offer.freeRefreshUsed,
+          choices,
+          createdAt: offer.createdAt
+        };
+      }
+
+      function compactPendingReplace(replaceInput) {
+        const pending = normalizePendingReplace(replaceInput);
+        if (!pending) return null;
+        const card = compactCardRef(pending.card);
+        if (!card) return null;
+        return {
+          card,
+          allowedSlots: pending.allowedSlots,
+          reason: pending.reason,
+          confirm_destroy: pending.confirm_destroy,
+          confirm_target: pending.confirm_target
+        };
+      }
+
+      function compactAssetDeckState(value) {
+        const state = normalizeAssetDeckState(value);
+        return {
+          version: state.version,
+          asset_count: state.asset_count,
+          general_slots_unlocked: state.general_slots_unlocked,
+          void_slots_unlocked: state.void_slots_unlocked,
+          active_general_cards: state.active_general_cards.map(compactCardRef).filter(Boolean),
+          active_void_cards: state.active_void_cards.map(compactCardRef).filter(Boolean),
+          pending_offer: compactPendingOffer(state.pending_offer),
+          pending_offer_queue: state.pending_offer_queue.map(compactPendingOffer).filter(Boolean),
+          pending_replace: compactPendingReplace(state.pending_replace),
+          history: Array.isArray(state.history) ? state.history.slice(-HISTORY_LIMIT).map(compactHistoryEvent) : []
+        };
+      }
+
       function makeDefaultAssetDeckState() {
         return {
           version: 1,
@@ -250,8 +285,7 @@
           pending_offer: null,
           pending_offer_queue: [],
           pending_replace: null,
-          history: [],
-          debug: {}
+          history: []
         };
       }
 
@@ -336,8 +370,7 @@
           pending_offer: normalizePendingOffer(source.pending_offer || source.pendingOffer),
           pending_offer_queue: normalizePendingOfferQueue(source.pending_offer_queue || source.pendingOfferQueue),
           pending_replace: normalizePendingReplace(source.pending_replace || source.pendingReplace),
-          history: Array.isArray(source.history) ? source.history.slice(-HISTORY_LIMIT).map(compactHistoryEvent) : [],
-          debug: source.debug && typeof source.debug === 'object' && !Array.isArray(source.debug) ? deepClone(source.debug) : {}
+          history: Array.isArray(source.history) ? source.history.slice(-HISTORY_LIMIT).map(compactHistoryEvent) : []
         };
       }
 
@@ -563,7 +596,7 @@
         return {
           ok,
           code,
-          assetDeck: normalizeAssetDeckState(assetDeck),
+          assetDeck: compactAssetDeckState(assetDeck),
           ...extra
         };
       }
@@ -674,15 +707,11 @@
         if (kind === 'grant_asset') {
           const amount = normalizeNonNegativeInt(payload.amount, 0);
           assetDeck.asset_count += amount;
-          const source = payload.source && typeof payload.source === 'object' && !Array.isArray(payload.source)
-            ? compactHistorySource(payload.source)
-            : null;
           const requestId = normalizeId(payload.requestId || command.requestId, '');
           pushHistory(assetDeck, {
             kind,
             amount,
-            ...(requestId ? { requestId } : {}),
-            ...(source ? { source } : {})
+            ...(requestId ? { requestId } : {})
           });
           return result(assetDeck, true, 'asset_granted', { amount });
         }
@@ -716,16 +745,12 @@
           };
           enqueueOrActivatePendingOffer(assetDeck, offer);
           assetDeck.pending_replace = null;
-          const source = payload.source && typeof payload.source === 'object' && !Array.isArray(payload.source)
-            ? compactHistorySource(payload.source)
-            : null;
           const requestId = normalizeId(payload.requestId || command.requestId, '');
           pushHistory(assetDeck, {
             kind,
             pool,
             cost,
-            ...(requestId ? { requestId } : {}),
-            ...(source ? { source } : {})
+            ...(requestId ? { requestId } : {})
           });
           return result(assetDeck, true, 'offer_opened', { offer });
         }
@@ -768,6 +793,7 @@
         getCatalog: () => deepClone(catalog),
         makeDefaultAssetDeckState,
         normalizeAssetDeckState,
+        compactAssetDeckState,
         normalizeAssetCardInstance,
         normalizePendingOffer,
         normalizePendingReplace,

@@ -101,11 +101,6 @@
     resolutionHistory: [],
     // 情节张力 0-100
     narrativeTension: 0,
-    // 首见帧持久化缓冲：{ [charKey]: hintText }
-    // 生命周期 = 当前节点/段位内（由 phase_advance 清空）。
-    // 绑到 MVU→绑楼层，玩家编辑 / swipe / 重生成都不会掉。
-    pendingFirstMeet: {},
-    pendingPreSignal: {},
     pendingTransitionTarget: '',
     transitionRequestTarget: '',
     pendingTransitionPrompt: ''
@@ -115,8 +110,6 @@
   let isProcessing = false;
   let pendingActBaselineSnapshot = null;
   let lastObservedWorldClock = null;
-  // pre_signal 仍按楼层消费；first_meet 按 ACT node/phase 消费。
-  let lastPreSignalInjectChatLen = -1;
 
   function getAce0HostRoot() {
     try {
@@ -186,61 +179,6 @@
   function normalizeActResourceKey(value, fallback = 'vision') {
     const normalized = _normalizeTrimmedString(value, fallback).toLowerCase();
     return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
-  }
-
-  function getCurrentActNodeIdFromState(act) {
-    const routeHistory = Array.isArray(act?.route_history) ? act.route_history : [];
-    const nodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
-    return routeHistory[nodeIndex - 1] || routeHistory[routeHistory.length - 1] || '';
-  }
-
-  function pruneExpiredPendingFirstMeet(act) {
-    const pending = act?.pendingFirstMeet && typeof act.pendingFirstMeet === 'object' && !Array.isArray(act.pendingFirstMeet)
-      ? act.pendingFirstMeet
-      : {};
-    const keys = Object.keys(pending);
-    if (!keys.length) return { pending, changed: false };
-
-    const encounter = act?.characterEncounter && typeof act.characterEncounter === 'object' && !Array.isArray(act.characterEncounter)
-      ? act.characterEncounter
-      : {};
-    const characters = encounter.characters && typeof encounter.characters === 'object' && !Array.isArray(encounter.characters)
-      ? encounter.characters
-      : {};
-    const queue = Array.isArray(encounter.queue) ? encounter.queue : [];
-    const currentNodeId = getCurrentActNodeIdFromState(act);
-    const currentNodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
-    const currentPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
-    const next = {};
-    let changed = false;
-
-    keys.forEach((rawKey) => {
-      const charKey = String(rawKey || '').trim().toUpperCase();
-      const charState = characters[charKey] && typeof characters[charKey] === 'object' ? characters[charKey] : null;
-      const isIntroduced = charState && (charState.status === 'introduced' || charState.firstMeetDone === true);
-      const introducedNodeId = typeof charState?.introducedNodeId === 'string' ? charState.introducedNodeId : '';
-      const introducedNodeIndex = Math.max(0, Math.round(Number(charState?.introducedAtNodeIndex) || 0));
-      const triggered = queue.find((item) => item && item.charKey === charKey && item.type === 'first_meet' && item.status === 'triggered');
-      const introducedPhaseIndex = Number.isFinite(Number(charState?.introducedPhaseIndex))
-        ? Math.max(0, Math.min(3, Math.round(Number(charState.introducedPhaseIndex))))
-        : Number.isFinite(Number(triggered?.triggeredPhaseIndex))
-          ? Math.max(0, Math.min(3, Math.round(Number(triggered.triggeredPhaseIndex))))
-        : -1;
-      const sameNode = introducedNodeId ? introducedNodeId === currentNodeId : introducedNodeIndex === currentNodeIndex;
-      const sameFrame = isIntroduced && sameNode && (
-        introducedPhaseIndex < 0 ||
-        introducedPhaseIndex === currentPhaseIndex
-      );
-
-      if (isIntroduced && !sameFrame) {
-        changed = true;
-        return;
-      }
-      next[charKey] = pending[rawKey];
-      if (charKey !== rawKey) changed = true;
-    });
-
-    return { pending: next, changed };
   }
 
   function normalizeBattleAssetDeckForFrontend(eraVars) {
@@ -1049,50 +987,13 @@
       const relationState = buildRelationshipStateSummary(eraVars);
       const worldContext = buildWorldContextSummary(eraVars);
       const locationDoc = buildLocationDocSummary(eraVars);
-      // pre_signal 是一次楼层提示；first_meet 是一次 ACT 相位提示。
-      // first_meet 只看当前 placed node/phase；pendingFirstMeet 仅用于旧档清理。
-      try {
-        const ctx = (typeof getContext === 'function') ? getContext() : null;
-        const currentChatLen = Array.isArray(ctx?.chat) ? ctx.chat.length : -1;
-        if (
-          currentChatLen >= 0 &&
-          lastPreSignalInjectChatLen >= 0 &&
-          currentChatLen > lastPreSignalInjectChatLen &&
-          eraVars?.world?.act?.pendingPreSignal &&
-          Object.keys(eraVars.world.act.pendingPreSignal).length > 0
-        ) {
-          await updateEraVars({ world: { act: { pendingPreSignal: {} } } });
-          if (eraVars.world && eraVars.world.act) {
-            eraVars.world.act.pendingPreSignal = {};
-          }
-        }
-      } catch (_) { /* chat 不可取时降级：保留 pending */ }
-
-      try {
-        const prunedFirstMeet = pruneExpiredPendingFirstMeet(eraVars?.world?.act);
-        if (prunedFirstMeet.changed) {
-          await updateEraVars({ world: { act: { pendingFirstMeet: prunedFirstMeet.pending } } });
-          if (eraVars.world && eraVars.world.act) {
-            eraVars.world.act.pendingFirstMeet = prunedFirstMeet.pending;
-          }
-        }
-      } catch (_) { /* pending 首见清理失败时降级：继续沿用原 pending */ }
-
       const activeFirstMeetHintsForTurn = getActiveFirstMeetHintsForCurrentPhase(eraVars, syncedState.derived);
       const firstMeetKeysForTurn = Object.keys(activeFirstMeetHintsForTurn);
-      const preSignalHintsForTurn = (eraVars?.world?.act?.pendingPreSignal && typeof eraVars.world.act.pendingPreSignal === 'object')
-        ? eraVars.world.act.pendingPreSignal
+      const preSignalHintsForTurn = syncedState.derived?.encounterPreSignalHints && typeof syncedState.derived.encounterPreSignalHints === 'object'
+        ? syncedState.derived.encounterPreSignalHints
         : {};
       const preSignalKeysForTurn = Object.keys(preSignalHintsForTurn);
 
-      // pre_signal 记录本次注入时的 chat.length，供下一次 prompt 构造比对。
-      if (preSignalKeysForTurn.length > 0) {
-        try {
-          const ctx = (typeof getContext === 'function') ? getContext() : null;
-          const currentChatLen = Array.isArray(ctx?.chat) ? ctx.chat.length : -1;
-          if (currentChatLen >= 0 && preSignalKeysForTurn.length > 0) lastPreSignalInjectChatLen = currentChatLen;
-        } catch (_) {}
-      }
       const charDocPrompts = await buildCharacterPromptInjections(eraVars, firstMeetKeysForTurn);
       const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived, activeFirstMeetHintsForTurn, preSignalHintsForTurn);
       const expansionPrompts = buildExpansionPromptInjections(eraVars);
@@ -1267,7 +1168,6 @@
     console.log(`${PLUGIN_NAME} ${reason} -> 重置状态`);
     isProcessing = false;
     pendingActBaselineSnapshot = null;
-    lastPreSignalInjectChatLen = -1;
     if (ACT_RUNTIME && typeof ACT_RUNTIME.resetState === 'function') ACT_RUNTIME.resetState();
   }
 
@@ -1431,10 +1331,6 @@
         actState.vision.jumpReady = false;
         actState.vision.pendingReplace = null;
       }
-      // 节点切换 = 坐标变化，上一节点遗留的首见帧进入历史。清空避免污染下一节点 prompt。
-      actState.pendingFirstMeet = {};
-      actState.pendingPreSignal = {};
-
       await updateEraVars({ world: { act: actState } });
       return {
         ok: true,

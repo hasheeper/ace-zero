@@ -180,8 +180,7 @@ function makeDefaultAssetDeckState() {
     pending_offer: null,
     pending_offer_queue: [],
     pending_replace: null,
-    history: [],
-    debug: {}
+    history: []
   };
 }
 
@@ -206,7 +205,7 @@ function normalizeAssetDeckCardInstance(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const cardId = normalizeTrimmedString(source.cardId || source.id, '');
   const addedAt = Math.max(0, Math.round(Number(source.addedAt) || 0));
-  const normalized = {
+  const full = {
     instanceId: normalizeTrimmedString(source.instanceId, `${cardId || 'asset_card'}:${addedAt}`),
     cardId,
     rarity: normalizeLowerEnumValue(source.rarity, ASSET_DECK_RARITIES, 'bronze'),
@@ -222,8 +221,14 @@ function normalizeAssetDeckCardInstance(value) {
     source: normalizeTrimmedString(source.source, 'runtime'),
     addedAt
   };
-  if (!isKnownAssetDeckCard(normalized.cardId)) return null;
-  return normalized;
+  if (!isKnownAssetDeckCard(full.cardId)) return null;
+  return {
+    instanceId: full.instanceId,
+    cardId: full.cardId,
+    level: full.level,
+    source: full.source,
+    addedAt: full.addedAt
+  };
 }
 
 function normalizeAssetDeckCardList(value, slotType, limit) {
@@ -431,6 +436,8 @@ const WorldExpansionStateSchema = z.object({
 const ACT_RESOURCE_KEYS = ['combat', 'rest', 'asset', 'vision'];
 const ACT_SLOT_SOURCES = ['limited', 'reserve'];
 const ACT_STAGE_VALUES = ['planning', 'executing', 'route', 'complete'];
+const ENCOUNTER_ACTIVE_QUEUE_STATUSES = ['queued', 'placed'];
+const ENCOUNTER_CHARACTER_STATUSES = ['locked', 'queued', 'placed', 'pre_signal', 'first_meet', 'introduced'];
 
 function makeDefaultActResourceCounts(defaultValue = 0) {
   return {
@@ -444,6 +451,83 @@ function makeDefaultActResourceCounts(defaultValue = 0) {
 function normalizeActResourceKey(value, fallback = 'vision') {
   const normalized = normalizeTrimmedString(value, fallback).toLowerCase();
   return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
+}
+
+function normalizeCharacterEncounterState(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const out = {};
+  const metaSource = source.meta && typeof source.meta === 'object' && !Array.isArray(source.meta) ? source.meta : null;
+  const hasEncounterShape = Boolean(metaSource)
+    || Array.isArray(source.queue)
+    || (source.characters && typeof source.characters === 'object' && !Array.isArray(source.characters));
+
+  if (hasEncounterShape) {
+    out.meta = {
+      version: Math.max(1, Math.round(Number(metaSource?.version) || 1)),
+      lastFirstMeetNodeIndex: Math.max(0, Math.round(Number(metaSource?.lastFirstMeetNodeIndex) || 0)),
+      lastSignalNodeIndex: Math.max(0, Math.round(Number(metaSource?.lastSignalNodeIndex) || 0))
+    };
+  }
+
+  const queue = (Array.isArray(source.queue) ? source.queue : [])
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item, index) => {
+      const charKey = normalizeTrimmedString(item.charKey || item.character || item.key, '').toUpperCase();
+      const type = normalizeTrimmedString(item.type, 'first_meet').toLowerCase();
+      const rawStatus = normalizeTrimmedString(item.status, 'queued').toLowerCase();
+      const status = ENCOUNTER_ACTIVE_QUEUE_STATUSES.includes(rawStatus) ? rawStatus : '';
+      const targetNodeId = normalizeTrimmedString(item.targetNodeId || item.nodeId, '');
+      if (!charKey || !status) return null;
+      return {
+        id: normalizeTrimmedString(item.id, `enc:${charKey}:${type}:${targetNodeId || 'unplaced'}:${index}`),
+        charKey,
+        type,
+        status,
+        targetNodeId,
+        targetNodeIndex: Math.max(0, Math.round(Number(item.targetNodeIndex) || 0)),
+        targetPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0))),
+        createdNodeIndex: Math.max(0, Math.round(Number(item.createdNodeIndex) || 0)),
+        expiresNodeIndex: Math.max(0, Math.round(Number(item.expiresNodeIndex) || 0)),
+        priority: Math.round(Number(item.priority) || 0),
+        spentScore: Math.max(0, Math.round(Number(item.spentScore) || 0))
+      };
+    })
+    .filter(Boolean);
+  if (queue.length) out.queue = queue;
+
+  const charactersSource = source.characters && typeof source.characters === 'object' && !Array.isArray(source.characters)
+    ? source.characters
+    : {};
+  const characters = {};
+  Object.entries(charactersSource).forEach(([rawKey, rawValue]) => {
+    const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
+    const stateSource = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : {};
+    if (!charKey) return;
+    const rawStatus = normalizeTrimmedString(stateSource.status, 'locked').toLowerCase();
+    const status = ENCOUNTER_CHARACTER_STATUSES.includes(rawStatus) ? rawStatus : 'locked';
+    characters[charKey] = {
+      status,
+      firstMeetDone: stateSource.firstMeetDone === true,
+      preSignalDone: stateSource.preSignalDone === true,
+      preSignalNodeId: normalizeTrimmedString(stateSource.preSignalNodeId, ''),
+      preSignalAtNodeIndex: Math.max(0, Math.round(Number(stateSource.preSignalAtNodeIndex) || 0)),
+      preSignalPhaseIndex: Number.isFinite(Number(stateSource.preSignalPhaseIndex))
+        ? Math.max(0, Math.min(3, Math.round(Number(stateSource.preSignalPhaseIndex))))
+        : -1,
+      cooldownUntilNodeIndex: Math.max(0, Math.round(Number(stateSource.cooldownUntilNodeIndex) || 0)),
+      queuedRequestId: normalizeTrimmedString(stateSource.queuedRequestId, ''),
+      placedNodeId: normalizeTrimmedString(stateSource.placedNodeId, ''),
+      introducedNodeId: normalizeTrimmedString(stateSource.introducedNodeId, ''),
+      introducedAtNodeIndex: Math.max(0, Math.round(Number(stateSource.introducedAtNodeIndex) || 0)),
+      introducedPhaseIndex: Number.isFinite(Number(stateSource.introducedPhaseIndex))
+        ? Math.max(0, Math.min(3, Math.round(Number(stateSource.introducedPhaseIndex))))
+        : -1,
+      lastEvaluatedNodeIndex: Math.max(0, Math.round(Number(stateSource.lastEvaluatedNodeIndex) || 0))
+    };
+  });
+  if (Object.keys(characters).length) out.characters = characters;
+
+  return out;
 }
 
 function normalizeActResolutionHistory(value) {
@@ -492,6 +576,34 @@ function normalizeActResolutionHistory(value) {
     .slice(-64);
 }
 
+function normalizeAssetDeckHistory(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .map(item => {
+      const out = {};
+      const kind = normalizeTrimmedString(item.kind || item.type, '');
+      const status = normalizeTrimmedString(item.status, '');
+      const cardId = normalizeTrimmedString(item.cardId, '');
+      const requestId = normalizeTrimmedString(item.requestId, '');
+      const pool = normalizeTrimmedString(item.pool, '');
+      const slotType = normalizeTrimmedString(item.slotType, '').toLowerCase();
+      if (kind) out.kind = kind;
+      if (status) out.status = status;
+      if (cardId) out.cardId = cardId;
+      if (requestId) out.requestId = requestId;
+      if (pool) out.pool = pool;
+      if (slotType) out.slotType = slotType;
+      ['amount', 'cost', 'free', 'fromLevel', 'toLevel'].forEach(key => {
+        if (item[key] != null && item[key] !== '') out[key] = item[key];
+      });
+      if (item.at != null && item.at !== '') out.at = Math.max(0, Math.round(Number(item.at) || 0));
+      return Object.keys(out).length ? out : null;
+    })
+    .filter(Boolean)
+    .slice(-24);
+}
+
 function normalizeActResourceCounts(value, options = {}) {
   const { allowDecimal = false, defaultValue = 0 } = options;
   const source = value && typeof value === 'object' ? value : {};
@@ -506,18 +618,6 @@ function normalizeActResourceCounts(value, options = {}) {
     if (seen.has(key)) out[key] += normalized;
     else out[key] = normalized;
     seen.add(key);
-  });
-  return out;
-}
-
-function normalizePendingFirstMeet(value) {
-  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const out = {};
-  Object.entries(source).forEach(([rawKey, rawHint]) => {
-    const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
-    const hint = normalizeTrimmedString(rawHint, '');
-    if (!charKey || !hint) return;
-    out[charKey] = hint;
   });
   return out;
 }
@@ -552,8 +652,6 @@ function makeDefaultActState() {
     vision: makeDefaultActVisionState(),
     resourceSpent: makeDefaultActResourceCounts(0),
     characterEncounter: {},
-    pendingFirstMeet: {},
-    pendingPreSignal: {},
     pendingResolutions: [],
     pendingAssetDeckCommands: [],
     resolutionHistory: [],
@@ -623,9 +721,7 @@ const WorldActSchema = z.object({
   crisisSignals: z.array(z.any()).default([]),
   vision: ActVisionStateSchema,
   resourceSpent: ActResourceCountsSchema,
-  characterEncounter: z.record(z.string(), z.any()).default({}),
-  pendingFirstMeet: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
-  pendingPreSignal: z.record(z.string(), z.any()).default({}).transform(v => normalizePendingFirstMeet(v)),
+  characterEncounter: z.record(z.string(), z.any()).default({}).transform(v => normalizeCharacterEncounterState(v)),
   pendingResolutions: z.array(z.any()).default([]),
   pendingAssetDeckCommands: z.array(z.any()).default([]),
   resolutionHistory: z.array(z.any()).default([]),
@@ -686,11 +782,7 @@ const WorldActSchema = z.object({
   act.crisis = Math.max(0, Math.min(100, Math.round(Number(act.crisis) || 0)));
   act.vision = ActVisionStateSchema.parse(act.vision);
   act.resourceSpent = ActResourceCountsSchema.parse(act.resourceSpent);
-  act.characterEncounter = act.characterEncounter && typeof act.characterEncounter === 'object' && !Array.isArray(act.characterEncounter)
-    ? act.characterEncounter
-    : {};
-  act.pendingFirstMeet = normalizePendingFirstMeet(act.pendingFirstMeet);
-  act.pendingPreSignal = normalizePendingFirstMeet(act.pendingPreSignal);
+  act.characterEncounter = normalizeCharacterEncounterState(act.characterEncounter);
   act.pendingResolutions = Array.isArray(act.pendingResolutions)
     ? act.pendingResolutions.filter(item => item && typeof item === 'object' && !Array.isArray(item))
     : [];
@@ -730,8 +822,7 @@ const WorldAssetDeckSchema = z.record(z.string(), z.any())
       pending_offer: normalizeAssetDeckPendingOffer(source.pending_offer || source.pendingOffer),
       pending_offer_queue: normalizeAssetDeckPendingOfferQueue(source.pending_offer_queue || source.pendingOfferQueue),
       pending_replace: normalizeAssetDeckPendingReplace(source.pending_replace || source.pendingReplace),
-      history: Array.isArray(source.history) ? source.history.slice(-50) : [],
-      debug: source.debug && typeof source.debug === 'object' && !Array.isArray(source.debug) ? source.debug : {}
+      history: normalizeAssetDeckHistory(source.history)
     };
   });
 

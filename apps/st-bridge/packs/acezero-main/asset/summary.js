@@ -86,8 +86,7 @@
           pending_offer: source.pending_offer || source.pendingOffer || null,
           pending_offer_queue: normalizeList(source.pending_offer_queue || source.pendingOfferQueue).map(offer => clone(offer, {})),
           pending_replace: source.pending_replace || source.pendingReplace || null,
-          history: normalizeList(source.history).map(item => clone(item, {})),
-          debug: source.debug && typeof source.debug === 'object' && !Array.isArray(source.debug) ? clone(source.debug, {}) : {}
+          history: normalizeList(source.history).map(item => clone(item, {}))
         };
       }
 

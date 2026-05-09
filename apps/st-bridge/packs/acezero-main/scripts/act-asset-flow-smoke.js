@@ -99,8 +99,8 @@ function testActAssetThreeSettlesIntoHighOffer() {
   assertEqual(settled.act.resolutionHistory[0].outcome, 'asset_granted', 'first history entry should record grant result');
   assertEqual(settled.act.resolutionHistory[1].outcome, 'offer_opened', 'second history entry should record offer result');
   assertEqual(settled.assetDeck.history.length, 2, 'AssetDeck history should record grant and offer');
-  assertEqual(settled.assetDeck.history[0].source.nodeId, 'node1-entry', 'grant history should keep ACT node source');
-  assertEqual(settled.assetDeck.history[1].source.nodeId, 'node1-entry', 'offer history should keep ACT node source');
+  assert(!('source' in settled.assetDeck.history[0]), 'AssetDeck history should not retain ACT source payload');
+  assert(!('source' in settled.assetDeck.history[1]), 'AssetDeck history should not retain ACT source payload');
 }
 
 function testActAssetTwoSettlesIntoMidOffer() {

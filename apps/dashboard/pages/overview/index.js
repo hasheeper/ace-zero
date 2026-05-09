@@ -412,8 +412,6 @@ function createExecutionRuntimeContext() {
             vision: { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null },
             resourceSpent: createEmptyActResourceCounts(0),
             characterEncounter: {},
-            pendingFirstMeet: {},
-            pendingPreSignal: {},
             pendingResolutions: [],
             pendingAssetDeckCommands: [],
             resolutionHistory: []
@@ -835,15 +833,13 @@ function createExecutionRuntimeContext() {
         const introducedNodeId = typeof encounterChar.introducedNodeId === 'string' ? encounterChar.introducedNodeId : '';
         const isIntroduced = encounterChar.firstMeetDone === true
             || encounterChar.status === 'introduced'
-            || encounterChar.status === 'first_meet'
-            || Boolean(act.pendingFirstMeet?.[heroCode]);
+            || encounterChar.status === 'first_meet';
         if (!isIntroduced) return null;
 
         return {
             activated: true,
             introduced: true,
             present: encounterChar.status === 'first_meet'
-                || Boolean(act.pendingFirstMeet?.[heroCode])
                 || (introducedNodeId && introducedNodeId === currentNodeId),
             inParty: false,
             miniKnown: false
@@ -1125,12 +1121,6 @@ function createExecutionRuntimeContext() {
             })(),
             resourceSpent: normalizeActResourceCounts(currentActState.resourceSpent),
             characterEncounter: deepCloneValue(currentActState.characterEncounter || {}),
-            pendingFirstMeet: currentActState.pendingFirstMeet && typeof currentActState.pendingFirstMeet === 'object' && !Array.isArray(currentActState.pendingFirstMeet)
-                ? deepCloneValue(currentActState.pendingFirstMeet)
-                : {},
-            pendingPreSignal: currentActState.pendingPreSignal && typeof currentActState.pendingPreSignal === 'object' && !Array.isArray(currentActState.pendingPreSignal)
-                ? deepCloneValue(currentActState.pendingPreSignal)
-                : {},
             pendingResolutions: Array.isArray(currentActState.pendingResolutions)
                 ? deepCloneValue(currentActState.pendingResolutions)
                 : [],
