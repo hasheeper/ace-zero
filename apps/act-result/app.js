@@ -493,6 +493,13 @@
         } catch (e) {}
       }
 
+      function syncAssetOfferButtonClearKey(clearKey) {
+        if (!clearKey) return;
+        document.querySelectorAll('.asset-card-btn').forEach(function (btn) {
+          btn.setAttribute('data-clear-key', clearKey);
+        });
+      }
+
       function isAssetOfferClearedLocally(offer, floorKey) {
         var clearKey = getAssetOfferClearKey(offer);
         var storageKey = getAssetOfferClearStorageKey(clearKey, floorKey);
@@ -622,10 +629,6 @@
         hint.textContent = '>> 点击一张契约卡并写入仓库 <<';
         panel.appendChild(hint);
 
-        if (isAssetOfferClearedLocally(offer, floorKey)) {
-          lockAssetPanel('', '契约已结算');
-          return;
-        }
         syncAssetPanelStateToMvu(data);
         setTimeout(function () { syncAssetPanelStateToMvu(data); }, 250);
         setTimeout(function () { syncAssetPanelStateToMvu(data); }, 900);
@@ -642,17 +645,26 @@
             : await postActResultEraVarsRequest();
           if (!v || typeof v !== 'object') return;
           var act = v && v.world && v.world.act;
-          if (isAssetOfferCleared(act, offer)) {
-            rememberAssetOfferCleared(offer, floorKey);
-            lockAssetPanel('', '契约已结算');
-            return;
-          }
           var assetDeck = v && v.world && v.world.assetDeck;
           if (!assetDeck || typeof assetDeck !== 'object') return;
           var liveOffer = assetDeck.pending_offer && typeof assetDeck.pending_offer === 'object' ? assetDeck.pending_offer : null;
           var liveOfferId = liveOffer && typeof liveOffer.id === 'string' ? liveOffer.id : '';
           var offerId = typeof offer.offerId === 'string' ? offer.offerId : '';
-          if (!liveOffer || (offerId && liveOfferId && liveOfferId !== offerId)) {
+          if (liveOffer && liveOfferId) {
+            syncAssetOfferButtonClearKey(liveOfferId);
+          }
+          if (liveOffer && offerId && liveOfferId && liveOfferId !== offerId) {
+            var hint = document.getElementById('ui-asset-hint');
+            if (hint && hint.textContent === '契约已结算') hint.textContent = '>> 点击一张契约卡并写入仓库 <<';
+            return;
+          }
+          if (isAssetOfferCleared(act, offer)) {
+            rememberAssetOfferCleared(offer, floorKey);
+            lockAssetPanel('', assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
+            return;
+          }
+          if (!liveOffer) {
+            if (isAssetOfferClearedLocally(offer, floorKey)) rememberAssetOfferCleared(offer, floorKey);
             lockAssetPanel('', assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
           }
         } catch (e) {}

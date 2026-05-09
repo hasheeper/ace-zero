@@ -1651,6 +1651,7 @@
     const castPatch = {};
     let changed = false;
     const encounter = normalizeCharacterEncounterState(derivedState.act?.characterEncounter);
+    const pendingFirstMeet = normalizePendingFirstMeet(derivedState.act?.pendingFirstMeet);
 
     for (const charKey of derivedState.managedCharacters) {
       const currentNode = currentCast[charKey] && typeof currentCast[charKey] === 'object'
@@ -1663,6 +1664,7 @@
         encounterChar.status === 'introduced'
       );
       const preserveManualPresent = encounterIntroduced === true
+        && !pendingFirstMeet[charKey]
         && currentNode.present === true
         && desiredNode.introduced === true;
       const nextNode = {
