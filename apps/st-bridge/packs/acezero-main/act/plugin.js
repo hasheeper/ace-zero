@@ -1628,7 +1628,7 @@
 
     // 首见帧来源只允许来自 characterEncounter 运行时状态。
     // 真正是否首见，仍在 createCharacterCastPatch 里比对 currentCast 旧态。
-    const designedFirstMeet = getCharacterEncounterFirstMeetMap(act, currentNodeId);
+    const encounterFirstMeetHints = getCharacterEncounterFirstMeetMap(act, currentNodeId);
 
     return {
       act,
@@ -1638,7 +1638,7 @@
       currentNodeId,
       currentNodeEffects,
       states,
-      designedFirstMeet
+      encounterFirstMeetHints
     };
   }
 
@@ -1650,16 +1650,25 @@
     const currentCast = currentCastInput && typeof currentCastInput === 'object' ? currentCastInput : {};
     const castPatch = {};
     let changed = false;
+    const encounter = normalizeCharacterEncounterState(derivedState.act?.characterEncounter);
 
     for (const charKey of derivedState.managedCharacters) {
       const currentNode = currentCast[charKey] && typeof currentCast[charKey] === 'object'
         ? currentCast[charKey]
         : {};
       const desiredNode = derivedState.states[charKey];
+      const encounterChar = encounter.characters[charKey];
+      const encounterIntroduced = encounterChar && (
+        encounterChar.firstMeetDone === true ||
+        encounterChar.status === 'introduced'
+      );
+      const preserveManualPresent = encounterIntroduced === true
+        && currentNode.present === true
+        && desiredNode.introduced === true;
       const nextNode = {
         activated: desiredNode.activated === true,
         introduced: desiredNode.introduced === true,
-        present: desiredNode.present === true,
+        present: desiredNode.present === true || preserveManualPresent,
         inParty: desiredNode.inParty === true,
         miniKnown: desiredNode.miniKnown === true
       };
@@ -1678,7 +1687,7 @@
 
     // 首见帧检测：旧态 introduced=false 且 本轮即将设为 true 且 章节提供了文案。
     const firstMeetHints = {};
-    const designed = derivedState.designedFirstMeet || {};
+    const encounterHints = derivedState.encounterFirstMeetHints || {};
     for (const charKey of derivedState.managedCharacters) {
       const currentNode = currentCast[charKey] && typeof currentCast[charKey] === 'object'
         ? currentCast[charKey]
@@ -1688,10 +1697,10 @@
       if (
         currentNode.introduced !== true &&
         desiredNode.introduced === true &&
-        typeof designed[charKey] === 'string' &&
-        designed[charKey].trim()
+        typeof encounterHints[charKey] === 'string' &&
+        encounterHints[charKey].trim()
       ) {
-        firstMeetHints[charKey] = designed[charKey];
+        firstMeetHints[charKey] = encounterHints[charKey];
       }
     }
 

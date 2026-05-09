@@ -234,7 +234,6 @@
       'buildCharterPromptContent',
       'buildNarrativePromptContentFromDerived',
       'buildNarrativePacingSummary',
-      'getNodeFirstMeetMap',
       'buildFirstMeetPromptContent',
       'buildPreSignalPromptContent'
     ];
@@ -768,12 +767,8 @@
       }
     });
 
-    // 首见帧持久化到 MVU: world.act.pendingFirstMeet。
-    // - 纯跃迁驱动：只在本轮 cast 的 introduced=false→true 时写入
-    // - 跨楼层稳定：玩家在同一楼层内编辑 / swipe / 重生成都保留
-    //   （楼层前进的清理由 prompt 流水里的 chat.length 闸门负责）
-    // - 推进时只清掉进入本次推进前已存在的旧 pending；本次新触发的首见帧保留给下一轮 prompt。
-    // 注意：不做"设计了就补写"的补偿逻辑——那会让 pending 常驻去不掉。
+    // phase 消费后的首见回执。生成前的首见提示以当前 placed first_meet 为准；
+    // pendingFirstMeet 只保留消费后的一轮兼容提示，并在 node/phase 过期后清理。
     const currentActState = getWorldActState(workingEraVars);
     const currentPending = currentActState?.pendingFirstMeet && typeof currentActState.pendingFirstMeet === 'object'
       ? currentActState.pendingFirstMeet

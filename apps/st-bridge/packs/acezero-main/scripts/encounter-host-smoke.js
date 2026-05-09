@@ -229,7 +229,7 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
       funds: 9999,
       cast: {
         RINO: { activated: true, introduced: true, present: true, inParty: true },
-        COTA: { activated: true, introduced: false, present: false, inParty: false }
+        COTA: { activated: true, introduced: false, present: true, inParty: false }
       },
       roster: {}
     },
@@ -250,6 +250,7 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
   const { runtime } = makeRuntimeWithEra(eraVars);
   const synced = await runtime.synchronizeActCharacterState(eraVars);
   assertEqual(synced.eraVars.hero.cast.COTA.introduced, false, 'Placed first_meet should not unlock Dossier before phase consumption');
+  assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'Placed first_meet should keep present locked before phase consumption');
 
   const prompts = runtime.buildActNarrativePrompts(
     synced.eraVars,
@@ -260,6 +261,34 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
   const firstMeetPrompt = prompts.find((prompt) => prompt.id === 'ace0_first_meet');
   assert(firstMeetPrompt, 'Placed current-phase first_meet should produce ace0_first_meet before phase consumption');
   assert(firstMeetPrompt.content.includes('COTA'), 'Placed current-phase first_meet should mention COTA');
+}
+
+async function testIntroducedEncounterPreservesManualPresentAfterPhaseConsumption() {
+  const eraVars = {
+    hero: {
+      funds: 9999,
+      cast: {
+        RINO: { activated: true, introduced: true, present: true, inParty: true },
+        COTA: { activated: true, introduced: false, present: true, inParty: false }
+      },
+      roster: {}
+    },
+    world: {
+      current_time: { day: 9, phase: 'NOON' },
+      location: { layer: 'THE_EXCHANGE', site: 'casino_floor', tags: ['casino'] },
+      tags: ['casino'],
+      flags: [],
+      storyFlags: {},
+      clockPressure: 0,
+      act: makePlacedCotaAct()
+    }
+  };
+  const { runtime } = makeRuntimeWithEra(eraVars);
+  const resolved = await runtime.resolvePendingActAdvance(eraVars);
+  const synced = await runtime.synchronizeActCharacterState(resolved.eraVars);
+
+  assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'Consumed first_meet should unlock Dossier');
+  assertEqual(synced.eraVars.hero.cast.COTA.present, true, 'Consumed first_meet should allow manual present=true to persist');
 }
 
 async function testPreSignalPendingDoesNotUnlockDossier() {
@@ -362,6 +391,7 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
   await testPhaseAdvanceQueuesPoppyImmediatelyWhenConditionBecomesTrue();
   await testQueuedPoppySchedulesAtNodeBoundary();
   await testPlacedFirstMeetInjectsBeforePhaseConsumption();
+  await testIntroducedEncounterPreservesManualPresentAfterPhaseConsumption();
   await testFirstMeetPendingAndDossierWriteback();
   await testPreSignalPendingDoesNotUnlockDossier();
   console.log('encounter-host-smoke ok');
