@@ -192,6 +192,61 @@
     return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
   }
 
+  function getCurrentActNodeIdFromState(act) {
+    const routeHistory = Array.isArray(act?.route_history) ? act.route_history : [];
+    const nodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
+    return routeHistory[nodeIndex - 1] || routeHistory[routeHistory.length - 1] || '';
+  }
+
+  function pruneExpiredPendingFirstMeet(act) {
+    const pending = act?.pendingFirstMeet && typeof act.pendingFirstMeet === 'object' && !Array.isArray(act.pendingFirstMeet)
+      ? act.pendingFirstMeet
+      : {};
+    const keys = Object.keys(pending);
+    if (!keys.length) return { pending, changed: false };
+
+    const encounter = act?.characterEncounter && typeof act.characterEncounter === 'object' && !Array.isArray(act.characterEncounter)
+      ? act.characterEncounter
+      : {};
+    const characters = encounter.characters && typeof encounter.characters === 'object' && !Array.isArray(encounter.characters)
+      ? encounter.characters
+      : {};
+    const queue = Array.isArray(encounter.queue) ? encounter.queue : [];
+    const currentNodeId = getCurrentActNodeIdFromState(act);
+    const currentNodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
+    const currentPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
+    const next = {};
+    let changed = false;
+
+    keys.forEach((rawKey) => {
+      const charKey = String(rawKey || '').trim().toUpperCase();
+      const charState = characters[charKey] && typeof characters[charKey] === 'object' ? characters[charKey] : null;
+      const isIntroduced = charState && (charState.status === 'introduced' || charState.firstMeetDone === true);
+      const introducedNodeId = typeof charState?.introducedNodeId === 'string' ? charState.introducedNodeId : '';
+      const introducedNodeIndex = Math.max(0, Math.round(Number(charState?.introducedAtNodeIndex) || 0));
+      const triggered = queue.find((item) => item && item.charKey === charKey && item.type === 'first_meet' && item.status === 'triggered');
+      const introducedPhaseIndex = Number.isFinite(Number(charState?.introducedPhaseIndex))
+        ? Math.max(0, Math.min(3, Math.round(Number(charState.introducedPhaseIndex))))
+        : Number.isFinite(Number(triggered?.triggeredPhaseIndex))
+          ? Math.max(0, Math.min(3, Math.round(Number(triggered.triggeredPhaseIndex))))
+        : -1;
+      const sameNode = introducedNodeId ? introducedNodeId === currentNodeId : introducedNodeIndex === currentNodeIndex;
+      const sameFrame = isIntroduced && sameNode && (
+        introducedPhaseIndex < 0 ||
+        introducedPhaseIndex === currentPhaseIndex
+      );
+
+      if (isIntroduced && !sameFrame) {
+        changed = true;
+        return;
+      }
+      next[charKey] = pending[rawKey];
+      if (charKey !== rawKey) changed = true;
+    });
+
+    return { pending: next, changed };
+  }
+
   function normalizeBattleAssetDeckForFrontend(eraVars) {
     const rawAssetDeck = eraVars?.world?.assetDeck;
     if (!rawAssetDeck || typeof rawAssetDeck !== 'object' || Array.isArray(rawAssetDeck)) return null;
@@ -1024,6 +1079,19 @@
           }
         }
       } catch (_) { /* chat 不可取时降级：保留 pending */ }
+
+      try {
+        const prunedFirstMeet = pruneExpiredPendingFirstMeet(eraVars?.world?.act);
+        if (prunedFirstMeet.changed) {
+          await updateEraVars({ world: { act: { pendingFirstMeet: prunedFirstMeet.pending } } });
+          if (eraVars.world && eraVars.world.act) {
+            eraVars.world.act.pendingFirstMeet = prunedFirstMeet.pending;
+          }
+          if (Object.keys(prunedFirstMeet.pending).length === 0) {
+            lastFirstMeetInjectChatLen = -1;
+          }
+        }
+      } catch (_) { /* pending 首见清理失败时降级：继续沿用原 pending */ }
 
       const firstMeetHintsForTurn = (eraVars?.world?.act?.pendingFirstMeet && typeof eraVars.world.act.pendingFirstMeet === 'object')
         ? eraVars.world.act.pendingFirstMeet

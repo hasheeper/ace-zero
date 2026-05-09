@@ -161,6 +161,7 @@ function testQueuePlaceConsumeFirstMeet() {
   assertEqual(consumedResult.consumed.charKey, 'COTA', 'Consumed encounter should be COTA');
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.firstMeetDone, true, 'COTA should be marked firstMeetDone');
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.status, 'introduced', 'COTA should become introduced');
+  assertEqual(consumedResult.actState.characterEncounter.characters.COTA.introducedPhaseIndex, placed.targetPhaseIndex, 'First-meet should record the phase it was introduced on');
   assert(consumedResult.actState.pendingFirstMeet.COTA, 'COTA first meet hint should be pending for prompt injection');
 
   const afterIntroduced = act.evaluateCharacterEncounterEligibility(consumedResult.actState, hero, context);

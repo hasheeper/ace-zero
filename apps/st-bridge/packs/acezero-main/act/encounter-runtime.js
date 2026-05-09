@@ -66,6 +66,7 @@
       placedNodeId: '',
       introducedNodeId: '',
       introducedAtNodeIndex: 0,
+      introducedPhaseIndex: -1,
       lastEvaluatedNodeIndex: 0,
       reasonCodes: [],
       firstMeetHint: '',
@@ -94,6 +95,9 @@
       placedNodeId: normalizeTrimmedString(source.placedNodeId, ''),
       introducedNodeId: normalizeTrimmedString(source.introducedNodeId, ''),
       introducedAtNodeIndex: Math.max(0, Math.round(Number(source.introducedAtNodeIndex) || 0)),
+      introducedPhaseIndex: Number.isFinite(Number(source.introducedPhaseIndex))
+        ? Math.max(0, Math.min(3, Math.round(Number(source.introducedPhaseIndex))))
+        : -1,
       lastEvaluatedNodeIndex: Math.max(0, Math.round(Number(source.lastEvaluatedNodeIndex) || 0)),
       reasonCodes: normalizeEncounterReasonCodes(source.reasonCodes),
       firstMeetHint: normalizeTrimmedString(source.firstMeetHint || source.hint || source.summary, ''),
@@ -876,6 +880,7 @@
       placedNodeId: '',
       introducedNodeId: nodeId,
       introducedAtNodeIndex: currentNodeIndex,
+      introducedPhaseIndex: phaseIndex === null ? request.targetPhaseIndex : phaseIndex,
       cooldownUntilNodeIndex: currentNodeIndex + Math.max(1, Math.round(Number(options.cooldownNodes) || 1)),
       reasonCodes: deepClone(request.reasonCodes),
       firstMeetHint,
