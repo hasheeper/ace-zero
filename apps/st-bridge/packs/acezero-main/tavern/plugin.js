@@ -115,11 +115,7 @@
   let isProcessing = false;
   let pendingActBaselineSnapshot = null;
   let lastObservedWorldClock = null;
-  // 首见帧楼层哨兵：记录上次注入 <ace0_first_meet> 时的 chat.length。
-  // prompt 构造前比较当前 chat.length：若更大 → 玩家已发下一条 → 清空 pendingFirstMeet。
-  // 相同或更小 → swipe / edit / regen 同一楼层 → 保留 pending 复用。
-  // -1 表示尚未注入或已在 CHAT_CHANGED 时重置。
-  let lastFirstMeetInjectChatLen = -1;
+  // pre_signal 仍按楼层消费；first_meet 按 ACT node/phase 消费。
   let lastPreSignalInjectChatLen = -1;
 
   function getAce0HostRoot() {
@@ -1047,25 +1043,11 @@
       const relationState = buildRelationshipStateSummary(eraVars);
       const worldContext = buildWorldContextSummary(eraVars);
       const locationDoc = buildLocationDocSummary(eraVars);
-      // 首见帧楼层闸门：通过 chat.length 判断楼层是否前进。
-      // - 当前 chat.length > 上次注入时的值 → 玩家已发新人物消息 → 清空 pending
-      // - 相同或更小 → 同一楼层的 swipe / edit / regen → 保留 pending 复用
-      // 这让首见帧的生命 = "一次 AI 楼层的完整畁股期"，而不是整个段位。
+      // pre_signal 是一次楼层提示；first_meet 是一次 ACT 相位提示。
+      // first_meet 只由 node/phase 清理，避免同相位内下一条生成过早转入普通人设。
       try {
         const ctx = (typeof getContext === 'function') ? getContext() : null;
         const currentChatLen = Array.isArray(ctx?.chat) ? ctx.chat.length : -1;
-        if (
-          currentChatLen >= 0 &&
-          lastFirstMeetInjectChatLen >= 0 &&
-          currentChatLen > lastFirstMeetInjectChatLen &&
-          eraVars?.world?.act?.pendingFirstMeet &&
-          Object.keys(eraVars.world.act.pendingFirstMeet).length > 0
-        ) {
-          await updateEraVars({ world: { act: { pendingFirstMeet: {} } } });
-          if (eraVars.world && eraVars.world.act) {
-            eraVars.world.act.pendingFirstMeet = {};
-          }
-        }
         if (
           currentChatLen >= 0 &&
           lastPreSignalInjectChatLen >= 0 &&
@@ -1087,9 +1069,6 @@
           if (eraVars.world && eraVars.world.act) {
             eraVars.world.act.pendingFirstMeet = prunedFirstMeet.pending;
           }
-          if (Object.keys(prunedFirstMeet.pending).length === 0) {
-            lastFirstMeetInjectChatLen = -1;
-          }
         }
       } catch (_) { /* pending 首见清理失败时降级：继续沿用原 pending */ }
 
@@ -1102,12 +1081,11 @@
         : {};
       const preSignalKeysForTurn = Object.keys(preSignalHintsForTurn);
 
-      // 记录本次注入时的 chat.length，供下一次 prompt 构造比对。
-      if (firstMeetKeysForTurn.length > 0 || preSignalKeysForTurn.length > 0) {
+      // pre_signal 记录本次注入时的 chat.length，供下一次 prompt 构造比对。
+      if (preSignalKeysForTurn.length > 0) {
         try {
           const ctx = (typeof getContext === 'function') ? getContext() : null;
           const currentChatLen = Array.isArray(ctx?.chat) ? ctx.chat.length : -1;
-          if (currentChatLen >= 0 && firstMeetKeysForTurn.length > 0) lastFirstMeetInjectChatLen = currentChatLen;
           if (currentChatLen >= 0 && preSignalKeysForTurn.length > 0) lastPreSignalInjectChatLen = currentChatLen;
         } catch (_) {}
       }
@@ -1285,7 +1263,6 @@
     console.log(`${PLUGIN_NAME} ${reason} -> 重置状态`);
     isProcessing = false;
     pendingActBaselineSnapshot = null;
-    lastFirstMeetInjectChatLen = -1;
     lastPreSignalInjectChatLen = -1;
     if (ACT_RUNTIME && typeof ACT_RUNTIME.resetState === 'function') ACT_RUNTIME.resetState();
   }
