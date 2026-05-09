@@ -830,6 +830,12 @@
   async function synchronizeActCharacterState(eraVars) { return await ACT_RUNTIME.synchronizeActCharacterState(eraVars); }
   function buildActStateSummary(eraVars, derivedActState = null) { return ACT_RUNTIME.buildActStateSummary(eraVars, derivedActState); }
   function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) { return ACT_RUNTIME.buildActNarrativePrompts(eraVars, derivedActState, firstMeetHints, preSignalHints); }
+
+  function getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState = null) {
+    return ACT_RUNTIME && typeof ACT_RUNTIME.getActiveFirstMeetHintsForCurrentPhase === 'function'
+      ? ACT_RUNTIME.getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState)
+      : {};
+  }
   function normalizeActSnapshotCounts(raw) { return ACT_RUNTIME.normalizeActSnapshotCounts(raw); }
   function getHeroResourceSnapshot(eraVars) { return ACT_RUNTIME.getHeroResourceSnapshot(eraVars); }
   function getHeroCastStateSnapshot(eraVars, managedCharacters, states) { return ACT_RUNTIME.getHeroCastStateSnapshot(eraVars, managedCharacters, states); }
@@ -1075,7 +1081,11 @@
       const firstMeetHintsForTurn = (eraVars?.world?.act?.pendingFirstMeet && typeof eraVars.world.act.pendingFirstMeet === 'object')
         ? eraVars.world.act.pendingFirstMeet
         : {};
-      const firstMeetKeysForTurn = Object.keys(firstMeetHintsForTurn);
+      const activeFirstMeetHintsForTurn = getActiveFirstMeetHintsForCurrentPhase(eraVars, syncedState.derived);
+      const firstMeetKeysForTurn = [...new Set([
+        ...Object.keys(firstMeetHintsForTurn),
+        ...Object.keys(activeFirstMeetHintsForTurn)
+      ])];
       const preSignalHintsForTurn = (eraVars?.world?.act?.pendingPreSignal && typeof eraVars.world.act.pendingPreSignal === 'object')
         ? eraVars.world.act.pendingPreSignal
         : {};

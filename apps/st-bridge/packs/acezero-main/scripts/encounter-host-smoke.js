@@ -222,6 +222,46 @@ async function testFirstMeetPendingAndDossierWriteback() {
   assert(firstMeetPrompt.content.includes('COTA'), 'First meet prompt should mention COTA');
 }
 
+async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
+  const baseAct = makePlacedCotaAct();
+  const eraVars = {
+    hero: {
+      funds: 9999,
+      cast: {
+        RINO: { activated: true, introduced: true, present: true, inParty: true },
+        COTA: { activated: true, introduced: false, present: false, inParty: false }
+      },
+      roster: {}
+    },
+    world: {
+      current_time: { day: 9, phase: 'NOON' },
+      location: { layer: 'THE_EXCHANGE', site: 'casino_floor', tags: ['casino'] },
+      tags: ['casino'],
+      flags: [],
+      storyFlags: {},
+      clockPressure: 0,
+      act: {
+        ...baseAct,
+        pendingFirstMeet: {},
+        phase_advance: 0
+      }
+    }
+  };
+  const { runtime } = makeRuntimeWithEra(eraVars);
+  const synced = await runtime.synchronizeActCharacterState(eraVars);
+  assertEqual(synced.eraVars.hero.cast.COTA.introduced, false, 'Placed first_meet should not unlock Dossier before phase consumption');
+
+  const prompts = runtime.buildActNarrativePrompts(
+    synced.eraVars,
+    null,
+    synced.eraVars.world.act.pendingFirstMeet,
+    synced.eraVars.world.act.pendingPreSignal
+  );
+  const firstMeetPrompt = prompts.find((prompt) => prompt.id === 'ace0_first_meet');
+  assert(firstMeetPrompt, 'Placed current-phase first_meet should produce ace0_first_meet before phase consumption');
+  assert(firstMeetPrompt.content.includes('COTA'), 'Placed current-phase first_meet should mention COTA');
+}
+
 async function testPreSignalPendingDoesNotUnlockDossier() {
   const context = createContext({ day: 9, crisis: 80, tags: ['casino', 'asset_signal'] });
   const route = [
@@ -321,6 +361,7 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
   await testHostAutoQueuesAllEligibleEncounters();
   await testPhaseAdvanceQueuesPoppyImmediatelyWhenConditionBecomesTrue();
   await testQueuedPoppySchedulesAtNodeBoundary();
+  await testPlacedFirstMeetInjectsBeforePhaseConsumption();
   await testFirstMeetPendingAndDossierWriteback();
   await testPreSignalPendingDoesNotUnlockDossier();
   console.log('encounter-host-smoke ok');

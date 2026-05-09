@@ -608,6 +608,34 @@
     return null;
   }
 
+  function getCurrentActNodeId(act) {
+    const routeHistory = Array.isArray(act?.route_history) ? act.route_history : [];
+    const nodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
+    return normalizeTrimmedString(routeHistory[nodeIndex - 1] || routeHistory[routeHistory.length - 1], '');
+  }
+
+  function getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState = null) {
+    const derived = derivedActState || deriveActCharacterStates(eraVars);
+    const act = derived?.act || getWorldActState(eraVars);
+    const currentNodeId = normalizeTrimmedString(derived?.currentNodeId, '') || getCurrentActNodeId(act);
+    const currentPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
+    const queue = Array.isArray(act?.characterEncounter?.queue) ? act.characterEncounter.queue : [];
+    const hints = {};
+
+    queue.forEach((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+      if (item.type !== 'first_meet' || item.status !== 'placed') return;
+      if (normalizeTrimmedString(item.targetNodeId, '') !== currentNodeId) return;
+      const targetPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
+      if (targetPhaseIndex !== currentPhaseIndex) return;
+      const charKey = normalizeTrimmedString(item.charKey, '').toUpperCase();
+      const hint = normalizeTrimmedString(item.firstMeetHint || item.hint || item.summary, '');
+      if (charKey && hint) hints[charKey] = hint;
+    });
+
+    return hints;
+  }
+
   function getAllActManagedCharacterKeys() {
     const chapterIdsResult = runActModuleMethod('listChapters');
     const chapterIds = chapterIdsResult.ok && Array.isArray(chapterIdsResult.value)
@@ -931,9 +959,11 @@
       });
     }
 
-    // 首见帧 hook（新 hook）：仅在 firstMeetHints 非空时注入。
-    // firstMeetHints 由 synchronizeActCharacterState 基于 MVU 践迁推出，用完即消。
-    const hints = firstMeetHints && typeof firstMeetHints === 'object' ? firstMeetHints : {};
+    // 首见帧 hook：当前 node/phase 的 placed first_meet 是权威来源；
+    // pendingFirstMeet 只作为相位消费后的兼容兜底，生成前不依赖它。
+    const pendingHints = firstMeetHints && typeof firstMeetHints === 'object' ? firstMeetHints : {};
+    const activeHints = getActiveFirstMeetHintsForCurrentPhase(eraVars, derived);
+    const hints = { ...pendingHints, ...activeHints };
     if (Object.keys(hints).length > 0) {
       const firstMeetModule = runActModuleMethod('buildFirstMeetPromptContent', hints);
       const firstMeetContent = firstMeetModule.ok && typeof firstMeetModule.value === 'string'
@@ -1774,6 +1804,7 @@
         getNormalizedActNodeEffects,
         getNormalizedActPhaseEffects,
         deriveActCharacterStates,
+        getActiveFirstMeetHintsForCurrentPhase,
         getAllActManagedCharacterKeys,
         synchronizeActCharacterState,
         buildActStateSummary,
