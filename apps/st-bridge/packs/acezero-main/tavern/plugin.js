@@ -1050,7 +1050,7 @@
       const worldContext = buildWorldContextSummary(eraVars);
       const locationDoc = buildLocationDocSummary(eraVars);
       // pre_signal 是一次楼层提示；first_meet 是一次 ACT 相位提示。
-      // first_meet 只由 node/phase 清理，避免同相位内下一条生成过早转入普通人设。
+      // first_meet 只看当前 placed node/phase；pendingFirstMeet 仅用于旧档清理。
       try {
         const ctx = (typeof getContext === 'function') ? getContext() : null;
         const currentChatLen = Array.isArray(ctx?.chat) ? ctx.chat.length : -1;
@@ -1078,14 +1078,8 @@
         }
       } catch (_) { /* pending 首见清理失败时降级：继续沿用原 pending */ }
 
-      const firstMeetHintsForTurn = (eraVars?.world?.act?.pendingFirstMeet && typeof eraVars.world.act.pendingFirstMeet === 'object')
-        ? eraVars.world.act.pendingFirstMeet
-        : {};
       const activeFirstMeetHintsForTurn = getActiveFirstMeetHintsForCurrentPhase(eraVars, syncedState.derived);
-      const firstMeetKeysForTurn = [...new Set([
-        ...Object.keys(firstMeetHintsForTurn),
-        ...Object.keys(activeFirstMeetHintsForTurn)
-      ])];
+      const firstMeetKeysForTurn = Object.keys(activeFirstMeetHintsForTurn);
       const preSignalHintsForTurn = (eraVars?.world?.act?.pendingPreSignal && typeof eraVars.world.act.pendingPreSignal === 'object')
         ? eraVars.world.act.pendingPreSignal
         : {};
@@ -1100,7 +1094,7 @@
         } catch (_) {}
       }
       const charDocPrompts = await buildCharacterPromptInjections(eraVars, firstMeetKeysForTurn);
-      const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived, firstMeetHintsForTurn, preSignalHintsForTurn);
+      const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived, activeFirstMeetHintsForTurn, preSignalHintsForTurn);
       const expansionPrompts = buildExpansionPromptInjections(eraVars);
       const prompts = [];
       const primaryContextContent = [

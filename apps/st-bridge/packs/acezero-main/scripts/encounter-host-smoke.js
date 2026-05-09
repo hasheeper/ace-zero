@@ -200,7 +200,7 @@ async function testFirstMeetPendingAndDossierWriteback() {
   const resolved = await runtime.resolvePendingActAdvance(eraVars);
   const resolvedAct = resolved.eraVars.world.act;
   assert(resolved.changed, 'resolvePendingActAdvance should advance and consume target phase');
-  assert(resolvedAct.pendingFirstMeet.COTA, 'New first_meet pending should survive phase advance');
+  assert(!resolvedAct.pendingFirstMeet.COTA, 'Consumed first_meet should not survive as a pending prompt');
   assert(!resolvedAct.pendingFirstMeet.OLD, 'Old pendingFirstMeet should be cleared during phase advance');
   assert(!resolvedAct.pendingPreSignal.OLD, 'Old pendingPreSignal should be cleared during phase advance');
 
@@ -208,7 +208,7 @@ async function testFirstMeetPendingAndDossierWriteback() {
   assert(synced.changed, 'synchronizeActCharacterState should write first-meet cast patch');
   assertEqual(synced.eraVars.hero.cast.COTA.activated, true, 'COTA should be activated in Dossier after first meet');
   assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'COTA should be introduced in Dossier after first meet');
-  assertEqual(synced.eraVars.hero.cast.COTA.present, true, 'COTA should be present on the first-meet node');
+  assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'COTA present should remain LLM-controlled after first meet consumption');
 
   const prompts = runtime.buildActNarrativePrompts(
     synced.eraVars,
@@ -217,9 +217,7 @@ async function testFirstMeetPendingAndDossierWriteback() {
     synced.eraVars.world.act.pendingPreSignal
   );
   const firstMeetPrompt = prompts.find((prompt) => prompt.id === 'ace0_first_meet');
-  assert(firstMeetPrompt, 'First meet pending should produce ace0_first_meet prompt');
-  assert(firstMeetPrompt.content.includes('<ace0_first_meet>'), 'First meet prompt should include XML wrapper');
-  assert(firstMeetPrompt.content.includes('COTA'), 'First meet prompt should mention COTA');
+  assert(!firstMeetPrompt, 'Consumed first_meet should not inject ace0_first_meet again');
 }
 
 async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
@@ -249,7 +247,7 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
   };
   const { runtime } = makeRuntimeWithEra(eraVars);
   const synced = await runtime.synchronizeActCharacterState(eraVars);
-  assertEqual(synced.eraVars.hero.cast.COTA.introduced, false, 'Placed first_meet should not unlock Dossier before phase consumption');
+  assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'Placed first_meet should unlock introduced during the appearance phase');
   assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'Placed first_meet should keep present locked before phase consumption');
 
   const prompts = runtime.buildActNarrativePrompts(
@@ -263,7 +261,7 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
   assert(firstMeetPrompt.content.includes('COTA'), 'Placed current-phase first_meet should mention COTA');
 }
 
-async function testIntroducedEncounterLocksManualPresentUntilFirstMeetPendingClears() {
+async function testIntroducedEncounterKeepsManualPresentAfterPhaseConsumption() {
   const eraVars = {
     hero: {
       funds: 9999,
@@ -298,8 +296,8 @@ async function testIntroducedEncounterLocksManualPresentUntilFirstMeetPendingCle
   };
   const synced = await runtime.synchronizeActCharacterState(movedEraVars);
 
-  assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'Consumed first_meet should unlock Dossier');
-  assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'Consumed first_meet should keep present locked while pendingFirstMeet remains');
+  assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'Consumed first_meet should keep Dossier unlocked');
+  assertEqual(synced.eraVars.hero.cast.COTA.present, true, 'Consumed first_meet should leave present=true under LLM control');
 }
 
 async function testIntroducedEncounterPreservesManualPresentAfterFirstMeetPendingClears() {
@@ -448,7 +446,7 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
   await testPhaseAdvanceQueuesPoppyImmediatelyWhenConditionBecomesTrue();
   await testQueuedPoppySchedulesAtNodeBoundary();
   await testPlacedFirstMeetInjectsBeforePhaseConsumption();
-  await testIntroducedEncounterLocksManualPresentUntilFirstMeetPendingClears();
+  await testIntroducedEncounterKeepsManualPresentAfterPhaseConsumption();
   await testIntroducedEncounterPreservesManualPresentAfterFirstMeetPendingClears();
   await testFirstMeetPendingAndDossierWriteback();
   await testPreSignalPendingDoesNotUnlockDossier();

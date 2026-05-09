@@ -162,7 +162,7 @@ function testQueuePlaceConsumeFirstMeet() {
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.firstMeetDone, true, 'COTA should be marked firstMeetDone');
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.status, 'introduced', 'COTA should become introduced');
   assertEqual(consumedResult.actState.characterEncounter.characters.COTA.introducedPhaseIndex, placed.targetPhaseIndex, 'First-meet should record the phase it was introduced on');
-  assert(consumedResult.actState.pendingFirstMeet.COTA, 'COTA first meet hint should be pending for prompt injection');
+  assert(!consumedResult.actState.pendingFirstMeet.COTA, 'Consumed first_meet should not create a follow-up pending prompt');
 
   const afterIntroduced = act.evaluateCharacterEncounterEligibility(consumedResult.actState, hero, context);
   assert(!afterIntroduced.eligible.some((item) => item.charKey === 'COTA'), 'Introduced COTA should not become eligible again');

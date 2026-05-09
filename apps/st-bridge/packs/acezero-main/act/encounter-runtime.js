@@ -172,10 +172,23 @@
     const actState = normalizeActState(actStateInput);
     const encounter = normalizeCharacterEncounterState(actState.characterEncounter);
     const nodeId = normalizeTrimmedString(currentNodeId, '');
+    const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(actState.phase_index) || 0)));
     const hints = {};
+    encounter.queue.forEach((item) => {
+      if (item.type !== 'first_meet' || item.status !== 'placed') return;
+      if (item.targetNodeId !== nodeId) return;
+      const targetPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
+      if (targetPhaseIndex !== phaseIndex) return;
+      if (!item.firstMeetHint) return;
+      hints[item.charKey] = item.firstMeetHint;
+    });
     Object.entries(encounter.characters).forEach(([charKey, state]) => {
       if (state.status !== 'introduced' && state.status !== 'first_meet') return;
       if (state.introducedNodeId && state.introducedNodeId !== nodeId) return;
+      if (Number.isFinite(Number(state.introducedPhaseIndex))) {
+        const introducedPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(state.introducedPhaseIndex))));
+        if (introducedPhaseIndex !== phaseIndex) return;
+      }
       if (!state.firstMeetHint) return;
       hints[charKey] = state.firstMeetHint;
     });
@@ -888,10 +901,7 @@
     };
     encounter.meta.lastFirstMeetNodeIndex = currentNodeIndex;
     act.characterEncounter = encounter;
-    act.pendingFirstMeet = {
-      ...normalizePendingFirstMeet(act.pendingFirstMeet),
-      ...(firstMeetHint ? { [request.charKey]: firstMeetHint } : {})
-    };
+    act.pendingFirstMeet = {};
     return { actState: act, consumed };
   }
 

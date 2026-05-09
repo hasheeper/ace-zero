@@ -1618,12 +1618,6 @@
         states[charKey].activated = true;
         states[charKey].introduced = true;
       }
-      if (
-        encounterChar.status === 'first_meet'
-        || (encounterChar.status === 'introduced' && encounterChar.introducedNodeId && encounterChar.introducedNodeId === currentNodeId)
-      ) {
-        states[charKey].present = true;
-      }
     });
 
     // 首见帧来源只允许来自 characterEncounter 运行时状态。
@@ -1651,7 +1645,6 @@
     const castPatch = {};
     let changed = false;
     const encounter = normalizeCharacterEncounterState(derivedState.act?.characterEncounter);
-    const pendingFirstMeet = normalizePendingFirstMeet(derivedState.act?.pendingFirstMeet);
 
     for (const charKey of derivedState.managedCharacters) {
       const currentNode = currentCast[charKey] && typeof currentCast[charKey] === 'object'
@@ -1661,16 +1654,22 @@
       const encounterChar = encounter.characters[charKey];
       const encounterIntroduced = encounterChar && (
         encounterChar.firstMeetDone === true ||
-        encounterChar.status === 'introduced'
+        encounterChar.status === 'introduced' ||
+        encounterChar.status === 'first_meet'
       );
-      const preserveManualPresent = encounterIntroduced === true
-        && !pendingFirstMeet[charKey]
-        && currentNode.present === true
-        && desiredNode.introduced === true;
+      const activeFirstMeet = typeof derivedState.encounterFirstMeetHints?.[charKey] === 'string'
+        && !!derivedState.encounterFirstMeetHints[charKey].trim();
+      const nextActivated = desiredNode.activated === true || activeFirstMeet;
+      const nextIntroduced = desiredNode.introduced === true || activeFirstMeet;
+      const nextPresent = activeFirstMeet
+        ? false
+        : (encounterIntroduced === true && nextIntroduced === true
+          ? currentNode.present === true
+          : desiredNode.present === true);
       const nextNode = {
-        activated: desiredNode.activated === true,
-        introduced: desiredNode.introduced === true,
-        present: desiredNode.present === true || preserveManualPresent,
+        activated: nextActivated,
+        introduced: nextIntroduced,
+        present: nextPresent,
         inParty: desiredNode.inParty === true,
         miniKnown: desiredNode.miniKnown === true
       };
@@ -1696,9 +1695,10 @@
         : {};
       const desiredNode = derivedState.states[charKey];
       if (!desiredNode) continue;
+      const activeFirstMeet = typeof encounterHints[charKey] === 'string' && !!encounterHints[charKey].trim();
       if (
         currentNode.introduced !== true &&
-        desiredNode.introduced === true &&
+        (desiredNode.introduced === true || activeFirstMeet) &&
         typeof encounterHints[charKey] === 'string' &&
         encounterHints[charKey].trim()
       ) {

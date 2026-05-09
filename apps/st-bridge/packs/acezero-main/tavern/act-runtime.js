@@ -717,13 +717,32 @@
       : false;
 
     if (!modulePatchResult.ok) {
+      const encounterCharacters = derived.act?.characterEncounter && typeof derived.act.characterEncounter === 'object'
+        && derived.act.characterEncounter.characters && typeof derived.act.characterEncounter.characters === 'object'
+        ? derived.act.characterEncounter.characters
+        : {};
       for (const charKey of derived.managedCharacters) {
         const currentNode = getCastNode(hero, charKey);
         const desiredNode = derived.states[charKey];
+        const encounterChar = encounterCharacters[charKey];
+        const encounterIntroduced = encounterChar && (
+          encounterChar.firstMeetDone === true ||
+          encounterChar.status === 'introduced' ||
+          encounterChar.status === 'first_meet'
+        );
+        const activeFirstMeet = typeof derived.encounterFirstMeetHints?.[charKey] === 'string'
+          && !!derived.encounterFirstMeetHints[charKey].trim();
+        const nextActivated = desiredNode.activated === true || activeFirstMeet;
+        const nextIntroduced = desiredNode.introduced === true || activeFirstMeet;
+        const nextPresent = activeFirstMeet
+          ? false
+          : (encounterIntroduced === true && nextIntroduced === true
+            ? currentNode.present === true
+            : desiredNode.present === true);
         const nextNode = {
-          activated: desiredNode.activated === true,
-          introduced: desiredNode.introduced === true,
-          present: desiredNode.present === true,
+          activated: nextActivated,
+          introduced: nextIntroduced,
+          present: nextPresent,
           inParty: desiredNode.inParty === true,
           miniKnown: desiredNode.miniKnown === true
         };
@@ -767,32 +786,9 @@
       }
     });
 
-    // phase 消费后的首见回执。生成前的首见提示以当前 placed first_meet 为准；
-    // pendingFirstMeet 只保留消费后的一轮兼容提示，并在 node/phase 过期后清理。
-    const currentActState = getWorldActState(workingEraVars);
-    const currentPending = currentActState?.pendingFirstMeet && typeof currentActState.pendingFirstMeet === 'object'
-      ? currentActState.pendingFirstMeet
-      : {};
-    const pendingPatch = {};
-
-    for (const [k, v] of Object.entries(firstMeetHints)) {
-      if (typeof v !== 'string' || !v.trim()) continue;
-      if (!currentPending[k]) pendingPatch[k] = v;
-    }
-
-    const pendingChanged = Object.keys(pendingPatch).length > 0;
-    const nextPending = pendingChanged
-      ? { ...currentPending, ...pendingPatch }
-      : currentPending;
-
-    if (changed || pendingChanged) {
-      const actUpdate = pendingChanged
-        ? { pendingFirstMeet: nextPending }
-        : undefined;
-
+    if (changed) {
       await updateEraVars({
-        ...(changed ? { hero: { cast: castPatch } } : {}),
-        ...(actUpdate ? { world: { act: actUpdate } } : {})
+        hero: { cast: castPatch }
       });
 
       const nextEraVars = {
@@ -803,16 +799,9 @@
             ...(workingEraVars?.hero?.cast || {}),
             ...(changed ? castPatch : {})
           }
-        },
-        world: {
-          ...(workingEraVars?.world || {}),
-          act: {
-            ...(workingEraVars?.world?.act || {}),
-            ...(pendingChanged ? { pendingFirstMeet: nextPending } : {})
-          }
         }
       };
-      return { eraVars: nextEraVars, derived, changed: changed || pendingChanged, firstMeetHints };
+      return { eraVars: nextEraVars, derived, changed, firstMeetHints };
     }
 
     return { eraVars: workingEraVars, derived, changed: autoEncounter.changed === true, firstMeetHints };
@@ -954,11 +943,10 @@
       });
     }
 
-    // 首见帧 hook：当前 node/phase 的 placed first_meet 是权威来源；
-    // pendingFirstMeet 只作为相位消费后的兼容兜底，生成前不依赖它。
-    const pendingHints = firstMeetHints && typeof firstMeetHints === 'object' ? firstMeetHints : {};
+    // 首见帧 hook：当前 node/phase 的 placed first_meet 是唯一权威来源。
+    // pendingFirstMeet 只兼容旧档清理，不再参与生成。
     const activeHints = getActiveFirstMeetHintsForCurrentPhase(eraVars, derived);
-    const hints = { ...pendingHints, ...activeHints };
+    const hints = activeHints;
     if (Object.keys(hints).length > 0) {
       const firstMeetModule = runActModuleMethod('buildFirstMeetPromptContent', hints);
       const firstMeetContent = firstMeetModule.ok && typeof firstMeetModule.value === 'string'
@@ -1559,7 +1547,6 @@
     let nextHero = hero;
     let moduleAdvance = { ok: false };
     const encounterContext = buildEncounterContextFromEraVars(eraVars);
-    const previousPendingFirstMeet = normalizePendingPromptMap(act.pendingFirstMeet);
     const previousPendingPreSignal = normalizePendingPromptMap(act.pendingPreSignal);
 
     if (requestedSteps > 0) {
@@ -1588,7 +1575,7 @@
     }
 
     if (requestedSteps > 0) {
-      actState.pendingFirstMeet = keepNewPendingPrompts(actState.pendingFirstMeet, previousPendingFirstMeet);
+      actState.pendingFirstMeet = {};
       actState.pendingPreSignal = keepNewPendingPrompts(actState.pendingPreSignal, previousPendingPreSignal);
     }
 
