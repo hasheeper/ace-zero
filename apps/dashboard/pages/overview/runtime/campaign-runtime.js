@@ -187,17 +187,24 @@
         const presentNodeId = selectableNodeIds.includes(ctx.currentNodeId)
             ? ctx.currentNodeId
             : getDefaultPresentNodeId(nodeTemplate) || ctx.currentNodeId;
+        const nodeDefinition = getNodeDefinitionByIndex(nodeTemplate, presentNodeId);
         const node = getNodeCatalogEntry(ctx, presentNodeId);
         const typeKey = getNodeTypeKey(ctx, presentNodeId);
         const label = nodeTemplate?.label || `NODE ${String(ctx.currentNodeIndex).padStart(2, '0')}`;
         const deadNodeIds = getDerivedDeadNodeIds(ctx, ctx.currentNodeIndex, presentNodeId);
         const presentTransition = getPresentNodeTransition(ctx, presentNodeId);
-        const snapshotLimited = Array.isArray(ctx.frontendSnapshot?.currentLimitedRewards)
+        const snapshotMatchesCurrentNode = ctx.frontendSnapshot
+            && Math.max(1, Math.round(Number(ctx.frontendSnapshot.currentNodeIndex) || 1)) === ctx.currentNodeIndex
+            && typeof ctx.frontendSnapshot.currentNodeId === 'string'
+            && ctx.frontendSnapshot.currentNodeId.trim() === presentNodeId;
+        const snapshotLimited = snapshotMatchesCurrentNode && Array.isArray(ctx.frontendSnapshot?.currentLimitedRewards)
             ? ctx.frontendSnapshot.currentLimitedRewards
             : null;
-        const limitedRewards = snapshotLimited?.length
+        const limitedRewards = snapshotLimited
             ? snapshotLimited
-            : (nodeTemplate?.limited?.length ? nodeTemplate.limited : ctx.getDefaultLimitedRewardsForNode(presentNodeId));
+            : (nodeDefinition?.limited?.length
+                ? nodeDefinition.limited
+                : (nodeTemplate?.limited?.length ? nodeTemplate.limited : ctx.getDefaultLimitedRewardsForNode(presentNodeId)));
         return {
             nodeIndex: ctx.currentNodeIndex,
             label,

@@ -152,6 +152,7 @@
         key: getNodeTypeKey(nodeRuntime) || 'vision',
         label: getNodeDisplayLabel(nodeId, nodeRuntime),
         sublabel: getNodeDisplaySubLabel(nodeRuntime),
+        limited: buildLimitedRewardsForNode(nodeRuntime),
         isBranch: !isSingleNodeAtIndex,
         lane: normalizeTrimmedString(nodeRuntime?.lane || nodeRuntime?.ui?.lane, ''),
         mainlineLanes: (Array.isArray(nodeRuntime?.mainlineLanes) ? nodeRuntime.mainlineLanes : [])

@@ -1827,17 +1827,24 @@ function createExecutionRuntimeContext() {
         const presentNodeId = selectableNodeIds.includes(appState.currentNodeId)
             ? appState.currentNodeId
             : getDefaultPresentNodeId(nodeTemplate) || appState.currentNodeId;
+        const nodeDefinition = getNodeDefinitionByIndex(nodeTemplate, presentNodeId);
         const node = getNodeData(presentNodeId);
         const typeKey = getNodeTypeKey(presentNodeId);
         const label = nodeTemplate?.label || `NODE ${String(appState.currentNodeIndex).padStart(2, '0')}`;
         const deadNodeIds = getDerivedDeadNodeIds(appState.currentNodeIndex, presentNodeId);
         const presentTransition = getPresentNodeTransition(presentNodeId);
-        const snapshotLimited = Array.isArray(appData.runtime.frontendSnapshot?.currentLimitedRewards)
+        const snapshotMatchesCurrentNode = appData.runtime.frontendSnapshot
+            && Math.max(1, Math.round(Number(appData.runtime.frontendSnapshot.currentNodeIndex) || 1)) === appState.currentNodeIndex
+            && typeof appData.runtime.frontendSnapshot.currentNodeId === 'string'
+            && appData.runtime.frontendSnapshot.currentNodeId.trim() === presentNodeId;
+        const snapshotLimited = snapshotMatchesCurrentNode && Array.isArray(appData.runtime.frontendSnapshot?.currentLimitedRewards)
             ? appData.runtime.frontendSnapshot.currentLimitedRewards
             : null;
-        const limitedRewards = (snapshotLimited?.length
+        const limitedRewards = snapshotLimited
             ? snapshotLimited
-            : (nodeTemplate?.limited?.length ? nodeTemplate.limited : getDefaultLimitedRewardsForNode(presentNodeId)));
+            : (nodeDefinition?.limited?.length
+                ? nodeDefinition.limited
+                : (nodeTemplate?.limited?.length ? nodeTemplate.limited : getDefaultLimitedRewardsForNode(presentNodeId)));
         return {
             nodeIndex: appState.currentNodeIndex,
             label,
