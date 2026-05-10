@@ -810,8 +810,7 @@ function createExecutionRuntimeContext() {
             activated: true,
             introduced: isKnownByDefault,
             present: isKnownByDefault,
-            inParty: isKnownByDefault,
-            miniKnown: false
+            inParty: isKnownByDefault
         };
     }
 
@@ -838,8 +837,7 @@ function createExecutionRuntimeContext() {
             introduced: true,
             present: encounterChar.status === 'first_meet'
                 || (introducedNodeId && introducedNodeId === currentNodeId),
-            inParty: false,
-            miniKnown: false
+            inParty: false
         };
     }
 
@@ -859,14 +857,13 @@ function createExecutionRuntimeContext() {
             const encounterState = getEncounterDashboardStateFromPayload(payload, heroCode);
             character.dashboardState = {
                 ...getDefaultDashboardCharacterState(key),
+                ...(encounterState || {}),
                 ...(castNode ? {
                     activated: true,
                     introduced: castNode.introduced === true,
                     present: castNode.present === true,
-                    inParty: castNode.inParty === true,
-                    miniKnown: castNode.miniKnown === true
-                } : {}),
-                ...(encounterState || {})
+                    inParty: castNode.inParty === true
+                } : {})
             };
         });
     }

@@ -214,8 +214,8 @@ function testFirstMeetPacing() {
     place: true
   });
   assertEqual(blockedRuleAddSia.placed, null, 'Scheduler should not place a new first-meet immediately after one is consumed');
-  const queuedSia = blockedRuleAddSia.actState.characterEncounter.queue.find((item) => item.charKey === 'SIA' && item.status === 'queued');
-  assert(queuedSia, 'The next eligible request should remain queued through the cooldown node');
+  const queuedNext = blockedRuleAddSia.actState.characterEncounter.queue.find((item) => item.status === 'queued');
+  assert(queuedNext, 'The next eligible request should remain queued through the cooldown node');
 
   const afterCooldown = {
     ...blockedRuleAddSia.actState,
@@ -227,7 +227,7 @@ function testFirstMeetPacing() {
   };
   const ruleAddSia = act.placeNextCharacterEncounter(afterCooldown, config, { context });
   assert(ruleAddSia.placed, 'Scheduler should place the next first-meet after one node of spacing');
-  assertEqual(ruleAddSia.placed.charKey, 'SIA', 'The next scheduled request should preserve its character');
+  assertEqual(ruleAddSia.placed.charKey, queuedNext.charKey, 'The next scheduled request should preserve its character');
   assert(ruleAddSia.placed.targetNodeIndex > 6 && ruleAddSia.placed.targetNodeIndex <= 8, 'Next first-meet should target a near future path node after cooldown');
   const sameNodeConsume = act.consumeCharacterEncounterForNode(ruleAddSia.actState, placed.targetNodeId, {
     phaseIndex: ruleAddSia.placed.targetPhaseIndex

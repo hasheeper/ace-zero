@@ -257,7 +257,6 @@ function createCharacterBase(config) {
       introduced: config.dashboardState?.introduced === true,
       present: config.dashboardState?.present === true,
       inParty: config.dashboardState?.inParty === true,
-      miniKnown: config.dashboardState?.miniKnown === true,
       activated: config.dashboardState?.activated !== false
     },
     watermark: config.watermark || config.name.toUpperCase(),

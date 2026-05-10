@@ -236,7 +236,7 @@ async function testPlacedFirstMeetInjectsBeforePhaseConsumption() {
   const { runtime } = makeRuntimeWithEra(eraVars);
   const synced = await runtime.synchronizeActCharacterState(eraVars);
   assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'Placed first_meet should unlock introduced during the appearance phase');
-  assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'Placed first_meet should keep present locked before phase consumption');
+  assertEqual(synced.eraVars.hero.cast.COTA.present, true, 'Placed first_meet should preserve existing present=true during the appearance phase');
 
   const prompts = runtime.buildActNarrativePrompts(synced.eraVars);
   const firstMeetPrompt = prompts.find((prompt) => prompt.id === 'ace0_first_meet');

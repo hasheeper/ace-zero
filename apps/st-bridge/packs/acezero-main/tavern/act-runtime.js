@@ -26,7 +26,6 @@
         LOCATION_LAYER_META = {},
         HERO_INTERNAL_KEY = 'KAZU',
         ACT_STATE_INJECT_ID = 'ace0_act_state',
-        ACT_CHARTER_INJECT_ID = 'ace0_act_charter',
         ACT_NARRATIVE_INJECT_ID = 'ace0_act_narrative',
         ACT_TRANSITION_INJECT_ID = 'ace0_act_transition',
         ACT_PACING_INJECT_ID = 'ace0_narrative_pacing',
@@ -231,7 +230,6 @@
       'deriveCharacterStatesFromActState',
       'createCharacterCastPatch',
       'buildActStateSummaryFromDerived',
-      'buildCharterPromptContent',
       'buildNarrativePromptContentFromDerived',
       'buildNarrativePacingSummary',
       'buildFirstMeetPromptContent',
@@ -618,28 +616,6 @@
     return hints;
   }
 
-  function getAllActManagedCharacterKeys() {
-    const chapterIdsResult = runActModuleMethod('listChapters');
-    const chapterIds = chapterIdsResult.ok && Array.isArray(chapterIdsResult.value)
-      ? chapterIdsResult.value
-      : [];
-    const keySet = new Set();
-
-    chapterIds.forEach((chapterId) => {
-      const chapterResult = runActModuleMethod('getChapter', chapterId);
-      const managedCharacters = chapterResult.ok
-        ? chapterResult.value?.runtime?.managedCharacters
-        : null;
-      if (!Array.isArray(managedCharacters)) return;
-      managedCharacters.forEach((charKey) => {
-        const normalized = typeof charKey === 'string' ? charKey.trim().toUpperCase() : '';
-        if (normalized) keySet.add(normalized);
-      });
-    });
-
-    return keySet;
-  }
-
   async function autoUpdateHostEncounters(eraVars) {
     const world = getWorldState(eraVars);
     const hero = eraVars?.hero && typeof eraVars.hero === 'object' ? eraVars.hero : {};
@@ -700,74 +676,31 @@
       : false;
 
     if (!modulePatchResult.ok) {
-      const encounterCharacters = derived.act?.characterEncounter && typeof derived.act.characterEncounter === 'object'
-        && derived.act.characterEncounter.characters && typeof derived.act.characterEncounter.characters === 'object'
-        ? derived.act.characterEncounter.characters
-        : {};
       for (const charKey of derived.managedCharacters) {
         const currentNode = getCastNode(hero, charKey);
         const desiredNode = derived.states[charKey];
-        const encounterChar = encounterCharacters[charKey];
-        const encounterIntroduced = encounterChar && (
-          encounterChar.firstMeetDone === true ||
-          encounterChar.status === 'introduced' ||
-          encounterChar.status === 'first_meet'
-        );
         const activeFirstMeet = typeof derived.encounterFirstMeetHints?.[charKey] === 'string'
           && !!derived.encounterFirstMeetHints[charKey].trim();
-        const nextActivated = desiredNode.activated === true || activeFirstMeet;
-        const nextIntroduced = desiredNode.introduced === true || activeFirstMeet;
-        const nextPresent = activeFirstMeet
-          ? false
-          : (encounterIntroduced === true && nextIntroduced === true
-            ? currentNode.present === true
-            : desiredNode.present === true);
+        const nextActivated = currentNode.activated === true || desiredNode.activated === true || activeFirstMeet;
+        const nextIntroduced = currentNode.introduced === true || desiredNode.introduced === true || activeFirstMeet;
         const nextNode = {
           activated: nextActivated,
           introduced: nextIntroduced,
-          present: nextPresent,
-          inParty: desiredNode.inParty === true,
-          miniKnown: desiredNode.miniKnown === true
+          present: currentNode.present === true || desiredNode.present === true,
+          inParty: currentNode.inParty === true || desiredNode.inParty === true
         };
 
         if (
           currentNode.activated !== nextNode.activated ||
           currentNode.introduced !== nextNode.introduced ||
           currentNode.present !== nextNode.present ||
-          currentNode.inParty !== nextNode.inParty ||
-          currentNode.miniKnown !== nextNode.miniKnown
+          currentNode.inParty !== nextNode.inParty
         ) {
           castPatch[charKey] = nextNode;
           changed = true;
         }
       }
     }
-
-    const activeManagedSet = new Set(
-      Array.isArray(derived.managedCharacters)
-        ? derived.managedCharacters.map((charKey) => String(charKey || '').trim().toUpperCase()).filter(Boolean)
-        : []
-    );
-    getAllActManagedCharacterKeys().forEach((charKey) => {
-      if (activeManagedSet.has(charKey)) return;
-      const currentNode = getCastNode(hero, charKey);
-      if (
-        currentNode.activated === true ||
-        currentNode.introduced === true ||
-        currentNode.present === true ||
-        currentNode.inParty === true ||
-        currentNode.miniKnown === true
-      ) {
-        castPatch[charKey] = {
-          activated: false,
-          introduced: false,
-          present: false,
-          inParty: false,
-          miniKnown: false
-        };
-        changed = true;
-      }
-    });
 
     if (changed) {
       await updateEraVars({
@@ -964,21 +897,6 @@
           should_scan: false
         });
       }
-    }
-
-    const charterModule = runActModuleMethod('buildCharterPromptContent', narrative);
-    const charterContent = charterModule.ok && typeof charterModule.value === 'string'
-      ? charterModule.value
-      : '';
-    if (charterContent) {
-      prompts.push({
-        id: ACT_CHARTER_INJECT_ID,
-        position: 'in_chat',
-        depth: 2,
-        role: 'system',
-        content: charterContent,
-        should_scan: false
-      });
     }
 
     const narrativeModule = runActModuleMethod('buildNarrativePromptContentFromDerived', derived);
@@ -1741,7 +1659,6 @@
         getNormalizedActPhaseEffects,
         deriveActCharacterStates,
         getActiveFirstMeetHintsForCurrentPhase,
-        getAllActManagedCharacterKeys,
         synchronizeActCharacterState,
         buildActStateSummary,
         buildActNarrativePrompts,

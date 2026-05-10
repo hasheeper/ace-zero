@@ -152,7 +152,6 @@
     introduced: false,
     present: false,
     inParty: false,
-    miniKnown: false,
   };
   const DEFAULT_ROSTER_NODE = {
     level: 0,
@@ -200,11 +199,10 @@
     const doc = CHARACTER_PROMPT_DOCS[key];
     if (!doc) return '';
 
-    // 四档逻辑：
+    // 三档逻辑：
     //   isFirstMeet=true                   → mini（首见瞬间只做轮廓垫底，full 由后续轮承接）
     //   introduced=true, present=false     → mini（已认识但此刻不在场的垫底感知）
     //   present=true                       → full
-    //   miniKnown=true, introduced=false   → mini（只投喂 mini 人设，不算正式登场）
 
     // 首见帧本轮不投喂 full 人设：<ace0_first_meet> 已单独承担登场文案，
     // 这里若再甩完整人设等于提前倾倒所有设定、破坏首见帧节奏。
@@ -216,7 +214,7 @@
       return await getFullCharacterDoc(key, doc);
     }
 
-    if (state?.introduced === true || state?.miniKnown === true) {
+    if (state?.introduced === true) {
       return [doc.mini].filter(Boolean).join('\n\n');
     }
 

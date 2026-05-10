@@ -47,7 +47,6 @@
   const REL_STATE_INJECT_ID = 'ace0_relationship_state';
   const PRIMARY_CONTEXT_INJECT_ID = 'ace0_primary_context';
   const ACT_STATE_INJECT_ID = 'ace0_act_state';
-  const ACT_CHARTER_INJECT_ID = 'ace0_act_charter';
   const ACT_NARRATIVE_INJECT_ID = 'ace0_act_narrative';
   const ACT_TRANSITION_INJECT_ID = 'ace0_act_transition';
   const ACT_PACING_INJECT_ID = 'ace0_narrative_pacing';
@@ -707,7 +706,6 @@
       LOCATION_LAYER_META,
       HERO_INTERNAL_KEY,
       ACT_STATE_INJECT_ID,
-      ACT_CHARTER_INJECT_ID,
       ACT_NARRATIVE_INJECT_ID,
       ACT_TRANSITION_INJECT_ID,
       ACT_PACING_INJECT_ID,
@@ -762,7 +760,6 @@
   function getNormalizedActNodeEffects(config, nodeId) { return ACT_RUNTIME.getNormalizedActNodeEffects(config, nodeId); }
   function getNormalizedActPhaseEffects(config, nodeId, phaseIndex) { return ACT_RUNTIME.getNormalizedActPhaseEffects(config, nodeId, phaseIndex); }
   function deriveActCharacterStates(eraVars) { return ACT_RUNTIME.deriveActCharacterStates(eraVars); }
-  function getAllActManagedCharacterKeys() { return ACT_RUNTIME.getAllActManagedCharacterKeys(); }
   async function synchronizeActCharacterState(eraVars) { return await ACT_RUNTIME.synchronizeActCharacterState(eraVars); }
   function buildActStateSummary(eraVars, derivedActState = null) { return ACT_RUNTIME.buildActStateSummary(eraVars, derivedActState); }
   function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) { return ACT_RUNTIME.buildActNarrativePrompts(eraVars, derivedActState, firstMeetHints, preSignalHints); }
@@ -951,7 +948,6 @@
           HERO_INJECT_ID,
           REL_STATE_INJECT_ID,
           ACT_STATE_INJECT_ID,
-          ACT_CHARTER_INJECT_ID,
           ACT_NARRATIVE_INJECT_ID,
           ACT_TRANSITION_INJECT_ID,
           ACT_PACING_INJECT_ID,
@@ -1559,10 +1555,6 @@
         normalizedPatch.activated = true;
         normalizedPatch.introduced = true;
       }
-      if (normalizedPatch.miniKnown === true) {
-        normalizedPatch.activated = true;
-      }
-
       await updateEraVars({
         hero: {
           cast: {
@@ -1596,13 +1588,6 @@
     async setCharacterActivated(charKey, activated) {
       return this.setCharacterState(charKey, {
         activated: !!activated
-      });
-    },
-
-    async setCharacterMiniKnown(charKey, miniKnown = true) {
-      return this.setCharacterState(charKey, {
-        activated: !!miniKnown,
-        miniKnown: !!miniKnown
       });
     },
 

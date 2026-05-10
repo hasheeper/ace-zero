@@ -128,32 +128,6 @@ ${phaseLines.join('\n')}
     return `<ace0_narrative_pacing>\n${lines.join('\n')}\n</ace0_narrative_pacing>`;
   }
 
-  function buildCharterPromptContent(narrative) {
-    const charter = narrative && narrative.charter;
-    if (!charter) return '';
-    const laws = Array.isArray(charter.ironLaws) && charter.ironLaws.length
-      ? charter.ironLaws.map((law, index) => `${index + 1}. ${law}`).join('\n')
-      : '';
-    const bounds = charter.bounds && typeof charter.bounds === 'object' ? charter.bounds : {};
-    const forbid = Array.isArray(bounds.forbid) && bounds.forbid.length
-      ? bounds.forbid.map((item, index) => `${index + 1}. ${item}`).join('\n')
-      : '';
-    const closeWhen = Array.isArray(bounds.closeWhen) && bounds.closeWhen.length
-      ? bounds.closeWhen.map((item, index) => `${index + 1}. ${item}`).join('\n')
-      : '';
-    const body = [
-      '[使用方式]\n这是章节级节奏指导，用来帮助把握方向、轻重与收束位置；不是逐段强制命令。',
-      charter.theme ? `[主题]\n${charter.theme}` : '',
-      laws ? `[铁律]\n${laws}` : '',
-      bounds.focus ? `[边界]\n${bounds.focus}` : '',
-      forbid ? `[不要展开]\n${forbid}` : '',
-      closeWhen ? `[收束参考]\n${closeWhen}` : '',
-      charter.successCriterion ? `[成功标准]\n${charter.successCriterion}` : ''
-    ].filter(Boolean).join('\n\n');
-    if (!body.trim()) return '';
-    return `<ace0_act_charter>\n${body}\n</ace0_act_charter>`;
-  }
-
   // ---------- 随机池抽签（seed 确定性）----------
   function hashStringToSeed(str) {
     // FNV-1a 32-bit
@@ -415,7 +389,6 @@ ${phaseLines.join('\n')}
         NARRATIVE_TENSION_TIERS: deepClone(NARRATIVE_TENSION_TIERS),
         pickNarrativeTensionTier,
         buildNarrativePacingSummary,
-        buildCharterPromptContent,
         hashStringToSeed,
         mulberry32,
         pickFromCandidates,

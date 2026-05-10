@@ -322,7 +322,6 @@ function syncOverviewNodesFromCharacters() {
     node.introduced = state.introduced === true;
     node.present = state.present === true;
     node.inParty = state.inParty === true;
-    node.miniKnown = state.miniKnown === true;
   });
 }
 
@@ -393,8 +392,7 @@ function getEncounterDashboardStateFromWorld(world, heroCode) {
     introduced: true,
     present: encounterChar.status === 'first_meet'
       || (introducedNodeId && introducedNodeId === currentNodeId),
-    inParty: false,
-    miniKnown: false
+    inParty: false
   };
 }
 
@@ -418,8 +416,7 @@ function applyMvuHero(hero, world = null) {
         activated: true,
         introduced: castNode.introduced === true,
         present: castNode.present === true,
-        inParty: castNode.inParty === true,
-        miniKnown: castNode.miniKnown === true
+        inParty: castNode.inParty === true
       } : {})
     };
 
@@ -607,12 +604,11 @@ function isSheetLayout() {
 
 function resolveOverviewStatus(nodeConfig = {}) {
   const normalizedStatus = String(nodeConfig.status || '').trim().toLowerCase();
-  const hasStructuredState = ['introduced', 'present', 'inParty', 'miniKnown'].some((key) => typeof nodeConfig[key] === 'boolean');
+  const hasStructuredState = ['introduced', 'present', 'inParty'].some((key) => typeof nodeConfig[key] === 'boolean');
 
   let introduced = nodeConfig.introduced;
   let present = nodeConfig.present;
   let inParty = nodeConfig.inParty;
-  let miniKnown = nodeConfig.miniKnown;
 
   if (!hasStructuredState && normalizedStatus) {
     if (normalizedStatus === 'party' || normalizedStatus === 'in_party' || normalizedStatus === 'in-party') {
@@ -632,10 +628,6 @@ function resolveOverviewStatus(nodeConfig = {}) {
       present = false;
       inParty = false;
     }
-  }
-
-  if (miniKnown === true) {
-    return { text: 'UNKNOWN', tone: 'unintroduced' };
   }
 
   if (introduced === true && present === true && inParty === true) {

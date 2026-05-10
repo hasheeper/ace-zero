@@ -3154,6 +3154,10 @@
             margin-top: 8px;
         }
 
+        .roster-section + .roster-section {
+            margin-top: 8px;
+        }
+
         .roster-slot {
             background: linear-gradient(180deg, rgba(207,181,59,0.05) 0%, rgba(255,255,255,0.01) 100%);
             border: 1px solid rgba(207, 181, 59, 0.15);

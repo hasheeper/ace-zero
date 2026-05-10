@@ -43,6 +43,7 @@ matches(/RINO:\s*\{\s*activated:\s*true,\s*introduced:\s*true,\s*present:\s*true
 ['SIA', 'POPPY', 'VV', 'TRIXIE', 'COTA', 'EULALIA', 'KAKO', 'KUZUHA'].forEach((charKey) => {
   includes(`${charKey}: makeDefaultCastNode()`, `${charKey} should default through makeDefaultCastNode`);
 });
-matches(/function makeDefaultCastNode\(\)\s*\{\s*return\s*\{\s*activated:\s*true,\s*introduced:\s*false,\s*present:\s*false,\s*inParty:\s*false,\s*miniKnown:\s*false,/m, 'Encounter cast nodes should default activated but not introduced/present/inParty');
+matches(/function makeDefaultCastNode\(\)\s*\{\s*return\s*\{\s*activated:\s*true,\s*introduced:\s*false,\s*present:\s*false,\s*inParty:\s*false,/m, 'Encounter cast nodes should default activated but not introduced/present/inParty');
+assert(!source.includes('miniKnown'), 'Schema should no longer expose miniKnown');
 
 console.log('schema-smoke ok');

@@ -14,7 +14,7 @@
 const ENCOUNTER_RULES = {
     SIA: {
       category: 'condition',
-      minNodeIndex: 5,
+      minNodeIndex: 2,
       spentWeights: { combat: 2, rest: 1, asset: 1, vision: 2 },
       minSpentScore: 9,
       laneWeights: ['mid_low', 'low', 'mid_high', 'high'],
@@ -25,7 +25,7 @@ const ENCOUNTER_RULES = {
     },
     TRIXIE: {
       category: 'condition',
-      minNodeIndex: 7,
+      minNodeIndex: 4,
       spentWeights: { combat: 5, rest: 0, asset: 0, vision: 1 },
       minSpentScore: 26,
       laneWeights: ['low', 'mid_low', 'mid_high', 'high'],
@@ -36,7 +36,7 @@ const ENCOUNTER_RULES = {
     },
     POPPY: {
       category: 'geo',
-      minNodeIndex: 4,
+      minNodeIndex: 1,
       minFunds: 51,
       requiredGeo: 'THE_RUST',
       laneWeights: ['mid_low', 'low', 'mid_high', 'high'],
@@ -47,18 +47,19 @@ const ENCOUNTER_RULES = {
     },
     COTA: {
       category: 'geo',
-      minNodeIndex: 4,
+      minNodeIndex: 1,
       optionalGeo: ['THE_EXCHANGE', 'THE_COURT', 'THE_STREET'],
-      requiredTags: ['赌场', 'casino', 'gambling hall', 'gambling_hall', '赌桌', 'card_table', '荷官', 'dealer'],
+      requiredTags: ['赌场', 'casino', 'gambling hall', 'gambling_hall', '赌桌', 'card_table', '荷官', 'dealer', '中市'],
+      spentWeights: { combat: 2, rest: 2, asset: 2, vision: 2 },
       laneWeights: ['mid_high', 'high', 'low', 'mid_low'],
-      priority: 38,
+      priority: 170,
       rarity: 1,
       debugLabel: 'COTA / table contact',
       firstMeetHint: 'COTA 首次在主角视野里出现。她依附赌场、赌桌或荷官场景，不要写成已经熟悉的联系人。'
     },
     VV: {
       category: 'hybrid',
-      minNodeIndex: 9,
+      minNodeIndex: 6,
       minFunds: 2501,
       spentWeights: { combat: 1, rest: 2, asset: 3, vision: 2 },
       minSpentScore: 32,
@@ -72,7 +73,7 @@ const ENCOUNTER_RULES = {
     },
     KUZUHA: {
       category: 'hybrid',
-      minNodeIndex: 7,
+      minNodeIndex: 4,
       requiredGeo: 'THE_RUST',
       requiredCharacters: ['POPPY'],
       spentWeights: { combat: 2, rest: 2, asset: 1, vision: 2 },
@@ -85,7 +86,7 @@ const ENCOUNTER_RULES = {
     },
     KAKO: {
       category: 'hybrid',
-      minNodeIndex: 10,
+      minNodeIndex: 7,
       requiredCharacters: ['SIA'],
       spentWeights: { combat: 4, rest: 1, asset: 1, vision: 3 },
       minSpentScore: 38,
@@ -99,7 +100,7 @@ const ENCOUNTER_RULES = {
     },
     EULALIA: {
       category: 'hybrid',
-      minNodeIndex: 11,
+      minNodeIndex: 8,
       spentWeights: { combat: 1, rest: 4, asset: 1, vision: 2 },
       minSpentScore: 36,
       requiredFlags: ['church_event_triggered'],
@@ -215,8 +216,7 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       activate: ['RINO'],
       introduce: ['RINO'],
       present: ['RINO'],
-      joinParty: ['RINO'],
-      miniKnown: ['COTA']
+      joinParty: ['RINO']
     }
   },
 
@@ -228,7 +228,7 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       key: 'random',
       ui: {
         label: 'NODE_01',
-        subtitle: 'ENTRY NIGHT'
+        subtitle: 'OPENING'
       },
       next: {
         mode: 'choice',
@@ -239,25 +239,12 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
           present: ['RINO']
         }
       },
-      narrative: {
-        title: 'ENTRY NIGHT',
-        subtitle: '进场弄钱',
-        overview: '{{user}} 和 RINO 还在中市，但手里快没钱了。这节的任务就是进赌场，而且目的很明确：必须赢钱，越多越好。',
-        guidance: '交代开场。写清楚中市赌场的环境长什么样，以及两人今晚就是来弄钱的，禁止牵扯其他剧情。'
-      },
       phases: [
         {
           index: 0,
           slot: null,
           fixed: false,
-          cast: { present: ['RINO'] },
-          event: {
-            id: 'entry_target',
-            title: '节点1 · 一段 · 今晚的目标',
-            direction: '从赌场外或者刚进门的地方开始。让 RINO 交代今晚的任务：必须赢一笔能接着用的本钱，不然明天连站在这层的资格都没了。说完就带 {{user}} 进场。',
-            castDirective: '主角 / RINO。',
-            mustEnd: '要赢钱的目标讲明白，然后进赌场，必须发生在中市层。'
-          }
+          cast: { present: ['RINO'] }
         },
         {
           index: 1,
@@ -284,19 +271,13 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       key: 'random',
       ui: {
         label: 'NODE_02_A',
-        subtitle: 'HOT FLOOR'
+        subtitle: 'ROUTE A'
       },
       next: { mode: 'forced', nodeId: 'node3-descent' },
       cast: {
         onEnter: {
           present: ['RINO']
         }
-      },
-      narrative: {
-        title: 'HOT FLOOR',
-        subtitle: '上桌连赢',
-        overview: 'RINO 带着 {{user}} 在赌场里换着桌子玩。主打德州，中间穿插小游戏。RINO 负责看桌子、算钱、催进度。',
-        guidance: '真打牌赢钱。不要让 RINO 要算账、挑肥点的人下手，剧情主要围着赢钱转。'
       },
       phases: [
         {
@@ -329,19 +310,13 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       key: 'random',
       ui: {
         label: 'NODE_02_B',
-        subtitle: 'SIDE MACHINES'
+        subtitle: 'ROUTE B'
       },
       next: { mode: 'forced', nodeId: 'node3-descent' },
       cast: {
         onEnter: {
           present: ['RINO']
         }
-      },
-      narrative: {
-        title: 'SIDE MACHINES',
-        subtitle: '小游戏区',
-        overview: 'RINO 没有一头扎进最热的大桌，而是带着 {{user}} 先从侧厅、小游戏区和更容易快进快出的台子里捞钱。',
-        guidance: '把这一条写得更像“小游戏区”的快节奏路线。节奏相对快，RINO 会根据台子状态和人群热度不断换位置。'
       },
       phases: [
         {
@@ -374,18 +349,13 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
       key: 'random',
       ui: {
         label: 'NODE_03',
-        subtitle: 'LAST RECEIPT'
+        subtitle: 'ANCHOR'
       },
       next: { mode: 'none' },
       cast: {
         onEnter: {
           present: ['RINO']
         }
-      },
-      narrative: {
-        title: 'LAST RECEIPT',
-        subtitle: '算账走人',
-        overview: '到此为止手上应该有一定启动资金了，接下来不该继续困在中市里，而是顺着这笔钱往更深处走。',
       },
       phases: [
         {
@@ -402,14 +372,7 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
           index: 2,
           slot: null,
           fixed: false,
-          cast: { present: ['RINO'] },
-          event: {
-            id: 'descent_drop',
-            title: '节点3 · 三段 · 往下走',
-            direction: '把场景放在散场后的柜台、走廊或者门口。RINO 清点刚才赢的钱，发现中市太贵，各种名目的杂费和规矩很快就能把这笔钱扣完。她直接决定离开中市，让 {{user}} 跟着她往下层走。',
-            castDirective: '主角 / RINO。',
-            mustEnd: '写完两人决定去下层并开始离开的经过，后续沿着下行路线继续推进。'
-          }
+          cast: { present: ['RINO'] }
         },
         {
           index: 3,
@@ -421,33 +384,11 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
   },
 
   narrative: {
-    title: 'EXCHANGE NIGHT',
-    charter: {
-      theme: '两人今晚在中市赌场，任务就是上桌弄一笔起步金。环境是金碧辉煌但处处要收钱的高级赌城。',
-      ironLaws: [
-        '德州扑克和小游戏要有具体的对局过程。',
-        'RINO 负责带路挑桌，她清楚留下来的花销很高。'
-      ],
-      successCriterion: '赢到起步金，并顺着离开中市后的路线继续向下推进。',
-      bounds: {
-        focus: '赌桌对决、RINO 的本色发挥以及筹码的变化。',
-        forbid: [
-          '牵扯任何大阴谋或拯救世界',
-          '让其他主要角色出场',
-          '跑到中市外面去'
-        ],
-        closeWhen: [
-          '玩过德州和小游戏',
-          '手里的钱变多了',
-          '离开中市的路线真正跑起来了'
-        ]
-      }
-    },
-
+    title: 'ACT ROUTE',
     stageGuides: {
-      executing: '按 [命运事件] 写这一段。RINO 得一直在场。只有当事情真的有进展，比如真的赢了钱、真的弄清了花费、真的定了去哪，才推进进度；如果只是瞎聊或者没变化，就不要推进，继续写。到了结局就果断收尾，不往下多写。',
-      route: '初章前半段在第二节点进入赌场路线分支；后半段会进入由种子生成的后续路径。若进入 route，只在当前节点给出的候选路径里选定一路继续写。',
-      complete: '初章完成时，必须收在整条 24 节点路线的最终收束点上。'
+      executing: '按当前节点、相位与已投入点数推进这一段。只有当事情真的有进展，才推进进度；如果只是闲聊、重复确认或没有状态变化，就不要推进。到了结局就果断收尾，不往下多写。',
+      route: '进入选路相时，只在当前节点给出的候选路径里选定一路继续写。',
+      complete: '章节完成时，收在整条路线的最终收束点上。'
     }
   }
 };

@@ -16,49 +16,41 @@ hero:
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
     POPPY:
       activated: true
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
     VV:
       activated: true
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
     TRIXIE:
       activated: true
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
     COTA:
       activated: true
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
     EULALIA:
       activated: true
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
     KAKO:
       activated: true
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
     KUZUHA:
       activated: true
       introduced: false
       present: false
       inParty: false
-      miniKnown: false
   roster:
     KAZU:
       level: 3

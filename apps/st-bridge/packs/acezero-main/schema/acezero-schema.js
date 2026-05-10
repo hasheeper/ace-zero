@@ -87,7 +87,6 @@ function makeDefaultCastNode() {
     introduced: false,
     present: false,
     inParty: false,
-    miniKnown: false,
   };
 }
 
@@ -334,14 +333,12 @@ const CastNodeSchema = z.object({
   introduced: z.coerce.boolean().default(false),
   present: z.coerce.boolean().default(false),
   inParty: z.coerce.boolean().default(false),
-  miniKnown: z.coerce.boolean().default(false),
 }).transform(node => {
   const normalized = {
     activated: node.activated === true,
     introduced: node.introduced === true,
     present: node.present === true,
-    inParty: node.inParty === true,
-    miniKnown: node.miniKnown === true
+    inParty: node.inParty === true
   };
 
   if (normalized.present) {
@@ -352,10 +349,6 @@ const CastNodeSchema = z.object({
   if (normalized.inParty) {
     normalized.activated = true;
     normalized.introduced = true;
-  }
-
-  if (normalized.miniKnown) {
-    normalized.activated = true;
   }
 
   if (!normalized.activated) {

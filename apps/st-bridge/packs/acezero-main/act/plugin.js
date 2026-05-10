@@ -69,7 +69,6 @@
           activate: normalizeActEffectList(runtimeInitialCast.activate || legacyInitialEffects.activate),
           introduce: normalizeActEffectList(runtimeInitialCast.introduce || legacyInitialEffects.introduce),
           present: normalizeActEffectList(runtimeInitialCast.present || legacyInitialEffects.present),
-          miniKnown: normalizeActEffectList(runtimeInitialCast.miniKnown || runtimeInitialCast.mini_known),
           joinParty: normalizeActEffectList(
             runtimeInitialCast.joinParty
             || runtimeInitialCast.join_party
@@ -547,7 +546,6 @@
       activate: normalizeActEffectList(raw.activate),
       introduce: normalizeActEffectList(raw.introduce),
       present: normalizeActEffectList(raw.present),
-      mini_known: normalizeActEffectList(raw.mini_known || raw.miniKnown),
       join_party: normalizeActEffectList(raw.join_party || raw.joinParty)
     };
   }
@@ -567,7 +565,6 @@
       activate: [],
       introduce: [],
       present: [],
-      mini_known: [],
       join_party: []
     };
   }
@@ -582,7 +579,6 @@
         activate: normalizeActEffectList(rawV2.activate),
         introduce: normalizeActEffectList(rawV2.introduce),
         present: normalizeActEffectList(rawV2.present),
-        mini_known: normalizeActEffectList(rawV2.mini_known || rawV2.miniKnown),
         join_party: normalizeActEffectList(rawV2.join_party || rawV2.joinParty)
       };
     }
@@ -1425,7 +1421,6 @@
       activate: normalizeActEffectList(runtime.initialCast?.activate),
       introduce: normalizeActEffectList(runtime.initialCast?.introduce),
       present: normalizeActEffectList(runtime.initialCast?.present),
-      mini_known: normalizeActEffectList(runtime.initialCast?.miniKnown || runtime.initialCast?.mini_known),
       join_party: normalizeActEffectList(runtime.initialCast?.joinParty || runtime.initialCast?.join_party)
     };
     const defaultRouteNode = Array.isArray(getDefaultActState(act.id).route_history) && getDefaultActState(act.id).route_history.length
@@ -1441,10 +1436,6 @@
     const applyPersistentEffects = (effect) => {
       if (!effect || typeof effect !== 'object') return;
       for (const charKey of effect.activate || []) states[charKey].activated = true;
-      for (const charKey of effect.mini_known || []) {
-        states[charKey].activated = true;
-        states[charKey].miniKnown = true;
-      }
       for (const charKey of effect.introduce || []) {
         states[charKey].activated = true;
         states[charKey].introduced = true;
@@ -1464,8 +1455,7 @@
           || initialEffects.present.includes(charKey)
           || initialEffects.join_party.includes(charKey),
         present: initialEffects.present.includes(charKey),
-        inParty: initialEffects.join_party.includes(charKey),
-        miniKnown: initialEffects.mini_known.includes(charKey)
+        inParty: initialEffects.join_party.includes(charKey)
       };
     }
 
@@ -1520,42 +1510,28 @@
     const currentCast = currentCastInput && typeof currentCastInput === 'object' ? currentCastInput : {};
     const castPatch = {};
     let changed = false;
-    const encounter = normalizeCharacterEncounterState(derivedState.act?.characterEncounter);
 
     for (const charKey of derivedState.managedCharacters) {
       const currentNode = currentCast[charKey] && typeof currentCast[charKey] === 'object'
         ? currentCast[charKey]
         : {};
       const desiredNode = derivedState.states[charKey];
-      const encounterChar = encounter.characters[charKey];
-      const encounterIntroduced = encounterChar && (
-        encounterChar.firstMeetDone === true ||
-        encounterChar.status === 'introduced' ||
-        encounterChar.status === 'first_meet'
-      );
       const activeFirstMeet = typeof derivedState.encounterFirstMeetHints?.[charKey] === 'string'
         && !!derivedState.encounterFirstMeetHints[charKey].trim();
-      const nextActivated = desiredNode.activated === true || activeFirstMeet;
-      const nextIntroduced = desiredNode.introduced === true || activeFirstMeet;
-      const nextPresent = activeFirstMeet
-        ? false
-        : (encounterIntroduced === true && nextIntroduced === true
-          ? currentNode.present === true
-          : desiredNode.present === true);
+      const nextActivated = currentNode.activated === true || desiredNode.activated === true || activeFirstMeet;
+      const nextIntroduced = currentNode.introduced === true || desiredNode.introduced === true || activeFirstMeet;
       const nextNode = {
         activated: nextActivated,
         introduced: nextIntroduced,
-        present: nextPresent,
-        inParty: desiredNode.inParty === true,
-        miniKnown: desiredNode.miniKnown === true
+        present: currentNode.present === true || desiredNode.present === true,
+        inParty: currentNode.inParty === true || desiredNode.inParty === true
       };
 
       if (
         currentNode.activated !== nextNode.activated ||
         currentNode.introduced !== nextNode.introduced ||
         currentNode.present !== nextNode.present ||
-        currentNode.inParty !== nextNode.inParty ||
-        currentNode.miniKnown !== nextNode.miniKnown
+        currentNode.inParty !== nextNode.inParty
       ) {
         castPatch[charKey] = nextNode;
         changed = true;
@@ -1613,7 +1589,6 @@
   const NARRATIVE_TENSION_TIERS = ACT_NARRATIVE_RUNTIME.NARRATIVE_TENSION_TIERS;
   function pickNarrativeTensionTier(tension) { return ACT_NARRATIVE_RUNTIME.pickNarrativeTensionTier(tension); }
   function buildNarrativePacingSummary(tension, worldClockSuggestion = null) { return ACT_NARRATIVE_RUNTIME.buildNarrativePacingSummary(tension, worldClockSuggestion); }
-  function buildCharterPromptContent(narrative) { return ACT_NARRATIVE_RUNTIME.buildCharterPromptContent(narrative); }
   function hashStringToSeed(str) { return ACT_NARRATIVE_RUNTIME.hashStringToSeed(str); }
   function mulberry32(seed) { return ACT_NARRATIVE_RUNTIME.mulberry32(seed); }
   function pickFromCandidates(candidates, seedStr) { return ACT_NARRATIVE_RUNTIME.pickFromCandidates(candidates, seedStr); }
@@ -1668,7 +1643,6 @@
     deriveCharacterStatesFromActState,
     createCharacterCastPatch,
     buildActStateSummaryFromDerived,
-    buildCharterPromptContent,
     buildNarrativePromptContentFromDerived,
     evaluateCompletionTransition,
     buildCompletionTransitionPromptContent,

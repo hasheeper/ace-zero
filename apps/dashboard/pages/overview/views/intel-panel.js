@@ -34,7 +34,6 @@
         if (!c) return '';
 
         const state = c.dashboardState || {};
-        const isMasked = state.miniKnown === true;
 
         // 未激活：整条消失（9人 → 8人）。默认 activated 缺省视为 true。
         if (state.activated === false) return '';
@@ -43,8 +42,7 @@
         let roleLabel = 'UNKNOWN';
         let opacityStyle = '';
 
-        if (isMasked) { roleLabel = 'UNKNOWN'; opacityStyle = 'opacity: 0.3; filter: grayscale(1);'; }
-        else if (state.inParty) { slotClass = 'main-hand'; roleLabel = 'IN PARTY'; }
+        if (state.inParty) { slotClass = 'main-hand'; roleLabel = 'IN PARTY'; }
         else if (state.present) { roleLabel = 'PRESENT'; }
         else if (state.introduced) { roleLabel = 'INTRODUCED'; opacityStyle = 'opacity: 0.6;'; }
         else { roleLabel = 'UNKNOWN'; opacityStyle = 'opacity: 0.3; filter: grayscale(1);'; }
@@ -54,7 +52,7 @@
         const manaMax = Math.max(1, Math.round(Number(resource.max) || 0)) || 100;
         const manaPct = Math.max(0, Math.min(100, Math.round((manaCur / manaMax) * 100)));
 
-        const isHookStage = isMasked || !state.introduced;
+        const isHookStage = state.introduced !== true;
 
         const rawDisplayName = c.watermark || c.name || entry.key.toUpperCase();
         const displayName = isHookStage ? '???' : rawDisplayName;
@@ -131,10 +129,8 @@
         const pool = (typeof window !== 'undefined' && window.dashboardCharacters) || {};
         const c = pool[entry.key] || {};
         const state = c.dashboardState || {};
-        const isMasked = state.miniKnown === true;
         let tone = 'unintroduced';
-        if (isMasked) tone = 'unintroduced';
-        else if (state.inParty) tone = 'party';
+        if (state.inParty) tone = 'party';
         else if (state.present) tone = 'present';
         else if (state.introduced) tone = 'offstage';
         const statusWeight = PARTY_STATUS_WEIGHT[tone] ?? 4;
@@ -147,15 +143,42 @@
         };
     }
 
-    function buildPartyRosterMarkup() {
-        const ordered = PARTY_ORDER.slice().sort((left, right) => {
+    function sortRosterEntries(entries) {
+        return entries.slice().sort((left, right) => {
             const a = getPartyEntryOrder(left);
             const b = getPartyEntryOrder(right);
             if (a.statusWeight !== b.statusWeight) return a.statusWeight - b.statusWeight;
             if (b.total !== a.total) return b.total - a.total;
             return a.fallbackIndex - b.fallbackIndex;
         });
-        return ordered.map((entry) => buildPartySlotMarkup(entry)).join('');
+    }
+
+    function isPartyEntry(entry) {
+        const pool = (typeof window !== 'undefined' && window.dashboardCharacters) || {};
+        const c = pool[entry.key];
+        return c?.dashboardState?.inParty === true;
+    }
+
+    function buildRosterSectionMarkup(title, entries) {
+        const visibleEntries = sortRosterEntries(entries)
+            .map((entry) => buildPartySlotMarkup(entry))
+            .filter(Boolean);
+        if (!visibleEntries.length) return '';
+        return `
+            <div class="roster-section">
+                <div class="section-header"><span>${escapePartyHtml(title)}</span></div>
+                <div class="glass-cards-grid">${visibleEntries.join('')}</div>
+            </div>
+        `;
+    }
+
+    function buildRosterSectionsMarkup() {
+        const partyEntries = PARTY_ORDER.filter((entry) => isPartyEntry(entry));
+        const otherEntries = PARTY_ORDER.filter((entry) => !isPartyEntry(entry));
+        return [
+            buildRosterSectionMarkup(appData.intel.rosterTitle || 'PARTY', partyEntries),
+            buildRosterSectionMarkup('OTHERS', otherEntries)
+        ].filter(Boolean).join('');
     }
 
     function formatActDecimal(value) {
@@ -711,7 +734,7 @@
                 <div class="token-count">${String(reward.count).padStart(2, '0')}</div>
             </div>
         `).join('');
-        const rosterMarkup = buildPartyRosterMarkup();
+        const rosterMarkup = buildRosterSectionsMarkup();
         const actPanelMarkup = buildActModePanelMarkup();
         const actToggleMarkup = isOverviewDebugMode()
             ? `<div class="act-panel-control"><button class="act-panel-mini-toggle${appState.actPanelCollapsed === true ? ' is-collapsed' : ''}" type="button" data-act-panel-toggle aria-expanded="${appState.actPanelCollapsed === true ? 'false' : 'true'}">${appState.actPanelCollapsed === true ? 'SHOW ACT' : 'HIDE ACT'}</button></div>`
@@ -729,10 +752,7 @@
             </div>
             ${actToggleMarkup}
             ${actPanelMarkup}
-            <div>
-                <div class="section-header"><span>${appData.intel.rosterTitle}</span></div>
-                <div class="glass-cards-grid">${rosterMarkup}</div>
-            </div>
+            ${rosterMarkup}
         `;
 
         const actPanelToggle = intelBody.querySelector('[data-act-panel-toggle]');
