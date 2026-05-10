@@ -127,7 +127,6 @@ pendingResolutions: [
 - 消费对应 request。
 - 应用允许的 `actPatch / heroPatch`。
 - 将结果写入 `resolutionHistory`。
-- 可通过 `crisisSignal(s)` 增加危机账本。
 
 当前边界：
 
@@ -136,31 +135,16 @@ pendingResolutions: [
 - Combat / Asset 正式玩法放到最后接入。
 - 在正式接入前，它们只作为稳定协议和调试入口存在。
 
-## 4. Crisis 当前状态
+## 4. 压力账本状态
 
-Crisis 已有接口，但没有正式来源公式。
+原 `crisis / crisisSignals` 系统已移除。
 
-已接字段：
+当前风险、角色入场强度和优先级不再依赖独立危机值，而是从已有结构派生：
 
-```js
-crisis
-crisisSignals
-```
-
-当前规则：
-
-- `crisis` 是 0-100 总值。
-- `crisisSignals` 是来源账本。
-- 外部 result 可携带 `crisisSignal` 或 `crisisSignals`。
-- 只有显式 `delta` 会改变 `crisis`。
-- 重复 `crisisSignal.id` 不会重复应用 `delta`。
-
-当前未完成：
-
-- Combat 失败如何增加 Crisis。
-- 高级 Combat 如何增加 Crisis。
-- Vision 跳线和固定相位替换如何增加 Crisis。
-- 负债、教廷、管理局等剧情系统如何贡献 Crisis。
+- `resourceSpent`：长期投入倾向。
+- `spentScore`：Encounter 资格和优先级计算。
+- `storyFlags / tags`：明确剧情前置。
+- `pendingResolutions / resolutionHistory`：外部玩法结算记录。
 
 ## 5. Encounter 当前状态
 
@@ -204,10 +188,10 @@ Debug 支持：
 
 前五阶段收口状态：
 
-- `encounterContext` 已降级为 Debug-only override；Host 正式上下文从 `world.current_time / world.location / world.tags / world.flags / world.storyFlags / world.act.crisis / hero.funds` 派生。
+- `encounterContext` 已降级为 Debug-only override；Host 正式上下文从 `world.current_time / world.location / world.tags / world.flags / world.storyFlags / hero.funds` 派生。
 - `FREE` 与 `RULE ADD` 已分离：前者自由投放指定角色，后者只按资格自动添加。
-- 8 名角色规则已统一到 `minCrisis / requiredCharacters / requiredFlags / requiredAny / spentWeights` 等字段。
-- 点数阈值已下调到初章 24 节点内更容易自然满足的区间；地理、tag、资金、Crisis、前置角色等剧情门槛仍保留。
+- 8 名角色规则已统一到 `minSpentScore / requiredCharacters / requiredFlags / requiredAny / spentWeights` 等字段。
+- 点数阈值已下调到初章 24 节点内更容易自然满足的区间；地理、tag、资金、前置角色等剧情门槛仍保留。
 - Debug 面板可显示 readable blocked reason 和门槛摘要。
 - `pre_signal` 已接入 runtime / Dashboard / Tavern prompt：消费后写入 `pendingPreSignal`，注入 `<ace0_pre_signal>`，但不解锁 Dossier。
 - `pre_signal` 与 `first_meet` 当前都默认投放到玩家路径下一节点。
@@ -220,7 +204,6 @@ Debug 支持：
 - Cota 的赌场 / 荷官 TAG 从正式场景上下文稳定传入。
 - Eulalia 的教廷事件从正式剧情上下文稳定传入。
 - Kuzuha / Kako / Eulalia 等混合角色的全部剧情前置来源。
-- Crisis 正式公式参与 encounter 权重。
 - Combat / Asset 正式结果参与 encounter 权重。
 
 ## 6. Dashboard / Dossier 同步
@@ -266,7 +249,7 @@ Debug 支持：
 Phase 6 已覆盖：
 
 - Runtime smoke：队列、投放、消费、FORCE、pre_signal、节奏阀。
-- Context smoke：地理、tag、flag、角色前置、资金、Crisis、Host/Debug 分流。
+- Context smoke：地理、tag、flag、角色前置、资金、Host/Debug 分流。
 - Host / MVU smoke：pending 生命周期、Dossier 解密、prompt XML 注入。
 - Schema smoke：默认值和 normalize。
 - UI smoke：已规划手工 checklist，后续再升级 browser smoke。
@@ -275,20 +258,13 @@ Phase 6 已覆盖：
 
 - Combat 正式赌局收益。
 - Asset 正式成长收益。
-- Crisis 完整公式。
-
 ### 第二优先级：Encounter 上下文
 
 - 正式接入赌场 / 教廷 / 场所 tag。
 - 正式接入剧情前置状态。
 - 补 Encounter UI smoke。
 
-### 第三优先级：Crisis 正式来源
-
-- 定义 Combat / Vision / debt / node / external 的 Crisis 公式。
-- 把 Crisis 从“账本接口”升级为“可预测的压力系统”。
-
-### 最后接入：Combat / Asset 正式玩法
+### 第三优先级：Combat / Asset 正式玩法
 
 Combat 和 Asset 放到最后接入。
 
@@ -301,7 +277,6 @@ Combat 和 Asset 放到最后接入。
 - 契约系统。
 - 经济资产和负债系统。
 - 失败惩罚与剧情后果。
-- Crisis 正式来源。
 - Encounter 权重调优。
 
 在此之前，Combat / Asset 只保留 `pendingResolutions` 和外部回填协议，确保 ACT 主循环不会提前绑定错误收益模型。

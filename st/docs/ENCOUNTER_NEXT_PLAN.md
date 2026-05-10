@@ -68,7 +68,6 @@ ACT 真相层负责：
 - 赌场 / 荷官 / 赌桌等场所标签
 - 角色是否已正式认识
 - funds / 资产等经济信息
-- crisis 当前值
 
 ACT 不硬猜剧情事实。
 
@@ -90,9 +89,9 @@ Dashboard 负责：
 当前已完成：
 
 - `encounterContext` 已降级为 Debug-only override，不再作为 Host 正式上下文来源。
-- Runtime 资格判断会读取 `funds / crisis / tags / storyFlags`。
-- Tavern Host 侧会从正式 MVU `world.current_time / world.location / world.tags / world.flags / world.storyFlags / world.act.crisis / hero.funds` 组装 encounter context。
-- Dashboard Debug 面板已提供 `SCENE TAGS / STORY FLAGS / FUNDS / CRISIS` 控件。
+- Runtime 资格判断会读取 `funds / tags / storyFlags / resourceSpent`。
+- Tavern Host 侧会从正式 MVU `world.current_time / world.location / world.tags / world.flags / world.storyFlags / hero.funds / world.act.resourceSpent` 组装 encounter context。
+- Dashboard Debug 面板已提供 `SCENE TAGS / STORY FLAGS / FUNDS` 控件。
 - Dashboard Debug 面板已拆出两种投放入口：
   - `FREE`：自由添加，等同 debug force，指定角色无视资格条件投放到路径。
   - `RULE ADD`：限制条件添加，只从当前 eligible 角色中自动投放到路径。
@@ -106,13 +105,11 @@ Runtime 内部仍使用一个标准上下文输入，但它是派生对象，不
 
 ```js
 encounterContext = {
-  day,
   geo,
   site,
   tags: [],
   storyFlags: {},
   funds,
-  crisis,
   introducedCharacters: []
 }
 ```
@@ -155,10 +152,6 @@ encounterContext = {
 
 - `hero.funds` 或当前 MVU 经济字段。
 
-危机：
-
-- `world.act.crisis`
-
 ### 3.3 Debug 面板扩展
 
 现有 `MVU LOCATION` 保留，并增加：
@@ -190,21 +183,21 @@ Debug 面板要能看到每个角色的：
 当前已完成：
 
 - Runtime 规则字段已兼容统一命名：
-  - `minCrisis` 兼容旧 `crisisMin`
+  - `minSpentScore` 作为主要投入强度门槛
   - `requiredCharacters` 兼容旧 `requiredIntroduced`
 - 规则表已改用统一字段名。
 - Debug 面板 blocked reason 已从机器码转成可读说明。
-- 规则结果会输出 `requirements` 摘要，Debug 面板可显示具体门槛，例如 `funds 100/2501`、`crisis 0/26`、`spent 12/45`。
+- 规则结果会输出 `requirements` 摘要，Debug 面板可显示具体门槛，例如 `funds 100/2501`、`spent 12/45`。
 - `optionalGeo / laneWeights / priority / rarity` 已进入优先级计算，不再只是文档字段。
 - 8 名角色规则已完成第一轮逐个校准：
   - Sia：异常行动 / Vision / Combat 加权。
-  - Trixie：高 Combat + crisis。
+  - Trixie：高 Combat / spentScore。
   - Poppy：底锈 + funds。
   - Cota：赌场 / 赌桌 / 荷官场景 tag。
-  - VV：资金 + Asset 加权 + crisis。
+  - VV：资金 + Asset 加权。
   - Kuzuha：底锈 + Poppy 前置。
-  - Kako：Sia 前置 + crisis。
-  - Eulalia：教廷事件 + `VV 已触发` 或 `crisis > 50`。
+  - Kako：Sia 前置 + 高 spentScore。
+  - Eulalia：教廷事件 + `VV 已触发` 或高 spentScore。
 
 ### 4.1 角色规则表整理
 
@@ -212,9 +205,8 @@ Debug 面板要能看到每个角色的：
 
 ```js
 {
-  minDay,
   minNodeIndex,
-  minCrisis,
+  minSpentScore,
   minFunds,
   requiredGeo: [],
   optionalGeo: [],
@@ -236,7 +228,7 @@ Debug 面板要能看到每个角色的：
 
 当前点数阈值策略：
 
-- 只降低 `minSpentScore`，不降低地理 / tag / 资金 / Crisis / 前置角色门槛。
+- 只降低 `minSpentScore`，不降低地理 / tag / 资金 / 前置角色门槛。
 - 早期角色应在 1-2 次相关投入后接近可触发。
 - 中后期角色应在 3-5 次相关投入后可自然满足。
 - Combat / Asset 正式玩法收益仍不提前接入，只使用 ACT 已记录的 `resourceSpent`。
@@ -252,7 +244,7 @@ Sia：
 Trixie：
 
 - 条件型。
-- 依赖高 Combat / 高 crisis。
+- 依赖高 Combat / 高 spentScore。
 
 Poppy：
 
@@ -269,7 +261,7 @@ Cota：
 VV：
 
 - 混合型。
-- 依赖资金、Asset、crisis。
+- 依赖资金、Asset。
 
 Kuzuha：
 
@@ -281,13 +273,13 @@ Kako：
 
 - 混合型。
 - 依赖 Sia 已触发。
-- 依赖 crisis。
+- 依赖高 spentScore。
 
 Eulalia：
 
 - 晚期稀有型。
 - 依赖 church event。
-- 依赖 VV 或高 crisis。
+- 依赖 VV 或高 spentScore。
 
 验收标准：
 
@@ -422,7 +414,7 @@ eligible
 1. 已完成 pre_signal 的角色优先转正式 first_meet。
 2. 当前地理匹配更强者优先。
 3. 当前 lane 权重更高者优先。
-4. crisis / spentScore 满足程度更高者优先。
+4. spentScore 满足程度更高者优先。
 5. 剧情前置角色已触发者优先。
 6. 稀有角色只降低排序或进入 pre_signal，不做硬容量封顶。
 
@@ -534,7 +526,6 @@ node apps/st-bridge/packs/acezero-main/scripts/encounter-context-smoke.js
 - requiredFlags
 - requiredCharacters
 - funds
-- crisis
 - Host 忽略 `world.encounterContext`
 - Host 读取 `world.tags / world.flags / world.storyFlags`
 - Debug override 仍可单独构造 context
@@ -626,17 +617,16 @@ git diff --check
 - Asset 三档正式成长。
 - 技能升级和契约结算。
 - 经济系统正式收益模型。
-- Crisis 完整来源公式。
 - 所有角色的最终首见文案。
 
-这些内容等 Encounter UI smoke、正式场景 tag 来源、Crisis 公式稳定后再接。
+这些内容等 Encounter UI smoke、正式场景 tag 来源稳定后再接。
 
 ## 10. 推荐实施顺序
 
 已完成：
 
 1. 将 Host encounter context 改为正式 MVU 派生，`encounterContext` 降级为 Debug-only override。
-2. 扩展 Debug 面板的 tags / flags / funds / crisis。
+2. 扩展 Debug 面板的 tags / flags / funds。
 3. 重写 reason code 展示，让 blocked 原因可读。
 4. 细化 8 名角色资格规则。
 5. 接入 `pre_signal` 状态和 pending 字段。

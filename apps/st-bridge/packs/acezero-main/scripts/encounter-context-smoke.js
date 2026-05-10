@@ -114,7 +114,7 @@ function testRuleRequirements() {
     cast: {
       VV: { activated: true, introduced: true }
     }
-  }), createContext({ day: 9, crisis: 80, tags: [] }));
+  }), createContext({ day: 9, tags: [] }));
   assert(!hasEligible(eulaliaNoFlag, 'EULALIA'), 'EULALIA should require church_event_triggered');
   assert(blockedReason(eulaliaNoFlag, 'EULALIA', 'missing_flag_church_event_triggered'), 'EULALIA should report missing_flag_church_event_triggered');
 
@@ -124,21 +124,19 @@ function testRuleRequirements() {
     }
   }), createContext({
     day: 9,
-    crisis: 10,
     tags: ['church_event_triggered'],
     flags: ['church_event_triggered'],
     storyFlags: { church_event_triggered: true }
   }));
   assert(hasEligible(eulaliaWithVv, 'EULALIA'), 'EULALIA should pass with church flag and VV introduced');
 
-  const eulaliaWithCrisis = act.evaluateCharacterEncounterEligibility(node11State, baseHero, createContext({
+  const eulaliaWithSpentScore = act.evaluateCharacterEncounterEligibility(node11State, baseHero, createContext({
     day: 9,
-    crisis: 80,
     tags: ['church_event_triggered'],
     flags: ['church_event_triggered'],
     storyFlags: { church_event_triggered: true }
   }));
-  assert(hasEligible(eulaliaWithCrisis, 'EULALIA'), 'EULALIA should also pass with church flag and crisis >= 51');
+  assert(hasEligible(eulaliaWithSpentScore, 'EULALIA'), 'EULALIA should also pass with church flag and high spent score');
 }
 
 function testHostDebugContextSplit() {
@@ -155,10 +153,9 @@ function testHostDebugContextSplit() {
         day: 99,
         geo: 'THE_RUST',
         tags: ['debug_only_tag'],
-        funds: 1,
-        crisis: 1
+        funds: 1
       },
-      act: { crisis: 66 }
+      act: {}
     }
   };
   const { runtime } = createTavernRuntime(tavernFactory, sandbox, { eraVars });
@@ -167,7 +164,6 @@ function testHostDebugContextSplit() {
   assertEqual(context.day, 7, 'Host context should read world.current_time.day');
   assertEqual(context.geo, 'THE_EXCHANGE', 'Host context should read world.location.layer');
   assertEqual(context.funds, 1234, 'Host context should read hero funds');
-  assertEqual(context.crisis, 66, 'Host context should read world.act.crisis');
   assert(context.tags.includes('casino'), 'Host context should include world.tags');
   assert(context.tags.includes('manual_flag'), 'Host context should include world.flags as tags');
   assert(context.tags.includes('dealer'), 'Host context should include location tags');
@@ -178,8 +174,7 @@ function testHostDebugContextSplit() {
   const debugContext = createContext({
     geo: 'THE_RUST',
     tags: ['debug_only_tag'],
-    funds: 1,
-    crisis: 1
+    funds: 1
   });
   assertEqual(debugContext.geo, 'THE_RUST', 'Debug helper context should still be able to override geo');
   assert(debugContext.tags.includes('debug_only_tag'), 'Debug helper context should still carry debug tags');

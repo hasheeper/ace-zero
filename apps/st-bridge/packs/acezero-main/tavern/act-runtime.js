@@ -403,12 +403,6 @@
       controlledNodes: (rawAct.controlledNodes && typeof rawAct.controlledNodes === 'object' && !Array.isArray(rawAct.controlledNodes))
         ? JSON.parse(JSON.stringify(rawAct.controlledNodes))
         : {},
-      crisis: Math.max(0, Math.min(100, Math.round(Number(rawAct.crisis) || 0))),
-      crisisSignals: Array.isArray(rawAct.crisisSignals)
-        ? rawAct.crisisSignals
-            .filter(item => item && typeof item === 'object' && !Array.isArray(item))
-            .map(item => JSON.parse(JSON.stringify(item)))
-        : [],
       vision: normalizeActVisionState(rawAct.vision),
       resourceSpent: normalizeActResourceCounts(rawAct.resourceSpent),
       characterEncounter: (rawAct.characterEncounter && typeof rawAct.characterEncounter === 'object' && !Array.isArray(rawAct.characterEncounter))
@@ -1124,7 +1118,6 @@
         tintSource: slot.tintSource === 'reserve' || slot.tintSource === 'limited' ? slot.tintSource : undefined
       } : null),
       controlledNodes: act.controlledNodes && typeof act.controlledNodes === 'object' ? JSON.parse(JSON.stringify(act.controlledNodes)) : {},
-      crisis: Math.max(0, Math.round(Number(act.crisis) || 0)),
       vision: normalizeActVisionState(act.vision),
       resourceSpent: normalizeActSnapshotCounts(act.resourceSpent),
       funds: heroResources.funds,
@@ -1328,7 +1321,6 @@
       location,
       site: location.site,
       funds: normalizeFundsAmount(hero.funds ?? hero.money),
-      crisis: Math.max(0, Math.min(100, Math.round(Number(world?.act?.crisis) || 0))),
       storyFlags,
       world: {
         ...(world && typeof world === 'object' ? world : {}),

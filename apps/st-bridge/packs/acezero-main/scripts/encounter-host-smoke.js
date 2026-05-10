@@ -329,7 +329,7 @@ async function testIntroducedEncounterPreservesManualPresentAfterFirstMeetPendin
 }
 
 async function testPreSignalPendingDoesNotUnlockDossier() {
-  const context = createContext({ day: 9, crisis: 80, tags: ['casino', 'asset_signal'] });
+  const context = createContext({ day: 9, tags: ['casino', 'asset_signal'] });
   const route = [
     'node1-entry',
     'node2-floor-high',

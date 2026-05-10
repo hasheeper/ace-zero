@@ -94,7 +94,7 @@
       gameTags: ['act'],
       slotTags: ['general'],
       pools: ['mid'],
-      modifiers: [{ type: 'crisis_gain_mult', value: 0.9 }]
+      modifiers: [{ type: 'reserve_bonus', key: 'vision', value: 1 }]
     },
     {
       id: 'asset_shared_reserve',

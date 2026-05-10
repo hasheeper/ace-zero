@@ -88,7 +88,7 @@ function testEncounterQueuePrefersHighestSpentScore() {
     resourceSpent: { combat: 12, rest: 0, asset: 0, vision: 0 }
   });
   const queuedResult = act.enqueueEligibleCharacterEncounters(state, createHero(), {
-    context: createContext({ crisis: 80 }),
+    context: createContext(),
     config,
     limit: 3,
     place: false
@@ -249,7 +249,6 @@ function testPreSignalThenFirstMeet() {
   ];
   const context = createContext({
     day: 9,
-    crisis: 80,
     funds: 9999,
     tags: ['casino', 'asset_signal']
   });

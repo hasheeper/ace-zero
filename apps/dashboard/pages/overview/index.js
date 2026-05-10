@@ -407,8 +407,6 @@ function createExecutionRuntimeContext() {
             stage: 'executing',
             phase_advance: 0,
             controlledNodes: {},
-            crisis: 0,
-            crisisSignals: [],
             vision: { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null },
             resourceSpent: createEmptyActResourceCounts(0),
             characterEncounter: {},
@@ -741,8 +739,7 @@ function createExecutionRuntimeContext() {
         return {
             tags: normalizeEncounterDebugTags(source.tags),
             storyFlags: normalizeEncounterDebugFlags(source.storyFlags),
-            funds: Math.max(0, Math.round(Number(source.funds ?? appState.resources.funds) || 0)),
-            crisis: Math.max(0, Math.min(100, Math.round(Number(source.crisis ?? actState?.crisis) || 0)))
+            funds: Math.max(0, Math.round(Number(source.funds ?? appState.resources.funds) || 0))
         };
     }
 
@@ -1106,10 +1103,6 @@ function createExecutionRuntimeContext() {
             stage: appState.awaitingRouteChoice ? 'route' : 'executing',
             phase_advance: 0,
             controlledNodes: deepCloneValue(currentActState.controlledNodes || {}),
-            crisis: Math.max(0, Math.min(100, Math.round(Number(currentActState.crisis) || 0))),
-            crisisSignals: Array.isArray(currentActState.crisisSignals)
-                ? deepCloneValue(currentActState.crisisSignals)
-                : [],
             vision: (() => {
                 const vision = deepCloneValue(currentActState.vision || { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null });
                 const nodeDelta = appState.currentNodeIndex - Math.max(1, Math.round(Number(currentActState.nodeIndex) || 1));
@@ -2996,10 +2989,6 @@ function createExecutionRuntimeContext() {
         const action = input.dataset.debugAction;
         if (action === 'set-encounter-funds') {
             setDebugEncounterNumericField('funds', input.value);
-            return;
-        }
-        if (action === 'set-encounter-crisis') {
-            setDebugEncounterNumericField('crisis', input.value);
         }
     });
 
@@ -3155,11 +3144,6 @@ function createExecutionRuntimeContext() {
                     income_rate: {
                         [normalizedKey]: Math.max(0, Math.min(1.5, Number(value) || 0))
                     }
-                });
-            },
-            setCrisis(value) {
-                return this.patchActState({
-                    crisis: Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
                 });
             },
             reset() {

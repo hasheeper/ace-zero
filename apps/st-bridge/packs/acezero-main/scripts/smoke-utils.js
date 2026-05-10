@@ -142,7 +142,6 @@ function createContext(overrides = {}) {
     flags: [],
     storyFlags: {},
     funds: 9999,
-    crisis: 80,
     ...clone(overrides)
   };
 }

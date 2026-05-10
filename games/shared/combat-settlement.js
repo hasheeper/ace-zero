@@ -32,16 +32,6 @@
     2: ['combat', 'asset', 'vision', 'rest', 'combat'],
     3: ['combat', 'asset', 'vision', 'combat', 'rest', 'asset', 'vision', 'combat', 'rest']
   };
-  var CRISIS_BY_BUCKET = {
-    rout: 6,
-    defeat: 4,
-    minor_defeat: 2,
-    draw: 0,
-    minor_victory: 0,
-    victory: 0,
-    great_victory: 0
-  };
-
   function clampInt(value, min, max, fallback) {
     var n = Math.round(Number(value));
     if (!Number.isFinite(n)) return fallback;
@@ -146,10 +136,6 @@
     });
     patch.push({ op: 'replace', path: '/world/act/pendingResolutions/' + settlement.requestIndex + '/status', value: 'resolved' });
     patch.push({ op: 'replace', path: '/world/act/pendingResolutions/' + settlement.requestIndex + '/outcome', value: settlement.outcome.key });
-    if (settlement.crisisDelta > 0) {
-      patch.push({ op: 'delta', path: '/world/act/crisis', value: settlement.crisisDelta });
-      patch.push({ op: 'add', path: '/world/act/crisisSignals/-', value: settlement.crisisSignal });
-    }
     return patch;
   }
 
@@ -164,7 +150,6 @@
     var stakeChips = Math.max(1, combat.stakeChips || goldToSilver(combat.stakeGold) || startingChips || Math.abs(netChips) || 1);
     var outcome = classifyOutcome(netChips, stakeChips);
     var rewardInfo = buildRewardDelta(combat.level, outcome.key);
-    var crisisDelta = (CRISIS_BY_BUCKET[outcome.key] || 0) * combat.level;
     var fundsDeltaGold = silverToGold(netChips);
     var summary = buildSummary(input.gameName || input.gameId || 'Combat', outcome, combat.level, fundsDeltaGold, rewardInfo);
     var settlement = {
@@ -186,13 +171,6 @@
       rewardPoints: rewardInfo.total,
       rewardMax: rewardInfo.max,
       rewardDelta: rewardInfo.delta,
-      crisisDelta: crisisDelta,
-      crisisSignal: {
-        id: 'combat:' + combat.requestId,
-        source: 'combat',
-        severity: crisisDelta,
-        summary: outcome.label + ' after ' + (input.gameName || input.gameId || 'combat')
-      },
       summary: summary,
       llmInstruction: 'If you use this combat settlement, copy suggestedJsonPatch into <UpdateVariable><JSONPatch> after the narrative replay. Do not invent different combat rewards.'
     };

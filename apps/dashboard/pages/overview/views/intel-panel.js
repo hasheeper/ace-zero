@@ -499,10 +499,6 @@
                         <span>FUNDS</span>
                         <input type="number" min="0" step="50" value="${context.funds}" data-debug-action="set-encounter-funds">
                     </label>
-                    <label>
-                        <span>CRISIS</span>
-                        <input type="number" min="0" max="100" step="1" value="${context.crisis}" data-debug-action="set-encounter-crisis">
-                    </label>
                 </div>
             </div>
         `;
@@ -566,10 +562,8 @@
             if (!threshold) return;
             parts.push(`${label} ${Math.max(0, Math.round(Number(current) || 0))}/${threshold}`);
         };
-        pushThreshold('day', req.day, req.minDay);
         pushThreshold('node', req.nodeIndex, req.minNodeIndex);
         pushThreshold('funds', req.funds, req.minFunds);
-        pushThreshold('crisis', req.crisis, req.minCrisis);
         pushThreshold('spent', req.spentScore, req.minSpentScore);
         if (req.requiredGeo) parts.push(`geo ${req.geo || 'missing'}>${req.requiredGeo}`);
         if (Array.isArray(req.requiredTags) && req.requiredTags.length) parts.push(`tag ${req.requiredTags.join('|')}`);
@@ -586,7 +580,7 @@
                 const parts = [];
                 if (Array.isArray(group.requiredCharacters) && group.requiredCharacters.length) parts.push(group.requiredCharacters.join('+'));
                 if (Array.isArray(group.requiredFlags) && group.requiredFlags.length) parts.push(group.requiredFlags.join('+'));
-                if (Number(group.minCrisis) > 0) parts.push(`crisis>${group.minCrisis}`);
+                if (Number(group.minSpentScore) > 0) parts.push(`spent>${group.minSpentScore}`);
                 if (Number(group.minFunds) > 0) parts.push(`funds>${group.minFunds}`);
                 return parts.join('+');
             })
@@ -667,7 +661,6 @@
         const actState = getCurrentActStateForPanel();
         const modeLabel = getAdapterModeLabel();
         const stage = normalizeActStage(actState.stage).toUpperCase();
-        const crisis = Math.max(0, Math.min(100, Math.round(Number(actState.crisis) || 0)));
         const sight = Math.max(0, Math.round(Number(actState.vision?.baseSight) || 0))
             + Math.max(0, Math.round(Number(actState.vision?.bonusSight) || 0));
         return `
@@ -686,10 +679,6 @@
                     <div class="act-kpi">
                         <span>PHASE</span>
                         <strong>${Math.min(appState.currentPhaseIndex + 1, PHASE_SLOT_IDS.length)}/${PHASE_SLOT_IDS.length}</strong>
-                    </div>
-                    <div class="act-kpi">
-                        <span>CRISIS</span>
-                        <strong>${crisis}</strong>
                     </div>
                     <div class="act-kpi">
                         <span>情报</span>

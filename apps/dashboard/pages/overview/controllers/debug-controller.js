@@ -98,7 +98,6 @@
             site: location.site,
             location,
             funds: debugContext.funds,
-            crisis: debugContext.crisis,
             storyFlags: debugContext.storyFlags,
             world: {
                 location,
@@ -272,13 +271,11 @@
         }));
     }
 
-    function setDebugEncounterNumericField(field, value) {
-        const key = field === 'crisis' ? 'crisis' : 'funds';
-        const max = key === 'crisis' ? 100 : Number.POSITIVE_INFINITY;
-        const numeric = Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
+    function setDebugEncounterNumericField(_field, value) {
+        const numeric = Math.max(0, Math.round(Number(value) || 0));
         return updateDebugEncounterContext((context) => ({
             ...context,
-            [key]: numeric
+            funds: numeric
         }));
     }
 

@@ -91,8 +91,6 @@
     stage: 'executing',
     phase_advance: 0,
     controlledNodes: {},
-    crisis: 0,
-    crisisSignals: [],
     vision: { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null },
     resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
     characterEncounter: {},

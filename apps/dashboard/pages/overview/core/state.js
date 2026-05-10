@@ -35,12 +35,9 @@
         const ENCOUNTER_REASON_LABELS = Object.freeze({
             active_or_done: 'already active/done',
             cooldown: 'cooldown',
-            crisis: 'crisis too low',
-            day: 'day too early',
             funds: 'funds too low',
             geo: 'wrong geo',
             missing_church_event: 'needs church event',
-            missing_day: 'missing day',
             missing_geo: 'missing geo',
             missing_rule: 'missing rule',
             missing_tags: 'missing scene tag',

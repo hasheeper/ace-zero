@@ -33,7 +33,7 @@ A.【前置判别】
       - 若日志包含 `<ACE0_COMBAT_SETTLEMENT>`：
         * 这是交锋点结算建议，不是插件直写变量
         * 正文回放结束后，必须在 `<UpdateVariable>` 的 `<JSONPatch>` 中原样复制其中的 `suggestedJsonPatch`
-        * 不要自由改 reward 点数、outcome、crisis 或 pending index
+        * 不要自由改 reward 点数、outcome 或 pending index
         * pending request 只标记 `status: "resolved"`，不要删除数组项
 
    - 【分支 B】: [NEW BATTLE / NARRATIVE MODE]

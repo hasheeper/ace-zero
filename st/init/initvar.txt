@@ -182,8 +182,6 @@ world:
     stage: executing
     phase_advance: 0
     controlledNodes: {}
-    crisis: 0
-    crisisSignals: []
     vision:
       baseSight: 1
       bonusSight: 0

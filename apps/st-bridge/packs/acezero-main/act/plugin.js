@@ -180,7 +180,6 @@
   function getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId); }
   function getCharacterEncounterPreSignalMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterPreSignalMap(actStateInput, currentNodeId); }
   function calculateEncounterSpentScore(actStateInput, weightsInput) { return ACT_ENCOUNTER_RUNTIME.calculateEncounterSpentScore(actStateInput, weightsInput); }
-  function getEncounterRuntimeDay(contextInput) { return ACT_ENCOUNTER_RUNTIME.getEncounterRuntimeDay(contextInput); }
   function getEncounterRuntimeGeo(contextInput) { return ACT_ENCOUNTER_RUNTIME.getEncounterRuntimeGeo(contextInput); }
   function collectEncounterRuntimeTags(contextInput, configInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.collectEncounterRuntimeTags(contextInput, configInput, currentNodeId); }
   function isEncounterCharacterIntroduced(actStateInput, heroStateInput, charKeyInput, contextInput = {}) { return ACT_ENCOUNTER_RUNTIME.isEncounterCharacterIntroduced(actStateInput, heroStateInput, charKeyInput, contextInput); }
@@ -436,8 +435,6 @@
       controlledNodes: (raw.controlledNodes && typeof raw.controlledNodes === 'object' && !Array.isArray(raw.controlledNodes))
         ? deepClone(raw.controlledNodes)
         : {},
-      crisis: Math.max(0, Math.min(100, Math.round(Number(raw.crisis) || 0))),
-      crisisSignals: normalizeCrisisSignals(raw.crisisSignals),
       vision: normalizeVisionState(raw.vision),
       resourceSpent: normalizeCountMap(raw.resourceSpent, false),
       characterEncounter: normalizeCharacterEncounterState(raw.characterEncounter),
@@ -524,8 +521,6 @@
       controlledNodes: (source.controlledNodes && typeof source.controlledNodes === 'object' && !Array.isArray(source.controlledNodes))
         ? deepClone(source.controlledNodes)
         : {},
-      crisis: Math.max(0, Math.min(100, Math.round(Number(source.crisis) || 0))),
-      crisisSignals: normalizeCrisisSignals(source.crisisSignals),
       vision: normalizeVisionState(source.vision || base.vision),
       resourceSpent: normalizeCountMap(source.resourceSpent, false),
       characterEncounter: normalizeCharacterEncounterState(source.characterEncounter),
@@ -817,31 +812,6 @@
       .slice(-64);
   }
 
-  function normalizeCrisisSignalStatus(value) {
-    const status = normalizeTrimmedString(value, 'open').toLowerCase();
-    return ['open', 'acknowledged', 'resolved', 'dismissed'].includes(status) ? status : 'open';
-  }
-
-  function normalizeCrisisSignals(value) {
-    const list = Array.isArray(value) ? value : [];
-    return list
-      .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
-      .map((item) => ({
-        ...deepClone(item),
-        id: normalizeTrimmedString(item.id, ''),
-        source: normalizeTrimmedString(item.source, 'external').toLowerCase(),
-        kind: normalizeTrimmedString(item.kind || item.type, 'generic').toLowerCase(),
-        level: Math.max(0, Math.round(Number(item.level) || 0)),
-        delta: Number.isFinite(Number(item.delta)) ? Math.round(Number(item.delta)) : 0,
-        nodeId: normalizeTrimmedString(item.nodeId, ''),
-        nodeIndex: Math.max(0, Math.round(Number(item.nodeIndex) || 0)),
-        phaseIndex: Math.max(-1, Math.min(3, Math.round(Number(item.phaseIndex ?? -1)))),
-        status: normalizeCrisisSignalStatus(item.status),
-        summary: normalizeTrimmedString(item.summary, '')
-      }))
-      .filter((item) => item.id);
-  }
-
   function normalizeExternalResolutionResult(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const id = normalizeTrimmedString(value.id || value.requestId || value.resolutionId, '');
@@ -855,9 +825,6 @@
       summary: normalizeTrimmedString(value.summary || value.note || value.notes, ''),
       actPatch: isPlainObject(value.actPatch) ? deepClone(value.actPatch) : null,
       heroPatch: isPlainObject(value.heroPatch) ? deepClone(value.heroPatch) : null,
-      crisisSignals: Array.isArray(value.crisisSignals)
-        ? deepClone(value.crisisSignals)
-        : (isPlainObject(value.crisisSignal) ? [deepClone(value.crisisSignal)] : []),
       payload: isPlainObject(value.payload) ? deepClone(value.payload) : null,
       consume: value.consume !== false
     };
@@ -1272,30 +1239,13 @@
     };
 
     const patchedActState = result.actPatch
-      ? mergePlainObjects(originalActState, result.actPatch, ['pendingResolutions', 'resolutionHistory', 'crisisSignals'])
+      ? mergePlainObjects(originalActState, result.actPatch, ['pendingResolutions', 'resolutionHistory'])
       : deepClone(originalActState);
     patchedActState.pendingResolutions = nextPending;
     patchedActState.resolutionHistory = normalizeResolutionHistory([
       ...normalizeResolutionHistory(originalActState.resolutionHistory),
       historyEntry
     ]);
-    if (Array.isArray(result.crisisSignals) && result.crisisSignals.length) {
-      let signalActState = patchedActState;
-      result.crisisSignals.forEach((signalInput) => {
-        const signalResult = appendCrisisSignalToActState(signalActState, {
-          source: request.type,
-          nodeId: request.nodeId,
-          nodeIndex: request.nodeIndex,
-          phaseIndex: request.phaseIndex,
-          level: request.level,
-          ...signalInput
-        });
-        signalActState = signalResult.actState;
-      });
-      patchedActState.crisis = signalActState.crisis;
-      patchedActState.crisisSignals = signalActState.crisisSignals;
-    }
-
     const patchedHeroState = result.heroPatch
       ? mergePlainObjects(heroState, result.heroPatch)
       : heroState;
@@ -1331,66 +1281,6 @@
       rejected,
       changed: applied.length > 0
     };
-  }
-
-  function createCrisisSignal(actStateInput, signalInput = {}) {
-    const actState = normalizeActState(actStateInput);
-    const source = isPlainObject(signalInput) ? signalInput : {};
-    const nodeId = normalizeTrimmedString(source.nodeId, getCurrentActNodeId(actState));
-    const nodeIndex = Math.max(1, Math.round(Number(source.nodeIndex) || Number(actState.nodeIndex) || 1));
-    const phaseIndex = Number.isFinite(Number(source.phaseIndex))
-      ? Math.max(-1, Math.min(3, Math.round(Number(source.phaseIndex))))
-      : Math.max(-1, Math.min(3, Math.round(Number(actState.phase_index) || 0)));
-    const existingCount = normalizeCrisisSignals(actState.crisisSignals).length;
-    const kind = normalizeTrimmedString(source.kind || source.type, 'generic').toLowerCase();
-    const signal = {
-      id: normalizeTrimmedString(
-        source.id,
-        `${actState.id}:${nodeId}:${phaseIndex}:crisis:${kind}:${existingCount}`
-      ),
-      source: normalizeTrimmedString(source.source, 'external').toLowerCase(),
-      kind,
-      level: Math.max(0, Math.round(Number(source.level) || 0)),
-      delta: Number.isFinite(Number(source.delta)) ? Math.round(Number(source.delta)) : 0,
-      nodeId,
-      nodeIndex,
-      phaseIndex,
-      status: normalizeCrisisSignalStatus(source.status),
-      summary: normalizeTrimmedString(source.summary || source.note, ''),
-      payload: isPlainObject(source.payload) ? deepClone(source.payload) : null
-    };
-    return normalizeCrisisSignals([signal])[0] || signal;
-  }
-
-  function appendCrisisSignalToActState(actStateInput, signalInput = {}) {
-    const actState = normalizeActState(actStateInput);
-    const signal = createCrisisSignal(actState, signalInput);
-    const signals = normalizeCrisisSignals(actState.crisisSignals);
-    const alreadyRecorded = signals.some((item) => item.id === signal.id);
-    if (!alreadyRecorded) {
-      signals.push(signal);
-    }
-    actState.crisisSignals = signals;
-    if (!alreadyRecorded && Number.isFinite(Number(signal.delta)) && signal.delta !== 0) {
-      actState.crisis = Math.max(0, Math.min(100, Math.round(Number(actState.crisis) || 0) + signal.delta));
-    }
-    return {
-      actState: normalizeActState(actState),
-      signal: deepClone(signal),
-      applied: !alreadyRecorded
-    };
-  }
-
-  function getCrisisSignals(actStateInput, filters = {}) {
-    const actState = normalizeActState(actStateInput);
-    const sourceFilter = normalizeTrimmedString(filters.source, '').toLowerCase();
-    const kindFilter = normalizeTrimmedString(filters.kind || filters.type, '').toLowerCase();
-    const statusFilter = normalizeTrimmedString(filters.status, '').toLowerCase();
-    return normalizeCrisisSignals(actState.crisisSignals)
-      .filter((signal) => !sourceFilter || signal.source === sourceFilter)
-      .filter((signal) => !kindFilter || signal.kind === kindFilter)
-      .filter((signal) => !statusFilter || signal.status === statusFilter)
-      .map((signal) => deepClone(signal));
   }
 
   function executeActTokenEffect(actState, heroState, config, token, phaseIndex = 0) {
@@ -1773,8 +1663,6 @@
     getPendingAssetDeckCommands,
     applyExternalResolutionResult,
     applyExternalResolutionResults,
-    appendCrisisSignalToActState,
-    getCrisisSignals,
     deriveWorldTimeFromAct,
     resolvePendingAdvanceState,
     deriveCharacterStatesFromActState,

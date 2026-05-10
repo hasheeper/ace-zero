@@ -1155,7 +1155,7 @@ Phase 5 完成标准：
 - ACT 仍不直接伪造卡组结果。
 - 节点收益进入 AssetDeck command。
 - resolutionHistory 记录来源。
-- Encounter 仍只读取已记录的 spent / crisis / funds，不被卡组系统污染。
+- Encounter 仍只读取已记录的 spent / funds / tags / flags，不被卡组系统污染。
 
 建议拆分：
 

@@ -647,8 +647,6 @@ function makeDefaultActState() {
     stage: 'executing',
     phase_advance: 0,
     controlledNodes: {},
-    crisis: 0,
-    crisisSignals: [],
     vision: makeDefaultActVisionState(),
     resourceSpent: makeDefaultActResourceCounts(0),
     characterEncounter: {},
@@ -717,8 +715,6 @@ const WorldActSchema = z.object({
   stage: z.string().transform(v => normalizeLowerEnumValue(v, ACT_STAGE_VALUES, 'executing')).default('executing'),
   phase_advance: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
   controlledNodes: z.record(z.string(), z.any()).default({}),
-  crisis: z.coerce.number().transform(v => Math.max(0, Math.min(100, Math.round(v)))).default(0),
-  crisisSignals: z.array(z.any()).default([]),
   vision: ActVisionStateSchema,
   resourceSpent: ActResourceCountsSchema,
   characterEncounter: z.record(z.string(), z.any()).default({}).transform(v => normalizeCharacterEncounterState(v)),
@@ -779,7 +775,6 @@ const WorldActSchema = z.object({
   act.controlledNodes = act.controlledNodes && typeof act.controlledNodes === 'object' && !Array.isArray(act.controlledNodes)
     ? act.controlledNodes
     : {};
-  act.crisis = Math.max(0, Math.min(100, Math.round(Number(act.crisis) || 0)));
   act.vision = ActVisionStateSchema.parse(act.vision);
   act.resourceSpent = ActResourceCountsSchema.parse(act.resourceSpent);
   act.characterEncounter = normalizeCharacterEncounterState(act.characterEncounter);
@@ -788,9 +783,6 @@ const WorldActSchema = z.object({
     : [];
   act.pendingAssetDeckCommands = Array.isArray(act.pendingAssetDeckCommands)
     ? act.pendingAssetDeckCommands.filter(item => item && typeof item === 'object' && !Array.isArray(item))
-    : [];
-  act.crisisSignals = Array.isArray(act.crisisSignals)
-    ? act.crisisSignals.filter(item => item && typeof item === 'object' && !Array.isArray(item))
     : [];
   act.resolutionHistory = normalizeActResolutionHistory(act.resolutionHistory);
   act.pendingTransitionTarget = normalizeTrimmedString(act.pendingTransitionTarget, '');

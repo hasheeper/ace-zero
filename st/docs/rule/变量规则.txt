@@ -27,8 +27,6 @@ ACE0 MVU 变量规则（最小 ACT 版）
 - `/world/act/reserve/vision`
 - `/world/act/pendingResolutions/<index>/status`
 - `/world/act/pendingResolutions/<index>/outcome`
-- `/world/act/crisis`
-- `/world/act/crisisSignals/-`
 - `/hero/cast/<角色名>/present`
 - `/hero/cast/<角色名>/inParty`
 - `/hero/roster/<角色名>/level`
@@ -40,7 +38,7 @@ ACE0 MVU 变量规则（最小 ACT 版）
 操作约定
 - `delta`: 仅用于数字增减。适用：`/hero/funds`、`/hero/assets`、`/hero/debt`、`/hero/majorDebt`、`/hero/relationship/*`
 - `replace`: 仅用于直接写结果值。适用：时间、地点、ACT 路由/推进、布尔值、level、mana、maxMana
-- `add`: 仅用于明确要求追加的数组尾部路径：`/world/act/crisisSignals/-`
+- `add`: 当前不使用。除非规则另行明确声明，否则不要追加数组项
 - 不使用整段对象覆写，不新增未声明路径
 - 关系第二字段统一写 `/exclusive`
 - `reversal / ownership / parasitism / indebtedness / takeover / entrustment / retention / coverup / fixation` 都只是显示名，不是变量路径
@@ -142,16 +140,6 @@ ACE0 MVU 变量规则（最小 ACT 版）
     check:
       - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
       - 对应条目只标记为 `resolved`，不删除数组项
-  world.act.crisis:
-    type: number
-    check:
-      - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
-      - 只用 `delta`
-  world.act.crisisSignals:
-    type: array
-    check:
-      - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 追加 `/world/act/crisisSignals/-`
-      - 禁止整段替换数组
   hero.cast.${角色名}.present:
     type: boolean
     check:

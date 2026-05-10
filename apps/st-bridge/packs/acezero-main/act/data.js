@@ -14,7 +14,6 @@
 const ENCOUNTER_RULES = {
     SIA: {
       category: 'condition',
-      minDay: 3,
       minNodeIndex: 5,
       spentWeights: { combat: 2, rest: 1, asset: 1, vision: 2 },
       minSpentScore: 9,
@@ -26,15 +25,13 @@ const ENCOUNTER_RULES = {
     },
     TRIXIE: {
       category: 'condition',
-      minDay: 3,
       minNodeIndex: 7,
       spentWeights: { combat: 5, rest: 0, asset: 0, vision: 1 },
-      minSpentScore: 22,
-      minCrisis: 26,
+      minSpentScore: 26,
       laneWeights: ['low', 'mid_low', 'mid_high', 'high'],
       priority: 30,
       rarity: 4,
-      debugLabel: 'TRIXIE / crisis noise',
+      debugLabel: 'TRIXIE / combat noise',
       firstMeetHint: 'TRIXIE 首次在主角视野里出现。她像从混乱规则的缝里钻出来，不要写成早已认识的玩笑伙伴。'
     },
     POPPY: {
@@ -61,12 +58,10 @@ const ENCOUNTER_RULES = {
     },
     VV: {
       category: 'hybrid',
-      minDay: 4,
       minNodeIndex: 9,
       minFunds: 2501,
       spentWeights: { combat: 1, rest: 2, asset: 3, vision: 2 },
-      minSpentScore: 28,
-      minCrisis: 26,
+      minSpentScore: 32,
       laneWeights: ['mid_high', 'high', 'mid_low', 'low'],
       preSignalPreferred: true,
       priority: 25,
@@ -77,7 +72,6 @@ const ENCOUNTER_RULES = {
     },
     KUZUHA: {
       category: 'hybrid',
-      minDay: 3,
       minNodeIndex: 7,
       requiredGeo: 'THE_RUST',
       requiredCharacters: ['POPPY'],
@@ -91,12 +85,10 @@ const ENCOUNTER_RULES = {
     },
     KAKO: {
       category: 'hybrid',
-      minDay: 4,
       minNodeIndex: 10,
       requiredCharacters: ['SIA'],
       spentWeights: { combat: 4, rest: 1, asset: 1, vision: 3 },
-      minSpentScore: 32,
-      minCrisis: 36,
+      minSpentScore: 38,
       laneWeights: ['mid_low', 'mid_high', 'high', 'low'],
       priority: 26,
       rarity: 4,
@@ -107,14 +99,13 @@ const ENCOUNTER_RULES = {
     },
     EULALIA: {
       category: 'hybrid',
-      minDay: 5,
       minNodeIndex: 11,
       spentWeights: { combat: 1, rest: 4, asset: 1, vision: 2 },
       minSpentScore: 36,
       requiredFlags: ['church_event_triggered'],
       requiredAny: [
         { requiredCharacters: ['VV'] },
-        { minCrisis: 51 }
+        { minSpentScore: 42 }
       ],
       laneWeights: ['high', 'mid_high', 'mid_low', 'low'],
       priority: 22,
@@ -167,8 +158,6 @@ const DEFAULT_WORLD_ACT = {
     phase_advance: 0,
     stage: 'executing',
     controlledNodes: {},
-    crisis: 0,
-    crisisSignals: [],
     vision: {
       baseSight: 1,
       bonusSight: 0,

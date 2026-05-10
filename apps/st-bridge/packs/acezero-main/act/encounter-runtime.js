@@ -286,22 +286,6 @@
     return Math.max(0, normalizedWeights.length - index) * 4;
   }
 
-  function getEncounterRuntimeDay(contextInput) {
-    const context = contextInput && typeof contextInput === 'object' ? contextInput : {};
-    const candidates = [
-      context.day,
-      context.worldDay,
-      context.worldClock?.day,
-      context.clock?.day,
-      context.world?.clock?.day
-    ];
-    for (const candidate of candidates) {
-      const day = Math.round(Number(candidate) || 0);
-      if (day > 0) return day;
-    }
-    return 0;
-  }
-
   function getEncounterRuntimeGeo(contextInput) {
     const context = contextInput && typeof contextInput === 'object' ? contextInput : {};
     return normalizeTrimmedString(
@@ -381,10 +365,10 @@
   function evaluateEncounterConditionGroup(groupInput, context) {
     const group = groupInput && typeof groupInput === 'object' ? groupInput : {};
     const reasons = [];
-    const minCrisis = Number(group.minCrisis ?? group.crisisMin);
-    if (minCrisis > 0 && context.crisis < minCrisis) reasons.push('crisis');
     const minFunds = Number(group.minFunds);
     if (minFunds > 0 && context.funds < minFunds) reasons.push('funds');
+    const minSpentScore = Number(group.minSpentScore);
+    if (minSpentScore > 0 && context.spentScore < minSpentScore) reasons.push('spent_score');
     const requiredFlags = Array.isArray(group.requiredFlags) ? group.requiredFlags : [];
     requiredFlags.forEach((flag) => {
       const normalizedFlag = normalizeTrimmedString(flag, '').toLowerCase();
@@ -405,8 +389,8 @@
       passed: reasons.length === 0,
       reasons,
       summary: {
-        minCrisis: Math.max(0, Math.round(minCrisis || 0)),
         minFunds: Math.max(0, Math.round(minFunds || 0)),
+        minSpentScore: Math.max(0, Math.round(minSpentScore || 0)),
         requiredFlags,
         requiredCharacters
       }
@@ -428,12 +412,10 @@
     const config = getChapter(act.id);
     const currentNodeId = getCurrentActNodeId(act);
     const currentLane = getEncounterNodeLaneKey(config, currentNodeId);
-    const day = getEncounterRuntimeDay(contextInput);
     const geo = getEncounterRuntimeGeo(contextInput);
     const tags = collectEncounterRuntimeTags(contextInput, config, currentNodeId);
     const hero = heroStateInput && typeof heroStateInput === 'object' ? heroStateInput : {};
     const funds = Math.max(0, Number(contextInput?.funds ?? hero.funds ?? hero.money) || 0);
-    const crisis = Math.max(0, Math.round(Number(contextInput?.crisis ?? act.crisis) || 0));
     const contextFlags = Array.isArray(contextInput?.flags)
       ? contextInput.flags.map((flag) => normalizeTrimmedString(flag, '').toLowerCase()).filter(Boolean)
       : [];
@@ -449,13 +431,7 @@
       const reasons = [];
       if (!rule) reasons.push('missing_rule');
       if (hasActiveEncounterForCharacter(encounter, charKey)) reasons.push('active_or_done');
-      if (Number(rule?.minDay) > 0) {
-        if (!day) reasons.push('missing_day');
-        else if (day < Number(rule.minDay)) reasons.push('day');
-      }
       if (Number(rule?.minNodeIndex) > 0 && act.nodeIndex < Number(rule.minNodeIndex)) reasons.push('node_index');
-      const minCrisis = Number(rule?.minCrisis ?? rule?.crisisMin);
-      if (minCrisis > 0 && crisis < minCrisis) reasons.push('crisis');
       if (Number(rule?.minFunds) > 0 && funds < Number(rule.minFunds)) reasons.push('funds');
       if (rule?.requiredGeo) {
         if (!geo) reasons.push('missing_geo');
@@ -490,6 +466,7 @@
         if (!hasChurchEvent) reasons.push('missing_church_event');
       }
       const requiredAny = Array.isArray(rule?.requiredAny) ? rule.requiredAny : [];
+      const spentScore = calculateEncounterSpentScore(act, rule?.spentWeights);
       const anyResults = requiredAny.map((group) => evaluateEncounterConditionGroup(group, {
         act,
         hero,
@@ -497,11 +474,10 @@
         storyFlags,
         contextFlags,
         funds,
-        crisis
+        spentScore
       }));
       if (anyResults.length && !anyResults.some((result) => result.passed)) reasons.push('requires_any');
 
-      const spentScore = calculateEncounterSpentScore(act, rule?.spentWeights);
       if (Number(rule?.minSpentScore) > 0 && spentScore < Number(rule.minSpentScore)) reasons.push('spent_score');
       const laneScore = getEncounterLanePreferenceScore(rule, currentLane);
       const basePriority = Math.round(Number(rule?.priority) || 0);
@@ -511,17 +487,13 @@
         charKey,
         eligible: reasons.length === 0,
         reasonCodes: reasons,
-        priority: Math.round(basePriority + (spentScore * 2) + (crisis * 1.5) + (act.nodeIndex * 3) + laneScore + geoScore + (10 - rarity)),
+        priority: Math.round(basePriority + (spentScore * 2) + (act.nodeIndex * 3) + laneScore + geoScore + (10 - rarity)),
         spentScore,
         requirements: {
-          day,
-          minDay: Math.max(0, Math.round(Number(rule?.minDay) || 0)),
           nodeIndex: Math.max(1, Math.round(Number(act.nodeIndex) || 1)),
           minNodeIndex: Math.max(0, Math.round(Number(rule?.minNodeIndex) || 0)),
           funds,
           minFunds: Math.max(0, Math.round(Number(rule?.minFunds) || 0)),
-          crisis,
-          minCrisis: Math.max(0, Math.round(minCrisis || 0)),
           geo,
           requiredGeo: normalizeTrimmedString(rule?.requiredGeo, '').toUpperCase(),
           optionalGeo,
@@ -548,7 +520,7 @@
     });
 
     eligible.sort(compareEncounterPriority);
-    return { eligible, blocked, context: { day, geo, tags, currentNodeId, funds, crisis } };
+    return { eligible, blocked, context: { geo, tags, currentNodeId, funds } };
   }
 
   function buildEncounterRequestId(actStateInput, charKey, type, fallbackIndex = 0) {
@@ -1068,7 +1040,6 @@
         getCharacterEncounterFirstMeetMap,
         getCharacterEncounterPreSignalMap,
         calculateEncounterSpentScore,
-        getEncounterRuntimeDay,
         getEncounterRuntimeGeo,
         collectEncounterRuntimeTags,
         isEncounterCharacterIntroduced,
