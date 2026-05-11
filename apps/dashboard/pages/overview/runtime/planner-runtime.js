@@ -15,6 +15,24 @@
         return bucket.reserve + bucket.limited;
     }
 
+    function getEffectiveInventoryBucket(ctx, key) {
+        const bucket = { ...getInventoryBucket(ctx, key) };
+        const planLocked = typeof ctx.isPhasePlanConfirmedForCurrentNode === 'function' && ctx.isPhasePlanConfirmedForCurrentNode();
+        if (planLocked) return bucket;
+        Object.values(ctx.appState.phaseSlots).forEach((token) => {
+            if (!token || token.key !== key) return;
+            const amount = Math.max(1, Math.min(3, Math.round(Number(token.amount) || 1)));
+            const sources = Array.isArray(token.sources) && token.sources.length
+                ? token.sources.slice(0, amount)
+                : Array.from({ length: amount }, () => token.source);
+            sources.forEach((source) => {
+                const sourceKey = source === 'reserve' ? 'reserve' : 'limited';
+                bucket[sourceKey] += 1;
+            });
+        });
+        return bucket;
+    }
+
     function getAllocatedCounts(ctx) {
         const counts = Object.fromEntries(ctx.resourceKeys.map((key) => [key, 0]));
         Object.values(ctx.appState.phaseSlots).forEach((token) => {
@@ -38,7 +56,7 @@
             });
 
         return ctx.resourceKeys.reduce((sum, key) => {
-            const limited = getInventoryBucket(ctx, key).limited;
+            const limited = getEffectiveInventoryBucket(ctx, key).limited;
             const coveredByFixed = Math.min(limited, remainingFixedByKey[key] || 0);
             return sum + Math.max(0, limited - coveredByFixed);
         }, 0);

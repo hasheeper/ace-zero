@@ -731,6 +731,13 @@ const ActPhasePlanLockSchema = z.object({
   confirmedPhaseIndex: v.confirmedPhaseIndex
 }));
 
+function isActPhasePlanLockedForNode(act, currentNodeId = '') {
+  const lock = ActPhasePlanLockSchema.parse(act?.phasePlanLock);
+  return lock.locked === true
+    && lock.nodeId === normalizeTrimmedString(currentNodeId, '')
+    && lock.nodeIndex === Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
+}
+
 function normalizeActEventTree(value, currentNodeId = '') {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const goals = source.nodeGoals && typeof source.nodeGoals === 'object' && !Array.isArray(source.nodeGoals)
@@ -811,6 +818,9 @@ const WorldActSchema = z.object({
     ? act.route_history.map(value => normalizeTrimmedString(value, '')).filter(Boolean)
     : [];
   const currentActNodeId = act.route_history[Math.max(0, act.nodeIndex - 1)] || act.route_history[act.route_history.length - 1] || '';
+  if (!isActPhasePlanLockedForNode(act, currentActNodeId)) {
+    act.phase_slots = [null, null, null, null];
+  }
   act.eventTree = normalizeActEventTree(act.eventTree, currentActNodeId);
 
   act.limited = ActResourceCountsSchema.parse(act.limited);

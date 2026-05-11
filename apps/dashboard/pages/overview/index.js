@@ -1083,19 +1083,23 @@ function createExecutionRuntimeContext() {
             window.clearTimeout(syncState.pendingTimer);
             syncState.pendingTimer = null;
         }
-        // 自动提交：排点数后 300ms 无新改动即回写 MVU，无需再按 CONFIRM。
+        // 未确认的节点编排只是本地草稿，不回写 MVU；点击 CONFIRM PLAN 后才正式提交。
         if (syncState.autoCommitTimer) {
             window.clearTimeout(syncState.autoCommitTimer);
-        }
-        syncState.autoCommitTimer = window.setTimeout(() => {
             syncState.autoCommitTimer = null;
-            if (syncState.dirty && !syncState.saving) {
-                commitActStateToHost();
-            }
-        }, 300);
+        }
+        if (isPhasePlanConfirmedForCurrentNode()) {
+            syncState.autoCommitTimer = window.setTimeout(() => {
+                syncState.autoCommitTimer = null;
+                if (syncState.dirty && !syncState.saving) {
+                    commitActStateToHost();
+                }
+            }, 300);
+        }
     }
 
     function serializeActPhaseSlots() {
+        if (!isPhasePlanConfirmedForCurrentNode()) return [null, null, null, null];
         return appData.planner.phases.map((phase) => {
             const token = appState.phaseSlots[phase.slotId];
             if (!token) return null;
@@ -1115,15 +1119,44 @@ function createExecutionRuntimeContext() {
         });
     }
 
+    function restoreTokenToCountMap(counts, token) {
+        if (!token || !token.key || !counts[token.key]) return;
+        const amount = Math.max(1, Math.min(3, Math.round(Number(token.amount) || 1)));
+        const sources = Array.isArray(token.sources) && token.sources.length
+            ? token.sources.slice(0, amount)
+            : Array.from({ length: amount }, () => token.source);
+        sources.forEach((source) => {
+            const bucket = source === 'reserve' ? 'reserve' : 'limited';
+            counts[token.key][bucket] += 1;
+        });
+        const tint = token.key === 'rest' ? normalizeRestTintKey(token.tint || token.controlType || token.targetKey, '') : '';
+        const tintSource = getRestTintSource(token.tintSource);
+        if (tint && tintSource && counts[tint]) {
+            counts[tint][tintSource] += 1;
+        }
+    }
+
+    function getInventoryCountsForCommit() {
+        const counts = Object.fromEntries(RESOURCE_KEYS.map((key) => [key, {
+            limited: appState.inventory[key].limited,
+            reserve: appState.inventory[key].reserve
+        }]));
+        if (!isPhasePlanConfirmedForCurrentNode()) {
+            Object.values(appState.phaseSlots).forEach((token) => restoreTokenToCountMap(counts, token));
+        }
+        return counts;
+    }
+
     function buildActStateForCommit() {
         const currentActState = extractWorldPayload(adapterState.lastPayload)?.act || {};
+        const inventoryForCommit = getInventoryCountsForCommit();
         return {
             id: getCurrentChapterId(),
             seed: appData.campaign.seed,
             nodeIndex: appState.currentNodeIndex,
             route_history: [...appState.routeHistory],
-            limited: Object.fromEntries(RESOURCE_KEYS.map((key) => [key, appState.inventory[key].limited])),
-            reserve: Object.fromEntries(RESOURCE_KEYS.map((key) => [key, appState.inventory[key].reserve])),
+            limited: Object.fromEntries(RESOURCE_KEYS.map((key) => [key, inventoryForCommit[key].limited])),
+            reserve: Object.fromEntries(RESOURCE_KEYS.map((key) => [key, inventoryForCommit[key].reserve])),
             reserve_progress: Object.fromEntries(RESOURCE_KEYS.map((key) => [key, appState.reserveProgress[key]])),
             income_rate: Object.fromEntries(RESOURCE_KEYS.map((key) => [key, appState.incomeRate?.[key] ?? 0.2])),
             income_progress: Object.fromEntries(RESOURCE_KEYS.map((key) => [key, appState.incomeProgress?.[key] ?? 0])),
@@ -2537,6 +2570,24 @@ function createExecutionRuntimeContext() {
         return getOverviewPlannerView().openRestTintPopup(slotId);
     }
 
+    function getDefaultRestTintSlotId() {
+        if (
+            selectionState.source === 'slot'
+            && selectionState.slotId
+            && appState.phaseSlots[selectionState.slotId]?.key === 'rest'
+            && canEditPhaseSlot(selectionState.slotId)
+        ) {
+            return selectionState.slotId;
+        }
+        const phases = Array.isArray(appData?.planner?.phases) ? appData.planner.phases : [];
+        const match = phases.find((phase) => (
+            phase?.slotId
+            && appState.phaseSlots[phase.slotId]?.key === 'rest'
+            && canEditPhaseSlot(phase.slotId)
+        ));
+        return match?.slotId || '';
+    }
+
     function closeRestTintPopup() {
         return getOverviewPlannerView().closeRestTintPopup();
     }
@@ -3042,6 +3093,22 @@ function createExecutionRuntimeContext() {
             return;
         }
 
+        const openRestTintButton = e.target.closest('[data-open-rest-tint]');
+        if (openRestTintButton) {
+            e.preventDefault();
+            e.stopPropagation();
+            const slotId = getDefaultRestTintSlotId();
+            if (slotId && openRestTintPopup(slotId)) {
+                selectionState.source = 'slot';
+                selectionState.slotId = slotId;
+                selectionState.type = 'rest';
+            }
+            appState.drawerOpen = true;
+            setPlannerPage('rest');
+            refreshPlannerUI();
+            return;
+        }
+
         const assetActionButton = e.target.closest('[data-asset-action]');
         if (assetActionButton) {
             e.preventDefault();
@@ -3116,7 +3183,7 @@ function createExecutionRuntimeContext() {
     });
 
     document.addEventListener('click', (e) => {
-        const keepAction = e.target.closest('#toggle-planner, #confirm-phase-plan, #commit-act-state, .route-option-btn, [data-debug-action], [data-vision-phase-action], [data-planner-tab], [data-planner-edit-mode], [data-asset-action]');
+        const keepAction = e.target.closest('#toggle-planner, #confirm-phase-plan, #commit-act-state, .route-option-btn, [data-debug-action], [data-vision-phase-action], [data-planner-tab], [data-planner-edit-mode], [data-open-rest-tint], [data-rest-tint], [data-close-rest-tint], [data-asset-action]');
         if (keepAction) return;
 
         const keep = e.target.closest('.token-dispenser, .phase-core.drop-zone, .mounted-token, #inventory, .view, .asset-layout, .az-node');

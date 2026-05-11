@@ -1634,7 +1634,6 @@
             height: 36px;
             clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
             background: currentColor;
-            animation: core-pulse 2s infinite alternate;
         }
         .token-dispenser.type-combat .magic-core::after,
         .mounted-token.type-combat .magic-core::after {
@@ -1929,7 +1928,6 @@
             min-height: 36px;
             max-width: 36px;
             max-height: 36px;
-            animation: core-pulse 2s infinite alternate;
         }
         .phase-fixed-glyph.type-combat .magic-core::after { transform: scale(0.88); }
         .phase-fixed-glyph.type-combat .magic-core::before {
@@ -2048,6 +2046,35 @@
             bottom: -36px;
         }
 
+        .phase-node.active .phase-core.has-token {
+            width: 32px;
+            height: 32px;
+            border-color: rgba(207,181,59,0.42);
+            background: radial-gradient(circle at 50% 50%, rgba(20,25,35,0.86) 0%, rgba(5,6,8,0.96) 100%);
+            box-shadow: 0 0 18px rgba(207,181,59,0.22), inset 0 0 14px rgba(255,255,255,0.04);
+        }
+        .phase-node.active .phase-core.has-token::after {
+            display: none;
+            animation: none;
+        }
+        .phase-node.active .mounted-token.type-combat .magic-core {
+            width: 26px;
+            height: 26px;
+            animation: none;
+        }
+        .phase-node.active .mounted-token.type-asset .magic-core {
+            width: 25px;
+            height: 25px;
+        }
+        .phase-node.active .mounted-token.type-vision .magic-core {
+            width: 24px;
+            height: 28px;
+        }
+        .phase-node.active .mounted-token.type-rest .magic-core {
+            width: 25px;
+            height: 25px;
+        }
+
         .hud-corner { position: absolute; width: 6px; height: 6px; border-color: var(--gold-main); border-style: solid; opacity: 0.8; }
         .hud-corner.tl { top: -5px; left: -5px; border-width: 1px 0 0 1px; }
         .hud-corner.tr { top: -5px; right: -5px; border-width: 1px 1px 0 0; }
@@ -2101,6 +2128,15 @@
             pointer-events: none;
             opacity: 0.42;
             filter: grayscale(1);
+        }
+        .phase-core.is-plan-readonly {
+            cursor: default;
+            pointer-events: none;
+        }
+        .phase-core.is-draft-plan {
+            border-style: dashed;
+            opacity: 0.45;
+            filter: grayscale(0.85);
         }
         .phase-node.future .phase-core.drop-zone.drag-over {
             border: 1px solid var(--gold-main);
@@ -2172,6 +2208,10 @@
         .mounted-token[data-vision-replacement="true"] {
             opacity: 1;
             filter: drop-shadow(0 0 10px rgba(58,235,200,0.28));
+        }
+        .mounted-token.is-draft-plan {
+            opacity: 0.42;
+            filter: grayscale(0.9);
         }
         .phase-node.future:hover .phase-core.has-fixed {
             border-color: rgba(207, 181, 59, 0.72);
@@ -2248,12 +2288,12 @@
 
         .planner-controls {
             position: absolute;
-            top: -22px;
+            top: -21px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             z-index: 120;
         }
         .planner-controls.is-plan-locked {
@@ -2272,6 +2312,8 @@
         }
 
         .toggle-planner-btn {
+            height: 31px;
+            min-width: 124px;
             background: rgba(8, 10, 14, 0.95);
             border: 1px solid rgba(207, 181, 59, 0.3);
             border-bottom: none;
@@ -2279,26 +2321,27 @@
             font-family: var(--font-title);
             font-size: 9px;
             font-weight: 600;
-            letter-spacing: 2.6px;
-            padding: 4px 22px;
+            letter-spacing: 2.2px;
+            padding: 0 17px;
             cursor: pointer;
             transition: all 0.3s ease;
             box-shadow: 0 -5px 15px rgba(0,0,0,0.8);
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            text-align: center;
             backdrop-filter: blur(4px);
         }
         .planner-commit-btn {
-            height: 33px;
-            padding: 0 18px;
+            height: 31px;
+            padding: 0 16px;
             border: 1px solid rgba(207, 181, 59, 0.3);
             background: rgba(8, 10, 14, 0.95);
             color: rgba(255,255,255,0.72);
             font-family: var(--font-title);
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
-            letter-spacing: 3px;
+            letter-spacing: 2.5px;
             white-space: nowrap;
             cursor: pointer;
             transition: all 0.24s ease;
@@ -2319,13 +2362,9 @@
             box-shadow: 0 0 14px var(--gold-glow);
         }
         .planner-commit-btn.is-plan-locked {
-            height: 26px;
-            padding: 0 12px;
             border-color: rgba(58, 235, 200, 0.38);
             background: linear-gradient(180deg, rgba(18, 42, 39, 0.92) 0%, rgba(7, 13, 16, 0.96) 100%);
             color: var(--flow-up);
-            font-size: 9px;
-            letter-spacing: 1.8px;
             text-shadow: 0 0 8px rgba(58, 235, 200, 0.35);
             box-shadow: 0 0 0 1px rgba(58, 235, 200, 0.08) inset, 0 -5px 15px rgba(0,0,0,0.55);
         }
@@ -2335,43 +2374,6 @@
         }
         .planner-commit-btn.is-plan-locked:disabled:not(.is-saving) {
             opacity: 0.92;
-        }
-        .planner-sync-status {
-            min-width: 180px;
-            max-width: 320px;
-            color: rgba(255,255,255,0.6);
-            font-family: var(--font-ui);
-            font-size: 10px;
-            letter-spacing: 1.4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .planner-sync-status.is-dirty {
-            color: rgba(207, 181, 59, 0.92);
-        }
-        .planner-sync-status.is-saving {
-            color: rgba(255,255,255,0.92);
-        }
-        .planner-sync-status.is-error {
-            color: #ff8f8f;
-        }
-        .planner-sync-status.is-locked {
-            min-width: auto;
-            height: 26px;
-            display: inline-flex;
-            align-items: center;
-            padding: 0 10px;
-            border: 1px solid rgba(58, 235, 200, 0.24);
-            background: rgba(7, 13, 16, 0.9);
-            color: var(--flow-up);
-            font-family: var(--font-title);
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 1.2px;
-            white-space: nowrap;
-            text-shadow: 0 0 8px rgba(58, 235, 200, 0.35);
-            box-shadow: 0 0 0 1px rgba(58, 235, 200, 0.05) inset, 0 -5px 15px rgba(0,0,0,0.45);
         }
         .toggle-planner-btn::before {
             content: '';
@@ -2387,11 +2389,19 @@
         .btn-text::before,
         .btn-text::after {
             content: '✦';
-            font-size: 8px;
+            font-size: 7px;
             color: rgba(207, 181, 59, 0.5);
             vertical-align: middle;
-            margin: 0 4px;
+            margin: 0 3px;
             transition: 0.3s;
+        }
+        .btn-text {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            text-align: center;
+            white-space: nowrap;
         }
         .toggle-planner-btn:hover,
         .toggle-planner-btn.is-active {

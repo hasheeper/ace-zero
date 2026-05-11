@@ -52,6 +52,7 @@ async function main() {
         stage: 'executing',
         phase_index: 1,
         phase_advance: 1,
+        phasePlanLock: { nodeId: 'node1-entry', nodeIndex: 1, locked: true, confirmedPhaseIndex: 1 },
         phase_slots: [
           null,
           { key: 'asset', amount: 1, source: 'limited', sources: ['limited'] },

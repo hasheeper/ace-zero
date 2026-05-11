@@ -730,7 +730,6 @@
             ? `<div class="planner-controls${readonlyClass}${lockClass}">
                     <button class="toggle-planner-btn${readonlyClass}" id="toggle-planner"><span class="btn-text" id="toggle-planner-label">${appData.planner.toggleClosedLabel.replace(/\s*\/\/$/, '')}</span></button>
                     <button class="planner-commit-btn${lockClass}" id="confirm-phase-plan" type="button" ${planLocked ? 'disabled' : ''}>${planLocked ? 'PLAN LOCKED' : 'CONFIRM PLAN'}</button>
-                    <div class="planner-sync-status${planLocked ? ' is-locked' : ''}" id="planner-sync-status">${planLocked ? '本节点编排已确认' : ''}</div>
                 </div>`
             : `<div class="planner-controls${readonlyClass}"></div>`;
         const phaseSegments = appData.planner.phases.slice(0, -1).map((phase, index) => {
@@ -915,7 +914,6 @@ ${phaseSegments}
         const toggleLabel = document.getElementById('toggle-planner-label');
         const confirmButton = document.getElementById('confirm-phase-plan');
         const commitButton = document.getElementById('commit-act-state');
-        const syncStatus = document.getElementById('planner-sync-status');
         const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
         if (toggleButton) toggleButton.classList.toggle('is-active', appState.drawerOpen);
         if (toggleLabel) {
@@ -933,17 +931,6 @@ ${phaseSegments}
             commitButton.disabled = syncState.saving || !syncState.dirty;
             commitButton.textContent = syncState.saving ? 'SAVING' : (syncState.dirty ? 'CONFIRM' : 'SYNCED');
         }
-        if (syncStatus) {
-            syncStatus.className = 'planner-sync-status';
-            if (syncState.errorText) syncStatus.classList.add('is-error');
-            else if (syncState.saving) syncStatus.classList.add('is-saving');
-            else if (planLocked) syncStatus.classList.add('is-locked');
-            else if (syncState.dirty) syncStatus.classList.add('is-dirty');
-            syncStatus.textContent = syncState.errorText
-                || (syncState.saving ? syncState.statusText : '')
-                || (planLocked ? '本节点编排已确认' : syncState.statusText);
-        }
-
         appData.planner.phases.slice(0, -1).forEach((phase, index) => {
             const segment = document.getElementById(`phase-seg-${index}`);
             if (!segment) return;
@@ -962,6 +949,7 @@ ${phaseSegments}
             const fixedGlyphEl = document.getElementById(`phase-fixed-glyph-${phaseIndex}`);
             const slotToken = appState.phaseSlots[phase.slotId];
             if (!nodeEl || !coreEl || !mountedEl) return;
+            const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
             const currentNodeId = getCurrentNodeData().presentNode;
             const visionReplacement = getReadyVisionReplacementForPhase(currentNodeId, phaseIndex);
             const encounterMarker = getEncounterMarkerForPhase(currentNodeId, phaseIndex);
@@ -979,12 +967,15 @@ ${phaseSegments}
 
             coreEl.className = 'phase-core drop-zone';
             if (displayToken) coreEl.classList.add('has-token', `type-${displayToken.key}`);
+            if (displayToken && !planLocked) coreEl.classList.add('is-draft-plan');
             if (visionReplacement) coreEl.classList.add('has-vision-replacement');
             if (fixedKind) coreEl.classList.add('has-fixed', `fixed-${fixedKind}`);
             if (encounterMarker) coreEl.classList.add('has-fixed', 'has-encounter-fixed');
             if (isVisionPromptPhase) coreEl.classList.add('vision-replace-prompt');
             if ((selectionState.source === 'slot' && selectionState.slotId === phase.slotId) || appState.restTintPopupSlotId === phase.slotId) coreEl.classList.add('is-selected');
-            if (!canEditPhaseSlot(phase.slotId)) coreEl.classList.add('is-locked');
+            if (!canEditPhaseSlot(phase.slotId)) {
+                coreEl.classList.add(planLocked ? 'is-plan-readonly' : 'is-locked');
+            }
 
             mountedEl.className = 'mounted-token';
             mountedEl.removeAttribute('data-type');
@@ -994,6 +985,7 @@ ${phaseSegments}
             mountedEl.removeAttribute('data-vision-replacement');
             if (displayToken) {
                 mountedEl.classList.add(`type-${displayToken.key}`);
+                if (!planLocked) mountedEl.classList.add('is-draft-plan');
                 if ((selectionState.source === 'slot' && selectionState.slotId === phase.slotId) || appState.restTintPopupSlotId === phase.slotId) mountedEl.classList.add('is-selected');
                 mountedEl.dataset.type = displayToken.type;
                 mountedEl.dataset.source = displayToken.source;

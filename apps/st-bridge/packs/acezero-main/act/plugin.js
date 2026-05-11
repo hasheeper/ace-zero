@@ -402,6 +402,13 @@
     };
   }
 
+  function isPhasePlanLockedForNode(actState, currentNodeId = '') {
+    const lock = normalizePhasePlanLock(actState?.phasePlanLock);
+    return lock.locked === true
+      && lock.nodeId === normalizeTrimmedString(currentNodeId, '')
+      && lock.nodeIndex === Math.max(1, Math.round(Number(actState?.nodeIndex) || 1));
+  }
+
   function normalizeActEventTree(value, currentNodeId = '') {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
     const goals = source.nodeGoals && typeof source.nodeGoals === 'object' && !Array.isArray(source.nodeGoals) ? source.nodeGoals : {};
@@ -492,6 +499,9 @@
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(raw.narrativeTension) || 0)))
     };
     const currentNodeId = nextState.route_history[Math.max(0, nextState.nodeIndex - 1)] || nextState.route_history[nextState.route_history.length - 1] || '';
+    if (!isPhasePlanLockedForNode(nextState, currentNodeId)) {
+      nextState.phase_slots = [null, null, null, null];
+    }
     nextState.eventTree = normalizeActEventTree(nextState.eventTree, currentNodeId);
     return nextState;
   }
@@ -583,6 +593,9 @@
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(source.narrativeTension) || base.narrativeTension || 0)))
     };
     const currentNodeId = normalized.route_history[Math.max(0, normalized.nodeIndex - 1)] || normalized.route_history[normalized.route_history.length - 1] || '';
+    if (!isPhasePlanLockedForNode(normalized, currentNodeId)) {
+      normalized.phase_slots = [null, null, null, null];
+    }
     normalized.eventTree = normalizeActEventTree(normalized.eventTree, currentNodeId);
     return normalized;
   }
