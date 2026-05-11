@@ -144,7 +144,7 @@ ACE0 MVU 变量规则（最小 ACT 版）
     check:
       - 仅用于 `<ACE0_COMBAT_SETTLEMENT>` 给出的交锋点结算
       - pending 条目不删除，只把对应 index 的 `status` 改为 `resolved`
-      - `outcome` / `summary` 必须原样来自 marker 内 `suggestedJsonPatch`
+      - `outcome` 必须原样来自 marker 内 `suggestedJsonPatch`
   hero.cast.${角色名}.activated:
     type: boolean
     check:

@@ -178,7 +178,7 @@ function testMiniGamePromptMarker() {
   assert(!prompt.includes('"requestId": "mini-combat"'), 'mini-game marker should not expose request id');
   assert(!prompt.includes('"protocol"'), 'mini-game marker should not expose protocol internals');
   assert(prompt.includes('"suggestedJsonPatch"'), 'mini-game marker should include suggested patch');
-  assert(prompt.includes('交锋点结算'), 'mini-game marker should include compact summary');
+  assert(!prompt.includes('"summary"'), 'mini-game marker should not expose summary text');
   assert(!logger.generateAIPrompt({ startingChips: 1000, endingChips: 1100 }).includes('<ACE0_COMBAT_SETTLEMENT>'), 'ordinary mini-game prompt should not include settlement marker');
 }
 
@@ -214,8 +214,83 @@ function testTexasPromptMarker() {
   assert(!prompt.includes('"requestId": "texas-combat"'), 'texas marker should not expose request id');
   assert(!prompt.includes('"fundsDeltaGold"'), 'texas marker should not expose intermediate fields');
   assert(prompt.includes('/hero/funds'), 'texas marker should include funds patch');
-  assert(prompt.includes('资金 +8 金弗'), 'texas marker should include compact funds summary');
+  assert(!prompt.includes('"summary"'), 'texas marker should not expose summary text');
   assert(!logger.generateAIPrompt({ ...context, ace0Combat: null }).includes('<ACE0_COMBAT_SETTLEMENT>'), 'ordinary texas prompt should not include settlement marker');
+}
+
+function testTexasPromptMarkerUsesSessionNet() {
+  const sandbox = createBrowserSandbox();
+  runRepoFile(sandbox, 'games/shared/combat-settlement.js');
+  runRepoFile(sandbox, 'games/texasholdem/texas-holdem/utils/game-logger.js');
+  const logger = new sandbox.GameLogger();
+  logger.roundHistory = [
+    {
+      round: 1,
+      entries: [{ type: 'RESULT', message: 'Hero wins hand 1', narrativeWeight: 2 }],
+      context: {
+        players: [{ name: 'Hero', chips: 1100 }, { name: 'Boss', chips: 900 }],
+        playerNames: ['Hero', 'Boss'],
+        initialChips: 1000,
+        startingChips: 1000,
+        endingChips: 1100,
+        fundsDelta: 100,
+        smallBlind: 10,
+        bigBlind: 20,
+        ace0Combat: {
+          requestId: 'texas-combat-session',
+          requestIndex: 1,
+          level: 1,
+          kind: 'skirmish',
+          stakeGold: 10
+        }
+      }
+    },
+    {
+      round: 2,
+      entries: [{ type: 'RESULT', message: 'Hero loses hand 2', narrativeWeight: 2 }],
+      context: {
+        players: [{ name: 'Hero', chips: 300 }, { name: 'Boss', chips: 1700 }],
+        playerNames: ['Hero', 'Boss'],
+        initialChips: 1000,
+        startingChips: 1100,
+        endingChips: 300,
+        fundsDelta: -800,
+        smallBlind: 10,
+        bigBlind: 20,
+        ace0Combat: {
+          requestId: 'texas-combat-session',
+          requestIndex: 1,
+          level: 1,
+          kind: 'skirmish',
+          stakeGold: 10
+        }
+      }
+    }
+  ];
+  logger.entries = [{ type: 'RESULT', message: 'Hero wins final hand', narrativeWeight: 3 }];
+  const context = {
+    playerNames: ['Hero', 'Boss'],
+    players: [{ name: 'Hero', chips: 1200 }, { name: 'Boss', chips: 800 }],
+    initialChips: 1000,
+    startingChips: 300,
+    endingChips: 1200,
+    smallBlind: 10,
+    bigBlind: 20,
+    fundsDelta: 900,
+    ace0Combat: {
+      requestId: 'texas-combat-session',
+      requestIndex: 1,
+      level: 1,
+      kind: 'skirmish',
+      stakeGold: 10
+    }
+  };
+  const prompt = logger.generateAIPrompt(context);
+  assert(prompt.includes('<ACE0_COMBAT_SETTLEMENT>'), 'multi-round texas prompt should include settlement marker');
+  assert(prompt.includes('"path": "/hero/funds"'), 'multi-round marker should include funds patch');
+  assert(prompt.includes('"value": 2'), 'multi-round marker should settle session net +200 silver, not last hand +900 silver');
+  assert(prompt.includes('"value": "minor_victory"'), 'multi-round outcome should classify session net, not last hand');
+  assert(!prompt.includes('"value": 9'), 'multi-round marker should not use only final hand funds');
 }
 
 function main() {
@@ -225,6 +300,7 @@ function main() {
   testActiveCombatTokenPromptInjection();
   testMiniGamePromptMarker();
   testTexasPromptMarker();
+  testTexasPromptMarkerUsesSessionNet();
   console.log('combat-loop-smoke ok');
 }
 

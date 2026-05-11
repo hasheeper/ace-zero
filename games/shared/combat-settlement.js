@@ -102,27 +102,6 @@
     return { total: total, delta: delta, max: max };
   }
 
-  function buildRewardText(delta) {
-    var parts = [];
-    Object.keys(delta || {}).forEach(function (key) {
-      if (delta[key] > 0) parts.push(key + '+' + delta[key]);
-    });
-    return parts.length ? parts.join(' / ') : '无返还点数';
-  }
-
-  function formatSignedGold(value) {
-    var n = roundGold(value);
-    if (n > 0) return '+' + n;
-    return String(n);
-  }
-
-  function buildSummary(gameName, outcome, level, fundsDeltaGold, rewardInfo) {
-    var title = gameName || 'Combat';
-    return '交锋点结算：' + title + ' level ' + level + ' ' + outcome.label
-      + '；资金 ' + formatSignedGold(fundsDeltaGold) + ' 金弗'
-      + '；返还 ' + buildRewardText(rewardInfo.delta) + '。';
-  }
-
   function buildSuggestedJsonPatch(settlement) {
     var patch = [];
     if (settlement.fundsDeltaGold !== 0) {
@@ -151,7 +130,6 @@
     var outcome = classifyOutcome(netChips, stakeChips);
     var rewardInfo = buildRewardDelta(combat.level, outcome.key);
     var fundsDeltaGold = silverToGold(netChips);
-    var summary = buildSummary(input.gameName || input.gameId || 'Combat', outcome, combat.level, fundsDeltaGold, rewardInfo);
     var settlement = {
       protocol: PROTOCOL,
       requestId: combat.requestId,
@@ -170,9 +148,7 @@
       outcome: outcome,
       rewardPoints: rewardInfo.total,
       rewardMax: rewardInfo.max,
-      rewardDelta: rewardInfo.delta,
-      summary: summary,
-      llmInstruction: 'If you use this combat settlement, copy suggestedJsonPatch into <UpdateVariable><JSONPatch> after the narrative replay. Do not invent different combat rewards.'
+      rewardDelta: rewardInfo.delta
     };
     settlement.suggestedJsonPatch = buildSuggestedJsonPatch(settlement);
     return settlement;
@@ -181,21 +157,45 @@
   function buildMarkerPayload(settlement) {
     if (!settlement || typeof settlement !== 'object') return null;
     return {
-      summary: settlement.summary,
       suggestedJsonPatch: settlement.suggestedJsonPatch || []
     };
+  }
+
+  function getRoundNetChips(context) {
+    context = context || {};
+    var explicit = Number(context.fundsDelta);
+    if (Number.isFinite(explicit)) return Math.round(explicit);
+    var fundsUp = Number(context.fundsUp);
+    var fundsDown = Number(context.fundsDown);
+    if (Number.isFinite(fundsUp) && fundsUp > 0) return Math.round(fundsUp);
+    if (Number.isFinite(fundsDown) && fundsDown > 0) return -Math.round(fundsDown);
+    var starting = Number(context.startingChips != null ? context.startingChips : context.initialChips);
+    var ending = Number(context.endingChips);
+    if (Number.isFinite(starting) && Number.isFinite(ending)) return Math.round(ending - starting);
+    return 0;
   }
 
   function buildSettlementFromSession(input) {
     input = input || {};
     var rounds = Array.isArray(input.rounds) ? input.rounds : [];
     var chosen = null;
+    var firstContext = null;
+    var lastContext = null;
+    var totalNetChips = 0;
+    var hasRoundContext = false;
     for (var i = rounds.length - 1; i >= 0; i--) {
       var ctx = rounds[i] && rounds[i].context;
-      if (ctx && ctx.ace0Combat) {
-        chosen = ctx;
-        break;
-      }
+      if (!ctx) continue;
+      if (!lastContext) lastContext = ctx;
+      firstContext = ctx;
+      totalNetChips += getRoundNetChips(ctx);
+      hasRoundContext = true;
+      if (ctx.ace0Combat) chosen = ctx;
+    }
+    if (!hasRoundContext && input.context) {
+      firstContext = input.context;
+      lastContext = input.context;
+      totalNetChips = getRoundNetChips(input.context);
     }
     if (!chosen && input.context && input.context.ace0Combat) chosen = input.context;
     if (!chosen) return null;
@@ -203,10 +203,10 @@
       ace0Combat: chosen.ace0Combat,
       gameId: input.gameId || chosen.gameId || '',
       gameName: input.gameName || chosen.gameName || '',
-      startingChips: chosen.startingChips != null ? chosen.startingChips : chosen.initialChips,
-      initialChips: chosen.initialChips,
-      endingChips: chosen.endingChips,
-      netChips: chosen.fundsDelta,
+      startingChips: firstContext && firstContext.startingChips != null ? firstContext.startingChips : firstContext && firstContext.initialChips,
+      initialChips: firstContext && firstContext.initialChips,
+      endingChips: lastContext && lastContext.endingChips,
+      netChips: totalNetChips,
       resultText: chosen.resultText
     });
   }

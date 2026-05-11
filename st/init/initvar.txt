@@ -141,15 +141,15 @@ world:
     route_history:
       - node1-entry
     limited:
-      combat: 1
-      rest: 1
-      asset: 1
-      vision: 1
-    reserve:
       combat: 0
       rest: 0
       asset: 0
       vision: 0
+    reserve:
+      combat: 1
+      rest: 1
+      asset: 1
+      vision: 1
     reserve_progress:
       combat: 0
       rest: 0
