@@ -624,6 +624,19 @@ function makeDefaultActVisionState() {
   };
 }
 
+function makeDefaultActEventTree() {
+  return {
+    nodeGoals: {
+      current: { goal: '', tendency: '' },
+      next: { goal: '', tendency: '' }
+    },
+    phaseWindow: {
+      nodeId: '',
+      phases: []
+    }
+  };
+}
+
 function makeDefaultActState() {
   return {
     id: 'chapter0_exchange',
@@ -639,6 +652,13 @@ function makeDefaultActState() {
     phase_index: 0,
     stage: 'executing',
     phase_advance: 0,
+    phasePlanLock: {
+      nodeId: '',
+      nodeIndex: 0,
+      locked: false,
+      confirmedPhaseIndex: 0
+    },
+    eventTree: makeDefaultActEventTree(),
     controlledNodes: {},
     vision: makeDefaultActVisionState(),
     resourceSpent: makeDefaultActResourceCounts(0),
@@ -693,6 +713,63 @@ const ActVisionStateSchema = z.object({
   pendingReplace: z.any().nullable().default(null)
 }).default(makeDefaultActVisionState());
 
+const ActPhasePlanLockSchema = z.object({
+  nodeId: z.string().transform(v => normalizeTrimmedString(v, '')).default(''),
+  nodeIndex: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
+  locked: z.coerce.boolean().default(false),
+  confirmed: z.coerce.boolean().default(false).optional(),
+  confirmedPhaseIndex: z.coerce.number().transform(v => Math.max(0, Math.min(3, Math.round(v)))).default(0)
+}).default({
+  nodeId: '',
+  nodeIndex: 0,
+  locked: false,
+  confirmedPhaseIndex: 0
+}).transform(v => ({
+  nodeId: v.nodeId,
+  nodeIndex: v.nodeIndex,
+  locked: v.locked === true || v.confirmed === true,
+  confirmedPhaseIndex: v.confirmedPhaseIndex
+}));
+
+function normalizeActEventTree(value, currentNodeId = '') {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const goals = source.nodeGoals && typeof source.nodeGoals === 'object' && !Array.isArray(source.nodeGoals)
+    ? source.nodeGoals
+    : {};
+  const normalizeGoal = (goalInput) => {
+    const goalSource = goalInput && typeof goalInput === 'object' && !Array.isArray(goalInput) ? goalInput : {};
+    return {
+      goal: normalizeTrimmedString(goalSource.goal, '').slice(0, 180),
+      tendency: normalizeTrimmedString(goalSource.tendency, '').slice(0, 120)
+    };
+  };
+  const rawWindow = source.phaseWindow && typeof source.phaseWindow === 'object' && !Array.isArray(source.phaseWindow)
+    ? source.phaseWindow
+    : {};
+  const windowNodeId = normalizeTrimmedString(rawWindow.nodeId, '');
+  const keepWindow = !currentNodeId || !windowNodeId || windowNodeId === currentNodeId;
+  const phases = keepWindow && Array.isArray(rawWindow.phases)
+    ? rawWindow.phases.slice(0, 4).map((item, index) => {
+        const phaseSource = item && typeof item === 'object' && !Array.isArray(item) ? item : {};
+        return {
+          index: Math.max(0, Math.min(3, Math.round(Number(phaseSource.index) || index))),
+          goal: normalizeTrimmedString(phaseSource.goal, '').slice(0, 160),
+          event: normalizeTrimmedString(phaseSource.event, '').slice(0, 160)
+        };
+      })
+    : [];
+  return {
+    nodeGoals: {
+      current: normalizeGoal(goals.current),
+      next: normalizeGoal(goals.next)
+    },
+    phaseWindow: {
+      nodeId: keepWindow ? windowNodeId : '',
+      phases
+    }
+  };
+}
+
 const WorldActSchema = z.object({
   id: z.string().transform(v => normalizeTrimmedString(v, 'chapter0_exchange')).default('chapter0_exchange'),
   seed: z.string().transform(v => normalizeTrimmedString(v, 'AUTO')).default('AUTO'),
@@ -707,6 +784,8 @@ const WorldActSchema = z.object({
   phase_index: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
   stage: z.string().transform(v => normalizeLowerEnumValue(v, ACT_STAGE_VALUES, 'executing')).default('executing'),
   phase_advance: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
+  phasePlanLock: ActPhasePlanLockSchema,
+  eventTree: z.record(z.string(), z.any()).default(makeDefaultActEventTree()).transform(v => normalizeActEventTree(v)),
   controlledNodes: z.record(z.string(), z.any()).default({}),
   vision: ActVisionStateSchema,
   resourceSpent: ActResourceCountsSchema,
@@ -726,10 +805,13 @@ const WorldActSchema = z.object({
   act.phase_index = Math.max(0, Math.min(4, Math.round(Number(act.phase_index) || 0)));
   act.phase_advance = Math.max(0, Math.round(Number(act.phase_advance) || 0));
   act.stage = normalizeLowerEnumValue(act.stage, ACT_STAGE_VALUES, 'executing');
+  act.phasePlanLock = ActPhasePlanLockSchema.parse(act.phasePlanLock);
 
   act.route_history = Array.isArray(act.route_history)
     ? act.route_history.map(value => normalizeTrimmedString(value, '')).filter(Boolean)
     : [];
+  const currentActNodeId = act.route_history[Math.max(0, act.nodeIndex - 1)] || act.route_history[act.route_history.length - 1] || '';
+  act.eventTree = normalizeActEventTree(act.eventTree, currentActNodeId);
 
   act.limited = ActResourceCountsSchema.parse(act.limited);
   act.reserve = ActResourceCountsSchema.parse(act.reserve);

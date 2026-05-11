@@ -86,6 +86,8 @@
     income_progress: { combat: 0, rest: 0, asset: 0, vision: 0 },
     phase_slots: [null, null, null, null],
     phase_index: 0,
+    phasePlanLock: { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0 },
+    eventTree: { nodeGoals: { current: { goal: '', tendency: '' }, next: { goal: '', tendency: '' } }, phaseWindow: { nodeId: '', phases: [] } },
     // 本章已去掉 planning（编排相）——玩家通过 Dashboard 在 executing 过程中随时排/改未来相位的 slot。
     stage: 'executing',
     phase_advance: 0,

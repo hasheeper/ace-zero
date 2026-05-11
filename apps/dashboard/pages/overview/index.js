@@ -129,6 +129,7 @@ function createPlannerRuntimeContext() {
         getNodeTemplate,
         getSelectableNodeIds,
         getDefaultPresentNodeId,
+        isPhasePlanConfirmedForCurrentNode,
         normalizeResourceKey,
         resourceTypeMap: RESOURCE_TYPE_MAP,
         setCurrentFocusNodeId(nextNodeId) {
@@ -406,6 +407,8 @@ function createExecutionRuntimeContext() {
             phase_index: 0,
             stage: 'executing',
             phase_advance: 0,
+            phasePlanLock: { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0 },
+            eventTree: { nodeGoals: { current: { goal: '', tendency: '' }, next: { goal: '', tendency: '' } }, phaseWindow: { nodeId: '', phases: [] } },
             controlledNodes: {},
             vision: { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null },
             resourceSpent: createEmptyActResourceCounts(0),
@@ -693,6 +696,35 @@ function createExecutionRuntimeContext() {
             }
             return [slotId, token];
         }));
+    }
+
+    function normalizePhasePlanLock(rawLock) {
+        const source = rawLock && typeof rawLock === 'object' && !Array.isArray(rawLock) ? rawLock : {};
+        return {
+            nodeId: typeof source.nodeId === 'string' ? source.nodeId.trim() : '',
+            nodeIndex: Math.max(0, Math.round(Number(source.nodeIndex) || 0)),
+            locked: source.locked === true || source.confirmed === true,
+            confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0)))
+        };
+    }
+
+    function isPhasePlanConfirmedForCurrentNode() {
+        const lock = normalizePhasePlanLock(appState.phasePlanLock);
+        return lock.locked === true
+            && lock.nodeId === appState.currentNodeId
+            && lock.nodeIndex === appState.currentNodeIndex;
+    }
+
+    function getPhasePlanLockForCommit() {
+        const lock = normalizePhasePlanLock(appState.phasePlanLock);
+        if (
+            lock.locked === true
+            && lock.nodeId === appState.currentNodeId
+            && lock.nodeIndex === appState.currentNodeIndex
+        ) {
+            return lock;
+        }
+        return { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0 };
     }
 
     function normalizeActStage(value) {
@@ -1019,6 +1051,7 @@ function createExecutionRuntimeContext() {
             reserve: normalizeActResourceCounts(actState.reserve)[key]
         }]));
         appState.phaseSlots = normalizeActPhaseSlots(actState.phase_slots);
+        appState.phasePlanLock = normalizePhasePlanLock(actState.phasePlanLock);
         if (nextOfferIdentity && nextOfferIdentity !== previousOfferIdentity && canOpenPlannerDrawer()) {
             appState.drawerOpen = true;
             setPlannerPage('asset');
@@ -1099,6 +1132,8 @@ function createExecutionRuntimeContext() {
             // 本章已去除 planning——非选路即执行。
             stage: appState.awaitingRouteChoice ? 'route' : 'executing',
             phase_advance: 0,
+            phasePlanLock: getPhasePlanLockForCommit(),
+            eventTree: deepCloneValue(currentActState.eventTree || { nodeGoals: { current: { goal: '', tendency: '' }, next: { goal: '', tendency: '' } }, phaseWindow: { nodeId: '', phases: [] } }),
             controlledNodes: deepCloneValue(currentActState.controlledNodes || {}),
             vision: (() => {
                 const vision = deepCloneValue(currentActState.vision || { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null });
@@ -1341,6 +1376,31 @@ function createExecutionRuntimeContext() {
             syncState.errorText = 'No parent/top host window available for commit.';
         }
         refreshPlannerUI();
+    }
+
+    function confirmCurrentNodePhasePlan() {
+        if (!canUseInteractivePlannerControls()) return false;
+        if (isRouteSelectionActive()) return false;
+        if (isPhasePlanConfirmedForCurrentNode()) return false;
+        appState.phasePlanLock = {
+            nodeId: appState.currentNodeId,
+            nodeIndex: appState.currentNodeIndex,
+            locked: true,
+            confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(appState.currentPhaseIndex) || 0)))
+        };
+        resetSelection();
+        closeRestTintPopup();
+        syncState.dirty = true;
+        syncState.saving = false;
+        syncState.statusText = '本节点编排已确认';
+        syncState.errorText = '';
+        if (syncState.autoCommitTimer) {
+            window.clearTimeout(syncState.autoCommitTimer);
+            syncState.autoCommitTimer = null;
+        }
+        refreshPlannerUI();
+        commitActStateToHost();
+        return true;
     }
 
     function handleActHostMessage(event) {
@@ -2241,11 +2301,12 @@ function createExecutionRuntimeContext() {
         }
         if (!canUseInteractivePlannerControls()) return false;
         if (appState.awaitingRouteChoice) return false;
+        if (isPhasePlanConfirmedForCurrentNode()) return false;
         const phaseIndex = getPhaseSlotIndex(slotId);
         if (phaseIndex < 0) return false;
         if (getFixedPhaseKind(getCurrentNodeData().presentNode, phaseIndex)) return false;
         if (getEncounterMarkerForPhase(getCurrentNodeData().presentNode, phaseIndex)) return false;
-        return phaseIndex > appState.currentPhaseIndex;
+        return phaseIndex >= appState.currentPhaseIndex;
     }
 
     function getPreferredSourceForKey(key) {
@@ -2410,6 +2471,7 @@ function createExecutionRuntimeContext() {
             getFixedPhaseKind,
             getDisplayTokenForPhase,
             getCurrentVisionFixedPhasePrompt,
+            isPhasePlanConfirmedForCurrentNode,
             buildEncounterFixedGlyphMarkup,
             getFixedPhaseMarker,
             escapePartyHtml,
@@ -2895,6 +2957,13 @@ function createExecutionRuntimeContext() {
     }
 
     sysTopbar.addEventListener('pointerdown', (e) => {
+        const confirmPlanButton = e.target.closest('#confirm-phase-plan');
+        if (confirmPlanButton) {
+            e.preventDefault();
+            confirmCurrentNodePhasePlan();
+            return;
+        }
+
         const commitActButton = e.target.closest('#commit-act-state');
         if (commitActButton) {
             e.preventDefault();
@@ -2932,6 +3001,7 @@ function createExecutionRuntimeContext() {
         if (editModeButton) {
             e.preventDefault();
             e.stopPropagation();
+            if (isPhasePlanConfirmedForCurrentNode()) return;
             const nextMode = normalizePlannerEditMode(editModeButton.dataset.plannerEditMode);
             setPlannerEditMode(nextMode);
             if (nextMode === 'remove') {
@@ -2962,7 +3032,8 @@ function createExecutionRuntimeContext() {
             }
             if (normalizePlannerEditMode(appState.plannerEditMode) === 'remove') setPlannerEditMode('add');
             if (RESOURCE_KEYS.includes(requestedTab)) {
-                if (getTotalInventoryCount(requestedTab) > 0) selectInventoryToken(requestedTab);
+                if (isPhasePlanConfirmedForCurrentNode()) resetSelection();
+                else if (getTotalInventoryCount(requestedTab) > 0) selectInventoryToken(requestedTab);
                 else resetSelection();
             }
             setPlannerPage(requestedTab);
@@ -2997,6 +3068,14 @@ function createExecutionRuntimeContext() {
     });
 
     phaseBarMount.addEventListener('pointerdown', (e) => {
+        const confirmPlanButton = e.target.closest('#confirm-phase-plan');
+        if (confirmPlanButton) {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmCurrentNodePhasePlan();
+            return;
+        }
+
         const commitActButton = e.target.closest('#commit-act-state');
         if (commitActButton) {
             e.preventDefault();
@@ -3037,7 +3116,7 @@ function createExecutionRuntimeContext() {
     });
 
     document.addEventListener('click', (e) => {
-        const keepAction = e.target.closest('#toggle-planner, #commit-act-state, .route-option-btn, [data-debug-action], [data-vision-phase-action], [data-planner-tab], [data-planner-edit-mode], [data-asset-action]');
+        const keepAction = e.target.closest('#toggle-planner, #confirm-phase-plan, #commit-act-state, .route-option-btn, [data-debug-action], [data-vision-phase-action], [data-planner-tab], [data-planner-edit-mode], [data-asset-action]');
         if (keepAction) return;
 
         const keep = e.target.closest('.token-dispenser, .phase-core.drop-zone, .mounted-token, #inventory, .view, .asset-layout, .az-node');

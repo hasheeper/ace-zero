@@ -392,6 +392,53 @@
     });
   }
 
+  function normalizePhasePlanLock(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+      nodeId: normalizeTrimmedString(source.nodeId, ''),
+      nodeIndex: Math.max(0, Math.round(Number(source.nodeIndex) || 0)),
+      locked: source.locked === true || source.confirmed === true,
+      confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0)))
+    };
+  }
+
+  function normalizeActEventTree(value, currentNodeId = '') {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const goals = source.nodeGoals && typeof source.nodeGoals === 'object' && !Array.isArray(source.nodeGoals) ? source.nodeGoals : {};
+    const normalizeGoal = (input) => {
+      const goalSource = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+      return {
+        goal: normalizeTrimmedString(goalSource.goal, '').slice(0, 180),
+        tendency: normalizeTrimmedString(goalSource.tendency, '').slice(0, 120)
+      };
+    };
+    const rawWindow = source.phaseWindow && typeof source.phaseWindow === 'object' && !Array.isArray(source.phaseWindow)
+      ? source.phaseWindow
+      : {};
+    const windowNodeId = normalizeTrimmedString(rawWindow.nodeId, '');
+    const keepWindow = !currentNodeId || !windowNodeId || windowNodeId === currentNodeId;
+    const phases = keepWindow && Array.isArray(rawWindow.phases)
+      ? rawWindow.phases.slice(0, 4).map((item, index) => {
+          const phaseSource = item && typeof item === 'object' && !Array.isArray(item) ? item : {};
+          return {
+            index: Math.max(0, Math.min(3, Math.round(Number(phaseSource.index) || index))),
+            goal: normalizeTrimmedString(phaseSource.goal, '').slice(0, 160),
+            event: normalizeTrimmedString(phaseSource.event, '').slice(0, 160)
+          };
+        })
+      : [];
+    return {
+      nodeGoals: {
+        current: normalizeGoal(goals.current),
+        next: normalizeGoal(goals.next)
+      },
+      phaseWindow: {
+        nodeId: keepWindow ? windowNodeId : '',
+        phases
+      }
+    };
+  }
+
   function getChapterEntryNodeId(config) {
     const firstIndexedNode = getChapterNodesByIndex(config)?.[0]?.[1]?.[0]?.[0];
     if (typeof firstIndexedNode === 'string' && firstIndexedNode.trim()) return firstIndexedNode.trim();
@@ -416,7 +463,7 @@
       .map((value) => normalizeTrimmedString(value, ''))
       .filter(Boolean);
 
-    return {
+    const nextState = {
       ...deepClone(DEFAULT_WORLD_ACT),
       id: chapterId,
       seed: normalizeTrimmedString(raw.seed, normalizeTrimmedString(runtimeConfig.seed, DEFAULT_WORLD_ACT.seed)),
@@ -430,6 +477,8 @@
       phase_slots: normalizePhaseSlots(raw.phase_slots || raw.phaseSlots),
       phase_index: Math.max(0, Math.min(4, Math.round(Number(raw.phase_index) || 0))),
       phase_advance: Math.max(0, Math.min(4, Math.round(Number(raw.phase_advance) || 0))),
+      phasePlanLock: normalizePhasePlanLock(raw.phasePlanLock),
+      eventTree: normalizeActEventTree(raw.eventTree),
       stage: normalizeActStage(raw.stage),
       controlledNodes: (raw.controlledNodes && typeof raw.controlledNodes === 'object' && !Array.isArray(raw.controlledNodes))
         ? deepClone(raw.controlledNodes)
@@ -442,6 +491,9 @@
       resolutionHistory: normalizeResolutionHistory(raw.resolutionHistory),
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(raw.narrativeTension) || 0)))
     };
+    const currentNodeId = nextState.route_history[Math.max(0, nextState.nodeIndex - 1)] || nextState.route_history[nextState.route_history.length - 1] || '';
+    nextState.eventTree = normalizeActEventTree(nextState.eventTree, currentNodeId);
+    return nextState;
   }
 
   function normalizeCompletionTransition(value) {
@@ -503,7 +555,7 @@
       ? source.route_history.map((value) => normalizeTrimmedString(value, '')).filter(Boolean)
       : [];
 
-    return {
+    const normalized = {
       id: normalizeTrimmedString(source.id, base.id),
       seed: normalizeTrimmedString(source.seed, base.seed),
       nodeIndex: Math.max(1, Math.round(Number(source.nodeIndex) || base.nodeIndex)),
@@ -516,6 +568,8 @@
       phase_slots: normalizePhaseSlots(source.phase_slots),
       phase_index: Math.max(0, Math.min(4, Math.round(Number(source.phase_index) || base.phase_index))),
       phase_advance: Math.max(0, Math.min(4, Math.round(Number(source.phase_advance) || base.phase_advance))),
+      phasePlanLock: normalizePhasePlanLock(source.phasePlanLock || base.phasePlanLock),
+      eventTree: normalizeActEventTree(source.eventTree || base.eventTree),
       stage: normalizeActStage(source.stage),
       controlledNodes: (source.controlledNodes && typeof source.controlledNodes === 'object' && !Array.isArray(source.controlledNodes))
         ? deepClone(source.controlledNodes)
@@ -528,6 +582,9 @@
       resolutionHistory: normalizeResolutionHistory(source.resolutionHistory),
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(source.narrativeTension) || base.narrativeTension || 0)))
     };
+    const currentNodeId = normalized.route_history[Math.max(0, normalized.nodeIndex - 1)] || normalized.route_history[normalized.route_history.length - 1] || '';
+    normalized.eventTree = normalizeActEventTree(normalized.eventTree, currentNodeId);
+    return normalized;
   }
 
   function normalizeActEffectList(list) {

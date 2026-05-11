@@ -216,6 +216,7 @@
             plannerPage: 'planner',
             plannerEditMode: 'add',
             plannerAddType: '',
+            phasePlanLock: { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0 },
             assetWarehouseOpen: false,
             restTintPopupSlotId: '',
             actPanelCollapsed: false,
@@ -250,6 +251,7 @@
                 saving: false,
                 pendingRequestId: '',
                 pendingTimer: null,
+                autoCommitTimer: null,
                 statusText: 'SYNCED TO MVU',
                 errorText: ''
             },

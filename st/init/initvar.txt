@@ -173,6 +173,22 @@ world:
     phase_index: 0
     stage: executing
     phase_advance: 0
+    phasePlanLock:
+      nodeId: ""
+      nodeIndex: 0
+      locked: false
+      confirmedPhaseIndex: 0
+    eventTree:
+      nodeGoals:
+        current:
+          goal: ""
+          tendency: ""
+        next:
+          goal: ""
+          tendency: ""
+      phaseWindow:
+        nodeId: ""
+        phases: []
     controlledNodes: {}
     vision:
       baseSight: 1

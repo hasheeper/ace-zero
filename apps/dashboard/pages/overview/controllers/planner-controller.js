@@ -94,6 +94,7 @@
     function setSelectedRestTint(tintKey) {
         const token = getSelectedRestSlotToken();
         if (!token) return false;
+        if (!canEditPhaseSlot(selectionState.slotId)) return false;
         const nextTint = normalizeRestTintKey(tintKey, 'neutral');
         const currentTint = normalizeRestTintKey(token.tint || token.controlType || token.targetKey, 'neutral');
         if (nextTint === currentTint) return true;

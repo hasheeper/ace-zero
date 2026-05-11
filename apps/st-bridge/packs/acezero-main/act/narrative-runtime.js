@@ -237,6 +237,93 @@ ${phaseLines.join('\n')}
     return flavorText ? `${heading}\n${flavorText}` : heading;
   }
 
+  function getNodePositionLabel(act, config) {
+    const nodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
+    const totalNodes = Math.max(1, Math.round(Number(config?.meta?.totalNodes) || 1));
+    if (nodeIndex <= 1) return '开局';
+    const ratio = nodeIndex / totalNodes;
+    if (ratio < 0.28) return '前期';
+    if (ratio < 0.68) return '中段';
+    if (ratio < 0.92) return '后期';
+    return '终盘';
+  }
+
+  function formatPhasePoint(slot) {
+    if (!slot || typeof slot !== 'object') return '无点';
+    const key = normalizeActResourceKey(slot.key, '');
+    if (!key) return '无点';
+    const amount = Math.max(1, Math.min(3, Math.round(Number(slot.amount) || 1)));
+    return `${key}点 x${amount}`;
+  }
+
+  function getPhaseWindowItem(eventTree, phaseIndex) {
+    const phases = Array.isArray(eventTree?.phaseWindow?.phases)
+      ? eventTree.phaseWindow.phases
+      : [];
+    return phases.find((item) => Math.max(0, Math.min(3, Math.round(Number(item?.index) || 0))) === phaseIndex) || null;
+  }
+
+  function buildStoryTendencyLine(act, eventTree, currentSlot) {
+    const explicit = normalizeTrimmedString(eventTree?.nodeGoals?.current?.tendency, '');
+    const key = currentSlot && typeof currentSlot.key === 'string' ? currentSlot.key : '';
+    const tokenHints = {
+      combat: '交锋 / 对抗 / 风险',
+      rest: '休整 / 关系 / 调整',
+      asset: '收益 / 资源 / 契机',
+      vision: '情报 / 选择 / 预兆'
+    };
+    const tokenHint = tokenHints[key] || '自然推进 / 场景变化';
+    const spent = act?.resourceSpent && typeof act.resourceSpent === 'object'
+      ? ACT_RESOURCE_KEYS
+          .map((resourceKey) => [resourceKey, Math.max(0, Math.round(Number(act.resourceSpent[resourceKey]) || 0))])
+          .filter(([, value]) => value > 0)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 2)
+          .map(([resourceKey]) => resourceKey)
+      : [];
+    return [explicit, tokenHint, spent.length ? `长期偏向: ${spent.join(' / ')}` : ''].filter(Boolean).join(' / ');
+  }
+
+  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot) {
+    const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
+    const nodeGoals = eventTree.nodeGoals && typeof eventTree.nodeGoals === 'object' ? eventTree.nodeGoals : {};
+    const currentGoal = normalizeTrimmedString(nodeGoals.current?.goal, '');
+    const nextGoal = normalizeTrimmedString(nodeGoals.next?.goal, '');
+    const windowNodeId = normalizeTrimmedString(eventTree.phaseWindow?.nodeId, '');
+    const hasCurrentWindow = windowNodeId === currentNodeId && Array.isArray(eventTree.phaseWindow?.phases) && eventTree.phaseWindow.phases.length > 0;
+    const tendency = buildStoryTendencyLine(act, eventTree, currentSlot);
+    const nodeLines = [
+      '[节点]',
+      `位置: ${getNodePositionLabel(act, config)}`,
+      `当前目标: ${currentGoal || '未规划'}`,
+      `下一节点目标: ${nextGoal || '未规划'}`,
+      `倾向: ${tendency}`
+    ];
+
+    const phaseLines = ['[事件树]'];
+    for (let index = 0; index < 4; index += 1) {
+      const item = hasCurrentWindow ? getPhaseWindowItem(eventTree, index) : null;
+      const label = index < phaseIndex ? '已完成' : (index === phaseIndex ? '当前进行' : '未来准备');
+      const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
+      const event = normalizeTrimmedString(item?.event, '');
+      const slot = Array.isArray(act?.phase_slots) ? act.phase_slots[index] : null;
+      const point = formatPhasePoint(slot);
+      phaseLines.push(`${label}: ${ACT_PHASE_LABELS[index]} - ${goal}${event ? ` / ${event}` : ''}（${point}）`);
+    }
+    if (!hasCurrentWindow) {
+      phaseLines.push('规划提示: 当前节点尚无 phaseWindow。请优先在 COT 中规划本节点四段小目标，再判断是否推进。');
+    }
+
+    const decisionLines = [
+      '[推进判断]',
+      '只有“当前进行”项已有实质结果时，才写 /world/act/phase_advance。',
+      '若正文现实已经偏离当前目标或四段小目标，可用最小 JSONPatch 更新 /world/act/eventTree/nodeGoals 或 /world/act/eventTree/phaseWindow。',
+      '下一节点只规划总目标，不规划下一节点四段细分；不要在普通剧情中改 phase_slots。'
+    ];
+
+    return [nodeLines.join('\n'), phaseLines.join('\n'), decisionLines.join('\n')].join('\n\n');
+  }
+
   function buildNarrativePromptContentFromDerived(derivedState) {
     if (!derivedState) return '';
 
@@ -291,10 +378,7 @@ ${phaseLines.join('\n')}
       } else if (resolved?.kind === 'flavor') {
         sections.push(renderFateFlavor(resolved.flavorText, phaseIndex, resolved.slotKey));
       }
-
-      if (stageGuides.executing) {
-        sections.push(`[阶段 · 执行相]\n${stageGuides.executing}`);
-      }
+      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot));
     }
 
     if (!sections.length) return '';

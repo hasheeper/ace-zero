@@ -2314,6 +2314,11 @@
             background: var(--gold-main);
             box-shadow: 0 0 14px var(--gold-glow);
         }
+        .planner-commit-btn.is-plan-locked {
+            border-color: rgba(58, 235, 200, 0.45);
+            color: var(--flow-up);
+            text-shadow: 0 0 8px rgba(58, 235, 200, 0.35);
+        }
         .planner-commit-btn:disabled:not(.is-saving) {
             opacity: 0.45;
             cursor: default;
@@ -2337,6 +2342,10 @@
         }
         .planner-sync-status.is-error {
             color: #ff8f8f;
+        }
+        .planner-sync-status.is-locked {
+            color: var(--flow-up);
+            text-shadow: 0 0 8px rgba(58, 235, 200, 0.35);
         }
         .toggle-planner-btn::before {
             content: '';

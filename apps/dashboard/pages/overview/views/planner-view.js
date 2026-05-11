@@ -635,6 +635,8 @@
         const plannerDrawerMount = document.getElementById('plannerDrawerMount');
         if (!plannerDrawerMount) return;
         const readonlyClass = canUseInteractivePlannerControls() ? '' : ' is-host-readonly';
+        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+        const lockClass = planLocked ? ' is-plan-locked' : '';
         const inventoryMarkup = appData.planner.inventory.map((item) => {
             const planned = getPlannedResourceState(item.key);
             return `
@@ -660,6 +662,7 @@
             inventory: appState.inventory,
             phaseSlots: appState.phaseSlots,
             selection: selectionState,
+            phasePlanLocked: typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode(),
             restTintPopupSlotId: appState.restTintPopupSlotId,
             nodeId: appState.currentNodeId,
             nodeIndex: appState.currentNodeIndex,
@@ -686,11 +689,11 @@
                     <div class="hub-title">
                         <span>PHASE DEPLOYMENT · RESOURCES</span>
                         <div class="planner-edit-mode" aria-label="Phase point edit mode">
-                            <button class="${editMode === 'remove' ? 'is-active' : ''}" type="button" data-planner-edit-mode="remove">-1</button>
-                            <button class="${editMode === 'add' ? 'is-active' : ''}" type="button" data-planner-edit-mode="add">+1</button>
+                            <button class="${editMode === 'remove' ? 'is-active' : ''}" type="button" data-planner-edit-mode="remove" ${planLocked ? 'disabled' : ''}>-1</button>
+                            <button class="${editMode === 'add' ? 'is-active' : ''}" type="button" data-planner-edit-mode="add" ${planLocked ? 'disabled' : ''}>+1</button>
                         </div>
                     </div>
-                    <div class="token-grid${readonlyClass}" id="inventory" aria-label="Phase resource hub">${inventoryMarkup}</div>
+                    <div class="token-grid${readonlyClass}${lockClass}" id="inventory" aria-label="Phase resource hub">${inventoryMarkup}</div>
                 </header>
             </section>
         `;
@@ -721,9 +724,13 @@
         const phaseBarMount = document.getElementById('phaseBarMount');
         if (!phaseBarMount) return;
         const readonlyClass = canUseInteractivePlannerControls() ? '' : ' is-host-readonly';
+        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+        const lockClass = planLocked ? ' is-plan-locked' : '';
         const plannerControlsMarkup = canOpenPlannerDrawer()
-            ? `<div class="planner-controls${readonlyClass}">
+            ? `<div class="planner-controls${readonlyClass}${lockClass}">
                     <button class="toggle-planner-btn${readonlyClass}" id="toggle-planner"><span class="btn-text" id="toggle-planner-label">${appData.planner.toggleClosedLabel.replace(/\s*\/\/$/, '')}</span></button>
+                    <button class="planner-commit-btn${lockClass}" id="confirm-phase-plan" type="button" ${planLocked ? 'disabled' : ''}>${planLocked ? 'PLAN LOCKED' : 'CONFIRM PLAN'}</button>
+                    <div class="planner-sync-status${planLocked ? ' is-locked' : ''}" id="planner-sync-status">${planLocked ? '本节点编排已确认' : ''}</div>
                 </div>`
             : `<div class="planner-controls${readonlyClass}"></div>`;
         const phaseSegments = appData.planner.phases.slice(0, -1).map((phase, index) => {
@@ -822,8 +829,10 @@ ${phaseSegments}
         if (!drawer) return;
         const activePage = getActivePlannerPage();
         const activeResourcePage = activePage === 'planner' ? '' : activePage;
+        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
         drawer.classList.toggle('is-hub-open', appState.drawerOpen);
         drawer.classList.toggle('is-expanded', appState.drawerOpen && Boolean(activeResourcePage));
+        drawer.classList.toggle('is-plan-locked', planLocked);
         drawer.classList.toggle('theme-combat', activeResourcePage === 'combat');
         drawer.classList.toggle('theme-rest', activeResourcePage === 'rest');
         drawer.classList.toggle('theme-asset', !activeResourcePage || activeResourcePage === 'asset');
@@ -839,6 +848,7 @@ ${phaseSegments}
             tokenEl.classList.toggle('is-empty', total <= 0 && !tokenEl.dataset.plannerTab);
             tokenEl.classList.toggle('is-active', activePage === item.key);
             tokenEl.classList.toggle('is-selected', selectionState.source === 'inventory' && selectionState.type === item.key);
+            tokenEl.classList.toggle('is-plan-locked', planLocked);
             const planned = getPlannedResourceState(item.key);
             tokenEl.classList.toggle('is-planned', planned.amount > 0);
             tokenEl.dataset.plannedAmount = String(planned.amount);
@@ -848,6 +858,7 @@ ${phaseSegments}
 
         document.querySelectorAll('[data-planner-edit-mode]').forEach((button) => {
             button.classList.toggle('is-active', normalizePlannerEditMode(button.dataset.plannerEditMode) === normalizePlannerEditMode(appState.plannerEditMode));
+            button.disabled = planLocked;
         });
 
         syncRestControlPanelDOM();
@@ -902,11 +913,19 @@ ${phaseSegments}
         const planningPhase = isPlanningPhase();
         const toggleButton = document.getElementById('toggle-planner');
         const toggleLabel = document.getElementById('toggle-planner-label');
+        const confirmButton = document.getElementById('confirm-phase-plan');
         const commitButton = document.getElementById('commit-act-state');
         const syncStatus = document.getElementById('planner-sync-status');
+        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
         if (toggleButton) toggleButton.classList.toggle('is-active', appState.drawerOpen);
         if (toggleLabel) {
             toggleLabel.textContent = (appState.drawerOpen ? appData.planner.toggleOpenLabel : appData.planner.toggleClosedLabel).replace(/\s*\/\/$/, '');
+        }
+        if (confirmButton) {
+            confirmButton.classList.toggle('is-plan-locked', planLocked);
+            confirmButton.classList.toggle('is-saving', syncState.saving);
+            confirmButton.disabled = planLocked || syncState.saving || !canUseInteractivePlannerControls();
+            confirmButton.textContent = planLocked ? 'PLAN LOCKED' : (syncState.saving ? 'SAVING' : 'CONFIRM PLAN');
         }
         if (commitButton) {
             commitButton.classList.toggle('is-dirty', syncState.dirty);
@@ -918,8 +937,11 @@ ${phaseSegments}
             syncStatus.className = 'planner-sync-status';
             if (syncState.errorText) syncStatus.classList.add('is-error');
             else if (syncState.saving) syncStatus.classList.add('is-saving');
+            else if (planLocked) syncStatus.classList.add('is-locked');
             else if (syncState.dirty) syncStatus.classList.add('is-dirty');
-            syncStatus.textContent = syncState.errorText || syncState.statusText;
+            syncStatus.textContent = syncState.errorText
+                || (syncState.saving ? syncState.statusText : '')
+                || (planLocked ? '本节点编排已确认' : syncState.statusText);
         }
 
         appData.planner.phases.slice(0, -1).forEach((phase, index) => {

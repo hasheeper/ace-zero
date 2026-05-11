@@ -157,6 +157,22 @@ const DEFAULT_WORLD_ACT = {
     phase_slots: [null, null, null, null],
     phase_index: 0,
     phase_advance: 0,
+    phasePlanLock: {
+      nodeId: '',
+      nodeIndex: 0,
+      locked: false,
+      confirmedPhaseIndex: 0
+    },
+    eventTree: {
+      nodeGoals: {
+        current: { goal: '', tendency: '' },
+        next: { goal: '', tendency: '' }
+      },
+      phaseWindow: {
+        nodeId: '',
+        phases: []
+      }
+    },
     stage: 'executing',
     controlledNodes: {},
     vision: {
@@ -386,7 +402,7 @@ const PROLOGUE_EXCHANGE_CHAPTER = {
   narrative: {
     title: 'ACT ROUTE',
     stageGuides: {
-      executing: '按当前节点、相位与已投入点数推进这一段。只有当事情真的有进展，才推进进度；如果只是闲聊、重复确认或没有状态变化，就不要推进。到了结局就果断收尾，不往下多写。',
+      executing: '',
       route: '进入选路相时，只在当前节点给出的候选路径里选定一路继续写。',
       complete: '章节完成时，收在整条路线的最终收束点上。'
     }

@@ -345,6 +345,53 @@
     };
   }
 
+  function normalizePhasePlanLock(raw) {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    return {
+      nodeId: normalizeTrimmedString(source.nodeId, ''),
+      nodeIndex: Math.max(0, Math.round(Number(source.nodeIndex) || 0)),
+      locked: source.locked === true || source.confirmed === true,
+      confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0)))
+    };
+  }
+
+  function normalizeActEventTree(raw, currentNodeId = '') {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const goals = source.nodeGoals && typeof source.nodeGoals === 'object' && !Array.isArray(source.nodeGoals) ? source.nodeGoals : {};
+    const normalizeGoal = (input) => {
+      const goalSource = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+      return {
+        goal: normalizeTrimmedString(goalSource.goal, '').slice(0, 180),
+        tendency: normalizeTrimmedString(goalSource.tendency, '').slice(0, 120)
+      };
+    };
+    const rawWindow = source.phaseWindow && typeof source.phaseWindow === 'object' && !Array.isArray(source.phaseWindow)
+      ? source.phaseWindow
+      : {};
+    const windowNodeId = normalizeTrimmedString(rawWindow.nodeId, '');
+    const keepWindow = !currentNodeId || !windowNodeId || windowNodeId === currentNodeId;
+    const phases = keepWindow && Array.isArray(rawWindow.phases)
+      ? rawWindow.phases.slice(0, 4).map((item, index) => {
+          const phaseSource = item && typeof item === 'object' && !Array.isArray(item) ? item : {};
+          return {
+            index: Math.max(0, Math.min(3, Math.round(Number(phaseSource.index) || index))),
+            goal: normalizeTrimmedString(phaseSource.goal, '').slice(0, 160),
+            event: normalizeTrimmedString(phaseSource.event, '').slice(0, 160)
+          };
+        })
+      : [];
+    return {
+      nodeGoals: {
+        current: normalizeGoal(goals.current),
+        next: normalizeGoal(goals.next)
+      },
+      phaseWindow: {
+        nodeId: keepWindow ? windowNodeId : '',
+        phases
+      }
+    };
+  }
+
   function getWorldActState(eraVars) {
     const world = getWorldState(eraVars);
     const moduleDefaultAct = getActDefaultStateFromModule(world?.act?.id || DEFAULT_WORLD_ACT.id);
@@ -354,7 +401,7 @@
       ? rawAct.route_history.map(value => normalizeTrimmedString(value, '')).filter(Boolean)
       : [];
 
-    return {
+    const normalized = {
       id: normalizeTrimmedString(rawAct.id, fallbackDefaultAct.id) || fallbackDefaultAct.id,
       seed: normalizeTrimmedString(rawAct.seed, fallbackDefaultAct.seed) || fallbackDefaultAct.seed,
       nodeIndex: Math.max(1, Math.round(Number(rawAct.nodeIndex) || fallbackDefaultAct.nodeIndex)),
@@ -398,6 +445,8 @@
       phase_index: Math.max(0, Math.min(4, Math.round(Number(rawAct.phase_index) || 0))),
       stage: normalizeActStage(rawAct.stage),
       phase_advance: Math.max(0, Math.round(Number(rawAct.phase_advance) || 0)),
+      phasePlanLock: normalizePhasePlanLock(rawAct.phasePlanLock),
+      eventTree: normalizeActEventTree(rawAct.eventTree),
       controlledNodes: (rawAct.controlledNodes && typeof rawAct.controlledNodes === 'object' && !Array.isArray(rawAct.controlledNodes))
         ? JSON.parse(JSON.stringify(rawAct.controlledNodes))
         : {},
@@ -432,6 +481,9 @@
         ? rawAct.pendingTransitionPrompt.trim()
         : ''
     };
+    const currentNodeId = normalized.route_history[Math.max(0, normalized.nodeIndex - 1)] || normalized.route_history[normalized.route_history.length - 1] || '';
+    normalized.eventTree = normalizeActEventTree(normalized.eventTree, currentNodeId);
+    return normalized;
   }
 
   function getActRuntimeConfig(actId) {
@@ -1035,6 +1087,8 @@
         tint: slot.key === 'rest' ? normalizeActResourceKey(slot.tint || slot.controlType || slot.targetKey, '') || undefined : undefined,
         tintSource: slot.tintSource === 'reserve' || slot.tintSource === 'limited' ? slot.tintSource : undefined
       } : null),
+      phasePlanLock: normalizePhasePlanLock(act.phasePlanLock),
+      eventTree: normalizeActEventTree(act.eventTree, currentNodeId),
       controlledNodes: act.controlledNodes && typeof act.controlledNodes === 'object' ? JSON.parse(JSON.stringify(act.controlledNodes)) : {},
       vision: normalizeActVisionState(act.vision),
       resourceSpent: normalizeActSnapshotCounts(act.resourceSpent),

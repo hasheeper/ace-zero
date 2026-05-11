@@ -99,6 +99,7 @@
 
     function canEditPhaseSlot(ctx, slotId) {
         if (ctx.appState.awaitingRouteChoice) return false;
+        if (typeof ctx.isPhasePlanConfirmedForCurrentNode === 'function' && ctx.isPhasePlanConfirmedForCurrentNode()) return false;
         const phaseIndex = getPhaseSlotIndex(ctx, slotId);
         if (phaseIndex < 0) return false;
         if (ctx.getFixedPhaseKind(ctx.getCurrentNodeData().presentNode, phaseIndex)) return false;
