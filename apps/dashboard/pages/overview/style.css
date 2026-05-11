@@ -2256,6 +2256,9 @@
             gap: 12px;
             z-index: 120;
         }
+        .planner-controls.is-plan-locked {
+            gap: 8px;
+        }
         .planner-controls.is-host-readonly {
             width: 220px;
             min-height: 33px;
@@ -2296,6 +2299,7 @@
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 3px;
+            white-space: nowrap;
             cursor: pointer;
             transition: all 0.24s ease;
             box-shadow: 0 -5px 15px rgba(0,0,0,0.55);
@@ -2315,13 +2319,22 @@
             box-shadow: 0 0 14px var(--gold-glow);
         }
         .planner-commit-btn.is-plan-locked {
-            border-color: rgba(58, 235, 200, 0.45);
+            height: 26px;
+            padding: 0 12px;
+            border-color: rgba(58, 235, 200, 0.38);
+            background: linear-gradient(180deg, rgba(18, 42, 39, 0.92) 0%, rgba(7, 13, 16, 0.96) 100%);
             color: var(--flow-up);
+            font-size: 9px;
+            letter-spacing: 1.8px;
             text-shadow: 0 0 8px rgba(58, 235, 200, 0.35);
+            box-shadow: 0 0 0 1px rgba(58, 235, 200, 0.08) inset, 0 -5px 15px rgba(0,0,0,0.55);
         }
         .planner-commit-btn:disabled:not(.is-saving) {
             opacity: 0.45;
             cursor: default;
+        }
+        .planner-commit-btn.is-plan-locked:disabled:not(.is-saving) {
+            opacity: 0.92;
         }
         .planner-sync-status {
             min-width: 180px;
@@ -2344,8 +2357,21 @@
             color: #ff8f8f;
         }
         .planner-sync-status.is-locked {
+            min-width: auto;
+            height: 26px;
+            display: inline-flex;
+            align-items: center;
+            padding: 0 10px;
+            border: 1px solid rgba(58, 235, 200, 0.24);
+            background: rgba(7, 13, 16, 0.9);
             color: var(--flow-up);
+            font-family: var(--font-title);
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            white-space: nowrap;
             text-shadow: 0 0 8px rgba(58, 235, 200, 0.35);
+            box-shadow: 0 0 0 1px rgba(58, 235, 200, 0.05) inset, 0 -5px 15px rgba(0,0,0,0.45);
         }
         .toggle-planner-btn::before {
             content: '';
