@@ -270,6 +270,14 @@ ${phaseLines.join('\n')}
     return phases.find((item) => Math.max(0, Math.min(3, Math.round(Number(item?.index) || 0))) === phaseIndex) || null;
   }
 
+  function normalizePhaseEventText(value) {
+    const text = normalizeTrimmedString(value, '');
+    if (!text) return '';
+    if (text === '自然推进') return '';
+    if (/^行动-[a-z]+(?:\s*[｜|].*)?$/i.test(text)) return '';
+    return text;
+  }
+
   function buildStoryTendencyLine(act, eventTree, currentSlot) {
     const explicit = normalizeTrimmedString(eventTree?.nodeGoals?.current?.tendency, '');
     const key = currentSlot && typeof currentSlot.key === 'string' ? currentSlot.key : '';
@@ -337,7 +345,7 @@ ${phaseLines.join('\n')}
       const item = hasCurrentWindow ? getPhaseWindowItem(eventTree, index) : null;
       const label = index < phaseIndex ? '已完成' : (index === phaseIndex ? '当前进行' : '未来准备');
       const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
-      const event = normalizeTrimmedString(item?.event, '');
+      const event = normalizePhaseEventText(item?.event);
       const slot = getEffectivePhaseSlot(act, index, currentNodeId);
       const action = formatPhaseAction(slot);
       const detail = `${ACT_PHASE_LABELS[index]} - ${goal}${event ? ` / ${event}` : ''}`;
@@ -371,7 +379,7 @@ ${phaseLines.join('\n')}
     return [0, 1, 2, 3].map((index) => {
       const item = getPhaseWindowItem(eventTree, index);
       const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
-      const event = normalizeTrimmedString(item?.event, '');
+      const event = normalizePhaseEventText(item?.event);
       const slot = Array.isArray(act?.phase_slots) ? act.phase_slots[index] : null;
       const detail = `${ACT_PHASE_LABELS[index] || `${index + 1}段`} - ${goal}${event ? ` / ${event}` : ''}`;
       return `${detail}｜${formatPhaseAction(slot)}`;

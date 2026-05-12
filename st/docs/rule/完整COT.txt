@@ -57,7 +57,7 @@ B.【战局思考】
    - 目前在对角色都有谁？参考 <ace0_hero_state>
    - 专属角色只能使用：{{user}}, RINO, SIA, POPPY, VV, TRIXIE, COTA, EULALIA, KAKO, KUZUHA
    - 是否需要副手：
-     * 有多角色 → 可指定副手
+     * 有其他队友 → 可指定副手
      * 只有一人 → 无副手
    - 确定 hero 字段：
      * `{ "vanguard": "XXX" }`
@@ -217,7 +217,7 @@ E.【语言协议锁】
    - 专属值 → `/hero/relationship/<角色名>/exclusive`
    - 一律优先用 `delta`
    - 无变化不写
-   - 数值必须和事件强度匹配（1~5），禁止跳变
+   - 必须和事件强度匹配（1~5）
 
 8. [最终执行]
    - 汇总所有变更
