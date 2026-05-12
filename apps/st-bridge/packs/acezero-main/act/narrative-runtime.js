@@ -326,8 +326,8 @@ ${phaseLines.join('\n')}
     const nodeLines = [
       '[节点]',
       `位置: ${getNodePositionLabel(act, config)}`,
-      `当前目标: ${currentGoal || '未规划'}`,
-      `下一节点目标: ${nextGoal || '未规划'}`,
+      `当前目标: ${currentGoal || '事件未规划'}`,
+      `下一节点目标: ${nextGoal || '事件未规划'}`,
       `倾向: ${tendency}`
     ];
 
@@ -348,7 +348,7 @@ ${phaseLines.join('\n')}
       }
     }
     if (!hasCurrentWindow) {
-      phaseLines.push('规划提示: 当前节点尚无 phaseWindow。请优先在 COT 中规划本节点四段小目标，再判断是否推进。');
+      phaseLines.push('未规划提示: 只有基本的行动指令，但当前节点尚无 phaseWindow。请规划本节点四段事件小目标。');
     }
 
     const currentLines = [
@@ -407,7 +407,7 @@ ${phaseLines.join('\n')}
       ...actionLines,
       '[本轮要求]',
       '必须先在 COT 中按以上四段行动建立或修正本节点 eventTree。',
-      '若当前目标、下一节点目标或 phaseWindow 缺失、空泛、偏离行动编排，本轮必须在 UpdateVariable 中更新 /world/act/eventTree。',
+      '若当前目标、下一节点目标或 phaseWindow 缺失（既未规划）、空泛、偏离行动编排，本轮必须在 UpdateVariable 中更新 /world/act/eventTree。',
       '</ace0_phase_plan_confirmed>'
     ].join('\n');
   }
