@@ -471,6 +471,7 @@ function normalizeCharacterEncounterState(value) {
       const status = ENCOUNTER_ACTIVE_QUEUE_STATUSES.includes(rawStatus) ? rawStatus : '';
       const targetNodeId = normalizeTrimmedString(item.targetNodeId || item.nodeId, '');
       if (!charKey || !status) return null;
+      const parsedPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
       return {
         id: normalizeTrimmedString(item.id, `enc:${charKey}:${type}:${targetNodeId || 'unplaced'}:${index}`),
         charKey,
@@ -478,7 +479,7 @@ function normalizeCharacterEncounterState(value) {
         status,
         targetNodeId,
         targetNodeIndex: Math.max(0, Math.round(Number(item.targetNodeIndex) || 0)),
-        targetPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0))),
+        targetPhaseIndex: type === 'first_meet' ? 1 : parsedPhaseIndex,
         createdNodeIndex: Math.max(0, Math.round(Number(item.createdNodeIndex) || 0)),
         expiresNodeIndex: Math.max(0, Math.round(Number(item.expiresNodeIndex) || 0)),
         priority: Math.round(Number(item.priority) || 0),

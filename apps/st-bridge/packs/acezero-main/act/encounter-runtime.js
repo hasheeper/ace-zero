@@ -22,6 +22,7 @@
         ENCOUNTER_TERMINAL_QUEUE_STATUSES = ['triggered', 'expired', 'cancelled']
       } = constants;
       const ENCOUNTER_RULES = data.ENCOUNTER_RULES || {};
+      const FIRST_MEET_PHASE_INDEX = 1;
       const {
         deepClone = (value) => (value == null ? value : JSON.parse(JSON.stringify(value))),
         normalizeTrimmedString = (value, fallback = '') => {
@@ -114,6 +115,7 @@
     const type = normalizeEncounterQueueType(rawItem.type);
     const status = normalizeEncounterQueueStatus(rawItem.status);
     const targetNodeId = normalizeTrimmedString(rawItem.targetNodeId || rawItem.nodeId, '');
+    const parsedPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(rawItem.targetPhaseIndex ?? rawItem.phaseIndex) || 0)));
     return {
       id: normalizeTrimmedString(rawItem.id, `enc:${charKey}:${type}:${targetNodeId || 'unplaced'}:${fallbackIndex}`),
       charKey,
@@ -121,7 +123,7 @@
       status,
       targetNodeId,
       targetNodeIndex: Math.max(0, Math.round(Number(rawItem.targetNodeIndex ?? rawItem.nodeIndex) || 0)),
-      targetPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(rawItem.targetPhaseIndex ?? rawItem.phaseIndex) || 0))),
+      targetPhaseIndex: type === 'first_meet' ? FIRST_MEET_PHASE_INDEX : parsedPhaseIndex,
       createdNodeIndex: Math.max(0, Math.round(Number(rawItem.createdNodeIndex) || 0)),
       expiresNodeIndex: Math.max(0, Math.round(Number(rawItem.expiresNodeIndex) || 0)),
       priority: Math.round(Number(rawItem.priority) || 0),
@@ -193,6 +195,25 @@
       const hint = normalizeTrimmedString(ENCOUNTER_RULES[charKey]?.firstMeetHint, '');
       if (!hint) return;
       hints[charKey] = hint;
+    });
+    return hints;
+  }
+
+  function getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId) {
+    const actState = normalizeActState(actStateInput);
+    const encounter = normalizeCharacterEncounterState(actState.characterEncounter);
+    const nodeId = normalizeTrimmedString(currentNodeId, '');
+    const hints = {};
+    encounter.queue.forEach((item) => {
+      if (item.type !== 'first_meet' || item.status !== 'placed') return;
+      if (item.targetNodeId !== nodeId) return;
+      const ruleHint = normalizeTrimmedString(ENCOUNTER_RULES[item.charKey]?.firstMeetHint, '');
+      const hint = normalizeTrimmedString(item.firstMeetHint, ruleHint);
+      hints[item.charKey] = {
+        charKey: item.charKey,
+        hint,
+        targetPhaseIndex: FIRST_MEET_PHASE_INDEX
+      };
     });
     return hints;
   }
@@ -607,6 +628,9 @@
   }
 
   function pickEncounterTargetPhaseIndex(actStateInput, requestInput, targetInput, options = {}) {
+    if (normalizeEncounterQueueType(requestInput?.type) === 'first_meet') {
+      return FIRST_MEET_PHASE_INDEX;
+    }
     if (Number.isFinite(Number(options.targetPhaseIndex))) {
       return Math.max(0, Math.min(3, Math.round(Number(options.targetPhaseIndex) || 0)));
     }
@@ -729,7 +753,7 @@
       status: 'queued',
       targetNodeId: '',
       targetNodeIndex: 0,
-      targetPhaseIndex: 0,
+      targetPhaseIndex: FIRST_MEET_PHASE_INDEX,
       createdNodeIndex: currentNodeIndex,
       expiresNodeIndex: 0,
       priority: Math.max(999, Math.round(Number(request.priority) || 0) + 50),
@@ -785,7 +809,7 @@
         status: 'queued',
         targetNodeId: '',
         targetNodeIndex: 0,
-        targetPhaseIndex: 0,
+        targetPhaseIndex: requestType === 'first_meet' ? FIRST_MEET_PHASE_INDEX : 0,
         createdNodeIndex: Math.max(1, Math.round(Number(act.nodeIndex) || 1)),
         expiresNodeIndex: 0,
         priority: shouldPreSignal ? candidate.priority + 25 : (charState.preSignalDone === true ? candidate.priority + 18 : candidate.priority),
@@ -955,7 +979,7 @@
         status: 'queued',
         targetNodeId: '',
         targetNodeIndex: 0,
-        targetPhaseIndex: 0,
+        targetPhaseIndex: FIRST_MEET_PHASE_INDEX,
         createdNodeIndex: Math.max(1, Math.round(Number(act.nodeIndex) || 1)),
         expiresNodeIndex: 0,
         priority: 999,
@@ -1038,6 +1062,7 @@
         normalizeCharacterEncounterState,
         getActiveEncounterCharacterKeys,
         getCharacterEncounterFirstMeetMap,
+        getCharacterEncounterNodeFirstMeetMap,
         getCharacterEncounterPreSignalMap,
         calculateEncounterSpentScore,
         getEncounterRuntimeGeo,

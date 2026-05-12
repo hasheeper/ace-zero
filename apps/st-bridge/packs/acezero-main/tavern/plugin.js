@@ -301,7 +301,7 @@
   function getRelationshipTierIndex(score) { return CHARACTER_RUNTIME.getRelationshipTierIndex(score); }
   async function getFullCharacterDoc(charKey, fallbackDoc = null) { return await CHARACTER_RUNTIME.getFullCharacterDoc(charKey, fallbackDoc); }
   async function getCharacterPromptDoc(charKey, state = {}, options = {}) { return await CHARACTER_RUNTIME.getCharacterPromptDoc(charKey, state, options); }
-  async function buildCharacterPromptInjections(eraVars, firstMeetKeys = null) { return await CHARACTER_RUNTIME.buildCharacterPromptInjections(eraVars, firstMeetKeys); }
+  async function buildCharacterPromptInjections(eraVars, forceMiniKeys = null) { return await CHARACTER_RUNTIME.buildCharacterPromptInjections(eraVars, forceMiniKeys); }
   function getHeroCast(hero) { return CHARACTER_RUNTIME.getHeroCast(hero); }
   function getHeroRoster(hero) { return CHARACTER_RUNTIME.getHeroRoster(hero); }
   function getCastNode(hero, charKey) { return CHARACTER_RUNTIME.getCastNode(hero, charKey); }
@@ -1005,13 +1005,16 @@
       const worldContext = buildWorldContextSummary(eraVars);
       const locationDoc = buildLocationDocSummary(eraVars);
       const activeFirstMeetHintsForTurn = getActiveFirstMeetHintsForCurrentPhase(eraVars, syncedState.derived);
-      const firstMeetKeysForTurn = Object.keys(activeFirstMeetHintsForTurn);
+      const nodeFirstMeetKeysForTurn = Object.keys(
+        syncedState.derived?.encounterNodeFirstMeetHints && typeof syncedState.derived.encounterNodeFirstMeetHints === 'object'
+          ? syncedState.derived.encounterNodeFirstMeetHints
+          : {}
+      );
       const preSignalHintsForTurn = syncedState.derived?.encounterPreSignalHints && typeof syncedState.derived.encounterPreSignalHints === 'object'
         ? syncedState.derived.encounterPreSignalHints
         : {};
-      const preSignalKeysForTurn = Object.keys(preSignalHintsForTurn);
 
-      const charDocPrompts = await buildCharacterPromptInjections(eraVars, firstMeetKeysForTurn);
+      const charDocPrompts = await buildCharacterPromptInjections(eraVars, nodeFirstMeetKeysForTurn);
       const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived, activeFirstMeetHintsForTurn, preSignalHintsForTurn);
       const expansionPrompts = buildExpansionPromptInjections(eraVars);
       const prompts = [];

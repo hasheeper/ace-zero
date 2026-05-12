@@ -323,7 +323,24 @@ ${phaseLines.join('\n')}
     return Array.isArray(act?.phase_slots) ? act.phase_slots[index] || null : null;
   }
 
-  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot) {
+  function getEncounterFirstMeetMarker(nodeFirstMeetHints, targetPhaseIndex) {
+    const source = nodeFirstMeetHints && typeof nodeFirstMeetHints === 'object' && !Array.isArray(nodeFirstMeetHints)
+      ? nodeFirstMeetHints
+      : {};
+    const keys = Object.entries(source)
+      .filter(([, value]) => {
+        const itemPhaseIndex = value && typeof value === 'object'
+          ? Math.max(0, Math.min(3, Math.round(Number(value.targetPhaseIndex) || 0)))
+          : 1;
+        return itemPhaseIndex === targetPhaseIndex;
+      })
+      .map(([rawKey, value]) => normalizeTrimmedString(value?.charKey || rawKey, '').toUpperCase())
+      .filter(Boolean)
+      .sort();
+    return keys.length ? `人物首见-${keys.join('/')}` : '';
+  }
+
+  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, nodeFirstMeetHints = {}) {
     const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
     const nodeGoals = eventTree.nodeGoals && typeof eventTree.nodeGoals === 'object' ? eventTree.nodeGoals : {};
     const currentGoal = normalizeTrimmedString(nodeGoals.current?.goal, '');
@@ -348,11 +365,12 @@ ${phaseLines.join('\n')}
       const event = normalizePhaseEventText(item?.event);
       const slot = getEffectivePhaseSlot(act, index, currentNodeId);
       const action = formatPhaseAction(slot);
+      const firstMeetMarker = getEncounterFirstMeetMarker(nodeFirstMeetHints, index);
       const detail = `${ACT_PHASE_LABELS[index]} - ${goal}${event ? ` / ${event}` : ''}`;
       const line = `${label}: ${detail}｜${action}`;
-      phaseLines.push(line);
+      phaseLines.push(firstMeetMarker ? `${line}｜${firstMeetMarker}` : line);
       if (index === phaseIndex) {
-        currentPhaseAction = `${detail}｜${action}`;
+        currentPhaseAction = `${detail}｜${action}${firstMeetMarker ? `｜${firstMeetMarker}` : ''}`;
       }
     }
     if (!hasCurrentWindow) {
@@ -407,6 +425,15 @@ ${phaseLines.join('\n')}
     }
 
     const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
+    const nodeGoals = eventTree.nodeGoals && typeof eventTree.nodeGoals === 'object' ? eventTree.nodeGoals : {};
+    const currentGoal = normalizeTrimmedString(nodeGoals.current?.goal, '');
+    const nextGoal = normalizeTrimmedString(nodeGoals.next?.goal, '');
+    const phaseWindow = eventTree.phaseWindow && typeof eventTree.phaseWindow === 'object' ? eventTree.phaseWindow : {};
+    const phases = Array.isArray(phaseWindow.phases) ? phaseWindow.phases : [];
+    const hasPlanGap = !currentGoal || !nextGoal || phases.length < 4 || [0, 1, 2, 3].some((index) => {
+      const item = getPhaseWindowItem(eventTree, index);
+      return !normalizeTrimmedString(item?.goal, '');
+    });
     const actionLines = buildConfirmedPlanActionLines(act, eventTree);
     return [
       '<ace0_phase_plan_confirmed>',
@@ -414,8 +441,10 @@ ${phaseLines.join('\n')}
       '[已确认行动]',
       ...actionLines,
       '[本轮要求]',
-      '当轮用户提交了新的行动编排，但是事件规划还没到位，需要你依据对应的行动编排，进行具体的情节树更新。',
-      '当前目标/下一节点目标或者事件缺失（既未规划），本轮必须在 UpdateVariable 中更新 /world/act/eventTree。',
+      '本楼确认的是本节点四段行动，请把这次编排转成 eventTree 的节点目标和四段小目标。',
+      hasPlanGap
+        ? '当前 eventTree 仍有未规划项，本轮必须在 UpdateVariable 中补齐 /world/act/eventTree。'
+        : '若已有 eventTree 与确认行动不一致，本轮先用最小 JSONPatch 修正 /world/act/eventTree，再决定是否推进。',
       '</ace0_phase_plan_confirmed>'
     ].join('\n');
   }
@@ -424,6 +453,7 @@ ${phaseLines.join('\n')}
     if (!derivedState) return '';
 
     const { act, config, currentNodeId } = derivedState;
+    const nodeFirstMeetHints = derivedState.encounterNodeFirstMeetHints || {};
     const narrative = config && config.narrative;
     if (!narrative) return '';
 
@@ -473,7 +503,7 @@ ${phaseLines.join('\n')}
       } else if (resolved?.kind === 'flavor') {
         sections.push(renderFateFlavor(resolved.flavorText, phaseIndex, resolved.slotKey));
       }
-      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot));
+      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, nodeFirstMeetHints));
     }
 
     if (!sections.length) return '';

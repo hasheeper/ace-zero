@@ -138,8 +138,11 @@ function testQueuePlaceConsumeFirstMeet() {
   const placed = placedResult.placed;
   assert(placed, 'Queued encounter should be placed');
   assertEqual(placed.charKey, 'COTA', 'Placed encounter should match queued character');
+  assertEqual(placed.targetPhaseIndex, 1, 'Formal first-meet should always target phase 2');
   assert(placed.targetNodeIndex > 4 && placed.targetNodeIndex <= 6, 'Encounter should be placed on a near future route node');
   assert(['node05-a-route', 'node06-a-route'].includes(placed.targetNodeId), 'Encounter should stay on the planned player path');
+  const nodeFirstMeetMap = act.getCharacterEncounterNodeFirstMeetMap(placedResult.actState, placed.targetNodeId);
+  assertEqual(nodeFirstMeetMap.COTA.targetPhaseIndex, 1, 'Node-level first-meet map should expose phase 2');
 
   const wrongPhase = (placed.targetPhaseIndex + 1) % 4;
   const missed = act.consumeCharacterEncounterForNode(placedResult.actState, placed.targetNodeId, {
@@ -182,6 +185,7 @@ function testForceSpecificCharacterAndQueuedSequence() {
   assert(forcedSia.applied, 'Debug FORCE should apply for SIA');
   assert(forcedSia.placed, 'Debug FORCE should place SIA when the next node is open');
   assertEqual(forcedSia.placed.charKey, 'SIA', 'FORCE should place the clicked character, not an older queued character');
+  assertEqual(forcedSia.placed.targetPhaseIndex, 1, 'Debug FORCE first-meet should always target phase 2');
   const cotaQueue = forcedSia.actState.characterEncounter.queue.find((item) => item.charKey === 'COTA');
   assertEqual(cotaQueue.status, 'queued', 'Older queued COTA should remain queued');
 
@@ -303,6 +307,7 @@ function testPreSignalThenFirstMeet() {
   assert(consumedResult.placed, 'pre_signal should immediately place the first_meet follow-up');
   assertEqual(consumedResult.placed.type, 'first_meet', 'VV follow-up request should be first_meet');
   assertEqual(consumedResult.placed.targetNodeIndex, placedResult.placed.targetNodeIndex + 1, 'first_meet follow-up should target the next node after pre_signal');
+  assertEqual(consumedResult.placed.targetPhaseIndex, 1, 'pre_signal follow-up first-meet should always target phase 2');
 }
 
 testGeneratedChapterExpandedTo24Nodes();

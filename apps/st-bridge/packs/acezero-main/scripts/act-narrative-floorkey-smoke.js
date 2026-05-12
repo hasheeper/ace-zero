@@ -43,7 +43,14 @@ const actState = createActStateAt(act, 1, ['node1-entry'], {
 const derived = {
   act: actState,
   config: act.getChapter(actState.id),
-  currentNodeId: 'node1-entry'
+  currentNodeId: 'node1-entry',
+  encounterNodeFirstMeetHints: {
+    COTA: {
+      charKey: 'COTA',
+      hint: 'COTA 首次在主角视野里出现。',
+      targetPhaseIndex: 1
+    }
+  }
 };
 
 const confirmed = act.buildPhasePlanConfirmedPromptContent(derived, 'message:7');
@@ -54,7 +61,8 @@ assert(confirmed.includes('行动-combat｜二级·精英战'), 'confirmed XML s
 assert(confirmed.includes('二段 - 迎接生客｜行动-combat｜二级·精英战'), 'confirmed XML should not duplicate action labels from phase event text');
 assert(!confirmed.includes('迎接生客 / 行动-combat｜行动-combat'), 'confirmed XML should strip duplicated action event text');
 assert(confirmed.includes('三段 - 上桌博弈｜行动-rest｜一级·休整'), 'confirmed XML should include phase 3 action without duplicated event text');
-assert(confirmed.includes('事件规划还没到位，需要你依据对应的行动编排，进行具体的情节树更新'), 'confirmed XML should strongly require eventTree alignment');
+assert(confirmed.includes('本楼确认的是本节点四段行动'), 'confirmed XML should strongly bind the confirmed node plan');
+assert(confirmed.includes('/world/act/eventTree'), 'confirmed XML should require eventTree alignment');
 assert(!confirmed.includes('当前行动：'), 'confirmed XML should not be scoped to only one current action');
 
 const staleConfirmed = act.buildPhasePlanConfirmedPromptContent(derived, 'message:8');
@@ -63,6 +71,12 @@ assert(staleConfirmed === '', 'mismatched floor should not inject confirmed XML'
 const narrative = act.buildNarrativePromptContentFromDerived(derived);
 assert(narrative.includes('token="combat"'), 'node-locked plan should expose current token attr');
 assert(narrative.includes('行动-combat｜二级·精英战'), 'node-locked narrative should include action label');
-assert(narrative.includes('本轮演绎: 二段 - 迎接生客｜行动-combat｜二级·精英战'), 'current section should include action label without duplicated event text');
+assert(narrative.includes('本轮演绎: 二段 - 迎接生客｜行动-combat｜二级·精英战｜人物首见-COTA'), 'current section should include action and first-meet labels without duplicated event text');
+
+const nodeEntryNarrative = act.buildNarrativePromptContentFromDerived({
+  ...derived,
+  act: { ...actState, phase_index: 0 }
+});
+assert(nodeEntryNarrative.includes('未来准备: 二段 - 迎接生客｜行动-combat｜二级·精英战｜人物首见-COTA'), 'node entry narrative should preview phase 2 first-meet from phase 1');
 
 console.log('[act-narrative-floorkey-smoke] all checks passed');

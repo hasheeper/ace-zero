@@ -200,13 +200,13 @@
     if (!doc) return '';
 
     // 三档逻辑：
-    //   isFirstMeet=true                   → mini（首见瞬间只做轮廓垫底，full 由后续轮承接）
+    //   forceMini=true                     → mini（节点首见预告或首见瞬间，只做轮廓垫底）
     //   introduced=true, present=false     → mini（已认识但此刻不在场的垫底感知）
     //   present=true                       → full
 
-    // 首见帧本轮不投喂 full 人设：<ace0_first_meet> 已单独承担登场文案，
-    // 这里若再甩完整人设等于提前倾倒所有设定、破坏首见帧节奏。
-    if (options?.isFirstMeet === true) {
+    // 节点首见预告和首见帧都不投喂 full 人设：<ace0_first_meet> 负责正式登场约束，
+    // 这里若再甩完整人设等于提前倾倒所有设定、破坏首见节奏。
+    if (options?.forceMini === true) {
       return [doc.mini].filter(Boolean).join('\n\n');
     }
 
@@ -222,17 +222,18 @@
   }
 
 
-  async function buildCharacterPromptInjections(eraVars, firstMeetKeys = null) {
+  async function buildCharacterPromptInjections(eraVars, forceMiniKeys = null) {
     const hero = eraVars?.hero || {};
     const prompts = [];
-    const firstMeetSet = firstMeetKeys instanceof Set
-      ? firstMeetKeys
-      : new Set(Array.isArray(firstMeetKeys) ? firstMeetKeys : []);
+    const rawForceMiniKeys = forceMiniKeys instanceof Set
+      ? Array.from(forceMiniKeys)
+      : (Array.isArray(forceMiniKeys) ? forceMiniKeys : []);
+    const forceMiniSet = new Set(rawForceMiniKeys.map((value) => normalizeTrimmedString(value, '').toUpperCase()).filter(Boolean));
 
     for (const charKey of NON_PLAYER_CHARACTER_KEYS) {
       const state = getCastNode(hero, charKey);
       const content = await getCharacterPromptDoc(charKey, state, {
-        isFirstMeet: firstMeetSet.has(charKey)
+        forceMini: forceMiniSet.has(charKey)
       });
       if (!content || !content.trim()) continue;
 

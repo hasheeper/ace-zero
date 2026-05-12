@@ -177,6 +177,7 @@
   function normalizeCharacterEncounterState(value) { return ACT_ENCOUNTER_RUNTIME.normalizeCharacterEncounterState(value); }
   function getActiveEncounterCharacterKeys(characterEncounterInput) { return ACT_ENCOUNTER_RUNTIME.getActiveEncounterCharacterKeys(characterEncounterInput); }
   function getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId); }
+  function getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId); }
   function getCharacterEncounterPreSignalMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterPreSignalMap(actStateInput, currentNodeId); }
   function calculateEncounterSpentScore(actStateInput, weightsInput) { return ACT_ENCOUNTER_RUNTIME.calculateEncounterSpentScore(actStateInput, weightsInput); }
   function getEncounterRuntimeGeo(contextInput) { return ACT_ENCOUNTER_RUNTIME.getEncounterRuntimeGeo(contextInput); }
@@ -1572,6 +1573,7 @@
     // 首见帧来源只允许来自 characterEncounter 运行时状态。
     // 真正是否首见，仍在 createCharacterCastPatch 里比对 currentCast 旧态。
     const encounterFirstMeetHints = getCharacterEncounterFirstMeetMap(act, currentNodeId);
+    const encounterNodeFirstMeetHints = getCharacterEncounterNodeFirstMeetMap(act, currentNodeId);
     const encounterPreSignalHints = getCharacterEncounterPreSignalMap(act, currentNodeId);
 
     return {
@@ -1583,6 +1585,7 @@
       currentNodeEffects,
       states,
       encounterFirstMeetHints,
+      encounterNodeFirstMeetHints,
       encounterPreSignalHints
     };
   }
@@ -1700,6 +1703,7 @@
     getDefaultActState,
     normalizeActState,
     normalizeCharacterEncounterState,
+    getCharacterEncounterNodeFirstMeetMap,
     evaluateCharacterEncounterEligibility,
     enqueueEligibleCharacterEncounters,
     placeNextCharacterEncounter,
