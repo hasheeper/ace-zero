@@ -333,7 +333,7 @@ ${phaseLines.join('\n')}
 
     const phaseLines = ['[事件树]'];
     let currentPhaseLine = '';
-    let currentPhaseGoal = '';
+    let currentPhaseAction = '';
     for (let index = 0; index < 4; index += 1) {
       const item = hasCurrentWindow ? getPhaseWindowItem(eventTree, index) : null;
       const label = index < phaseIndex ? '已完成' : (index === phaseIndex ? '当前进行' : '未来准备');
@@ -346,7 +346,7 @@ ${phaseLines.join('\n')}
       phaseLines.push(line);
       if (index === phaseIndex) {
         currentPhaseLine = line;
-        currentPhaseGoal = detail;
+        currentPhaseAction = `${detail}｜${action}`;
       }
     }
     if (!hasCurrentWindow) {
@@ -355,7 +355,7 @@ ${phaseLines.join('\n')}
 
     const currentLines = [
       '[当前进行]',
-      `本轮演绎: ${currentPhaseGoal || currentPhaseLine || `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - 未规划`}`,
+      `本轮演绎: ${currentPhaseAction || currentPhaseLine || `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - 未规划｜自然推进`}`,
       '写出这件事的实际发生、阻力与结果；如果已经形成可观察结果，结尾推进 /world/act/phase_advance 进入下一段。'
     ];
 
@@ -410,7 +410,6 @@ ${phaseLines.join('\n')}
       '[本轮要求]',
       '必须先在 COT 中按以上四段行动建立或修正本节点 eventTree。',
       '若当前目标、下一节点目标或 phaseWindow 缺失、空泛、偏离行动编排，本轮必须在 UpdateVariable 中更新 /world/act/eventTree。',
-      '完成计划对齐后，再按当前进行项演绎正文；只有当前进行项已经落地，才推进 /world/act/phase_advance。',
       '</ace0_phase_plan_confirmed>'
     ].join('\n');
   }

@@ -126,7 +126,7 @@ D.【演出计划】
    [计划 / 改正]
    - 若当前节点为未规划，或者没有 phaseWindow，必须先为当前节点规划四段小目标
    - 若 `<ace0_phase_plan_confirmed>` 中的行动编排与现有 nodeGoals / phaseWindow 不一致，本轮必须修正 `world.act.eventTree`
-   - 若剧情现实已经偏离节点目标、四段小目标或已确认行动，先修正计划，再决定正文怎么写
+   - 若剧情现实已经偏离节点目标、四段小目标或已确认行动，需要计划
    - 需要修正/计划时，只在 UpdateVariable 中更新对应 `world.act.eventTree`
 
 3. [对话校准]

@@ -61,6 +61,7 @@ assert(staleConfirmed === '', 'mismatched floor should not inject confirmed XML'
 const narrative = act.buildNarrativePromptContentFromDerived(derived, { currentFloorKey: 'message:7' });
 assert(narrative.includes('token="combat"'), 'matched floor should expose current token attr');
 assert(narrative.includes('行动-combat｜二级·精英战'), 'matched floor narrative should include action label');
+assert(narrative.includes('本轮演绎: 二段 - 迎接生客 / 未知牌局对手入场试探｜行动-combat｜二级·精英战'), 'current section should include action label');
 
 const staleNarrative = act.buildNarrativePromptContentFromDerived(derived, { currentFloorKey: 'message:8' });
 assert(staleNarrative.includes('token="combat"'), 'node-locked plan should keep current token attr across floors');
