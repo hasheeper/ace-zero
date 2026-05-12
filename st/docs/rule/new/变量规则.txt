@@ -140,16 +140,18 @@ ACE0 MVU 变量规则（最小 ACT 版）
     check:
       - 仅用于维护当前节点与下一节点的剧情总目标
       - 只允许 `current` 与 `next`
-      - `current` 可写当前节点总目标与故事倾向
-      - `next` 只写下一节点总目标，不写下一节点四段细分
+      - `current` 必须写成 `{ "goal": "...", "tendency": "..." }`
+      - `next` 必须写成 `{ "goal": "...", "tendency": "" }`；只写下一节点总目标，不写下一节点四段细分
+      - 不要把 `current` / `next` 直接写成字符串
       - 仅在目标缺失、目标变化、正文现实已经偏离原计划时写
       - 使用 `replace` 整体替换 nodeGoals，不要追加数组
   world.act.eventTree.phaseWindow:
     type: object
     check:
       - 仅用于当前节点四段小目标/突发事件窗口
-      - 必须绑定当前节点 nodeId
-      - 固定四段格式：一段 / 二段 / 三段 / 四段
+      - 必须写成 `{ "nodeId": "<当前节点ID>", "phases": [...] }`
+      - `phases` 固定四项，每项写 `{ "index": 0~3, "goal": "...", "event": "" }`
+      - 不要写成 `phase_1` / `phase_2` / `phase_3` / `phase_4`
       - 每段只写 goal/event，不写点数；点数由系统从 phase_slots 显示
       - 当前节点没有 phaseWindow 时，优先规划四段小目标
       - 若正文现实偏离计划，可用 `replace` 更新当前节点 phaseWindow

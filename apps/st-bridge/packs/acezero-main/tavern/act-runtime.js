@@ -366,6 +366,12 @@
     const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     const goals = source.nodeGoals && typeof source.nodeGoals === 'object' && !Array.isArray(source.nodeGoals) ? source.nodeGoals : {};
     const normalizeGoal = (input) => {
+      if (typeof input === 'string') {
+        return {
+          goal: normalizeTrimmedString(input, '').slice(0, 180),
+          tendency: ''
+        };
+      }
       const goalSource = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
       return {
         goal: normalizeTrimmedString(goalSource.goal, '').slice(0, 180),
@@ -377,12 +383,20 @@
       : {};
     const windowNodeId = normalizeTrimmedString(rawWindow.nodeId, '');
     const keepWindow = !currentNodeId || !windowNodeId || windowNodeId === currentNodeId;
-    const phases = keepWindow && Array.isArray(rawWindow.phases)
-      ? rawWindow.phases.slice(0, 4).map((item, index) => {
+    const shorthandPhases = [0, 1, 2, 3]
+      .map(index => normalizeTrimmedString(rawWindow[`phase_${index + 1}`], ''))
+      .filter(Boolean)
+      .map((goal, index) => ({ index, goal, event: '' }));
+    const phaseInput = Array.isArray(rawWindow.phases) && rawWindow.phases.length
+      ? rawWindow.phases
+      : shorthandPhases;
+    const phases = keepWindow && Array.isArray(phaseInput)
+      ? phaseInput.slice(0, 4).map((item, index) => {
           const phaseSource = item && typeof item === 'object' && !Array.isArray(item) ? item : {};
+          const stringGoal = typeof item === 'string' ? item : '';
           return {
             index: Math.max(0, Math.min(3, Math.round(Number(phaseSource.index) || index))),
-            goal: normalizeTrimmedString(phaseSource.goal, '').slice(0, 160),
+            goal: normalizeTrimmedString(phaseSource.goal || stringGoal, '').slice(0, 160),
             event: normalizeTrimmedString(phaseSource.event, '').slice(0, 160)
           };
         })
@@ -393,7 +407,7 @@
         next: normalizeGoal(goals.next)
       },
       phaseWindow: {
-        nodeId: keepWindow ? windowNodeId : '',
+        nodeId: keepWindow ? (windowNodeId || (phases.length ? normalizeTrimmedString(currentNodeId, '') : '')) : '',
         phases
       }
     };
