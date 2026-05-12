@@ -178,6 +178,7 @@ world:
       nodeIndex: 0
       locked: false
       confirmedPhaseIndex: 0
+      floorKey: ""
     eventTree:
       nodeGoals:
         current:

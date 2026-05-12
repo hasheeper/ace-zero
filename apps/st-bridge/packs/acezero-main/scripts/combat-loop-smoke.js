@@ -130,6 +130,13 @@ function testActiveCombatTokenPromptInjection() {
       location: { layer: 'THE_EXCHANGE', site: 'casino_floor', tags: [] },
       act: createActStateAt(act, 1, ['node1-entry'], {
         phase_index: 1,
+        phasePlanLock: {
+          nodeId: 'node1-entry',
+          nodeIndex: 1,
+          locked: true,
+          confirmedPhaseIndex: 1,
+          floorKey: 'message:7'
+        },
         resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
         phase_slots: [
           null,
@@ -141,7 +148,10 @@ function testActiveCombatTokenPromptInjection() {
       })
     }
   };
-  const { runtime } = createTavernRuntime(tavernFactory, sandbox, { eraVars });
+  const { runtime } = createTavernRuntime(tavernFactory, sandbox, {
+    eraVars,
+    getCurrentFloorKey: () => 'message:7'
+  });
   const prompts = runtime.buildActNarrativePrompts(eraVars);
   const prompt = prompts.find((item) => item.id === 'ace0_combat_request');
   assert(prompt, 'active combat token should inject combat request prompt before pending exists');

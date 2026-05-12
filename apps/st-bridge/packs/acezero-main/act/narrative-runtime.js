@@ -248,12 +248,19 @@ ${phaseLines.join('\n')}
     return '终盘';
   }
 
-  function formatPhasePoint(slot) {
-    if (!slot || typeof slot !== 'object') return '无点';
+  function formatPhaseAction(slot) {
+    if (!slot || typeof slot !== 'object') return '自然推进';
     const key = normalizeActResourceKey(slot.key, '');
-    if (!key) return '无点';
+    if (!key) return '自然推进';
     const amount = Math.max(1, Math.min(3, Math.round(Number(slot.amount) || 1)));
-    return `${key}点 x${amount}`;
+    const labels = {
+      combat: ['一级·小交锋', '二级·精英战', '三级·Boss战'],
+      asset: ['一级·低阶契令', '二级·中阶契令', '三级·高阶契令'],
+      rest: ['一级·休整', '二级·休整', '三级·休整'],
+      vision: ['一级·情报', '二级·情报', '三级·情报']
+    };
+    const label = labels[key]?.[amount - 1] || `${amount}级`;
+    return `行动-${key}｜${label}`;
   }
 
   function getPhaseWindowItem(eventTree, phaseIndex) {
@@ -284,7 +291,33 @@ ${phaseLines.join('\n')}
     return [explicit, tokenHint, spent.length ? `长期偏向: ${spent.join(' / ')}` : ''].filter(Boolean).join(' / ');
   }
 
-  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot) {
+  function getPhasePlanLockForAct(raw) {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    return {
+      nodeId: normalizeTrimmedString(source.nodeId, ''),
+      nodeIndex: Math.max(0, Math.round(Number(source.nodeIndex) || 0)),
+      locked: source.locked === true || source.confirmed === true,
+      confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0))),
+      floorKey: normalizeTrimmedString(source.floorKey, '')
+    };
+  }
+
+  function isPhasePlanLockCurrent(act, currentNodeId = '', currentFloorKey = '') {
+    const floorKey = normalizeTrimmedString(currentFloorKey, '');
+    if (!act || !floorKey) return false;
+    const lock = getPhasePlanLockForAct(act.phasePlanLock);
+    return lock.locked === true
+      && lock.nodeId === normalizeTrimmedString(currentNodeId, '')
+      && lock.nodeIndex === Math.max(1, Math.round(Number(act.nodeIndex) || 1))
+      && lock.floorKey === floorKey;
+  }
+
+  function getEffectivePhaseSlot(act, index, currentNodeId = '', currentFloorKey = '') {
+    if (!isPhasePlanLockCurrent(act, currentNodeId, currentFloorKey)) return null;
+    return Array.isArray(act?.phase_slots) ? act.phase_slots[index] || null : null;
+  }
+
+  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, currentFloorKey = '') {
     const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
     const nodeGoals = eventTree.nodeGoals && typeof eventTree.nodeGoals === 'object' ? eventTree.nodeGoals : {};
     const currentGoal = normalizeTrimmedString(nodeGoals.current?.goal, '');
@@ -301,30 +334,83 @@ ${phaseLines.join('\n')}
     ];
 
     const phaseLines = ['[事件树]'];
+    let currentPhaseLine = '';
+    let currentPhaseGoal = '';
     for (let index = 0; index < 4; index += 1) {
       const item = hasCurrentWindow ? getPhaseWindowItem(eventTree, index) : null;
       const label = index < phaseIndex ? '已完成' : (index === phaseIndex ? '当前进行' : '未来准备');
       const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
       const event = normalizeTrimmedString(item?.event, '');
-      const slot = Array.isArray(act?.phase_slots) ? act.phase_slots[index] : null;
-      const point = formatPhasePoint(slot);
-      phaseLines.push(`${label}: ${ACT_PHASE_LABELS[index]} - ${goal}${event ? ` / ${event}` : ''}（${point}）`);
+      const slot = getEffectivePhaseSlot(act, index, currentNodeId, currentFloorKey);
+      const action = formatPhaseAction(slot);
+      const detail = `${ACT_PHASE_LABELS[index]} - ${goal}${event ? ` / ${event}` : ''}`;
+      const line = `${label}: ${detail}｜${action}`;
+      phaseLines.push(line);
+      if (index === phaseIndex) {
+        currentPhaseLine = line;
+        currentPhaseGoal = detail;
+      }
     }
     if (!hasCurrentWindow) {
       phaseLines.push('规划提示: 当前节点尚无 phaseWindow。请优先在 COT 中规划本节点四段小目标，再判断是否推进。');
     }
 
-    const decisionLines = [
-      '[推进判断]',
-      '只有“当前进行”项已有实质结果时，才写 /world/act/phase_advance。',
-      '若正文现实已经偏离当前目标或四段小目标，可用最小 JSONPatch 更新 /world/act/eventTree/nodeGoals 或 /world/act/eventTree/phaseWindow。',
-      '下一节点只规划总目标，不规划下一节点四段细分；不要在普通剧情中改 phase_slots。'
+    const currentLines = [
+      '[当前进行]',
+      `本轮演绎: ${currentPhaseGoal || currentPhaseLine || `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - 未规划`}`,
+      '写出这件事的实际发生、阻力与结果；如果已经形成可观察结果，结尾推进 /world/act/phase_advance 进入下一段。'
     ];
 
-    return [nodeLines.join('\n'), phaseLines.join('\n'), decisionLines.join('\n')].join('\n\n');
+    const decisionLines = [
+      '[推进判断]',
+      '当前进行项没有实际结果时，停留本段。',
+      '当前进行项已经落地时，写 /world/act/phase_advance 进入下一段。',
+      '若剧情目标需要修正，只更新 /world/act/eventTree。'
+    ];
+
+    return [nodeLines.join('\n'), phaseLines.join('\n'), currentLines.join('\n'), decisionLines.join('\n')].join('\n\n');
   }
 
-  function buildNarrativePromptContentFromDerived(derivedState) {
+  function buildCurrentPhaseActionLine(act, eventTree, phaseIndex) {
+    const item = getPhaseWindowItem(eventTree, phaseIndex);
+    const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
+    const event = normalizeTrimmedString(item?.event, '');
+    const slot = Array.isArray(act?.phase_slots) ? act.phase_slots[phaseIndex] : null;
+    return `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - ${goal}${event ? ` / ${event}` : ''}｜${formatPhaseAction(slot)}`;
+  }
+
+  function buildPhasePlanConfirmedPromptContent(derivedState, currentFloorKey = '') {
+    if (!derivedState) return '';
+    const { act, currentNodeId } = derivedState;
+    const floorKey = normalizeTrimmedString(currentFloorKey, '');
+    if (!act || !floorKey) return '';
+
+    const lock = getPhasePlanLockForAct(act.phasePlanLock);
+    const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(act.phase_index) || 0)));
+    const nodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
+    const nodeId = normalizeTrimmedString(currentNodeId, '');
+    if (
+      lock.locked !== true ||
+      lock.nodeId !== nodeId ||
+      lock.nodeIndex !== nodeIndex ||
+      lock.confirmedPhaseIndex !== phaseIndex ||
+      lock.floorKey !== floorKey
+    ) {
+      return '';
+    }
+
+    const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
+    const currentAction = buildCurrentPhaseActionLine(act, eventTree, phaseIndex);
+    return [
+      '<ace0_phase_plan_confirmed>',
+      '本楼刚确认了行动编排。',
+      `当前行动：${currentAction}`,
+      '请按当前行动演绎正文；若正文现实与原计划不合，先在 UpdateVariable 中修正 /world/act/eventTree，再决定是否推进 /world/act/phase_advance。',
+      '</ace0_phase_plan_confirmed>'
+    ].join('\n');
+  }
+
+  function buildNarrativePromptContentFromDerived(derivedState, options = {}) {
     if (!derivedState) return '';
 
     const { act, config, currentNodeId } = derivedState;
@@ -334,8 +420,8 @@ ${phaseLines.join('\n')}
     const stage = act?.stage || 'planning';
     const rawPhaseIndex = Math.round(Number(act?.phase_index) || 0);
     const phaseIndex = Math.max(0, Math.min(3, rawPhaseIndex));
-    const phaseSlots = Array.isArray(act?.phase_slots) ? act.phase_slots : [];
-    const currentSlot = phaseSlots[phaseIndex] || null;
+    const currentFloorKey = normalizeTrimmedString(options?.currentFloorKey, '');
+    const currentSlot = getEffectivePhaseSlot(act, phaseIndex, currentNodeId, currentFloorKey);
     const tokenKey = currentSlot && typeof currentSlot.key === 'string' ? currentSlot.key : '';
     const headerAttrs = [
       `nodeIndex="${act?.nodeIndex || 1}"`,
@@ -378,7 +464,7 @@ ${phaseLines.join('\n')}
       } else if (resolved?.kind === 'flavor') {
         sections.push(renderFateFlavor(resolved.flavorText, phaseIndex, resolved.slotKey));
       }
-      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot));
+      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, currentFloorKey));
     }
 
     if (!sections.length) return '';
@@ -481,7 +567,9 @@ ${phaseLines.join('\n')}
         resolveNodeGuide,
         renderPinnedTemplate,
         renderFateFlavor,
+        formatPhaseAction,
         buildNarrativePromptContentFromDerived,
+        buildPhasePlanConfirmedPromptContent,
         evaluateCompletionTransition,
         buildCompletionTransitionPromptContent
       };

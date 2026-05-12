@@ -161,7 +161,8 @@ ACE0 MVU 变量规则（最小 ACT 版）
     check:
       - 仅由 Dashboard 的“确定规划”按钮写入
       - 剧情 LLM 不要在普通正文中写入或修改
-      - 格式为 `{ nodeId, nodeIndex, locked, confirmedPhaseIndex }`
+      - 格式为 `{ nodeId, nodeIndex, locked, confirmedPhaseIndex, floorKey }`
+      - `floorKey` 绑定当前消息楼层，防止刷新、编辑、换楼后旧确认继续生效
       - `locked=true` 只表示当前节点点数编排已锁定，不表示剧情目标
   world.act.reserve.${combat|rest|asset|vision}:
     type: number

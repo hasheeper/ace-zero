@@ -161,7 +161,8 @@ const DEFAULT_WORLD_ACT = {
       nodeId: '',
       nodeIndex: 0,
       locked: false,
-      confirmedPhaseIndex: 0
+      confirmedPhaseIndex: 0,
+      floorKey: ''
     },
     eventTree: {
       nodeGoals: {

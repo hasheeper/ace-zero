@@ -1,5 +1,5 @@
 <variable_rule>
-ACE0 MVU 变量规则（最小 ACT 版）
+ACE0 MVU 变量规则
 仅输出本轮真实变化；禁止整段覆写。
 
 ——【相位定义】——
@@ -43,8 +43,7 @@ ACE0 MVU 变量规则（最小 ACT 版）
 - `replace`: 仅用于直接写结果值。适用：时间、地点、ACT 路由/推进、布尔值、level、mana、maxMana
 - `add`: 当前不使用。除非规则另行明确声明，否则不要追加数组项
 - 不使用整段对象覆写，不新增未声明路径
-- 关系第二字段统一写 `/exclusive`
-- `reversal / ownership / parasitism / indebtedness / takeover / entrustment / retention / coverup / fixation` 都只是显示名，不是变量路径
+- 关系第二字段统一写 `/exclusive`，无后续路径
 
 字段约束:
   hero.funds:
@@ -148,8 +147,7 @@ ACE0 MVU 变量规则（最小 ACT 版）
       - 仅用于当前节点四段小目标/突发事件窗口
       - 必须写成 `{ "nodeId": "<当前节点ID>", "phases": [...] }`
       - `phases` 固定四项，每项写 `{ "index": 0~3, "goal": "...", "event": "" }`
-      - 不要写成 `phase_1` / `phase_2` / `phase_3` / `phase_4`
-      - 每段只写 goal/event，不写点数；点数由系统从 phase_slots 显示
+      - 每段只写 goal/event
       - 当前节点没有 phaseWindow 时，优先规划四段小目标
       - 若正文现实偏离计划，可用 `replace` 更新当前节点 phaseWindow
       - 不要规划下一节点的 phaseWindow

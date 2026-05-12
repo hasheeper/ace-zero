@@ -398,7 +398,8 @@
       nodeId: normalizeTrimmedString(source.nodeId, ''),
       nodeIndex: Math.max(0, Math.round(Number(source.nodeIndex) || 0)),
       locked: source.locked === true || source.confirmed === true,
-      confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0)))
+      confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0))),
+      floorKey: normalizeTrimmedString(source.floorKey, '')
     };
   }
 
@@ -1681,7 +1682,8 @@
   function resolveNodeGuide(config, narrative, nodeId) { return ACT_NARRATIVE_RUNTIME.resolveNodeGuide(config, narrative, nodeId); }
   function renderPinnedTemplate(template, phaseIndex) { return ACT_NARRATIVE_RUNTIME.renderPinnedTemplate(template, phaseIndex); }
   function renderFateFlavor(flavorText, phaseIndex, tokenKey) { return ACT_NARRATIVE_RUNTIME.renderFateFlavor(flavorText, phaseIndex, tokenKey); }
-  function buildNarrativePromptContentFromDerived(derivedState) { return ACT_NARRATIVE_RUNTIME.buildNarrativePromptContentFromDerived(derivedState); }
+  function buildNarrativePromptContentFromDerived(derivedState, options = {}) { return ACT_NARRATIVE_RUNTIME.buildNarrativePromptContentFromDerived(derivedState, options); }
+  function buildPhasePlanConfirmedPromptContent(derivedState, currentFloorKey = '') { return ACT_NARRATIVE_RUNTIME.buildPhasePlanConfirmedPromptContent(derivedState, currentFloorKey); }
   function evaluateCompletionTransition(actStateInput, heroStateInput) { return ACT_NARRATIVE_RUNTIME.evaluateCompletionTransition(actStateInput, heroStateInput); }
   function buildCompletionTransitionPromptContent(transitionResult, options = {}) { return ACT_NARRATIVE_RUNTIME.buildCompletionTransitionPromptContent(transitionResult, options); }
 
@@ -1728,6 +1730,7 @@
     createCharacterCastPatch,
     buildActStateSummaryFromDerived,
     buildNarrativePromptContentFromDerived,
+    buildPhasePlanConfirmedPromptContent,
     evaluateCompletionTransition,
     buildCompletionTransitionPromptContent,
     createFrontendSnapshot,

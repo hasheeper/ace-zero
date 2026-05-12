@@ -41,6 +41,7 @@ includes('active_void_cards: normalizeAssetDeckCardList', 'AssetDeck schema shou
 includes('if (typeof goalInput === \'string\')', 'eventTree nodeGoals should accept shorthand string goals');
 includes('rawWindow[`phase_${index + 1}`]', 'eventTree phaseWindow should accept phase_1..phase_4 shorthand');
 includes('goal: normalizeTrimmedString(phaseSource.goal || stringGoal, \'\').slice(0, 160)', 'eventTree phase items should accept string shorthand');
+includes('floorKey: z.string().transform(v => normalizeTrimmedString(v, \'\')).default(\'\')', 'phasePlanLock should preserve floorKey');
 
 matches(/RINO:\s*\{\s*activated:\s*true,\s*introduced:\s*true,\s*present:\s*true,\s*inParty:\s*true\s*\}/m, 'RINO should default to known/present/in-party');
 ['SIA', 'POPPY', 'VV', 'TRIXIE', 'COTA', 'EULALIA', 'KAKO', 'KUZUHA'].forEach((charKey) => {

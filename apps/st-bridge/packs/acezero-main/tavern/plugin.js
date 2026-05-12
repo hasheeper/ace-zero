@@ -52,6 +52,7 @@
   const ACT_PACING_INJECT_ID = 'ace0_narrative_pacing';
   const ACT_FIRST_MEET_INJECT_ID = 'ace0_first_meet';
   const ACT_PRE_SIGNAL_INJECT_ID = 'ace0_pre_signal';
+  const ACT_PHASE_PLAN_CONFIRMED_INJECT_ID = 'ace0_phase_plan_confirmed';
   const ACT_COMBAT_REQUEST_INJECT_ID = 'ace0_combat_request';
   const WORLD_CONTEXT_INJECT_ID = 'ace0_world_context';
   const LOCATION_DOC_INJECT_ID = 'ace0_location_doc';
@@ -86,7 +87,7 @@
     income_progress: { combat: 0, rest: 0, asset: 0, vision: 0 },
     phase_slots: [null, null, null, null],
     phase_index: 0,
-    phasePlanLock: { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0 },
+    phasePlanLock: { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0, floorKey: '' },
     eventTree: { nodeGoals: { current: { goal: '', tendency: '' }, next: { goal: '', tendency: '' } }, phaseWindow: { nodeId: '', phases: [] } },
     // 本章已去掉 planning（编排相）——玩家通过 Dashboard 在 executing 过程中随时排/改未来相位的 slot。
     stage: 'executing',
@@ -120,6 +121,23 @@
     } catch (_) {}
 
     return window;
+  }
+
+  function getCurrentFloorKey() {
+    try {
+      if (typeof getCurrentMessageId === 'function') {
+        const id = Number(getCurrentMessageId());
+        if (Number.isFinite(id) && id >= 0) return `message:${Math.round(id)}`;
+      }
+    } catch (_) {}
+    try {
+      if (typeof getChatMessages === 'function') {
+        const latest = getChatMessages(-1)?.[0];
+        const id = Number(latest?.message_id);
+        if (Number.isFinite(id) && id >= 0) return `message:${Math.round(id)}`;
+      }
+    } catch (_) {}
+    return '';
   }
 
   function isSameWorldClock(a, b) {
@@ -713,6 +731,7 @@
       ACT_PACING_INJECT_ID,
       ACT_FIRST_MEET_INJECT_ID,
       ACT_PRE_SIGNAL_INJECT_ID,
+      ACT_PHASE_PLAN_CONFIRMED_INJECT_ID,
       ACT_COMBAT_REQUEST_INJECT_ID
     },
     deps: {
@@ -727,7 +746,8 @@
       getHeroCast,
       getCastNode,
       getRosterNode,
-      getWorldLocation
+      getWorldLocation,
+      getCurrentFloorKey
     }
   }) || {};
   const {
@@ -953,6 +973,7 @@
           ACT_NARRATIVE_INJECT_ID,
           ACT_TRANSITION_INJECT_ID,
           ACT_PACING_INJECT_ID,
+          ACT_PHASE_PLAN_CONFIRMED_INJECT_ID,
           ACT_COMBAT_REQUEST_INJECT_ID,
           // 首见帧注入 id 必须每轮清理：本轮若 pending 空（楼层已前进/被闸门清掉），
           // 不会再 push 新 first_meet prompt；若这里不 uninject 旧注入，

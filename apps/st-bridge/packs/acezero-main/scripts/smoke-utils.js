@@ -200,7 +200,10 @@ function createTavernRuntime(tavernFactory, sandbox, hooks = {}) {
       getRosterNode: (hero, key) => hero && hero.roster && hero.roster[key] ? hero.roster[key] : {},
       getWorldLocation: (eraVars) => eraVars && eraVars.world && eraVars.world.location
         ? eraVars.world.location
-        : { layer: 'THE_STREET', site: '', tags: [] }
+        : { layer: 'THE_STREET', site: '', tags: [] },
+      getCurrentFloorKey: typeof hooks.getCurrentFloorKey === 'function'
+        ? hooks.getCurrentFloorKey
+        : () => ''
     }
   });
 

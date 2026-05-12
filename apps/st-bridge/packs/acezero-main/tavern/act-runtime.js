@@ -31,6 +31,7 @@
         ACT_PACING_INJECT_ID = 'ace0_narrative_pacing',
         ACT_FIRST_MEET_INJECT_ID = 'ace0_first_meet',
         ACT_PRE_SIGNAL_INJECT_ID = 'ace0_pre_signal',
+        ACT_PHASE_PLAN_CONFIRMED_INJECT_ID = 'ace0_phase_plan_confirmed',
         ACT_COMBAT_REQUEST_INJECT_ID = 'ace0_combat_request'
       } = constants;
       const {
@@ -51,7 +52,8 @@
         getHeroCast = () => ({}),
         getCastNode = () => ({}),
         getRosterNode = () => ({}),
-        getWorldLocation = () => ({ layer: 'THE_STREET', site: '' })
+        getWorldLocation = () => ({ layer: 'THE_STREET', site: '' }),
+        getCurrentFloorKey = () => ''
       } = deps;
 
       let hasWarnedMissingActModule = false;
@@ -231,6 +233,7 @@
       'createCharacterCastPatch',
       'buildActStateSummaryFromDerived',
       'buildNarrativePromptContentFromDerived',
+      'buildPhasePlanConfirmedPromptContent',
       'buildNarrativePacingSummary',
       'buildFirstMeetPromptContent',
       'buildPreSignalPromptContent'
@@ -351,7 +354,8 @@
       nodeId: normalizeTrimmedString(source.nodeId, ''),
       nodeIndex: Math.max(0, Math.round(Number(source.nodeIndex) || 0)),
       locked: source.locked === true || source.confirmed === true,
-      confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0)))
+      confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0))),
+      floorKey: normalizeTrimmedString(source.floorKey, '')
     };
   }
 
@@ -975,10 +979,25 @@
       }
     }
 
-    const narrativeModule = runActModuleMethod('buildNarrativePromptContentFromDerived', derived);
+    const currentFloorKey = normalizeTrimmedString(getCurrentFloorKey(), '');
+    const narrativeModule = runActModuleMethod('buildNarrativePromptContentFromDerived', derived, { currentFloorKey });
     const narrativeContent = narrativeModule.ok && typeof narrativeModule.value === 'string'
       ? narrativeModule.value
       : '';
+    const confirmedModule = runActModuleMethod('buildPhasePlanConfirmedPromptContent', derived, currentFloorKey);
+    const confirmedContent = confirmedModule.ok && typeof confirmedModule.value === 'string'
+      ? confirmedModule.value
+      : '';
+    if (confirmedContent) {
+      prompts.push({
+        id: ACT_PHASE_PLAN_CONFIRMED_INJECT_ID,
+        position: 'in_chat',
+        depth: 0,
+        role: 'system',
+        content: confirmedContent,
+        should_scan: false
+      });
+    }
     if (narrativeContent) {
       prompts.push({
         id: ACT_NARRATIVE_INJECT_ID,

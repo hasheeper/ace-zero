@@ -656,7 +656,8 @@ function makeDefaultActState() {
       nodeId: '',
       nodeIndex: 0,
       locked: false,
-      confirmedPhaseIndex: 0
+      confirmedPhaseIndex: 0,
+      floorKey: ''
     },
     eventTree: makeDefaultActEventTree(),
     controlledNodes: {},
@@ -718,17 +719,20 @@ const ActPhasePlanLockSchema = z.object({
   nodeIndex: z.coerce.number().transform(v => Math.max(0, Math.round(v))).default(0),
   locked: z.coerce.boolean().default(false),
   confirmed: z.coerce.boolean().default(false).optional(),
-  confirmedPhaseIndex: z.coerce.number().transform(v => Math.max(0, Math.min(3, Math.round(v)))).default(0)
+  confirmedPhaseIndex: z.coerce.number().transform(v => Math.max(0, Math.min(3, Math.round(v)))).default(0),
+  floorKey: z.string().transform(v => normalizeTrimmedString(v, '')).default('')
 }).default({
   nodeId: '',
   nodeIndex: 0,
   locked: false,
-  confirmedPhaseIndex: 0
+  confirmedPhaseIndex: 0,
+  floorKey: ''
 }).transform(v => ({
   nodeId: v.nodeId,
   nodeIndex: v.nodeIndex,
   locked: v.locked === true || v.confirmed === true,
-  confirmedPhaseIndex: v.confirmedPhaseIndex
+  confirmedPhaseIndex: v.confirmedPhaseIndex,
+  floorKey: v.floorKey
 }));
 
 function isActPhasePlanLockedForNode(act, currentNodeId = '') {

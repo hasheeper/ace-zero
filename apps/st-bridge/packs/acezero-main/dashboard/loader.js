@@ -98,6 +98,23 @@
     }
   }
 
+  function getCurrentDashboardFloorKey() {
+    try {
+      if (typeof getCurrentMessageId === 'function') {
+        const id = Number(getCurrentMessageId());
+        if (Number.isFinite(id) && id >= 0) return `message:${Math.round(id)}`;
+      }
+    } catch (_) {}
+    try {
+      if (typeof getChatMessages === 'function') {
+        const latest = getChatMessages(-1)?.[0];
+        const id = Number(latest?.message_id);
+        if (Number.isFinite(id) && id >= 0) return `message:${Math.round(id)}`;
+      }
+    } catch (_) {}
+    return '';
+  }
+
   function normalizeDashboardString(value, fallback = '') {
     return typeof value === 'string' ? value.trim() : fallback;
   }
@@ -451,6 +468,10 @@
       hero: clonedHero,
       world: clonedWorld,
       frontendSnapshot,
+      meta: {
+        ...(eraVars?.meta && typeof eraVars.meta === 'object' ? cloneJsonData(eraVars.meta, {}) : {}),
+        floorKey: getCurrentDashboardFloorKey()
+      },
       extensions: {
         tabs: cloneJsonData(dashboardState.tabs, []),
         icon: cloneJsonData(dashboardState.icon, null)
@@ -463,6 +484,15 @@
 
     const eraVars = getCurrentEraVars();
     if (!eraVars || typeof eraVars !== 'object') return false;
+    const currentFloorKey = getCurrentDashboardFloorKey();
+    const commitFloorKey = normalizeDashboardString(commitPayload?.meta?.floorKey, '');
+    const actFloorKey = normalizeDashboardString(
+      commitPayload?.world?.act?.phasePlanLock?.floorKey || commitPayload?.act?.phasePlanLock?.floorKey,
+      ''
+    );
+    if (currentFloorKey && (commitFloorKey !== currentFloorKey || (actFloorKey && actFloorKey !== currentFloorKey))) {
+      throw new Error('Stale ACT commit rejected: floorKey mismatch.');
+    }
 
     const nextState = cloneJsonData(eraVars, {}) || {};
     if (!nextState.world || typeof nextState.world !== 'object') nextState.world = {};

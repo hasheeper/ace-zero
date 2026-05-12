@@ -407,7 +407,7 @@ function createExecutionRuntimeContext() {
             phase_index: 0,
             stage: 'executing',
             phase_advance: 0,
-            phasePlanLock: { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0 },
+            phasePlanLock: { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0, floorKey: '' },
             eventTree: { nodeGoals: { current: { goal: '', tendency: '' }, next: { goal: '', tendency: '' } }, phaseWindow: { nodeId: '', phases: [] } },
             controlledNodes: {},
             vision: { baseSight: 1, bonusSight: 0, jumpReady: false, pendingReplace: null },
@@ -704,7 +704,8 @@ function createExecutionRuntimeContext() {
             nodeId: typeof source.nodeId === 'string' ? source.nodeId.trim() : '',
             nodeIndex: Math.max(0, Math.round(Number(source.nodeIndex) || 0)),
             locked: source.locked === true || source.confirmed === true,
-            confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0)))
+            confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(source.confirmedPhaseIndex) || 0))),
+            floorKey: typeof source.floorKey === 'string' ? source.floorKey.trim() : ''
         };
     }
 
@@ -712,7 +713,9 @@ function createExecutionRuntimeContext() {
         const lock = normalizePhasePlanLock(appState.phasePlanLock);
         return lock.locked === true
             && lock.nodeId === appState.currentNodeId
-            && lock.nodeIndex === appState.currentNodeIndex;
+            && lock.nodeIndex === appState.currentNodeIndex
+            && !!appState.currentFloorKey
+            && lock.floorKey === appState.currentFloorKey;
     }
 
     function getPhasePlanLockForCommit() {
@@ -721,10 +724,12 @@ function createExecutionRuntimeContext() {
             lock.locked === true
             && lock.nodeId === appState.currentNodeId
             && lock.nodeIndex === appState.currentNodeIndex
+            && !!appState.currentFloorKey
+            && lock.floorKey === appState.currentFloorKey
         ) {
             return lock;
         }
-        return { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0 };
+        return { nodeId: '', nodeIndex: 0, locked: false, confirmedPhaseIndex: 0, floorKey: '' };
     }
 
     function normalizeActStage(value) {
@@ -993,6 +998,9 @@ function createExecutionRuntimeContext() {
         const actState = world?.act;
         const frontendSnapshot = extractFrontendSnapshot(normalizedPayload);
         const nextOfferIdentity = getAssetPendingOfferIdentity(world?.assetDeck);
+        const nextFloorKey = typeof normalizedPayload?.meta?.floorKey === 'string'
+            ? normalizedPayload.meta.floorKey.trim()
+            : '';
 
         syncHeroResourcesFromPayload(normalizedPayload);
         syncDashboardCharactersFromHeroPayload(normalizedPayload);
@@ -1033,6 +1041,7 @@ function createExecutionRuntimeContext() {
 
         appState.currentNodeIndex = currentNodeIndex;
         appState.currentNodeId = currentNodeId;
+        appState.currentFloorKey = nextFloorKey;
         appState.currentPhaseIndex = stage === 'route' || stage === 'complete'
             ? PHASE_SLOT_IDS.length
             : phaseIndexValue;
@@ -1341,6 +1350,9 @@ function createExecutionRuntimeContext() {
         const requestId = `act-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         const commitPayload = {
             requestId,
+            meta: {
+                floorKey: appState.currentFloorKey
+            },
             world: buildWorldStateForCommit()
         };
         syncState.saving = true;
@@ -1415,11 +1427,18 @@ function createExecutionRuntimeContext() {
         if (!canUseInteractivePlannerControls()) return false;
         if (isRouteSelectionActive()) return false;
         if (isPhasePlanConfirmedForCurrentNode()) return false;
+        if (!appState.currentFloorKey) {
+            syncState.statusText = 'SYNC FAILED';
+            syncState.errorText = '当前楼层标识缺失，无法确认规划。';
+            refreshPlannerUI();
+            return false;
+        }
         appState.phasePlanLock = {
             nodeId: appState.currentNodeId,
             nodeIndex: appState.currentNodeIndex,
             locked: true,
-            confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(appState.currentPhaseIndex) || 0)))
+            confirmedPhaseIndex: Math.max(0, Math.min(3, Math.round(Number(appState.currentPhaseIndex) || 0))),
+            floorKey: appState.currentFloorKey
         };
         resetSelection();
         closeRestTintPopup();
