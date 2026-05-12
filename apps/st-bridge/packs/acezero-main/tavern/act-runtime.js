@@ -980,7 +980,7 @@
     }
 
     const currentFloorKey = normalizeTrimmedString(getCurrentFloorKey(), '');
-    const narrativeModule = runActModuleMethod('buildNarrativePromptContentFromDerived', derived, { currentFloorKey });
+    const narrativeModule = runActModuleMethod('buildNarrativePromptContentFromDerived', derived);
     const narrativeContent = narrativeModule.ok && typeof narrativeModule.value === 'string'
       ? narrativeModule.value
       : '';

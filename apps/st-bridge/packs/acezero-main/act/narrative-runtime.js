@@ -302,7 +302,7 @@ ${phaseLines.join('\n')}
     };
   }
 
-  function isPhasePlanLockCurrent(act, currentNodeId = '') {
+  function isPhasePlanLockedForNode(act, currentNodeId = '') {
     if (!act) return false;
     const lock = getPhasePlanLockForAct(act.phasePlanLock);
     return lock.locked === true
@@ -311,11 +311,11 @@ ${phaseLines.join('\n')}
   }
 
   function getEffectivePhaseSlot(act, index, currentNodeId = '') {
-    if (!isPhasePlanLockCurrent(act, currentNodeId)) return null;
+    if (!isPhasePlanLockedForNode(act, currentNodeId)) return null;
     return Array.isArray(act?.phase_slots) ? act.phase_slots[index] || null : null;
   }
 
-  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, currentFloorKey = '') {
+  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot) {
     const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
     const nodeGoals = eventTree.nodeGoals && typeof eventTree.nodeGoals === 'object' ? eventTree.nodeGoals : {};
     const currentGoal = normalizeTrimmedString(nodeGoals.current?.goal, '');
@@ -332,7 +332,6 @@ ${phaseLines.join('\n')}
     ];
 
     const phaseLines = ['[事件树]'];
-    let currentPhaseLine = '';
     let currentPhaseAction = '';
     for (let index = 0; index < 4; index += 1) {
       const item = hasCurrentWindow ? getPhaseWindowItem(eventTree, index) : null;
@@ -345,7 +344,6 @@ ${phaseLines.join('\n')}
       const line = `${label}: ${detail}｜${action}`;
       phaseLines.push(line);
       if (index === phaseIndex) {
-        currentPhaseLine = line;
         currentPhaseAction = `${detail}｜${action}`;
       }
     }
@@ -355,7 +353,7 @@ ${phaseLines.join('\n')}
 
     const currentLines = [
       '[当前进行]',
-      `本轮演绎: ${currentPhaseAction || currentPhaseLine || `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - 未规划｜自然推进`}`,
+      `本轮演绎: ${currentPhaseAction || `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - 未规划｜自然推进`}`,
       '写出这件事的实际发生、阻力与结果；如果已经形成可观察结果，结尾推进 /world/act/phase_advance 进入下一段。'
     ];
 
@@ -414,7 +412,7 @@ ${phaseLines.join('\n')}
     ].join('\n');
   }
 
-  function buildNarrativePromptContentFromDerived(derivedState, options = {}) {
+  function buildNarrativePromptContentFromDerived(derivedState) {
     if (!derivedState) return '';
 
     const { act, config, currentNodeId } = derivedState;
@@ -424,7 +422,6 @@ ${phaseLines.join('\n')}
     const stage = act?.stage || 'planning';
     const rawPhaseIndex = Math.round(Number(act?.phase_index) || 0);
     const phaseIndex = Math.max(0, Math.min(3, rawPhaseIndex));
-    const currentFloorKey = normalizeTrimmedString(options?.currentFloorKey, '');
     const currentSlot = getEffectivePhaseSlot(act, phaseIndex, currentNodeId);
     const tokenKey = currentSlot && typeof currentSlot.key === 'string' ? currentSlot.key : '';
     const headerAttrs = [
@@ -468,7 +465,7 @@ ${phaseLines.join('\n')}
       } else if (resolved?.kind === 'flavor') {
         sections.push(renderFateFlavor(resolved.flavorText, phaseIndex, resolved.slotKey));
       }
-      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, currentFloorKey));
+      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot));
     }
 
     if (!sections.length) return '';

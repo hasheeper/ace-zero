@@ -486,11 +486,7 @@
     if (!eraVars || typeof eraVars !== 'object') return false;
     const currentFloorKey = getCurrentDashboardFloorKey();
     const commitFloorKey = normalizeDashboardString(commitPayload?.meta?.floorKey, '');
-    const actFloorKey = normalizeDashboardString(
-      commitPayload?.world?.act?.phasePlanLock?.floorKey || commitPayload?.act?.phasePlanLock?.floorKey,
-      ''
-    );
-    if (currentFloorKey && (commitFloorKey !== currentFloorKey || (actFloorKey && actFloorKey !== currentFloorKey))) {
+    if (currentFloorKey && commitFloorKey !== currentFloorKey) {
       throw new Error('Stale ACT commit rejected: floorKey mismatch.');
     }
 

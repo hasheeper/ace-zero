@@ -1682,7 +1682,7 @@
   function resolveNodeGuide(config, narrative, nodeId) { return ACT_NARRATIVE_RUNTIME.resolveNodeGuide(config, narrative, nodeId); }
   function renderPinnedTemplate(template, phaseIndex) { return ACT_NARRATIVE_RUNTIME.renderPinnedTemplate(template, phaseIndex); }
   function renderFateFlavor(flavorText, phaseIndex, tokenKey) { return ACT_NARRATIVE_RUNTIME.renderFateFlavor(flavorText, phaseIndex, tokenKey); }
-  function buildNarrativePromptContentFromDerived(derivedState, options = {}) { return ACT_NARRATIVE_RUNTIME.buildNarrativePromptContentFromDerived(derivedState, options); }
+  function buildNarrativePromptContentFromDerived(derivedState) { return ACT_NARRATIVE_RUNTIME.buildNarrativePromptContentFromDerived(derivedState); }
   function buildPhasePlanConfirmedPromptContent(derivedState, currentFloorKey = '') { return ACT_NARRATIVE_RUNTIME.buildPhasePlanConfirmedPromptContent(derivedState, currentFloorKey); }
   function evaluateCompletionTransition(actStateInput, heroStateInput) { return ACT_NARRATIVE_RUNTIME.evaluateCompletionTransition(actStateInput, heroStateInput); }
   function buildCompletionTransitionPromptContent(transitionResult, options = {}) { return ACT_NARRATIVE_RUNTIME.buildCompletionTransitionPromptContent(transitionResult, options); }
