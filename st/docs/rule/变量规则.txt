@@ -6,7 +6,7 @@ ACE0 MVU 变量规则
 “相位”是理解节点内情节推进用的单位，不是世界时间。
 - 一个节点最多四个相位：一段 / 二段 / 三段 / 四段
 - 相位表示“当前节点里的这一小段戏 / 当前正在写的这一步情节”
-- 你可以把它理解为：同一节点内部，剧情从开场、试探、推进、收束，分成最多四步来写
+- 你可以把它理解为：同一节点内部，一个事件从开场、试探、推进、收束的过程
 - 它不表示推进 DAY，也不表示推进 MORNING / NOON / AFTERNOON / NIGHT
 - 只有当前这一小段情节已经自然收束、确实该进入下一步时，才写 `phase_advance`
 
@@ -19,17 +19,13 @@ ACE0 MVU 变量规则
 - `/world/current_time/phase`
 - `/world/location/layer`
 - `/world/location/site`
-- `/world/act/route_history`
 - `/world/act/phase_advance`
 - `/world/act/eventTree/nodeGoals`
 - `/world/act/eventTree/phaseWindow`
-- `/world/act/phasePlanLock`
 - `/world/act/reserve/combat`
 - `/world/act/reserve/rest`
 - `/world/act/reserve/asset`
 - `/world/act/reserve/vision`
-- `/world/act/pendingResolutions/<index>/status`
-- `/world/act/pendingResolutions/<index>/outcome`
 - `/hero/cast/<角色名>/present`
 - `/hero/cast/<角色名>/inParty`
 - `/hero/roster/<角色名>/level`
@@ -117,12 +113,6 @@ ACE0 MVU 变量规则
     check:
       - 仅在明确换场时更新
       - 写当前镜头场所
-  world.act.route_history:
-    type: array
-    check:
-      - 仅在明确选择下一节点时整体替换（追加新 node id）
-      - 必须保持顺序，表示已走过的节点
-      - 不要写派生字段，如 `current_node_id / dead_nodes / future_nodes`
   world.act.phase_advance:
     type: number
     range: 0~4
@@ -150,24 +140,11 @@ ACE0 MVU 变量规则
       - 每段只写 goal/event
       - 当前节点没有 phaseWindow 时，优先规划四段小目标
       - 若正文现实偏离计划，可用 `replace` 更新当前节点 phaseWindow
-  world.act.phasePlanLock:
-    type: object
-    check:
-      - 仅由 Dashboard 的“确定规划”按钮写入
-      - 剧情 LLM 不要在普通正文中写入或修改
-      - 格式为 `{ nodeId, nodeIndex, locked, confirmedPhaseIndex }`
-      - `locked=true` 只表示当前节点点数编排已锁定，不表示剧情目标
   world.act.reserve.${combat|rest|asset|vision}:
     type: number
     check:
       - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
       - 只用 `delta`
-      - 不自行分配点数
-  world.act.pendingResolutions.${index}.status/outcome:
-    type: string
-    check:
-      - 仅按 `<ACE0_COMBAT_SETTLEMENT>` 的 `suggestedJsonPatch` 更新
-      - 对应条目只标记为 `resolved`，不删除数组项
   hero.cast.${角色名}.present:
     type: boolean
     check:

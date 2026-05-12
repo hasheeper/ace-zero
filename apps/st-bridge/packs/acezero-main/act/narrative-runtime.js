@@ -402,12 +402,12 @@ ${phaseLines.join('\n')}
     const actionLines = buildConfirmedPlanActionLines(act, eventTree);
     return [
       '<ace0_phase_plan_confirmed>',
-      '本楼刚确认了本节点行动编排。',
+      '确认了本节点行动编排。',
       '[已确认行动]',
       ...actionLines,
       '[本轮要求]',
-      '必须先在 COT 中按以上四段行动建立或修正本节点 eventTree。',
-      '若当前目标、下一节点目标或 phaseWindow 缺失（既未规划）、空泛、偏离行动编排，本轮必须在 UpdateVariable 中更新 /world/act/eventTree。',
+      '当轮用户提交了新的行动编排，但是事件规划还没到位，需要你依据对应的行动编排，进行具体的情节树更新。',
+      '当前目标/下一节点目标或者事件缺失（既未规划），本轮必须在 UpdateVariable 中更新 /world/act/eventTree。',
       '</ace0_phase_plan_confirmed>'
     ].join('\n');
   }
