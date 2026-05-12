@@ -713,9 +713,7 @@ function createExecutionRuntimeContext() {
         const lock = normalizePhasePlanLock(appState.phasePlanLock);
         return lock.locked === true
             && lock.nodeId === appState.currentNodeId
-            && lock.nodeIndex === appState.currentNodeIndex
-            && !!appState.currentFloorKey
-            && lock.floorKey === appState.currentFloorKey;
+            && lock.nodeIndex === appState.currentNodeIndex;
     }
 
     function getPhasePlanLockForCommit() {
@@ -724,8 +722,6 @@ function createExecutionRuntimeContext() {
             lock.locked === true
             && lock.nodeId === appState.currentNodeId
             && lock.nodeIndex === appState.currentNodeIndex
-            && !!appState.currentFloorKey
-            && lock.floorKey === appState.currentFloorKey
         ) {
             return lock;
         }

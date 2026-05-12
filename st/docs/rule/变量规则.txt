@@ -134,7 +134,7 @@ ACE0 MVU 变量规则
   world.act.eventTree.nodeGoals:
     type: object
     check:
-      - 仅用于维护当前节点与下一节点的剧情总目标
+      - 仅用于维护和计划当前节点与下一节点的剧情总目标
       - 只允许 `current` 与 `next`
       - `current` 必须写成 `{ "goal": "...", "tendency": "..." }`
       - `next` 必须写成 `{ "goal": "...", "tendency": "" }`；只写下一节点总目标，不写下一节点四段细分
@@ -150,7 +150,6 @@ ACE0 MVU 变量规则
       - 每段只写 goal/event
       - 当前节点没有 phaseWindow 时，优先规划四段小目标
       - 若正文现实偏离计划，可用 `replace` 更新当前节点 phaseWindow
-      - 不要规划下一节点的 phaseWindow
   world.act.phasePlanLock:
     type: object
     check:

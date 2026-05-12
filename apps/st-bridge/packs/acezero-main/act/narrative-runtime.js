@@ -302,18 +302,16 @@ ${phaseLines.join('\n')}
     };
   }
 
-  function isPhasePlanLockCurrent(act, currentNodeId = '', currentFloorKey = '') {
-    const floorKey = normalizeTrimmedString(currentFloorKey, '');
-    if (!act || !floorKey) return false;
+  function isPhasePlanLockCurrent(act, currentNodeId = '') {
+    if (!act) return false;
     const lock = getPhasePlanLockForAct(act.phasePlanLock);
     return lock.locked === true
       && lock.nodeId === normalizeTrimmedString(currentNodeId, '')
-      && lock.nodeIndex === Math.max(1, Math.round(Number(act.nodeIndex) || 1))
-      && lock.floorKey === floorKey;
+      && lock.nodeIndex === Math.max(1, Math.round(Number(act.nodeIndex) || 1));
   }
 
-  function getEffectivePhaseSlot(act, index, currentNodeId = '', currentFloorKey = '') {
-    if (!isPhasePlanLockCurrent(act, currentNodeId, currentFloorKey)) return null;
+  function getEffectivePhaseSlot(act, index, currentNodeId = '') {
+    if (!isPhasePlanLockCurrent(act, currentNodeId)) return null;
     return Array.isArray(act?.phase_slots) ? act.phase_slots[index] || null : null;
   }
 
@@ -341,7 +339,7 @@ ${phaseLines.join('\n')}
       const label = index < phaseIndex ? '已完成' : (index === phaseIndex ? '当前进行' : '未来准备');
       const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
       const event = normalizeTrimmedString(item?.event, '');
-      const slot = getEffectivePhaseSlot(act, index, currentNodeId, currentFloorKey);
+      const slot = getEffectivePhaseSlot(act, index, currentNodeId);
       const action = formatPhaseAction(slot);
       const detail = `${ACT_PHASE_LABELS[index]} - ${goal}${event ? ` / ${event}` : ''}`;
       const line = `${label}: ${detail}｜${action}`;
@@ -371,12 +369,15 @@ ${phaseLines.join('\n')}
     return [nodeLines.join('\n'), phaseLines.join('\n'), currentLines.join('\n'), decisionLines.join('\n')].join('\n\n');
   }
 
-  function buildCurrentPhaseActionLine(act, eventTree, phaseIndex) {
-    const item = getPhaseWindowItem(eventTree, phaseIndex);
-    const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
-    const event = normalizeTrimmedString(item?.event, '');
-    const slot = Array.isArray(act?.phase_slots) ? act.phase_slots[phaseIndex] : null;
-    return `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - ${goal}${event ? ` / ${event}` : ''}｜${formatPhaseAction(slot)}`;
+  function buildConfirmedPlanActionLines(act, eventTree) {
+    return [0, 1, 2, 3].map((index) => {
+      const item = getPhaseWindowItem(eventTree, index);
+      const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
+      const event = normalizeTrimmedString(item?.event, '');
+      const slot = Array.isArray(act?.phase_slots) ? act.phase_slots[index] : null;
+      const detail = `${ACT_PHASE_LABELS[index] || `${index + 1}段`} - ${goal}${event ? ` / ${event}` : ''}`;
+      return `${detail}｜${formatPhaseAction(slot)}`;
+    });
   }
 
   function buildPhasePlanConfirmedPromptContent(derivedState, currentFloorKey = '') {
@@ -400,12 +401,16 @@ ${phaseLines.join('\n')}
     }
 
     const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
-    const currentAction = buildCurrentPhaseActionLine(act, eventTree, phaseIndex);
+    const actionLines = buildConfirmedPlanActionLines(act, eventTree);
     return [
       '<ace0_phase_plan_confirmed>',
-      '本楼刚确认了行动编排。',
-      `当前行动：${currentAction}`,
-      '请按当前行动演绎正文；若正文现实与原计划不合，先在 UpdateVariable 中修正 /world/act/eventTree，再决定是否推进 /world/act/phase_advance。',
+      '本楼刚确认了本节点行动编排。',
+      '[已确认行动]',
+      ...actionLines,
+      '[本轮要求]',
+      '必须先在 COT 中按以上四段行动建立或修正本节点 eventTree。',
+      '若当前目标、下一节点目标或 phaseWindow 缺失、空泛、偏离行动编排，本轮必须在 UpdateVariable 中更新 /world/act/eventTree。',
+      '完成计划对齐后，再按当前进行项演绎正文；只有当前进行项已经落地，才推进 /world/act/phase_advance。',
       '</ace0_phase_plan_confirmed>'
     ].join('\n');
   }
@@ -421,7 +426,7 @@ ${phaseLines.join('\n')}
     const rawPhaseIndex = Math.round(Number(act?.phase_index) || 0);
     const phaseIndex = Math.max(0, Math.min(3, rawPhaseIndex));
     const currentFloorKey = normalizeTrimmedString(options?.currentFloorKey, '');
-    const currentSlot = getEffectivePhaseSlot(act, phaseIndex, currentNodeId, currentFloorKey);
+    const currentSlot = getEffectivePhaseSlot(act, phaseIndex, currentNodeId);
     const tokenKey = currentSlot && typeof currentSlot.key === 'string' ? currentSlot.key : '';
     const headerAttrs = [
       `nodeIndex="${act?.nodeIndex || 1}"`,

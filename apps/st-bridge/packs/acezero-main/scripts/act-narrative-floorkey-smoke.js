@@ -48,7 +48,12 @@ const derived = {
 
 const confirmed = act.buildPhasePlanConfirmedPromptContent(derived, 'message:7');
 assert(confirmed.includes('<ace0_phase_plan_confirmed>'), 'confirmed floor should inject standalone XML');
+assert(confirmed.includes('[已确认行动]'), 'confirmed XML should list the whole node plan');
+assert(confirmed.includes('一段 - 包间对话与身份确认 / 与Rino的私下交底｜自然推进'), 'confirmed XML should include phase 1 action');
 assert(confirmed.includes('行动-combat｜二级·精英战'), 'confirmed XML should include combat level label');
+assert(confirmed.includes('三段 - 上桌博弈 / 首轮牌桌交锋｜行动-rest｜一级·休整'), 'confirmed XML should include phase 3 action');
+assert(confirmed.includes('必须先在 COT 中按以上四段行动建立或修正本节点 eventTree'), 'confirmed XML should strongly require eventTree alignment');
+assert(!confirmed.includes('当前行动：'), 'confirmed XML should not be scoped to only one current action');
 
 const staleConfirmed = act.buildPhasePlanConfirmedPromptContent(derived, 'message:8');
 assert(staleConfirmed === '', 'mismatched floor should not inject confirmed XML');
@@ -58,7 +63,7 @@ assert(narrative.includes('token="combat"'), 'matched floor should expose curren
 assert(narrative.includes('行动-combat｜二级·精英战'), 'matched floor narrative should include action label');
 
 const staleNarrative = act.buildNarrativePromptContentFromDerived(derived, { currentFloorKey: 'message:8' });
-assert(!staleNarrative.includes('token="combat"'), 'stale floor should hide current token attr');
-assert(!staleNarrative.includes('行动-combat｜二级·精英战'), 'stale floor narrative should hide stale action label');
+assert(staleNarrative.includes('token="combat"'), 'node-locked plan should keep current token attr across floors');
+assert(staleNarrative.includes('行动-combat｜二级·精英战'), 'node-locked plan should keep action label across floors');
 
 console.log('[act-narrative-floorkey-smoke] all checks passed');
