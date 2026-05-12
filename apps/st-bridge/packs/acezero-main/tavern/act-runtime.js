@@ -811,14 +811,31 @@
     return '';
   }
 
-  function findPendingCombatRequest(liveAct) {
+  function findPendingCombatRequest(liveAct, derived = null) {
     const pending = Array.isArray(liveAct?.pendingResolutions) ? liveAct.pendingResolutions : [];
+    const act = derived?.act || liveAct;
+    const currentNodeId = typeof derived?.currentNodeId === 'string' && derived.currentNodeId.trim()
+      ? derived.currentNodeId.trim()
+      : (Array.isArray(act?.route_history) ? act.route_history[Math.max(0, Math.round(Number(act?.nodeIndex) || 1) - 1)] : '') || '';
+    const currentNodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
+    const currentPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
     for (let i = 0; i < pending.length; i++) {
       const item = pending[i];
       if (!item || typeof item !== 'object') continue;
       const type = typeof item.type === 'string' ? item.type.trim().toLowerCase() : '';
       const status = typeof item.status === 'string' ? item.status.trim().toLowerCase() : 'pending';
-      if (type === 'combat' && status === 'pending') return { request: item, index: i };
+      const requestNodeId = typeof item.nodeId === 'string' ? item.nodeId.trim() : '';
+      const requestNodeIndex = Math.max(1, Math.round(Number(item.nodeIndex) || currentNodeIndex));
+      const requestPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.phaseIndex) || 0)));
+      if (
+        type === 'combat' &&
+        status === 'pending' &&
+        (!requestNodeId || !currentNodeId || requestNodeId === currentNodeId) &&
+        requestNodeIndex === currentNodeIndex &&
+        requestPhaseIndex === currentPhaseIndex
+      ) {
+        return { request: item, index: i };
+      }
     }
     return null;
   }
@@ -856,7 +873,7 @@
   }
 
   function buildCombatRequestPromptContent(liveAct, eraVars, derived = null) {
-    const pending = findPendingCombatRequest(liveAct) || findActiveCombatTokenRequest(liveAct, derived);
+    const pending = findPendingCombatRequest(liveAct, derived) || findActiveCombatTokenRequest(liveAct, derived);
     if (!pending) return '';
     const request = pending.request;
     const level = Math.max(1, Math.min(3, Math.round(Number(request.level || request.combatLevel || request.tier) || 1)));
@@ -885,7 +902,7 @@
     const label = level >= 3 ? 'Combat 3 / Boss 交锋' : level === 2 ? 'Combat 2 / 精英交锋' : 'Combat 1 / 小交锋';
     return [
       '<ace0_combat_request>',
-      '当前存在一个待结算交锋点 pending request。本轮若进入这个特殊交锋局，必须在 <ACE0_BATTLE> JSON 顶层原样写入以下 ace0Combat 字段；普通赌局、非交锋点赌局、回放模式都不要写 ace0Combat。',
+      '当前相位存在一个待结算交锋点 pending request。本轮若进入这个特殊交锋局，必须在 <ACE0_BATTLE> JSON 顶层原样写入以下 ace0Combat 字段；普通赌局、非交锋点赌局、回放模式都不要写 ace0Combat。',
       '特殊档位: ' + label,
       '筹码参考: level 1 约正资产 10%，level 2 约 33%，level 3 约 70%。stakeGold 已由系统按当前资源估算，AI 不要自由改动。',
       '```json',

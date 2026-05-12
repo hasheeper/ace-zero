@@ -102,10 +102,11 @@ function testCombatPromptInjection() {
     world: {
       current_time: { day: 1, phase: 'NOON' },
       location: { layer: 'THE_EXCHANGE', site: 'casino_floor', tags: [] },
-      act: createActStateAt(act, 0, [], {
+      act: createActStateAt(act, 1, ['node1-entry'], {
+        phase_index: 1,
         pendingResolutions: [
           { type: 'combat', status: 'resolved', id: 'old' },
-          { type: 'combat', status: 'pending', id: 'boss-req', level: 3 }
+          { type: 'combat', status: 'pending', id: 'boss-req', level: 3, nodeId: 'node1-entry', nodeIndex: 1, phaseIndex: 1 }
         ]
       })
     }
@@ -119,6 +120,47 @@ function testCombatPromptInjection() {
   assert(prompt.content.includes('"requestIndex": 1'), 'requestIndex should point to original pending index');
   assert(prompt.content.includes('"level": 3'), 'level should be in prompt');
   assert(prompt.content.includes('"stakeGold": 105'), 'stakeGold should use 70% of positive funds + assets');
+}
+
+function testStaleCombatPromptDoesNotInject() {
+  const { sandbox, act, tavernFactory } = loadTavernSandbox();
+  const eraVars = {
+    hero: { funds: 12, assets: 0, cast: {}, roster: {} },
+    world: {
+      current_time: { day: 1, phase: 'MORNING' },
+      location: { layer: 'THE_EXCHANGE', site: 'casino_floor', tags: [] },
+      act: createActStateAt(act, 1, ['node1-entry'], {
+        phase_index: 2,
+        phasePlanLock: {
+          nodeId: 'node1-entry',
+          nodeIndex: 1,
+          locked: true,
+          confirmedPhaseIndex: 0,
+          floorKey: 'message:7'
+        },
+        phase_slots: [
+          null,
+          { key: 'combat', source: 'reserve', amount: 1 },
+          { key: 'rest', source: 'reserve', amount: 1 },
+          null
+        ],
+        pendingResolutions: [
+          {
+            type: 'combat',
+            status: 'pending',
+            id: 'chapter0_exchange:node1-entry:1:combat:1:1',
+            level: 1,
+            nodeId: 'node1-entry',
+            nodeIndex: 1,
+            phaseIndex: 1
+          }
+        ]
+      })
+    }
+  };
+  const { runtime } = createTavernRuntime(tavernFactory, sandbox, { eraVars });
+  const prompts = runtime.buildActNarrativePrompts(eraVars);
+  assert(!prompts.find((item) => item.id === 'ace0_combat_request'), 'stale combat pending from previous phase should not inject during rest phase');
 }
 
 function testActiveCombatTokenPromptInjection() {
@@ -307,6 +349,7 @@ function main() {
   testOutcomeAndRewards();
   testSettlementPatch();
   testCombatPromptInjection();
+  testStaleCombatPromptDoesNotInject();
   testActiveCombatTokenPromptInjection();
   testMiniGamePromptMarker();
   testTexasPromptMarker();

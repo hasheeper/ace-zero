@@ -54,7 +54,7 @@ assert(confirmed.includes('行动-combat｜二级·精英战'), 'confirmed XML s
 assert(confirmed.includes('二段 - 迎接生客｜行动-combat｜二级·精英战'), 'confirmed XML should not duplicate action labels from phase event text');
 assert(!confirmed.includes('迎接生客 / 行动-combat｜行动-combat'), 'confirmed XML should strip duplicated action event text');
 assert(confirmed.includes('三段 - 上桌博弈｜行动-rest｜一级·休整'), 'confirmed XML should include phase 3 action without duplicated event text');
-assert(confirmed.includes('必须先在 COT 中按以上四段行动建立或修正本节点 eventTree'), 'confirmed XML should strongly require eventTree alignment');
+assert(confirmed.includes('事件规划还没到位，需要你依据对应的行动编排，进行具体的情节树更新'), 'confirmed XML should strongly require eventTree alignment');
 assert(!confirmed.includes('当前行动：'), 'confirmed XML should not be scoped to only one current action');
 
 const staleConfirmed = act.buildPhasePlanConfirmedPromptContent(derived, 'message:8');
