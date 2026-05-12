@@ -1022,7 +1022,7 @@
           ]
         : [];
       if (combatSettlement) {
-        fundsInstruction += '\n交锋点结算：直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
+        fundsInstruction += '\n此轮只作为结算演绎段，不要推进`world.act.phase_advance`';
       }
 
       // 多局写作指导

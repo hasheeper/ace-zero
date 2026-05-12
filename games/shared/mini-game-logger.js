@@ -179,7 +179,7 @@
         ]
       : [];
     if (combatSettlement) {
-      fundsLine += '\n交锋点结算：直接复制 <ACE0_COMBAT_SETTLEMENT> 的 suggestedJsonPatch。';
+      fundsLine += '\n此轮只作为结算演绎段，不要推进`world.act.phase_advance`';
     }
 
     // 推荐字数 (简化版 + 多局加成)
