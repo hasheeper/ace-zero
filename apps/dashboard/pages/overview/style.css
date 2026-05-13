@@ -3608,7 +3608,6 @@
             letter-spacing: 0.5px;
         }
         .action-btn,
-        .drawer .choice-actions button,
         .btn-unequip {
             min-height: 30px;
             border: 1px solid color-mix(in srgb, var(--accent) 30%, rgba(255,255,255,0.12));
@@ -4055,9 +4054,7 @@
             font: 900 8px/1 var(--font-ui);
             letter-spacing: 0.9px;
         }
-        .drawer .choice { display: grid; grid-template-rows: 126px 26px; gap: 8px; min-width: 0; }
-        .drawer .choice-actions { display: flex; gap: 6px; height: 26px; }
-        .drawer .choice-actions button { flex: 1; min-height: 26px; }
+        .drawer .choice { display: block; min-width: 0; min-height: 154px; }
         .offer-overlay,
         .warehouse-overlay,
         .tint-overlay {
@@ -4428,9 +4425,7 @@
             min-height: 54px;
             height: auto;
         }
-        .drawer.plan-layout-narrow .choice {
-            grid-template-rows: auto 26px;
-        }
+        .drawer.plan-layout-narrow .choice { min-height: 112px; }
         .drawer.plan-layout-narrow .cmd-card {
             min-height: 98px;
             padding: 16px 18px;

@@ -513,16 +513,21 @@
         `;
     }
 
-    function buildAssetOfferChoiceMarkup(card, index) {
+    function resolveOfferChoiceSlotType(card, assetSummary) {
         const slotTags = Array.isArray(card?.slotTags) ? card.slotTags : [];
         const canUseVoid = slotTags.includes('void');
+        if (!canUseVoid) return 'general';
+        const slots = assetSummary?.slots || {};
+        const voidUsed = Math.max(0, Math.round(Number(slots.voidUsed) || 0));
+        const voidMax = Math.max(0, Math.round(Number(slots.voidMax) || 0));
+        return voidUsed < voidMax ? 'void' : 'general';
+    }
+
+    function buildAssetOfferChoiceMarkup(card, index, assetSummary) {
+        const slotType = resolveOfferChoiceSlotType(card, assetSummary);
         return `
             <div class="choice">
-                ${buildAssetCardMarkup(card, { compact: true })}
-                <div class="choice-actions">
-                    <button type="button" data-asset-action="choose-card" data-choice-index="${index}" data-slot-type="general">GENERAL</button>
-                    ${canUseVoid ? `<button type="button" data-asset-action="choose-card" data-choice-index="${index}" data-slot-type="void">VOID</button>` : ''}
-                </div>
+                ${buildAssetCardMarkup(card, { compact: true, action: 'choose-card', choiceIndex: index, slotType })}
             </div>
         `;
     }
@@ -532,7 +537,7 @@
         const queuedOffers = Array.isArray(assetSummary.pending?.offerQueue) ? assetSummary.pending.offerQueue : [];
         const queueText = queuedOffers.length ? ` · QUEUE ${queuedOffers.length}` : '';
         const offerMarkup = pendingOffer?.choices?.length
-            ? pendingOffer.choices.map((card, index) => buildAssetOfferChoiceMarkup(card, index)).join('')
+            ? pendingOffer.choices.map((card, index) => buildAssetOfferChoiceMarkup(card, index, assetSummary)).join('')
             : '';
         if (!offerMarkup) return '';
         return `

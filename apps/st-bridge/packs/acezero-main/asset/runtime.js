@@ -749,7 +749,14 @@
 
         const allowedSlots = getAllowedSlotsForCard(card);
         const preferredSlot = normalizeEnum(payload.slotType, SLOT_TYPES, allowedSlots[0] || 'general');
-        const slotType = allowedSlots.includes(preferredSlot) ? preferredSlot : allowedSlots[0];
+        let slotType = allowedSlots.includes(preferredSlot) ? preferredSlot : allowedSlots[0];
+        if (
+          slotType === 'void' &&
+          allowedSlots.includes('general') &&
+          assetDeck.active_void_cards.length >= assetDeck.void_slots_unlocked
+        ) {
+          slotType = 'general';
+        }
         if (!slotType) return result(assetDeck, false, 'invalid_slot');
 
         const targetListKey = slotType === 'void' ? 'active_void_cards' : 'active_general_cards';

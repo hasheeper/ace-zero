@@ -301,6 +301,28 @@ function testVoidSlotRestriction() {
   assertEqual(chosen.ok, true, 'Void skill should be selectable into a void slot');
   assertEqual(chosen.code, 'equipped', 'Void skill should equip when a void slot is free');
   assertEqual(chosen.assetDeck.active_void_cards.length, 1, 'Void skill should enter active void deck');
+
+  const fallback = assetDeck.applyAssetDeckCommand(assetDeck.normalizeAssetDeckState({
+    active_void_cards: [
+      { cardId: 'asset_skill_insulation_l1', instanceId: 'filled-void-1' },
+      { cardId: 'asset_skill_reality_l3', instanceId: 'filled-void-2' }
+    ],
+    pending_offer: {
+      id: 'offer:void:fallback',
+      pool: 'low',
+      choices: [{
+        cardId: 'asset_void_anchor',
+        instanceId: 'candidate-void-fallback',
+        slotTags: ['general', 'void']
+      }]
+    }
+  }), {
+    kind: 'choose_card',
+    payload: { choiceIndex: 0, slotType: 'void' }
+  });
+  assertEqual(fallback.ok, true, 'Void-compatible card should still resolve when void slots are full');
+  assertEqual(fallback.code, 'equipped', 'Void-compatible card should fall back to general when void slots are full');
+  assertEqual(fallback.assetDeck.active_general_cards.length, 1, 'Void-compatible fallback should enter general deck');
 }
 
 function testRainbowUniqueAndProtectedReplace() {
