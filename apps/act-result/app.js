@@ -557,10 +557,59 @@
         return parts.join(' · ') || 'CONTRACT';
       }
 
+      function formatAssetSignedNumber(value) {
+        var numeric = Math.round((Number(value) || 0) * 1000) / 1000;
+        return (numeric > 0 ? '+' : '') + String(numeric);
+      }
+
+      function formatAssetPercent(value) {
+        var numeric = Math.round((Number(value) || 0) * 100);
+        return (numeric > 0 ? '+' : '') + String(numeric) + '%';
+      }
+
+      function getAssetCardDescription(card) {
+        if (card && typeof card.effectText === 'string' && card.effectText.trim()) return card.effectText.trim();
+        var kind = String(card && card.kind || '').toLowerCase();
+        var skillKey = String(card && card.skillKey || '').toLowerCase();
+        var level = Math.max(0, Math.round(Number(card && card.level) || 0));
+        if (kind === 'skill' && skillKey) return skillKey.replace(/_/g, ' ') + (level ? ' ' + level : '');
+        var modifiers = Array.isArray(card && card.modifiers) ? card.modifiers : [];
+        var parts = modifiers.map(function (modifier) {
+          var type = String(modifier && (modifier.type || modifier.kind) || '').toLowerCase();
+          var value = Number(modifier && modifier.value) || 0;
+          if (type === 'mana_max_flat') return 'Mana Max ' + formatAssetSignedNumber(value);
+          if (type === 'skill_cost_flat') return 'Mana ' + formatAssetSignedNumber(value);
+          if (type === 'skill_cost_pct') return 'Mana ' + formatAssetPercent(value);
+          if (type === 'force_power_flat') return '效果 ' + formatAssetSignedNumber(value);
+          if (type === 'force_power_pct' || type === 'all_force_power_bonus') return '效果 ' + formatAssetPercent(value);
+          if (type === 'risk_reward_roll') return '释放时随机 Mana / 效果';
+          if (type === 'skill_level_bonus') return 'Texas 技能等级 +1';
+          if (type === 'skill_upgrade') return '已装配技能升级 +1';
+          if (type === 'street_force_chance_flat') return '每街 ' + formatAssetPercent(modifier.chance || 0) + ' 触发 ' + formatAssetSignedNumber(value);
+          return '';
+        }).filter(Boolean);
+        return parts.slice(0, 2).join(' / ') || String(card && (card.skillKey || card.system || card.cardId) || '').replace(/_/g, ' ') || 'READY';
+      }
+
+      function getAssetCardStatusTags(card) {
+        if (Array.isArray(card && card.statusTags) && card.statusTags.length) {
+          return card.statusTags.filter(function (tag) { return typeof tag === 'string' && tag.trim(); }).slice(0, 5);
+        }
+        var kind = String(card && card.kind || '').toLowerCase();
+        var gameTags = Array.isArray(card && card.gameTags) ? card.gameTags.map(function (tag) { return String(tag).toLowerCase(); }) : [];
+        var slotTags = Array.isArray(card && card.slotTags) ? card.slotTags.map(function (tag) { return String(tag).toLowerCase(); }) : [];
+        var tags = [kind === 'skill' ? '技能唯一' : '可叠加'];
+        if (kind === 'upgrade' || card && card.consumable) tags.push('消耗');
+        if (slotTags.indexOf('void') >= 0) tags.push('VOID槽');
+        if (gameTags.some(function (tag) { return tag.indexOf('texas') >= 0; })) tags.push('Texas');
+        if (gameTags.some(function (tag) { return ['blackjack', 'dice', 'dragon-tiger'].indexOf(tag) >= 0; })) tags.push('小游戏');
+        return tags.slice(0, 5);
+      }
+
       function getDefaultAssetSlot(card) {
         var tags = Array.isArray(card && card.slotTags) ? card.slotTags.map(function (tag) { return String(tag).toLowerCase(); }) : [];
-        if (tags.indexOf('general') >= 0) return 'general';
         if (tags.indexOf('void') >= 0) return 'void';
+        if (tags.indexOf('general') >= 0) return 'general';
         return 'general';
       }
 
@@ -607,16 +656,25 @@
 
           var desc = document.createElement('span');
           desc.className = 'asset-card-desc';
-          desc.textContent = String(card.skillKey || card.system || card.cardId || '').replace(/_/g, ' ') || 'READY';
+          desc.textContent = getAssetCardDescription(card);
 
           var slot = document.createElement('span');
           slot.className = 'asset-card-slot';
           slot.textContent = getDefaultAssetSlot(card).toUpperCase();
 
+          var tags = document.createElement('span');
+          tags.className = 'asset-card-tags';
+          getAssetCardStatusTags(card).forEach(function (tagText) {
+            var tag = document.createElement('i');
+            tag.textContent = String(tagText).toUpperCase();
+            tags.appendChild(tag);
+          });
+
           btn.appendChild(glyph);
           btn.appendChild(meta);
           btn.appendChild(name);
           btn.appendChild(desc);
+          btn.appendChild(tags);
           btn.appendChild(slot);
           btn.addEventListener('click', function () { handleAssetCardClick(btn); });
           listEl.appendChild(btn);

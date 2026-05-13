@@ -50,6 +50,62 @@
     }
   }
 
+  function normalizeAssetText(value, fallback = '') {
+    return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  }
+
+  function formatAssetSignedNumber(value) {
+    const numeric = Math.round((Number(value) || 0) * 1000) / 1000;
+    return `${numeric > 0 ? '+' : ''}${numeric}`;
+  }
+
+  function formatAssetPercent(value) {
+    const numeric = Math.round((Number(value) || 0) * 100);
+    return `${numeric > 0 ? '+' : ''}${numeric}%`;
+  }
+
+  function buildAssetCardEffectText(card, catalogCard) {
+    const explicit = normalizeAssetText(card.effectText || catalogCard?.effectText, '');
+    if (explicit) return explicit;
+    const kind = normalizeAssetText(card.kind || catalogCard?.kind, '').toLowerCase();
+    const skillKey = normalizeAssetText(card.skillKey || catalogCard?.skillKey, '').toLowerCase();
+    const level = Math.max(0, Math.round(Number(card.level ?? catalogCard?.level) || 0));
+    if (kind === 'skill' && skillKey) return `${skillKey.replace(/_/g, ' ')}${level ? ` ${level}` : ''}`;
+    const modifiers = Array.isArray(card.modifiers) ? card.modifiers : (Array.isArray(catalogCard?.modifiers) ? catalogCard.modifiers : []);
+    const parts = modifiers.map(modifier => {
+      const type = normalizeAssetText(modifier?.type || modifier?.kind, '').toLowerCase();
+      const value = Number(modifier?.value) || 0;
+      if (type === 'mana_max_flat') return `Mana Max ${formatAssetSignedNumber(value)}`;
+      if (type === 'skill_cost_flat') return `Mana ${formatAssetSignedNumber(value)}`;
+      if (type === 'skill_cost_pct') return `Mana ${formatAssetPercent(value)}`;
+      if (type === 'force_power_flat') return `效果 ${formatAssetSignedNumber(value)}`;
+      if (type === 'force_power_pct' || type === 'all_force_power_bonus') return `效果 ${formatAssetPercent(value)}`;
+      if (type === 'risk_reward_roll') return '释放时随机 Mana / 效果';
+      if (type === 'skill_level_bonus') return 'Texas 技能等级 +1';
+      if (type === 'skill_upgrade') return '已装配技能升级 +1';
+      if (type === 'street_force_chance_flat') return `每街 ${formatAssetPercent(modifier.chance || 0)} 触发 ${formatAssetSignedNumber(value)}`;
+      return '';
+    }).filter(Boolean);
+    return parts.slice(0, 2).join(' / ') || normalizeAssetText(card.cardId || catalogCard?.id, 'READY');
+  }
+
+  function buildAssetCardStatusTags(card, catalogCard) {
+    const explicit = Array.isArray(card.statusTags) ? card.statusTags.filter(tag => typeof tag === 'string' && tag.trim()) : [];
+    if (explicit.length) return explicit.slice(0, 5);
+    const kind = normalizeAssetText(card.kind || catalogCard?.kind, '').toLowerCase();
+    const gameTags = Array.isArray(card.gameTags) ? card.gameTags : (Array.isArray(catalogCard?.gameTags) ? catalogCard.gameTags : []);
+    const slotTags = Array.isArray(card.slotTags) ? card.slotTags : (Array.isArray(catalogCard?.slotTags) ? catalogCard.slotTags : []);
+    const tags = [];
+    if (catalogCard?.unique || card.unique) tags.push('唯一');
+    else if (kind === 'skill') tags.push('技能唯一');
+    else tags.push('可叠加');
+    if (catalogCard?.consumable || card.consumable || kind === 'upgrade') tags.push('消耗');
+    if (slotTags.map(tag => String(tag).toLowerCase()).includes('void')) tags.push('VOID槽');
+    if (gameTags.some(tag => String(tag).toLowerCase().includes('texas'))) tags.push('Texas');
+    if (gameTags.some(tag => ['blackjack', 'dice', 'dragon-tiger'].includes(String(tag).toLowerCase()))) tags.push('小游戏');
+    return tags.slice(0, 5);
+  }
+
   function buildAssetOfferResultPayload(assetDeckInput) {
     const assetDeck = assetDeckInput && typeof assetDeckInput === 'object' && !Array.isArray(assetDeckInput)
       ? assetDeckInput
@@ -67,6 +123,9 @@
       choices: choices.slice(0, 3).map((choice, index) => {
         const card = choice && typeof choice === 'object' && !Array.isArray(choice) ? choice : {};
         const catalogCard = getAssetCatalogCard(card.cardId);
+        const slotTags = Array.isArray(card.slotTags) && card.slotTags.length
+          ? card.slotTags.filter(tag => typeof tag === 'string')
+          : (Array.isArray(catalogCard?.slotTags) ? catalogCard.slotTags.filter(tag => typeof tag === 'string') : []);
         return {
           choiceIndex: index,
           instanceId: typeof card.instanceId === 'string' ? card.instanceId : '',
@@ -74,12 +133,14 @@
           name: typeof catalogCard?.name === 'string' && catalogCard.name.trim()
             ? catalogCard.name.trim()
             : (typeof card.name === 'string' ? card.name : card.cardId || `CARD ${index + 1}`),
-          kind: typeof card.kind === 'string' ? card.kind : '',
-          rarity: typeof card.rarity === 'string' ? card.rarity : '',
-          system: typeof card.system === 'string' ? card.system : '',
-          skillKey: typeof card.skillKey === 'string' ? card.skillKey : '',
-          level: Math.max(0, Math.round(Number(card.level) || 0)),
-          slotTags: Array.isArray(card.slotTags) ? card.slotTags.filter(tag => typeof tag === 'string') : []
+          kind: typeof card.kind === 'string' ? card.kind : (typeof catalogCard?.kind === 'string' ? catalogCard.kind : ''),
+          rarity: typeof card.rarity === 'string' ? card.rarity : (typeof catalogCard?.rarity === 'string' ? catalogCard.rarity : ''),
+          system: typeof card.system === 'string' ? card.system : (typeof catalogCard?.system === 'string' ? catalogCard.system : ''),
+          skillKey: typeof card.skillKey === 'string' ? card.skillKey : (typeof catalogCard?.skillKey === 'string' ? catalogCard.skillKey : ''),
+          level: Math.max(0, Math.round(Number(card.level ?? catalogCard?.level) || 0)),
+          slotTags,
+          effectText: buildAssetCardEffectText(card, catalogCard),
+          statusTags: buildAssetCardStatusTags({ ...card, slotTags }, catalogCard)
         };
       })
     };

@@ -88,6 +88,8 @@ async function main() {
   assertEqual(payload.assetOffer.pool, 'low', 'asset I should expose low pool in ACT_RESULT');
   assertEqual(payload.assetOffer.choices.length, 3, 'ACT_RESULT should expose three card choices');
   assert(payload.assetOffer.choices.every(card => card.name && card.cardId), 'card choices should include display names and ids');
+  assert(payload.assetOffer.choices.every(card => card.effectText && card.rarity), 'card choices should include effect text and rarity');
+  assert(payload.assetOffer.choices.every(card => Array.isArray(card.statusTags)), 'card choices should include status tags');
   console.log('[act-result-asset-offer-smoke] all checks passed');
 }
 

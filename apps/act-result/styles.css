@@ -1007,13 +1007,15 @@
         gap: 8px;
     }
     .asset-card-btn {
+        --asset-card-accent: var(--gold-main);
+        --asset-card-rgb: 207, 181, 59;
         position: relative;
         min-height: 112px;
         padding: 12px 13px 28px;
-        border: 1px solid rgba(207,181,59,0.12);
-        border-top-color: rgba(207,181,59,0.38);
+        border: 1px solid rgba(var(--asset-card-rgb),0.14);
+        border-top-color: rgba(var(--asset-card-rgb),0.52);
         background:
-            radial-gradient(circle at 15% 0%, rgba(207,181,59,0.14), transparent 36%),
+            radial-gradient(circle at 15% 0%, rgba(var(--asset-card-rgb),0.15), transparent 36%),
             linear-gradient(145deg, rgba(255,255,255,0.045), rgba(255,255,255,0.004) 58%, rgba(0,0,0,0.22));
         color: rgba(255,255,255,0.82);
         text-align: left;
@@ -1023,6 +1025,22 @@
         transition: transform 0.24s ease, border-color 0.24s ease, opacity 0.24s ease, filter 0.24s ease;
         font: inherit;
     }
+    .asset-card-btn.rarity-bronze {
+        --asset-card-accent: #c7834a;
+        --asset-card-rgb: 199, 131, 74;
+    }
+    .asset-card-btn.rarity-silver {
+        --asset-card-accent: #cfd7df;
+        --asset-card-rgb: 207, 215, 223;
+    }
+    .asset-card-btn.rarity-gold {
+        --asset-card-accent: #e7c748;
+        --asset-card-rgb: 231, 199, 72;
+    }
+    .asset-card-btn.rarity-rainbow {
+        --asset-card-accent: #ff62d9;
+        --asset-card-rgb: 255, 98, 217;
+    }
     .asset-card-btn::after {
         content: '';
         position: absolute;
@@ -1031,27 +1049,27 @@
         right: 70%;
         bottom: 3px;
         height: 1px;
-        background: rgba(207,181,59,0.38);
+        background: rgba(var(--asset-card-rgb),0.52);
         transition: right 0.3s ease, background 0.3s ease;
     }
     .asset-card-btn:hover {
         transform: translateY(-2px);
-        border-color: var(--gold-main);
+        border-color: var(--asset-card-accent);
         background:
-            radial-gradient(circle at 15% 0%, rgba(207,181,59,0.22), transparent 38%),
+            radial-gradient(circle at 15% 0%, rgba(var(--asset-card-rgb),0.22), transparent 38%),
             linear-gradient(145deg, rgba(255,255,255,0.065), rgba(255,255,255,0.006) 58%, rgba(0,0,0,0.18));
     }
     .asset-card-btn:hover::after {
         right: 12px;
-        background: var(--gold-main);
-        box-shadow: 0 0 8px var(--gold-glow);
+        background: var(--asset-card-accent);
+        box-shadow: 0 0 8px rgba(var(--asset-card-rgb),0.55);
     }
     .asset-card-glyph {
         position: absolute;
         right: -6px;
         bottom: -17px;
         color: transparent;
-        -webkit-text-stroke: 1px rgba(207,181,59,0.44);
+        -webkit-text-stroke: 1px rgba(var(--asset-card-rgb),0.44);
         opacity: 0.22;
         font: italic 900 82px/1 var(--font-title);
         pointer-events: none;
@@ -1059,6 +1077,7 @@
     .asset-card-meta,
     .asset-card-name,
     .asset-card-desc,
+    .asset-card-tags,
     .asset-card-slot {
         position: relative;
         z-index: 1;
@@ -1066,7 +1085,7 @@
         min-width: 0;
     }
     .asset-card-meta {
-        color: var(--gold-main);
+        color: var(--asset-card-accent);
         font: 900 8px/1.2 var(--font-ui);
         letter-spacing: 1.4px;
         opacity: 0.84;
@@ -1078,6 +1097,26 @@
         letter-spacing: 0.5px;
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .asset-card-tags {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding-right: 42px;
+    }
+    .asset-card-tags i {
+        display: inline-flex;
+        align-items: center;
+        min-height: 14px;
+        padding: 2px 4px;
+        border: 1px solid rgba(var(--asset-card-rgb),0.28);
+        background: rgba(var(--asset-card-rgb),0.08);
+        color: rgba(255,255,255,0.54);
+        font: 900 7px/1 var(--font-ui);
+        letter-spacing: 0.8px;
+        font-style: normal;
         white-space: nowrap;
     }
     .asset-card-desc {
