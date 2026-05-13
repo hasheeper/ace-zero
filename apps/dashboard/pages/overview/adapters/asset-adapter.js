@@ -184,14 +184,61 @@
         return buildFallbackAssetDeckSummary(assetDeck, gameId);
     }
 
+    function buildPhaseBoundAssetSeed(kind, extra = {}) {
+        const world = getCurrentWorldPayload();
+        const actState = world?.act && typeof world.act === 'object' && !Array.isArray(world.act) ? world.act : {};
+        const routeHistory = Array.isArray(actState.route_history) ? actState.route_history : [];
+        const nodeId = String(actState.nodeId || routeHistory[routeHistory.length - 1] || 'node').trim() || 'node';
+        const nodeIndex = Math.max(1, Math.round(Number(actState.nodeIndex) || 1));
+        const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(actState.phase_index) || 0)));
+        const phaseNo = phaseIndex + 1;
+        const actId = String(actState.id || 'act').trim() || 'act';
+        const seed = String(actState.seed || appData.campaign.seed || 'ASSET').trim() || 'ASSET';
+        const pool = extra.pool ? `:${String(extra.pool).toLowerCase()}` : '';
+        const refresh = extra.refreshCount != null ? `:refresh${Math.max(1, Math.round(Number(extra.refreshCount) || 1))}` : '';
+        return `${seed}:asset:${kind}:${actId}:${nodeId}:${nodeIndex}:phase${phaseNo}${pool}${refresh}`;
+    }
+
+    function withPhaseBoundAssetSeed(command) {
+        const source = command && typeof command === 'object' && !Array.isArray(command) ? command : {};
+        const kind = String(source.kind || source.type || '').toLowerCase();
+        if (kind !== 'open_offer' && kind !== 'refresh_offer') return source;
+        const payload = source.payload && typeof source.payload === 'object' && !Array.isArray(source.payload)
+            ? { ...source.payload }
+            : {};
+        if (payload.seed) return source;
+        if (kind === 'open_offer') {
+            const pool = payload.pool || 'low';
+            return {
+                ...source,
+                payload: {
+                    ...payload,
+                    seed: buildPhaseBoundAssetSeed('offer', { pool })
+                }
+            };
+        }
+        const offer = getCurrentAssetDeckState().pending_offer || {};
+        return {
+            ...source,
+            payload: {
+                ...payload,
+                seed: buildPhaseBoundAssetSeed('offer', {
+                    pool: offer.pool || payload.pool || 'low',
+                    refreshCount: Math.max(1, Math.round(Number(offer.refreshCount) || 0) + 1)
+                })
+            }
+        };
+    }
+
     function applyAssetDeckCommand(command) {
         if (!command || typeof command !== 'object') return false;
+        const preparedCommand = withPhaseBoundAssetSeed(command);
         if (isOverviewDebugMode()) {
-            return applyAssetDeckCommandLocally(command);
+            return applyAssetDeckCommandLocally(preparedCommand);
         }
 
         const requestId = `asset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-        const commandPayload = { requestId, command };
+        const commandPayload = { requestId, command: preparedCommand };
         const directBridge = resolveDirectAssetDeckCommandBridge();
         syncState.statusText = 'ASSET COMMAND';
         syncState.errorText = '';
@@ -264,7 +311,7 @@
             const reserveSource = actState.reserve && typeof actState.reserve === 'object' && !Array.isArray(actState.reserve) ? actState.reserve : {};
             const assetPoints = Math.max(0, Math.round(Number(reserveSource.asset ?? appState.resources.assets) || 0));
             const result = assetModule.applyAssetDeckCommand(currentAssetDeck, command, {
-                seed: `${appData.campaign.seed || 'ASSET'}:${Date.now()}`,
+                seed: buildPhaseBoundAssetSeed(String(command.kind || command.type || 'command').toLowerCase()),
                 assetPoints
             });
             if (!result?.assetDeck) {
