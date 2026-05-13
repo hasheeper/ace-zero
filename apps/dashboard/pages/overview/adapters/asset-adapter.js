@@ -59,7 +59,6 @@
     function createFallbackAssetDeckState() {
         return {
             version: 1,
-            asset_count: 0,
             general_slots_unlocked: 4,
             void_slots_unlocked: 2,
             active_general_cards: [],
@@ -84,7 +83,6 @@
         return {
             ...createFallbackAssetDeckState(),
             ...deepCloneValue(source),
-            asset_count: Math.max(0, Math.round(Number(source.asset_count ?? source.assetCount) || 0)),
             general_slots_unlocked: Math.max(4, Math.min(8, Math.round(Number(source.general_slots_unlocked ?? source.generalSlotsUnlocked) || 4))),
             void_slots_unlocked: Math.max(0, Math.min(2, Math.round(Number(source.void_slots_unlocked ?? source.voidSlotsUnlocked) || 2))),
             active_general_cards: Array.isArray(source.active_general_cards) ? deepCloneValue(source.active_general_cards) : [],
@@ -133,7 +131,7 @@
             version: 1,
             gameId,
             mode: isOverviewDebugMode() ? 'debug' : 'host',
-            points: Math.max(0, Math.round(Number(normalized.asset_count) || 0)),
+            points: Math.max(0, Math.round(Number(appState.resources.assets) || 0)),
             slots: {
                 generalUsed: generalCards.length,
                 generalMax: Math.max(0, Math.round(Number(normalized.general_slots_unlocked) || 0)),
@@ -262,8 +260,12 @@
         }
         return updateWorldPayloadAndCommit((world) => {
             const currentAssetDeck = normalizeAssetDeckForDashboard(world.assetDeck);
+            const actState = world.act && typeof world.act === 'object' && !Array.isArray(world.act) ? world.act : {};
+            const reserveSource = actState.reserve && typeof actState.reserve === 'object' && !Array.isArray(actState.reserve) ? actState.reserve : {};
+            const assetPoints = Math.max(0, Math.round(Number(reserveSource.asset ?? appState.resources.assets) || 0));
             const result = assetModule.applyAssetDeckCommand(currentAssetDeck, command, {
-                seed: `${appData.campaign.seed || 'ASSET'}:${Date.now()}`
+                seed: `${appData.campaign.seed || 'ASSET'}:${Date.now()}`,
+                assetPoints
             });
             if (!result?.assetDeck) {
                 syncState.statusText = 'ASSET COMMAND FAILED';
@@ -271,6 +273,19 @@
                 return world;
             }
             world.assetDeck = result.assetDeck;
+            if (Number.isFinite(Number(result.assetPoints))) {
+                const nextAssetPoints = Math.max(0, Math.round(Number(result.assetPoints) || 0));
+                world.act = {
+                    ...actState,
+                    reserve: {
+                        combat: Math.max(0, Number(reserveSource.combat) || 0),
+                        rest: Math.max(0, Number(reserveSource.rest) || 0),
+                        asset: nextAssetPoints,
+                        vision: Math.max(0, Number(reserveSource.vision) || 0)
+                    }
+                };
+                appState.resources.assets = nextAssetPoints;
+            }
             syncState.statusText = result.ok ? `ASSET: ${String(result.code || 'OK').toUpperCase()}` : 'ASSET COMMAND BLOCKED';
             syncState.errorText = result.ok ? '' : String(result.code || 'Command rejected.');
             return world;

@@ -250,7 +250,7 @@
     return null;
   }
 
-  function buildCompactAssetDeckResolution(pending, command, commandResult, currentAssetDeck, status) {
+  function buildCompactAssetDeckResolution(pending, command, commandResult, status) {
     const commandPayload = command && typeof command.payload === 'object' && !Array.isArray(command.payload)
       ? command.payload
       : {};
@@ -267,8 +267,7 @@
       phaseIndex: Math.max(0, Math.round(Number(pending.phaseIndex ?? source.phaseIndex) || 0)),
       status,
       outcome: commandResult?.code || (commandResult?.ok ? 'asset_command_applied' : 'asset_command_failed'),
-      commandKind: normalizeDashboardString(command.kind || command.type, ''),
-      assetCount: Math.max(0, Math.round(Number(currentAssetDeck?.asset_count) || 0))
+      commandKind: normalizeDashboardString(command.kind || command.type, '')
     };
     if (commandResult?.error) out.error = normalizeDashboardString(commandResult.error, '');
     if (commandPayload.pool) out.pool = normalizeDashboardString(commandPayload.pool, '');
@@ -305,9 +304,7 @@
       outcome: normalizeDashboardString(item.outcome, '')
     };
     const commandKind = normalizeDashboardString(item.commandKind || payload.commandKind, '');
-    const assetCount = Number(item.assetCount ?? payload.asset_count);
     if (commandKind) compact.commandKind = commandKind;
-    if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
     if (item.pool) compact.pool = normalizeDashboardString(item.pool, '');
     if (item.error || payload.error) compact.error = normalizeDashboardString(item.error || payload.error, '');
     return compact.id ? compact : null;
@@ -329,6 +326,10 @@
     let currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
       ? assetDeckModule.normalizeAssetDeckState(nextState.world.assetDeck)
       : (nextState.world.assetDeck || {});
+    const reserveSource = nextActState.reserve && typeof nextActState.reserve === 'object' && !Array.isArray(nextActState.reserve)
+      ? nextActState.reserve
+      : {};
+    let currentAssetPoints = Math.max(0, Math.round(Number(reserveSource.asset) || 0));
     const consumedIds = new Set();
     const resolutionHistory = Array.isArray(nextActState.resolutionHistory)
       ? nextActState.resolutionHistory.map(compactActResolutionHistoryItem).filter(Boolean).slice(-64)
@@ -358,7 +359,8 @@
       let commandResult;
       try {
         commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
-          seed: `act:${pending.id || Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+          seed: `act:${pending.id || Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+          assetPoints: currentAssetPoints
         });
       } catch (error) {
         commandResult = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
@@ -366,11 +368,20 @@
 
       const status = commandResult?.ok ? 'resolved' : 'failed';
       if (commandResult?.assetDeck) currentAssetDeck = cloneJsonData(commandResult.assetDeck, currentAssetDeck);
-      resolutionHistory.push(buildCompactAssetDeckResolution(pending, command, commandResult, currentAssetDeck, status));
+      if (Number.isFinite(Number(commandResult?.assetPoints))) {
+        currentAssetPoints = Math.max(0, Math.round(Number(commandResult.assetPoints) || 0));
+      }
+      resolutionHistory.push(buildCompactAssetDeckResolution(pending, command, commandResult, status));
       consumedIds.add(pending.id);
     });
 
     nextState.world.assetDeck = cloneJsonData(currentAssetDeck, currentAssetDeck);
+    nextActState.reserve = {
+      combat: Math.max(0, Number(reserveSource.combat) || 0),
+      rest: Math.max(0, Number(reserveSource.rest) || 0),
+      asset: currentAssetPoints,
+      vision: Math.max(0, Number(reserveSource.vision) || 0)
+    };
     nextActState.pendingAssetDeckCommands = pendingCommands.filter((item) => !consumedIds.has(item.id));
     nextActState.resolutionHistory = resolutionHistory.slice(-64);
     return nextActState;
@@ -570,11 +581,19 @@
     const currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
       ? assetDeckModule.normalizeAssetDeckState(nextState.world.assetDeck)
       : (nextState.world.assetDeck || {});
+    const actState = nextState.world.act && typeof nextState.world.act === 'object' && !Array.isArray(nextState.world.act)
+      ? nextState.world.act
+      : {};
+    const reserveSource = actState.reserve && typeof actState.reserve === 'object' && !Array.isArray(actState.reserve)
+      ? actState.reserve
+      : {};
+    const assetPoints = Math.max(0, Math.round(Number(reserveSource.asset) || 0));
 
     let commandResult;
     try {
       commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
-        seed: `host:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+        seed: `host:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+        assetPoints
       });
     } catch (error) {
       return {
@@ -595,6 +614,17 @@
     }
 
     nextState.world.assetDeck = cloneJsonData(commandResult.assetDeck, commandResult.assetDeck);
+    if (Number.isFinite(Number(commandResult.assetPoints))) {
+      nextState.world.act = {
+        ...actState,
+        reserve: {
+          combat: Math.max(0, Number(reserveSource.combat) || 0),
+          rest: Math.max(0, Number(reserveSource.rest) || 0),
+          asset: Math.max(0, Math.round(Number(commandResult.assetPoints) || 0)),
+          vision: Math.max(0, Number(reserveSource.vision) || 0)
+        }
+      };
+    }
     let didPersist = false;
     if (typeof insertOrAssignVariables === 'function') {
       await insertOrAssignVariables({ stat_data: nextState }, { type: 'message' });

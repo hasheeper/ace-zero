@@ -1055,6 +1055,7 @@ function createExecutionRuntimeContext() {
             limited: normalizeActResourceCounts(actState.limited)[key],
             reserve: normalizeActResourceCounts(actState.reserve)[key]
         }]));
+        appState.resources.assets = appState.inventory.asset.reserve;
         appState.phaseSlots = normalizeActPhaseSlots(actState.phase_slots);
         appState.phasePlanLock = normalizePhasePlanLock(actState.phasePlanLock);
         if (nextOfferIdentity && nextOfferIdentity !== previousOfferIdentity && canOpenPlannerDrawer()) {

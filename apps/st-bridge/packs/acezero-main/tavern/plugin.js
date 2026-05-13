@@ -222,7 +222,6 @@
 
     return {
       version: Math.max(1, Math.round(Number(normalizedDeck.version) || 1)),
-      asset_count: Math.max(0, Math.round(Number(normalizedDeck.asset_count) || 0)),
       general_slots_unlocked: Math.max(0, Math.round(Number(normalizedDeck.general_slots_unlocked) || 0)),
       void_slots_unlocked: Math.max(0, Math.round(Number(normalizedDeck.void_slots_unlocked) || 0)),
       active_general_cards: Array.isArray(normalizedDeck.active_general_cards) ? normalizedDeck.active_general_cards : [],
@@ -260,9 +259,7 @@
       outcome: _normalizeTrimmedString(item.outcome, '')
     };
     const commandKind = _normalizeTrimmedString(item.commandKind || payload.commandKind, '');
-    const assetCount = Number(item.assetCount ?? payload.asset_count);
     if (commandKind) compact.commandKind = commandKind;
-    if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
     if (item.pool) compact.pool = _normalizeTrimmedString(item.pool, '');
     if (item.error || payload.error) compact.error = _normalizeTrimmedString(item.error || payload.error, '');
     return compact.id ? compact : null;

@@ -56,7 +56,6 @@ sandbox.__vars = {
   world: {
     assetDeck: {
       version: 1,
-      asset_count: 0,
       general_slots_unlocked: 4,
       void_slots_unlocked: 2,
       active_general_cards: [

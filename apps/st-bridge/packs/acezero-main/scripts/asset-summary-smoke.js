@@ -37,13 +37,12 @@ function makeCard(cardId, index = 0) {
 
 function makeDeck() {
   return assetDeck.normalizeAssetDeckState({
-    asset_count: 5,
     general_slots_unlocked: 4,
     void_slots_unlocked: 2,
     active_general_cards: [
       makeCard('asset_skill_minor_wish_l2', 1),
-      makeCard('asset_blackjack_dealer_coupon', 2),
-      makeCard('asset_dice_payout_spike', 3),
+      makeCard('asset_mini_cost_silver', 2),
+      makeCard('asset_mini_power_gold', 3),
       makeCard('asset_rainbow_contract', 4)
     ],
     active_void_cards: [
@@ -56,8 +55,8 @@ function makeDeck() {
       refreshCount: 0,
       freeRefreshUsed: 0,
       choices: [
-        makeCard('asset_dragon_tiger_tie_contract', 6),
-        makeCard('asset_texas_mana_cell', 7)
+        makeCard('asset_mini_power_bronze', 6),
+        makeCard('asset_mana_max_silver', 7)
       ]
     },
     pending_offer_queue: [{
@@ -67,7 +66,7 @@ function makeDeck() {
       refreshCount: 0,
       freeRefreshUsed: 0,
       choices: [
-        makeCard('asset_texas_minor_discount', 8),
+        makeCard('asset_skill_upgrade_bronze', 8),
         makeCard('asset_texas_force_amplifier', 9)
       ]
     }],
@@ -80,13 +79,13 @@ function makeDeck() {
 
 function testTexasSummary() {
   const deck = makeDeck();
-  const texas = summary.buildAssetDeckSummary(deck, { gameId: 'texas-holdem', mode: 'host' });
+  const texas = summary.buildAssetDeckSummary(deck, { gameId: 'texas-holdem', mode: 'host', assetPoints: 5 });
 
   assertEqual(texas.points, 5, 'Summary should expose asset points');
   assertEqual(texas.slots.generalUsed, 4, 'Summary should expose general used slots');
   assertEqual(texas.slots.voidUsed, 1, 'Summary should expose void used slots');
   assertEqual(texas.activeCards.effective.some(card => card.cardId === 'asset_skill_minor_wish_l2'), true, 'Texas skill card should be effective in Texas');
-  assertEqual(texas.activeCards.effective.some(card => card.cardId === 'asset_blackjack_dealer_coupon'), false, 'Blackjack card should not be effective in Texas');
+  assertEqual(texas.activeCards.effective.some(card => card.cardId === 'asset_mini_cost_silver'), false, 'Mini-game card should not be effective in Texas');
   assertEqual(texas.activeCards.effective.some(card => card.cardId === 'asset_rainbow_contract'), true, 'Any/global card should be effective in Texas');
   assertEqual(texas.gameplay.skillLevels.some(entry => entry.skillKey === 'minor_wish' && entry.level === 2), true, 'Texas summary should expose skill level modifiers');
   assertEqual(texas.gameplay.forcePower.some(entry => entry.scope === 'team' && entry.pct === 0.08), true, 'Texas summary should expose team-scoped force power modifiers');
@@ -99,17 +98,17 @@ function testTexasSummary() {
 function testMiniGameIsolation() {
   const deck = makeDeck();
   const blackjack = summary.buildAssetDeckSummary(deck, { gameId: 'blackjack', mode: 'host' });
-  assertEqual(blackjack.activeCards.effective.some(card => card.cardId === 'asset_blackjack_dealer_coupon'), true, 'Blackjack card should be effective in blackjack');
+  assertEqual(blackjack.activeCards.effective.some(card => card.cardId === 'asset_mini_cost_silver'), true, 'Mini-game cost card should be effective in blackjack');
   assertEqual(blackjack.activeCards.effective.some(card => card.cardId === 'asset_skill_minor_wish_l2'), false, 'Texas card should not be effective in blackjack');
-  assertEqual(blackjack.gameplay.cost.some(entry => entry.scope === 'global' && entry.pct === -0.15), true, 'Blackjack summary should expose cost modifier');
+  assertEqual(blackjack.gameplay.cost.some(entry => entry.scope === 'global' && entry.pct === -0.2), true, 'Blackjack summary should expose cost modifier');
 
   const dice = summary.buildAssetDeckSummary(deck, { gameId: 'dice-game', mode: 'host' });
-  assertEqual(dice.activeCards.effective.some(card => card.cardId === 'asset_dice_payout_spike'), true, 'Dice card should be effective in dice');
-  assertEqual(dice.gameplay.miniGame.payout.some(entry => entry.key === 'triple' && entry.pct === 0.1), true, 'Dice summary should expose triple payout modifier');
+  assertEqual(dice.activeCards.effective.some(card => card.cardId === 'asset_mini_power_gold'), true, 'Mini-game power card should be effective in dice');
+  assertEqual(dice.gameplay.forcePower.some(entry => entry.scope === 'system' && entry.pct === 0.33), true, 'Dice summary should expose mini-game power modifier');
 
   const mahjong = summary.buildAssetDeckSummary(deck, { gameId: 'mahjong', mode: 'host' });
   assertEqual(mahjong.activeCards.effective.some(card => card.cardId === 'asset_rainbow_contract'), true, 'Mahjong should read any/global cards');
-  assertEqual(mahjong.activeCards.effective.some(card => card.cardId === 'asset_blackjack_dealer_coupon'), false, 'Mahjong should ignore blackjack-only cards');
+  assertEqual(mahjong.activeCards.effective.some(card => card.cardId === 'asset_mini_cost_silver'), false, 'Mahjong should ignore mini-game cards');
 }
 
 function testDebugSummary() {

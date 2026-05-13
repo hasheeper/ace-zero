@@ -26,6 +26,7 @@ function settleActAssetDeckCommands(worldInput) {
   const consumed = new Set();
   const history = Array.isArray(world.act.resolutionHistory) ? clone(world.act.resolutionHistory) : [];
   let deck = world.assetDeck;
+  let assetPoints = Math.max(0, Math.round(Number(world.act.reserve?.asset) || 0));
 
   pending.forEach((request) => {
     if (!request || request.status !== 'pending' || !request.command) return;
@@ -36,9 +37,11 @@ function settleActAssetDeckCommands(worldInput) {
     };
 
     const result = assetDeck.applyAssetDeckCommand(deck, command, {
-      seed: `act-flow:${request.id}`
+      seed: `act-flow:${request.id}`,
+      assetPoints
     });
     if (result.assetDeck) deck = result.assetDeck;
+    if (Number.isFinite(Number(result.assetPoints))) assetPoints = Math.max(0, Math.round(Number(result.assetPoints) || 0));
     consumed.add(request.id);
     history.push({
       ...clone(request),
@@ -49,13 +52,16 @@ function settleActAssetDeckCommands(worldInput) {
       payload: {
         commandKind: command.kind || command.type || '',
         resultCode: result.code,
-        asset_count: deck.asset_count,
         error: result.error || ''
       }
     });
   });
 
   world.assetDeck = deck;
+  world.act.reserve = {
+    ...(world.act.reserve || {}),
+    asset: assetPoints
+  };
   world.act.pendingAssetDeckCommands = pending.filter((request) => !consumed.has(request.id));
   world.act.resolutionHistory = history;
   return world;
@@ -69,6 +75,7 @@ function testActAssetThreeSettlesIntoHighOffer() {
     route_history: ['node1-entry'],
     stage: 'executing',
     phase_index: 0,
+    phasePlanLock: { nodeId: 'node1-entry', nodeIndex: 1, locked: true, confirmedPhaseIndex: 0 },
     phase_slots: [
       { key: 'asset', amount: 3, source: 'limited', sources: ['limited', 'limited', 'reserve'] },
       null,
@@ -92,7 +99,8 @@ function testActAssetThreeSettlesIntoHighOffer() {
   });
 
   assertEqual(settled.act.pendingAssetDeckCommands.length, 0, 'host settlement should consume pending AssetDeck commands');
-  assertEqual(settled.assetDeck.asset_count, 0, 'grant + high offer should net to zero asset points');
+  assertEqual(settled.act.reserve.asset, 0, 'grant + high offer should net to zero reserve asset');
+  assert(!Object.prototype.hasOwnProperty.call(settled.assetDeck, 'asset_count'), 'settlement should not write asset_count');
   assert(settled.assetDeck.pending_offer, 'high offer should be opened on AssetDeck');
   assertEqual(settled.assetDeck.pending_offer.pool, 'high', 'asset III should open high pool');
   assertEqual(settled.act.resolutionHistory.length, 2, 'ACT resolution history should record both asset commands');
@@ -111,6 +119,7 @@ function testActAssetTwoSettlesIntoMidOffer() {
     route_history: ['node1-entry'],
     stage: 'executing',
     phase_index: 0,
+    phasePlanLock: { nodeId: 'node1-entry', nodeIndex: 1, locked: true, confirmedPhaseIndex: 0 },
     phase_slots: [
       { key: 'asset', amount: 2, source: 'limited', sources: ['limited', 'reserve'] },
       null,
@@ -131,7 +140,7 @@ function testActAssetTwoSettlesIntoMidOffer() {
   });
 
   assertEqual(settled.act.pendingAssetDeckCommands.length, 0, 'asset II commands should settle');
-  assertEqual(settled.assetDeck.asset_count, 0, 'grant + mid offer should net to zero asset points');
+  assertEqual(settled.act.reserve.asset, 0, 'grant + mid offer should net to zero reserve asset');
   assert(settled.assetDeck.pending_offer, 'asset II should open a pending offer');
   assertEqual(settled.assetDeck.pending_offer.pool, 'mid', 'asset II should open mid pool');
   assertEqual(settled.act.resolutionHistory.length, 2, 'asset II should record grant + offer entries');
@@ -147,6 +156,7 @@ function testMultipleAssetPhasesSettleIntoOfferQueue() {
     route_history: ['node1-entry'],
     stage: 'executing',
     phase_index: 0,
+    phasePlanLock: { nodeId: 'node1-entry', nodeIndex: 1, locked: true, confirmedPhaseIndex: 0 },
     phase_slots: [
       { key: 'asset', amount: 1, source: 'limited', sources: ['limited'] },
       { key: 'asset', amount: 2, source: 'limited', sources: ['limited', 'reserve'] },
@@ -160,6 +170,7 @@ function testMultipleAssetPhasesSettleIntoOfferQueue() {
   };
 
   act.consumeSingleActPhase(actState, createHero(), config, {});
+  actState.phase_index = 1;
   act.consumeSingleActPhase(actState, createHero(), config, {});
 
   assertEqual(actState.pendingAssetDeckCommands.length, 4, 'two asset phases should emit two grant/offer command pairs');
@@ -170,7 +181,7 @@ function testMultipleAssetPhasesSettleIntoOfferQueue() {
   });
 
   assertEqual(settled.act.pendingAssetDeckCommands.length, 0, 'host settlement should consume all multi-phase commands');
-  assertEqual(settled.assetDeck.asset_count, 0, 'grant + matching offers should net to zero asset points');
+  assertEqual(settled.act.reserve.asset, 0, 'grant + matching offers should net to zero reserve asset');
   assert(settled.assetDeck.pending_offer, 'first phase offer should be active');
   assertEqual(settled.assetDeck.pending_offer.pool, 'low', 'asset I should stay as the current offer');
   assertEqual(settled.assetDeck.pending_offer_queue.length, 1, 'asset II offer should wait behind current offer');

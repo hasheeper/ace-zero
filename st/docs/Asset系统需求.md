@@ -1041,7 +1041,7 @@ RINO 不需要从低级法术练起
 主要数据结构可以是：
 
 ```text
-asset_count
+world.act.reserve.asset
 general_slots_unlocked
 void_slots_unlocked = 2
 active_general_cards[]

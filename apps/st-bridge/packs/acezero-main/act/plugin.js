@@ -883,9 +883,7 @@
           outcome: normalizeTrimmedString(item.outcome, '')
         };
         const commandKind = normalizeTrimmedString(item.commandKind || payload.commandKind, '');
-        const assetCount = Number(item.assetCount ?? payload.asset_count);
         if (commandKind) compact.commandKind = commandKind;
-        if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
         if (item.pool) compact.pool = normalizeTrimmedString(item.pool, '');
         if (item.error || payload.error) compact.error = normalizeTrimmedString(item.error || payload.error, '');
         return compact.id ? compact : null;

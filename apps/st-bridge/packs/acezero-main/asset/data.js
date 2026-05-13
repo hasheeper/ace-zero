@@ -1,8 +1,8 @@
 /**
  * ACEZERO ASSET DECK DATA
  *
- * Long-term team deck constants and card catalog. This is intentionally
- * separate from Texas Hold'em AssetLedger, which is table-run temporary state.
+ * Long-term team deck constants and card catalog. This file keeps the design
+ * table compact by generating repeated skill/rarity families from rules.
  */
 (function initAceZeroAssetDeckData(global) {
   'use strict';
@@ -40,536 +40,467 @@
     }
   };
 
+  const RARITY_META = {
+    bronze: { level: 1, roman: 'I', pools: ['low', 'mid'] },
+    silver: { level: 2, roman: 'II', pools: ['mid', 'high'] },
+    gold: { level: 3, roman: 'III', pools: ['low', 'mid', 'high'] },
+    rainbow: { level: 4, roman: 'IV', pools: ['mid', 'high'] }
+  };
+
+  const SKILL_NAME = {
+    minor_wish: '小吉',
+    grand_wish: '大吉',
+    divine_order: '神谕',
+    hex: '诅咒',
+    havoc: '灾厄',
+    catastrophe: '大灾变',
+    analysis: '解析',
+    premonition: '预兆',
+    refraction: '折射',
+    insulation: '绝缘',
+    reality: 'Reality'
+  };
+
+  const SYSTEM_LABEL = {
+    moirai: 'Moirai',
+    chaos: 'Chaos',
+    psyche: 'Psyche',
+    void: 'Void'
+  };
+
+  function poolsForRarity(rarity) {
+    return (RARITY_META[rarity] && RARITY_META[rarity].pools || ['low']).slice();
+  }
+
+  function romanForLevel(level) {
+    return ['0', 'I', 'II', 'III', 'IV'][Math.max(0, Math.min(4, Number(level) || 0))] || String(level || 0);
+  }
+
+  function card(id, name, rarity, kind, extra) {
+    const meta = extra || {};
+    return {
+      id,
+      name,
+      rarity,
+      kind,
+      ...(meta.system ? { system: meta.system } : {}),
+      ...(meta.skillKey ? { skillKey: meta.skillKey } : {}),
+      ...(meta.level != null ? { level: meta.level } : {}),
+      ...(meta.unique ? { unique: true } : {}),
+      ...(meta.consumable ? { consumable: true } : {}),
+      targetTags: meta.targetTags || ['team'],
+      gameTags: meta.gameTags || ['any'],
+      slotTags: meta.slotTags || ['general'],
+      pools: meta.pools || poolsForRarity(rarity),
+      effectText: meta.effectText || '',
+      statusTags: meta.statusTags || [],
+      modifiers: meta.modifiers || []
+    };
+  }
+
+  function skillCard(system, skillKey, rarity, targetTags, slotTags) {
+    const level = RARITY_META[rarity].level;
+    const roman = romanForLevel(level);
+    const name = `${SKILL_NAME[skillKey] || skillKey} ${roman}`;
+    return card(`asset_skill_${skillKey}_l${level}`, name, rarity, 'skill', {
+      system,
+      skillKey,
+      level,
+      targetTags: targetTags || ['team'],
+      gameTags: ['texas-holdem'],
+      slotTags: slotTags || ['general'],
+      effectText: `${skillKey} 加入卡组，等级 ${roman}`,
+      statusTags: ['唯一升级', 'Texas'],
+      modifiers: [{ type: 'skill_level', key: skillKey, value: level }]
+    });
+  }
+
+  function texasSkillFamily(system, skills, targetTags, slotTags) {
+    const out = [];
+    skills.forEach(skillKey => {
+      ['bronze', 'silver', 'gold', 'rainbow'].forEach(rarity => {
+        out.push(skillCard(system, skillKey, rarity, targetTags, slotTags));
+      });
+    });
+    return out;
+  }
+
+  function manaMaxCards() {
+    return [
+      card('asset_mana_max_bronze', '魔运电池 I', 'bronze', 'numeric', {
+        effectText: 'Mana Max +4',
+        statusTags: ['可叠加', '常驻'],
+        modifiers: [{ type: 'mana_max_flat', value: 4 }]
+      }),
+      card('asset_mana_max_silver', '魔运电池 II', 'silver', 'numeric', {
+        effectText: 'Mana Max +8',
+        statusTags: ['可叠加', '常驻'],
+        modifiers: [{ type: 'mana_max_flat', value: 8 }]
+      }),
+      card('asset_mana_max_gold', '魔运电池 III', 'gold', 'numeric', {
+        effectText: 'Mana Max +12',
+        statusTags: ['可叠加', '常驻'],
+        modifiers: [{ type: 'mana_max_flat', value: 12 }]
+      })
+    ];
+  }
+
+  function manaShiftCards() {
+    return [
+      card('asset_mana_amp_bronze', '增幅咒式 I', 'bronze', 'numeric', {
+        effectText: 'Mana 消耗 +3，技能效果 +4',
+        statusTags: ['可叠加'],
+        modifiers: [{ type: 'skill_cost_flat', value: 3 }, { type: 'force_power_flat', value: 4 }]
+      }),
+      card('asset_mana_amp_silver', '增幅咒式 II', 'silver', 'numeric', {
+        effectText: 'Mana 消耗 +2，技能效果 +6',
+        statusTags: ['可叠加'],
+        modifiers: [{ type: 'skill_cost_flat', value: 2 }, { type: 'force_power_flat', value: 6 }]
+      }),
+      card('asset_mana_amp_gold', '增幅咒式 III', 'gold', 'numeric', {
+        effectText: 'Mana 消耗 +1，技能效果 +8',
+        statusTags: ['可叠加'],
+        modifiers: [{ type: 'skill_cost_flat', value: 1 }, { type: 'force_power_flat', value: 8 }]
+      }),
+      card('asset_mana_reduce_bronze', '减幅咒式 I', 'bronze', 'numeric', {
+        effectText: 'Mana 消耗 -1，技能效果 -2',
+        statusTags: ['可叠加'],
+        modifiers: [{ type: 'skill_cost_flat', value: -1 }, { type: 'force_power_flat', value: -2 }]
+      }),
+      card('asset_mana_reduce_silver', '减幅咒式 II', 'silver', 'numeric', {
+        effectText: 'Mana 消耗 -2，技能效果 -2',
+        statusTags: ['可叠加'],
+        modifiers: [{ type: 'skill_cost_flat', value: -2 }, { type: 'force_power_flat', value: -2 }]
+      }),
+      card('asset_mana_reduce_gold', '减幅咒式 III', 'gold', 'numeric', {
+        effectText: 'Mana 消耗 -3，技能效果 -1',
+        statusTags: ['可叠加'],
+        modifiers: [{ type: 'skill_cost_flat', value: -3 }, { type: 'force_power_flat', value: -1 }]
+      })
+    ];
+  }
+
+  function upgradeCards() {
+    return [
+      card('asset_skill_upgrade_bronze', '技能升格 I', 'bronze', 'upgrade', {
+        consumable: true,
+        effectText: '绑定一张 LV1 技能卡，升一级',
+        statusTags: ['消耗', '绑定目标'],
+        modifiers: [{ type: 'skill_upgrade', maxFromLevel: 1, value: 1 }]
+      }),
+      card('asset_skill_upgrade_silver', '技能升格 II', 'silver', 'upgrade', {
+        consumable: true,
+        effectText: '绑定一张 LV1-LV2 技能卡，升一级',
+        statusTags: ['消耗', '绑定目标'],
+        modifiers: [{ type: 'skill_upgrade', maxFromLevel: 2, value: 1 }]
+      }),
+      card('asset_skill_upgrade_gold', '技能升格 III', 'gold', 'upgrade', {
+        consumable: true,
+        effectText: '绑定一张 LV1-LV3 技能卡，升一级',
+        statusTags: ['消耗', '绑定目标'],
+        modifiers: [{ type: 'skill_upgrade', maxFromLevel: 3, value: 1 }]
+      })
+    ];
+  }
+
+  function passiveCards() {
+    return [
+      card('asset_moirai_street_bronze', '偶发小吉 I', 'bronze', 'passive', {
+        system: 'moirai',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 10% 获得 3 好运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'moirai', forceType: 'fortune', chance: 0.1, value: 3 }]
+      }),
+      card('asset_moirai_power_silver', '天命锐化 II', 'silver', 'passive', {
+        system: 'moirai',
+        gameTags: ['texas-holdem'],
+        effectText: 'Moirai 攻击 +8%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.08 }]
+      }),
+      card('asset_moirai_street_silver', '偶发小吉 II', 'silver', 'passive', {
+        system: 'moirai',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 15% 获得 4 好运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'moirai', forceType: 'fortune', chance: 0.15, value: 4 }]
+      }),
+      card('asset_moirai_power_gold', '天命锐化 III', 'gold', 'passive', {
+        system: 'moirai',
+        gameTags: ['texas-holdem'],
+        effectText: 'Moirai 攻击 +12%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.12 }]
+      }),
+      card('asset_moirai_street_gold', '偶发小吉 III', 'gold', 'passive', {
+        system: 'moirai',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 20% 获得 5 好运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'moirai', forceType: 'fortune', chance: 0.2, value: 5 }]
+      }),
+      card('asset_moirai_power_rainbow', '天命锐化 IV', 'rainbow', 'passive', {
+        system: 'moirai',
+        gameTags: ['texas-holdem'],
+        effectText: 'Moirai 攻击 +16%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.16 }]
+      }),
+      card('asset_moirai_street_rainbow', '偶发小吉 IV', 'rainbow', 'passive', {
+        system: 'moirai',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 25% 获得 6 好运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'moirai', forceType: 'fortune', chance: 0.25, value: 6 }]
+      }),
+      card('asset_chaos_street_bronze', '偶发厄咒 I', 'bronze', 'passive', {
+        system: 'chaos',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 10% 随机投放 4 厄运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'chaos', forceType: 'curse', chance: 0.1, value: 4, randomTarget: true }]
+      }),
+      card('asset_chaos_power_silver', '厄运锐化 II', 'silver', 'passive', {
+        system: 'chaos',
+        gameTags: ['texas-holdem'],
+        effectText: 'Chaos 攻击 +10%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'chaos', value: 0.1 }]
+      }),
+      card('asset_chaos_street_silver', '偶发厄咒 II', 'silver', 'passive', {
+        system: 'chaos',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 15% 随机投放 6 厄运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'chaos', forceType: 'curse', chance: 0.15, value: 6, randomTarget: true }]
+      }),
+      card('asset_chaos_power_gold', '厄运锐化 III', 'gold', 'passive', {
+        system: 'chaos',
+        gameTags: ['texas-holdem'],
+        effectText: 'Chaos 攻击 +16%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'chaos', value: 0.16 }]
+      }),
+      card('asset_chaos_street_gold', '偶发厄咒 III', 'gold', 'passive', {
+        system: 'chaos',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 20% 随机投放 8 厄运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'chaos', forceType: 'curse', chance: 0.2, value: 8, randomTarget: true }]
+      }),
+      card('asset_chaos_power_rainbow', '厄运锐化 IV', 'rainbow', 'passive', {
+        system: 'chaos',
+        gameTags: ['texas-holdem'],
+        effectText: 'Chaos 攻击 +24%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'chaos', value: 0.24 }]
+      }),
+      card('asset_chaos_street_rainbow', '偶发厄咒 IV', 'rainbow', 'passive', {
+        system: 'chaos',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 25% 随机投放 10 厄运',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'chaos', forceType: 'curse', chance: 0.25, value: 10, randomTarget: true }]
+      }),
+      card('asset_psyche_power_silver', '洞悉锐化 II', 'silver', 'passive', {
+        system: 'psyche',
+        gameTags: ['texas-holdem'],
+        effectText: 'Psyche 值 +10%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'psyche', value: 0.1 }]
+      }),
+      card('asset_psyche_shield_silver', '洞悉护盾 II', 'silver', 'passive', {
+        system: 'psyche',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 20% 生成 6 Psyche 护盾',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'psyche', forceType: 'psyche', chance: 0.2, value: 6, shield: true }]
+      }),
+      card('asset_psyche_power_gold', '洞悉锐化 III', 'gold', 'passive', {
+        system: 'psyche',
+        gameTags: ['texas-holdem'],
+        effectText: 'Psyche 值 +16%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'psyche', value: 0.16 }]
+      }),
+      card('asset_psyche_shield_gold', '洞悉护盾 III', 'gold', 'passive', {
+        system: 'psyche',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 30% 生成 8 Psyche 护盾',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'psyche', forceType: 'psyche', chance: 0.3, value: 8, shield: true }]
+      }),
+      card('asset_psyche_power_rainbow', '洞悉锐化 IV', 'rainbow', 'passive', {
+        system: 'psyche',
+        gameTags: ['texas-holdem'],
+        effectText: 'Psyche 值 +24%',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'force_power_pct', system: 'psyche', value: 0.24 }]
+      }),
+      card('asset_psyche_shield_rainbow', '洞悉护盾 IV', 'rainbow', 'passive', {
+        system: 'psyche',
+        gameTags: ['texas-holdem'],
+        effectText: '每街 40% 生成 10 Psyche 护盾',
+        statusTags: ['被动', 'Texas'],
+        modifiers: [{ type: 'street_force_chance_flat', system: 'psyche', forceType: 'psyche', chance: 0.4, value: 10, shield: true }]
+      })
+    ];
+  }
+
+  function miniGameCards() {
+    const gameTags = ['blackjack', 'dice', 'dragon-tiger'];
+    return [
+      card('asset_mini_cost_bronze', '小游戏节流 I', 'bronze', 'numeric', {
+        gameTags,
+        effectText: '小游戏技能 Mana -12%',
+        statusTags: ['小游戏'],
+        modifiers: [{ type: 'skill_cost_pct', value: -0.12 }]
+      }),
+      card('asset_mini_cost_silver', '小游戏节流 II', 'silver', 'numeric', {
+        gameTags,
+        effectText: '小游戏技能 Mana -20%',
+        statusTags: ['小游戏'],
+        modifiers: [{ type: 'skill_cost_pct', value: -0.2 }]
+      }),
+      card('asset_mini_cost_gold', '小游戏节流 III', 'gold', 'numeric', {
+        gameTags,
+        effectText: '小游戏技能 Mana -33%',
+        statusTags: ['小游戏'],
+        modifiers: [{ type: 'skill_cost_pct', value: -0.33 }]
+      }),
+      card('asset_mini_power_bronze', '小游戏收益 I', 'bronze', 'numeric', {
+        gameTags,
+        effectText: '好运/厄运技能效果 +12%',
+        statusTags: ['小游戏'],
+        modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.12 }, { type: 'force_power_pct', system: 'chaos', value: 0.12 }]
+      }),
+      card('asset_mini_power_silver', '小游戏收益 II', 'silver', 'numeric', {
+        gameTags,
+        effectText: '好运/厄运技能效果 +20%',
+        statusTags: ['小游戏'],
+        modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.2 }, { type: 'force_power_pct', system: 'chaos', value: 0.2 }]
+      }),
+      card('asset_mini_power_gold', '小游戏收益 III', 'gold', 'numeric', {
+        gameTags,
+        effectText: '好运/厄运技能效果 +33%',
+        statusTags: ['小游戏'],
+        modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.33 }, { type: 'force_power_pct', system: 'chaos', value: 0.33 }]
+      })
+    ];
+  }
+
+  function highRiskCards() {
+    return [
+      card('asset_risk_reward_bronze', '赌徒咒式 I', 'bronze', 'passive', {
+        gameTags: ['texas-holdem'],
+        effectText: '施放时 Mana/效果随机 -16% 到 +16%',
+        statusTags: ['高风险', 'Texas'],
+        modifiers: [{ type: 'risk_reward_roll', costPctMin: -0.16, costPctMax: 0.16, effectPctMin: -0.16, effectPctMax: 0.16 }]
+      }),
+      card('asset_risk_reward_silver', '赌徒咒式 II', 'silver', 'passive', {
+        gameTags: ['texas-holdem'],
+        effectText: '施放时 Mana -14%到+14%，效果 -12%到+20%',
+        statusTags: ['高风险', 'Texas'],
+        modifiers: [{ type: 'risk_reward_roll', costPctMin: -0.14, costPctMax: 0.14, effectPctMin: -0.12, effectPctMax: 0.2 }]
+      }),
+      card('asset_risk_reward_gold', '赌徒咒式 III', 'gold', 'passive', {
+        gameTags: ['texas-holdem'],
+        effectText: '施放时 Mana -10%到+10%，效果 -8%到+24%',
+        statusTags: ['高风险', 'Texas'],
+        modifiers: [{ type: 'risk_reward_roll', costPctMin: -0.1, costPctMax: 0.1, effectPctMin: -0.08, effectPctMax: 0.24 }]
+      })
+    ];
+  }
+
+  function godCards() {
+    return [
+      card('asset_god_mana_discount', '神卡：零耗律', 'rainbow', 'god', {
+        unique: true,
+        effectText: '全局 Mana 消耗 -10%',
+        statusTags: ['唯一', '神卡'],
+        modifiers: [{ type: 'skill_cost_pct', value: -0.1 }]
+      }),
+      card('asset_god_texas_skill_plus', '神卡：牌桌升格', 'rainbow', 'god', {
+        unique: true,
+        gameTags: ['texas-holdem'],
+        effectText: 'Texas 技能卡等级默认 +1',
+        statusTags: ['唯一', '神卡', 'Texas'],
+        modifiers: [{ type: 'skill_level_bonus', value: 1 }]
+      }),
+      card('asset_god_mini_mastery', '神卡：小局支配', 'rainbow', 'god', {
+        unique: true,
+        gameTags: ['blackjack', 'dice', 'dragon-tiger'],
+        effectText: '小游戏 Mana -33%，技能效果 +33%',
+        statusTags: ['唯一', '神卡', '小游戏'],
+        modifiers: [{ type: 'skill_cost_pct', value: -0.33 }, { type: 'force_power_pct', value: 0.33 }]
+      }),
+      card('asset_rainbow_contract', '彩虹契约', 'rainbow', 'god', {
+        unique: true,
+        effectText: '所有技能效果 +8%',
+        statusTags: ['唯一', '神卡'],
+        modifiers: [{ type: 'all_force_power_bonus', value: 0.08 }]
+      })
+    ];
+  }
+
   const ASSET_CARD_CATALOG = [
-    {
-      id: 'asset_bootstrap_credit',
-      name: '启动资金',
-      rarity: 'bronze',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['any'],
-      slotTags: ['general'],
-      pools: ['low'],
-      modifiers: [{ type: 'funds_start', value: 5 }]
-    },
-    {
-      id: 'asset_minor_guard',
-      name: '轻型护栏',
-      rarity: 'bronze',
-      kind: 'passive',
-      targetTags: ['team'],
-      gameTags: ['any'],
-      slotTags: ['general'],
-      pools: ['low'],
-      modifiers: [{ type: 'damage_taken_mult', value: 0.97 }]
-    },
-    {
-      id: 'asset_clear_signal',
-      name: '清晰信号',
-      rarity: 'bronze',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['act'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'vision_bonus', value: 1 }]
-    },
-    {
-      id: 'asset_fast_recovery',
-      name: '快速整备',
-      rarity: 'bronze',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['act'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'reserve_bonus', key: 'rest', value: 1 }]
-    },
-    {
-      id: 'asset_safe_route',
-      name: '安全路线',
-      rarity: 'silver',
-      kind: 'passive',
-      targetTags: ['team'],
-      gameTags: ['act'],
-      slotTags: ['general'],
-      pools: ['mid'],
-      modifiers: [{ type: 'reserve_bonus', key: 'vision', value: 1 }]
-    },
-    {
-      id: 'asset_shared_reserve',
-      name: '共享储备',
-      rarity: 'silver',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['act'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'reserve_bonus', key: 'asset', value: 1 }]
-    },
-    {
-      id: 'asset_skill_minor_wish_l1',
-      name: '小吉 I',
-      rarity: 'bronze',
-      kind: 'skill',
-      system: 'fortune',
-      skillKey: 'minor_wish',
-      level: 1,
-      targetTags: ['RINO'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'skill_level', key: 'minor_wish', value: 1 }]
-    },
-    {
-      id: 'asset_skill_minor_wish_l2',
-      name: '小吉 II',
-      rarity: 'silver',
-      kind: 'skill',
-      system: 'fortune',
-      skillKey: 'minor_wish',
-      level: 2,
-      targetTags: ['RINO'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'skill_level', key: 'minor_wish', value: 2 }]
-    },
-    {
-      id: 'asset_skill_minor_wish_l3',
-      name: '小吉 III',
-      rarity: 'gold',
-      kind: 'skill',
-      system: 'fortune',
-      skillKey: 'minor_wish',
-      level: 3,
-      targetTags: ['RINO'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'skill_level', key: 'minor_wish', value: 3 }]
-    },
-    {
-      id: 'asset_skill_minor_wish_l4',
-      name: '小吉 IV',
-      rarity: 'rainbow',
-      kind: 'skill',
-      system: 'fortune',
-      skillKey: 'minor_wish',
-      level: 4,
-      targetTags: ['RINO'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'skill_level', key: 'minor_wish', value: 4 }]
-    },
-    {
-      id: 'asset_skill_hex_l1',
-      name: '诅咒 I',
-      rarity: 'bronze',
-      kind: 'skill',
-      system: 'chaos',
-      skillKey: 'hex',
-      level: 1,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'skill_level', key: 'hex', value: 1 }]
-    },
-    {
-      id: 'asset_skill_hex_l2',
-      name: '诅咒 II',
-      rarity: 'silver',
-      kind: 'skill',
-      system: 'chaos',
-      skillKey: 'hex',
-      level: 2,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'skill_level', key: 'hex', value: 2 }]
-    },
-    {
-      id: 'asset_skill_hex_l3',
-      name: '诅咒 III',
-      rarity: 'gold',
-      kind: 'skill',
-      system: 'chaos',
-      skillKey: 'hex',
-      level: 3,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'skill_level', key: 'hex', value: 3 }]
-    },
-    {
-      id: 'asset_skill_analysis_l1',
-      name: '解析 I',
-      rarity: 'bronze',
-      kind: 'skill',
-      system: 'psyche',
-      skillKey: 'analysis',
-      level: 1,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'skill_level', key: 'analysis', value: 1 }]
-    },
-    {
-      id: 'asset_skill_analysis_l2',
-      name: '解析 II',
-      rarity: 'silver',
-      kind: 'skill',
-      system: 'psyche',
-      skillKey: 'analysis',
-      level: 2,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'skill_level', key: 'analysis', value: 2 }]
-    },
-    {
-      id: 'asset_skill_analysis_l3',
-      name: '解析 III',
-      rarity: 'gold',
-      kind: 'skill',
-      system: 'psyche',
-      skillKey: 'analysis',
-      level: 3,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'skill_level', key: 'analysis', value: 3 }]
-    },
-    {
-      id: 'asset_skill_premonition_l2',
-      name: '预兆 II',
-      rarity: 'silver',
-      kind: 'skill',
-      system: 'psyche',
-      skillKey: 'premonition',
-      level: 2,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'skill_level', key: 'premonition', value: 2 }]
-    },
-    {
-      id: 'asset_psyche_refraction',
-      name: '折射协议',
-      rarity: 'gold',
-      kind: 'skill',
-      system: 'psyche',
-      skillKey: 'refraction',
-      level: 2,
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'skill_level', key: 'refraction', value: 2 }]
-    },
-    {
-      id: 'asset_skill_insulation_l1',
-      name: '绝缘 I',
-      rarity: 'bronze',
-      kind: 'skill',
-      system: 'void',
-      skillKey: 'insulation',
-      level: 1,
-      targetTags: ['KAZU'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general', 'void'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'skill_level', key: 'insulation', value: 1 }]
-    },
-    {
-      id: 'asset_skill_insulation_l2',
-      name: '绝缘 II',
-      rarity: 'silver',
-      kind: 'skill',
-      system: 'void',
-      skillKey: 'insulation',
-      level: 2,
-      targetTags: ['KAZU'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general', 'void'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'skill_level', key: 'insulation', value: 2 }]
-    },
-    {
-      id: 'asset_skill_insulation_l3',
-      name: '绝缘 III',
-      rarity: 'gold',
-      kind: 'skill',
-      system: 'void',
-      skillKey: 'insulation',
-      level: 3,
-      targetTags: ['KAZU'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general', 'void'],
-      pools: ['high'],
-      modifiers: [{ type: 'skill_level', key: 'insulation', value: 3 }]
-    },
-    {
-      id: 'asset_skill_reality_l2',
-      name: 'Reality II',
-      rarity: 'gold',
-      kind: 'skill',
+    ...texasSkillFamily('moirai', ['minor_wish', 'grand_wish', 'divine_order'], ['RINO']),
+    ...texasSkillFamily('chaos', ['hex', 'havoc', 'catastrophe'], ['team']),
+    ...texasSkillFamily('psyche', ['analysis', 'premonition', 'refraction'], ['team']),
+    skillCard('void', 'insulation', 'bronze', ['KAZU'], ['general', 'void']),
+    skillCard('void', 'insulation', 'silver', ['KAZU'], ['general', 'void']),
+    skillCard('void', 'insulation', 'gold', ['KAZU'], ['general', 'void']),
+    skillCard('void', 'insulation', 'rainbow', ['KAZU'], ['general', 'void']),
+    card('asset_skill_reality_l3', 'Reality I', 'gold', 'skill', {
       system: 'void',
       skillKey: 'reality',
-      level: 2,
+      level: 3,
       targetTags: ['KAZU'],
       gameTags: ['texas-holdem'],
       slotTags: ['general', 'void'],
-      pools: ['high'],
-      modifiers: [{ type: 'skill_level', key: 'reality', value: 2 }]
-    },
-    {
-      id: 'asset_texas_mana_cell',
-      name: '魔力电池',
-      rarity: 'bronze',
-      kind: 'numeric',
-      targetTags: ['team'],
+      effectText: 'reality 加入卡组，等级 III',
+      statusTags: ['唯一升级', 'Texas', 'VOID'],
+      modifiers: [{ type: 'skill_level', key: 'reality', value: 3 }]
+    }),
+    card('asset_skill_reality_l4', 'Reality II', 'rainbow', 'skill', {
+      system: 'void',
+      skillKey: 'reality',
+      level: 4,
+      targetTags: ['KAZU'],
       gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'mana_max_flat', value: 8 }]
-    },
-    {
-      id: 'asset_texas_mana_core',
-      name: '魔力核心',
-      rarity: 'silver',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'mana_max_flat', value: 14 }]
-    },
-    {
-      id: 'asset_texas_minor_discount',
-      name: '低耗咒式',
-      rarity: 'bronze',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'skill_cost_flat', value: -2 }]
-    },
-    {
-      id: 'asset_texas_general_discount',
-      name: '通用节流',
-      rarity: 'silver',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'skill_cost_pct', value: -0.1 }]
-    },
-    {
-      id: 'asset_texas_moirai_lens',
-      name: '天命透镜',
-      rarity: 'bronze',
-      kind: 'numeric',
-      system: 'fortune',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.08 }]
-    },
-    {
-      id: 'asset_texas_chaos_lens',
-      name: '狂厄透镜',
-      rarity: 'bronze',
-      kind: 'numeric',
-      system: 'chaos',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'force_power_pct', system: 'chaos', value: 0.06 }]
-    },
-    {
-      id: 'asset_texas_psyche_lens',
-      name: '灵视透镜',
-      rarity: 'bronze',
-      kind: 'numeric',
-      system: 'psyche',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'force_power_pct', system: 'psyche', value: 0.06 }]
-    },
-    {
-      id: 'asset_texas_force_amplifier',
-      name: '强运增幅器',
-      rarity: 'gold',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'force_power_pct', value: 0.12 }]
-    },
-    {
-      id: 'asset_texas_street_mana',
-      name: '街头魔力',
-      rarity: 'bronze',
-      kind: 'passive',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['low', 'mid'],
-      modifiers: [{ type: 'street_start_mana_gain', value: 1 }]
-    },
-    {
-      id: 'asset_texas_first_cast_discount',
-      name: '首发节流',
-      rarity: 'silver',
-      kind: 'passive',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'first_skill_cost_flat', value: -4 }]
-    },
-    {
-      id: 'asset_texas_first_force_focus',
-      name: '首力聚焦',
-      rarity: 'silver',
-      kind: 'passive',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'first_force_power_pct', value: 0.1 }]
-    },
-    {
-      id: 'asset_texas_opening_glimmer',
-      name: '开局微光',
-      rarity: 'silver',
-      kind: 'passive',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['mid'],
-      modifiers: [{ type: 'once_per_hand_fortune_flat', value: 12 }]
-    },
-    {
-      id: 'asset_texas_opening_blessing',
-      name: '开局祝福',
-      rarity: 'gold',
-      kind: 'passive',
-      targetTags: ['team'],
-      gameTags: ['texas-holdem'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'once_per_hand_fortune_flat', value: 14 }]
-    },
-    {
-      id: 'asset_blackjack_dealer_coupon',
-      name: '廿一折扣券',
-      rarity: 'silver',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['blackjack'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'skill_cost_pct', value: -0.15 }]
-    },
-    {
-      id: 'asset_blackjack_blackjack_bonus',
-      name: '黑杰克溢价',
-      rarity: 'gold',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['blackjack'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'reward_pct', key: 'blackjack', value: 0.12 }]
-    },
-    {
-      id: 'asset_dice_risk_anchor',
-      name: '骰局锚点',
-      rarity: 'silver',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['dice'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'risk_pct', value: -0.12 }]
-    },
-    {
-      id: 'asset_dice_payout_spike',
-      name: '豹子溢价',
-      rarity: 'gold',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['dice'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'payout_pct', key: 'triple', value: 0.1 }]
-    },
-    {
-      id: 'asset_dragon_tiger_force_lens',
-      name: '龙虎力场镜',
-      rarity: 'silver',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['dragon-tiger'],
-      slotTags: ['general'],
-      pools: ['mid', 'high'],
-      modifiers: [{ type: 'force_power_pct', value: 0.1 }]
-    },
-    {
-      id: 'asset_dragon_tiger_tie_contract',
-      name: '和局契约',
-      rarity: 'gold',
-      kind: 'numeric',
-      targetTags: ['team'],
-      gameTags: ['dragon-tiger'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'odds_pct', key: 'tie', value: 0.08 }]
-    },
-    {
-      id: 'asset_void_anchor',
-      name: '虚空锚点',
-      rarity: 'gold',
-      kind: 'passive',
+      slotTags: ['general', 'void'],
+      effectText: 'reality 加入卡组，等级 IV',
+      statusTags: ['唯一升级', 'Texas', 'VOID'],
+      modifiers: [{ type: 'skill_level', key: 'reality', value: 4 }]
+    }),
+    ...manaMaxCards(),
+    ...manaShiftCards(),
+    ...upgradeCards(),
+    ...passiveCards(),
+    ...miniGameCards(),
+    ...highRiskCards(),
+    ...godCards(),
+    card('asset_void_anchor', '虚空锚点', 'gold', 'passive', {
       targetTags: ['KAZU'],
       gameTags: ['any'],
       slotTags: ['general', 'void'],
-      pools: ['high'],
+      effectText: 'Void 槽稳定占位',
+      statusTags: ['VOID'],
       modifiers: [{ type: 'void_stability', value: 1 }]
-    },
-    {
-      id: 'asset_rainbow_contract',
-      name: '彩虹契约',
-      rarity: 'rainbow',
-      kind: 'god',
-      unique: true,
-      targetTags: ['team'],
-      gameTags: ['any'],
-      slotTags: ['general'],
-      pools: ['high'],
-      modifiers: [{ type: 'all_force_power_bonus', value: 0.08 }]
-    }
+    }),
+    card('asset_texas_force_amplifier', '强运增幅器', 'gold', 'numeric', {
+      gameTags: ['texas-holdem'],
+      effectText: 'Texas 技能效果 +12%',
+      statusTags: ['Texas'],
+      modifiers: [{ type: 'force_power_pct', value: 0.12 }]
+    })
   ];
 
   global.ACE0AssetDeckData = {
     ASSET_DECK_CONFIG,
-    ASSET_CARD_CATALOG
+    ASSET_CARD_CATALOG,
+    SYSTEM_LABEL,
+    SKILL_NAME
   };
 })(typeof window !== 'undefined' ? window : globalThis);

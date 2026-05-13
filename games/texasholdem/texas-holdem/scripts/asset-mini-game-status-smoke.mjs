@@ -57,7 +57,6 @@ assert.equal(typeof MiniGameBase.applyAssetDeckToMiniGameConfig, 'function');
 assert.equal(typeof MiniGameBase.renderAssetStatus, 'function');
 
 const assetDeck = {
-  asset_count: 4,
   general_slots_unlocked: 4,
   void_slots_unlocked: 1,
   active_general_cards: [
@@ -82,6 +81,7 @@ const assetDeck = {
 
 const compiled = MiniGameBase.applyAssetDeckToMiniGameConfig({
   gameMode: 'blackjack',
+  assetPoints: 4,
   assetDeck
 }, 'blackjack');
 

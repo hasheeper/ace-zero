@@ -69,6 +69,20 @@
         return Math.round(normalizeNumber(value, 0) * 1000) / 1000;
       }
 
+      function formatSignedNumber(value) {
+        const numeric = roundThree(value);
+        return `${numeric > 0 ? '+' : ''}${numeric}`;
+      }
+
+      function formatPercent(value) {
+        const numeric = Math.round(roundThree(value) * 100);
+        return `${numeric > 0 ? '+' : ''}${numeric}%`;
+      }
+
+      function romanLevel(level) {
+        return ['0', 'I', 'II', 'III', 'IV'][Math.max(0, Math.min(4, Math.round(normalizeNumber(level, 0))))] || String(level || '');
+      }
+
       function normalizeAssetDeck(assetDeckInput) {
         if (assetDeckModule && typeof assetDeckModule.normalizeAssetDeckState === 'function') {
           return assetDeckModule.normalizeAssetDeckState(assetDeckInput);
@@ -78,7 +92,6 @@
           : {};
         return {
           version: Math.max(1, Math.round(normalizeNumber(source.version, 1))),
-          asset_count: Math.max(0, Math.round(normalizeNumber(source.asset_count ?? source.assetCount, 0))),
           general_slots_unlocked: Math.max(0, Math.round(normalizeNumber(source.general_slots_unlocked, 4))),
           void_slots_unlocked: Math.max(0, Math.round(normalizeNumber(source.void_slots_unlocked, 2))),
           active_general_cards: normalizeList(source.active_general_cards || source.activeGeneralCards).map(card => clone(card, {})),
@@ -100,6 +113,60 @@
         return normalizeList((card && card[key]) || meta[key]).map(tag => normalizeKey(tag)).filter(Boolean);
       }
 
+      function buildEffectText(card, meta, modifiers) {
+        const explicit = normalizeId((card && card.effectText) || meta.effectText);
+        if (explicit) return explicit;
+        const kind = normalizeKey((card && card.kind) || meta.kind, 'numeric');
+        const skillKey = normalizeKey((card && card.skillKey) || meta.skillKey);
+        const level = Math.max(0, Math.round(normalizeNumber((card && card.level) ?? meta.level, 0)));
+        if (kind === 'skill' && skillKey) return `${skillKey.replace(/_/g, ' ')} ${romanLevel(level)}`;
+        if (kind === 'upgrade') {
+          const target = normalizeKey((card && card.upgradeTargetSkillKey) || (card && card.upgradeTarget) || meta.upgradeTargetSkillKey);
+          return target ? `${target.replace(/_/g, ' ')} 升级 +1` : '已装配技能升级 +1';
+        }
+        const parts = [];
+        normalizeList(modifiers).forEach(modifier => {
+          const type = normalizeKey(modifier && (modifier.type || modifier.kind));
+          const value = normalizeNumber(modifier && modifier.value, 0);
+          const key = normalizeKey(modifier && (modifier.key || modifier.skillKey));
+          if (type === 'mana_max_flat') parts.push(`Mana Max ${formatSignedNumber(value)}`);
+          else if (type === 'skill_cost_flat') parts.push(`Mana 消耗 ${formatSignedNumber(value)}`);
+          else if (type === 'skill_cost_pct') parts.push(`Mana 消耗 ${formatPercent(value)}`);
+          else if (type === 'force_power_flat') parts.push(`${key ? `${key.replace(/_/g, ' ')} ` : ''}效果 ${formatSignedNumber(value)}`);
+          else if (type === 'force_power_pct' || type === 'all_force_power_bonus') parts.push(`${key ? `${key.replace(/_/g, ' ')} ` : ''}效果 ${formatPercent(value)}`);
+          else if (type === 'reward_pct') parts.push(`小游戏效果 ${formatPercent(value)}`);
+          else if (type === 'risk_reward_roll') parts.push('技能释放时随机 Mana / 效果浮动');
+          else if (type === 'street_force_chance_flat') {
+            const chance = formatPercent(modifier.chance || 0);
+            const forceType = normalizeKey(modifier.forceType || modifier.system, 'force').replace(/_/g, ' ');
+            parts.push(`每街 ${chance} 触发 ${forceType} ${formatSignedNumber(value)}`);
+          } else if (type === 'skill_level_bonus') {
+            parts.push(`Texas 技能等级 ${formatSignedNumber(value)}`);
+          }
+        });
+        return parts.slice(0, 2).join(' / ') || kind.replace(/_/g, ' ') || 'Asset effect';
+      }
+
+      function buildStatusTags(card, meta, effective) {
+        const tags = [];
+        const kind = normalizeKey((card && card.kind) || meta.kind);
+        const gameTags = getCardTags(card, 'gameTags');
+        const slotTags = getCardTags(card, 'slotTags');
+        const unique = Boolean((card && card.unique) ?? meta.unique);
+        const consumable = Boolean((card && card.consumable) ?? meta.consumable) || kind === 'upgrade';
+        if (unique) tags.push('唯一');
+        else if (kind === 'skill') tags.push('技能唯一');
+        else tags.push('可叠加');
+        if (consumable) tags.push('消耗');
+        if (slotTags.includes('void')) tags.push('VOID槽');
+        if (gameTags.includes('texas-holdem') || gameTags.includes('texas')) tags.push('Texas');
+        if (gameTags.some(tag => tag === 'blackjack' || tag === 'dice' || tag === 'dragon-tiger')) tags.push('小游戏');
+        const target = normalizeKey((card && card.upgradeTargetSkillKey) || (card && card.upgradeTarget) || meta.upgradeTargetSkillKey);
+        if (target) tags.push(`目标:${target.replace(/_/g, ' ')}`);
+        if (!effective) tags.push('未生效');
+        return tags.slice(0, 5);
+      }
+
       function isCardEffectiveForGame(card, gameId) {
         const gameTags = getCardTags(card, 'gameTags');
         if (!gameTags.length) return true;
@@ -112,6 +179,7 @@
         const meta = getCardMeta(card);
         const cardId = normalizeId((card && (card.cardId || card.id)) || meta.id);
         const modifiers = normalizeList((card && card.modifiers) || meta.modifiers).map(modifier => clone(modifier, {}));
+        const effective = isCardEffectiveForGame(card, gameId);
         return {
           instanceId: normalizeId(card && card.instanceId),
           cardId,
@@ -126,7 +194,12 @@
           slotTags: getCardTags(card, 'slotTags'),
           slotType,
           slotIndex: index,
-          effective: isCardEffectiveForGame(card, gameId),
+          effective,
+          unique: Boolean((card && card.unique) ?? meta.unique),
+          consumable: Boolean((card && card.consumable) ?? meta.consumable),
+          upgradeTargetSkillKey: normalizeKey((card && card.upgradeTargetSkillKey) || (card && card.upgradeTarget) || meta.upgradeTargetSkillKey),
+          effectText: buildEffectText(card, meta, modifiers),
+          statusTags: buildStatusTags(card, meta, effective),
           modifiers
         };
       }
@@ -302,7 +375,7 @@
           version: 1,
           gameId,
           mode,
-          points: Math.max(0, Math.round(normalizeNumber(normalizedDeck.asset_count, 0))),
+          points: Math.max(0, Math.round(normalizeNumber(buildOptions.assetPoints ?? buildOptions.points, 0))),
           slots: {
             generalUsed: generalCards.length,
             generalMax: Math.max(0, Math.round(normalizeNumber(normalizedDeck.general_slots_unlocked, 0))),

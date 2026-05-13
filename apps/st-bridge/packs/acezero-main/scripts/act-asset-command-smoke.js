@@ -119,10 +119,10 @@ function testAssetDeckGrantHistoryKeepsActSource() {
         phaseIndex: 1
       }
     }
-  });
+  }, { assetPoints: 0 });
 
   assertEqual(result.ok, true, 'grant_asset should apply');
-  assertEqual(result.assetDeck.asset_count, 2, 'grant_asset should add asset points');
+  assertEqual(result.assetPoints, 2, 'grant_asset should add reserve asset points');
   const lastHistory = result.assetDeck.history[result.assetDeck.history.length - 1];
   assert(lastHistory, 'grant_asset should append history');
   assertEqual(lastHistory.requestId, 'act-command-1', 'AssetDeck history should keep request id');
@@ -131,10 +131,11 @@ function testAssetDeckGrantHistoryKeepsActSource() {
 
 function testAssetDeckOpenOfferHistoryKeepsActSource() {
   const { assetDeck } = loadAssetSandbox();
-  let state = assetDeck.applyAssetDeckCommand(assetDeck.makeDefaultAssetDeckState(), {
+  const granted = assetDeck.applyAssetDeckCommand(assetDeck.makeDefaultAssetDeckState(), {
     kind: 'grant_asset',
     payload: { amount: 3 }
-  }).assetDeck;
+  }, { assetPoints: 0 });
+  let state = granted.assetDeck;
   const result = assetDeck.applyAssetDeckCommand(state, {
     kind: 'open_offer',
     payload: {
@@ -147,10 +148,10 @@ function testAssetDeckOpenOfferHistoryKeepsActSource() {
         phaseIndex: 0
       }
     }
-  });
+  }, { assetPoints: granted.assetPoints });
 
   assertEqual(result.ok, true, 'open_offer should apply after grant');
-  assertEqual(result.assetDeck.asset_count, 0, 'High offer should consume the granted three asset points');
+  assertEqual(result.assetPoints, 0, 'High offer should consume the granted three asset points');
   assertEqual(result.assetDeck.pending_offer.pool, 'high', 'open_offer should create high pending offer');
   const lastHistory = result.assetDeck.history[result.assetDeck.history.length - 1];
   assertEqual(lastHistory.requestId, 'act-offer-1', 'open_offer history should keep request id');

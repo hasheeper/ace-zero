@@ -64,7 +64,6 @@
       protocol: 'ace0.assetOffer.v1',
       offerId: typeof offer.id === 'string' ? offer.id : '',
       pool: typeof offer.pool === 'string' ? offer.pool : 'low',
-      points: Math.max(0, Math.round(Number(assetDeck.asset_count) || 0)),
       choices: choices.slice(0, 3).map((choice, index) => {
         const card = choice && typeof choice === 'object' && !Array.isArray(choice) ? choice : {};
         const catalogCard = getAssetCatalogCard(card.cardId);

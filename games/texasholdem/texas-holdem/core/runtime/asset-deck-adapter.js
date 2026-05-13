@@ -55,6 +55,18 @@
     return Math.max(1, Math.round(n));
   }
 
+  function randomBetween(min, max, randomFn) {
+    var low = toNumber(min, 0);
+    var high = toNumber(max, low);
+    if (high < low) {
+      var swap = low;
+      low = high;
+      high = swap;
+    }
+    var roll = typeof randomFn === 'function' ? randomFn() : Math.random();
+    return low + (high - low) * Math.max(0, Math.min(1, roll));
+  }
+
   function makeSource(card, modifier, type, value) {
     return {
       cardId: (card && (card.cardId || card.id || card.skillKey)) || null,
@@ -129,8 +141,10 @@
         odds: { globalFlat: 0, globalPct: 0, byKey: {}, sources: [] }
       },
       passiveTriggers: [],
+      riskRewards: [],
       skillLevelBySkill: {},
       skillLevelEntries: [],
+      skillLevelBonus: { global: 0, sources: [] },
       debug: { cards: [], ignored: [], applied: [] }
     };
   }
@@ -217,7 +231,7 @@
   }
 
   function makePassiveEntry(card, modifier, cardId, type, value) {
-    return {
+    var entry = {
       cardId: cardId,
       cardName: (card && card.name) || null,
       type: type,
@@ -229,6 +243,12 @@
       value: value,
       source: makeSource(card, modifier, type, value)
     };
+    if (modifier.chance != null) entry.chance = Math.max(0, Math.min(1, toNumber(modifier.chance, 0)));
+    if (modifier.forceType != null) entry.forceType = normalizeKey(modifier.forceType);
+    if (modifier.randomTarget != null) entry.randomTarget = modifier.randomTarget === true;
+    if (modifier.shield != null) entry.shield = modifier.shield === true;
+    if (modifier.scope != null) entry.scope = normalizeKey(modifier.scope);
+    return entry;
   }
 
   function passiveRuntimeKey(entry, ownerId) {
@@ -312,6 +332,18 @@
     }, { flat: 0, pct: 0, sources: [] });
   }
 
+  function collectPctSourceValues(sourceLists, fallbackValue) {
+    var values = [];
+    (Array.isArray(sourceLists) ? sourceLists : []).forEach(function(list) {
+      (Array.isArray(list) ? list : []).forEach(function(source) {
+        if (!source || normalizeKey(source.type) !== 'skill_cost_pct') return;
+        values.push(toNumber(source.value, 0));
+      });
+    });
+    if (!values.length && fallbackValue) values.push(toNumber(fallbackValue, 0));
+    return values;
+  }
+
   function compile(input) {
     var source = input || {};
     var gameId = normalizeGameId(source.gameId || 'texas-holdem');
@@ -348,6 +380,16 @@
               targetTags: normalizeTags(card.targetTags),
               cardId: cardId
             });
+            compiled.debug.applied.push(record);
+          }
+          return;
+        }
+
+        if (type === 'skill_level_bonus') {
+          var bonus = Math.max(0, Math.floor(value || 0));
+          if (bonus > 0) {
+            compiled.skillLevelBonus.global = Math.min(1, Math.max(compiled.skillLevelBonus.global || 0, bonus));
+            compiled.skillLevelBonus.sources.push(makeSource(card, modifier, type, bonus));
             compiled.debug.applied.push(record);
           }
           return;
@@ -446,6 +488,7 @@
 
         if (
           type === 'street_start_mana_gain' ||
+          type === 'street_force_chance_flat' ||
           type === 'first_skill_cost_flat' ||
           type === 'first_force_power_pct' ||
           type === 'once_per_hand_fortune_flat'
@@ -455,9 +498,37 @@
           return;
         }
 
+        if (type === 'risk_reward_roll') {
+          compiled.riskRewards.push({
+            cardId: cardId,
+            cardName: card && card.name || null,
+            type: type,
+            costPctMin: toNumber(modifier.costPctMin, 0),
+            costPctMax: toNumber(modifier.costPctMax, 0),
+            effectPctMin: toNumber(modifier.effectPctMin, 0),
+            effectPctMax: toNumber(modifier.effectPctMax, 0),
+            source: makeSource(card, modifier, type, 0)
+          });
+          compiled.debug.applied.push(record);
+          return;
+        }
+
         compiled.debug.ignored.push({ cardId: cardId, type: type, reason: 'unsupported_modifier' });
       });
     });
+
+    var bonusLevel = Math.max(0, Math.floor(compiled.skillLevelBonus && compiled.skillLevelBonus.global || 0));
+    if (bonusLevel > 0) {
+      Object.keys(compiled.skillLevelBySkill).forEach(function(skillKey) {
+        compiled.skillLevelBySkill[skillKey] = Math.min(4, Math.max(0, compiled.skillLevelBySkill[skillKey]) + bonusLevel);
+      });
+      compiled.skillLevelEntries = compiled.skillLevelEntries.map(function(entry) {
+        var next = cloneJson(entry, entry) || entry;
+        next.level = Math.min(4, Math.max(0, Number(next.level || 0)) + bonusLevel);
+        next.skillLevelBonus = bonusLevel;
+        return next;
+      });
+    }
 
     return compiled;
   }
@@ -489,7 +560,13 @@
     var bySystem = getBucketValue(mods, 'bySystem', skill.system);
     var byOwner = getBucketValue(mods, 'byOwner', skill.ownerId);
     var flatDelta = toNumber(mods.globalFlat, 0) + bySkill.flat + bySystem.flat + byOwner.flat;
-    var pctDelta = toNumber(mods.globalPct, 0) + bySkill.pct + bySystem.pct + byOwner.pct;
+    var aggregatePct = toNumber(mods.globalPct, 0) + bySkill.pct + bySystem.pct + byOwner.pct;
+    var pctSources = collectPctSourceValues([
+      mods.sources,
+      bySkill.sources,
+      bySystem.sources,
+      byOwner.sources
+    ], aggregatePct);
     var sources = []
       .concat(Array.isArray(mods.sources) ? mods.sources : [])
       .concat(Array.isArray(bySkill.sources) ? bySkill.sources : [])
@@ -514,15 +591,44 @@
     });
 
     var afterFlat = Math.max(0, base + flatDelta);
-    var clampedPct = Math.max(-0.66, pctDelta);
+    var riskRolls = [];
+    if (context && context.consumeAssetRisk === true) {
+      var risks = Array.isArray(compiled && compiled.riskRewards) ? compiled.riskRewards : [];
+      risks.forEach(function(entry) {
+        if (!entry) return;
+        var costPct = randomBetween(entry.costPctMin, entry.costPctMax, context.random);
+        var effectPct = randomBetween(entry.effectPctMin, entry.effectPctMax, context.random);
+        pctSources.push(costPct);
+        sources.push(entry.source);
+        riskRolls.push({
+          cardId: entry.cardId,
+          cardName: entry.cardName,
+          costPct: roundThree(costPct),
+          effectPct: roundThree(effectPct)
+        });
+      });
+    }
+
+    var pctIncrease = 0;
+    var pctReduction = 0;
+    pctSources.forEach(function(value) {
+      var pct = toNumber(value, 0);
+      if (pct >= 0) pctIncrease += pct;
+      else pctReduction += Math.abs(pct);
+    });
+    var cappedReduction = Math.min(0.66, pctReduction);
+    var finalPct = pctIncrease - cappedReduction;
 
     return {
-      finalCost: roundCost(afterFlat * (1 + clampedPct)),
+      finalCost: afterFlat <= 0 ? 0 : roundCost(afterFlat * Math.max(0, 1 + finalPct)),
       baseCost: base,
       flatDelta: flatDelta,
-      pctDelta: clampedPct,
+      pctDelta: roundThree(finalPct),
+      pctIncrease: roundThree(pctIncrease),
+      pctReduction: roundThree(cappedReduction),
       sources: sources,
-      passiveTriggers: passiveTriggers
+      passiveTriggers: passiveTriggers,
+      riskRolls: riskRolls
     };
   }
 
@@ -544,6 +650,19 @@
       .concat(Array.isArray(byOwner.sources) ? byOwner.sources : [])
       .concat(Array.isArray(scoped.sources) ? scoped.sources : []);
     var passiveTriggers = [];
+    var riskRolls = Array.isArray(force._assetRiskRolls) ? force._assetRiskRolls : [];
+    riskRolls.forEach(function(roll) {
+      var effectPct = toNumber(roll && roll.effectPct, 0);
+      if (!effectPct) return;
+      pctDelta += effectPct;
+      sources.push({
+        cardId: roll.cardId || null,
+        cardName: roll.cardName || null,
+        type: 'risk_reward_roll',
+        key: force.skillKey || null,
+        value: effectPct
+      });
+    });
     var passiveState = context && context.passiveState;
     var passives = Array.isArray(compiled && compiled.passiveTriggers) ? compiled.passiveTriggers : [];
     passives.forEach(function(entry) {
@@ -631,18 +750,33 @@
     return passives.reduce(function(events, entry) {
       if (!entry) return events;
       if (entry.type === 'street_start_mana_gain' && triggerKey !== 'street_start') return events;
+      if (entry.type === 'street_force_chance_flat' && triggerKey !== 'street_start') return events;
       if (entry.type === 'once_per_hand_fortune_flat' && triggerKey !== 'hand_start') return events;
-      if (entry.type !== 'street_start_mana_gain' && entry.type !== 'once_per_hand_fortune_flat') return events;
+      if (
+        entry.type !== 'street_start_mana_gain' &&
+        entry.type !== 'street_force_chance_flat' &&
+        entry.type !== 'once_per_hand_fortune_flat'
+      ) return events;
 
       var targetOwnerId = entry.ownerId != null ? entry.ownerId : ownerId;
       var runtimeKey = passiveRuntimeKey(entry, targetOwnerId);
       if (entry.type === 'once_per_hand_fortune_flat' && isPassiveUsed(passiveState, runtimeKey)) return events;
+      if (entry.type === 'street_force_chance_flat') {
+        var chance = entry.chance != null ? entry.chance : 1;
+        var randomFn = context && context.random;
+        var roll = typeof randomFn === 'function' ? randomFn() : Math.random();
+        if (roll > chance) return events;
+      }
       events.push({
         cardId: entry.cardId,
         cardName: entry.cardName,
         trigger: entry.type,
         value: entry.value,
         ownerId: targetOwnerId,
+        system: entry.system,
+        forceType: entry.forceType,
+        randomTarget: entry.randomTarget,
+        shield: entry.shield,
         runtimeKey: runtimeKey,
         source: entry.source
       });

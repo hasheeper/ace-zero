@@ -65,7 +65,12 @@
       gameId: normalizeGameKey(gameKey),
       mode: 'host',
       adapter: global.AssetDeckAdapter || null,
-      compiledModifiers: compiled || null
+      compiledModifiers: compiled || null,
+      assetPoints: config && (
+        config.assetPoints ??
+        config.points ??
+        (config.world && config.world.act && config.world.act.reserve && config.world.act.reserve.asset)
+      )
     });
   }
 

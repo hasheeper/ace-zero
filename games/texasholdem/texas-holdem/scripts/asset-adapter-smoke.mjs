@@ -133,6 +133,48 @@ const cost = adapter.resolveSkillCost(compiled, {
 assert.equal(cost.finalCost, 17, 'Flat skill-cost modifier should affect final cost');
 assert.equal(cost.sources[0].cardId, 'asset_skill_minor_wish_l2', 'Cost modifier should expose source card');
 
+const zeroCostCompiled = adapter.compile({
+  gameId: 'texas-holdem',
+  assetDeck: {
+    active_general_cards: [
+      { cardId: 'asset_zero_flat', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_flat', value: -12 }] },
+      { cardId: 'asset_zero_pct', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: -0.5 }] }
+    ]
+  }
+});
+const zeroCost = adapter.resolveSkillCost(zeroCostCompiled, { ownerId: 0, skillKey: 'minor_wish', system: 'moirai' }, 10);
+assert.equal(zeroCost.finalCost, 0, 'Flat reduction can make a skill free before percent modifiers');
+
+const pctCapCompiled = adapter.compile({
+  gameId: 'texas-holdem',
+  assetDeck: {
+    active_general_cards: [
+      { cardId: 'asset_pct_reduce_a', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: -0.5 }] },
+      { cardId: 'asset_pct_reduce_b', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: -0.5 }] },
+      { cardId: 'asset_pct_increase', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: 0.5 }] }
+    ]
+  }
+});
+const pctCapCost = adapter.resolveSkillCost(pctCapCompiled, { ownerId: 0, skillKey: 'hex', system: 'chaos' }, 30);
+assert.equal(pctCapCost.finalCost, 25, 'Percent reductions cap at 66% while increases remain uncapped');
+
+const riskCompiled = adapter.compile({
+  gameId: 'texas-holdem',
+  assetDeck: {
+    active_general_cards: [
+      {
+        cardId: 'asset_risk_fixed',
+        gameTags: ['texas-holdem'],
+        modifiers: [{ type: 'risk_reward_roll', costPctMin: -0.1, costPctMax: -0.1, effectPctMin: 0.2, effectPctMax: 0.2 }]
+      }
+    ]
+  }
+});
+const riskCost = adapter.resolveSkillCost(riskCompiled, { ownerId: 0, skillKey: 'hex', system: 'chaos' }, 20, { consumeAssetRisk: true, random: () => 0.5 });
+assert.equal(riskCost.finalCost, 18, 'Risk/reward cost roll should apply only when consumed');
+const riskForce = adapter.enhanceForcePower(riskCompiled, { ownerId: 0, skillKey: 'hex', system: 'chaos', power: 50, _assetRiskRolls: riskCost.riskRolls });
+assert.equal(riskForce.power, 60, 'Risk/reward effect roll should apply to the activated force');
+
 const mana = adapter.resolveManaMax(compiled, 0, 100);
 assert.equal(mana.max, 110, 'Mana max modifier should affect max mana');
 const enemyMana = adapter.resolveManaMax(compiled, 2, 100);

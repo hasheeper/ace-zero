@@ -445,11 +445,12 @@
                 <strong>${escapePartyHtml(String(offer.pool || 'low').toUpperCase())} · ${Array.isArray(offer.choices) ? offer.choices.length : 0} CARDS</strong>
             </div>
         ` : '';
+        const assetPoints = Math.max(0, Math.round(Number(appState.resources.assets) || 0));
         return `
             <div class="asset-act-panel">
                 <div class="vision-task-row asset-task-row">
-                    <span>DECK PTS</span>
-                    <strong>${Math.max(0, Math.round(Number(assetSummary.points) || 0))} POINTS</strong>
+                    <span>ASSET</span>
+                    <strong>${assetPoints} POINTS</strong>
                 </div>
                 ${offerMarkup}
                 ${pendingRows}

@@ -25,11 +25,12 @@ async function testTavernHostSettlesAssetTokenDuringPhaseAdvance() {
       assetDeck: assetDeck.makeDefaultAssetDeckState(),
       act: createActStateAt(act, 1, ['node1-entry'], {
         stage: 'executing',
-        phase_index: 1,
+        phase_index: 0,
         phase_advance: 1,
+        phasePlanLock: { nodeId: 'node1-entry', nodeIndex: 1, locked: true, confirmedPhaseIndex: 0 },
         phase_slots: [
-          null,
           { key: 'asset', amount: 1, source: 'limited', sources: ['limited'] },
+          null,
           null,
           null
         ],
@@ -50,7 +51,8 @@ async function testTavernHostSettlesAssetTokenDuringPhaseAdvance() {
   assertEqual(nextAct.resolutionHistory.length, 2, 'tavern host should record grant + offer resolution history');
   assert(nextWorld.assetDeck.pending_offer, 'tavern host should open an AssetDeck offer immediately');
   assertEqual(nextWorld.assetDeck.pending_offer.pool, 'low', 'Asset I should open the low pool');
-  assertEqual(nextWorld.assetDeck.asset_count, 0, 'grant + low offer should net to zero asset points');
+  assertEqual(nextAct.reserve.asset, 0, 'grant + low offer should net to zero reserve asset');
+  assert(!Object.prototype.hasOwnProperty.call(nextWorld.assetDeck, 'asset_count'), 'tavern host should not write asset_count');
   assert(patches.some((patch) => patch.world && patch.world.assetDeck), 'host writeback should include world.assetDeck');
 }
 

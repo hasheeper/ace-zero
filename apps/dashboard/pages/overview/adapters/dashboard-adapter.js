@@ -304,6 +304,10 @@
             if (!assetModule || typeof assetModule.applyAssetDeckCommand !== 'function') return world;
 
             let assetDeck = normalizeAssetDeckForDashboard(world.assetDeck);
+            const reserveSource = actState.reserve && typeof actState.reserve === 'object' && !Array.isArray(actState.reserve)
+                ? actState.reserve
+                : {};
+            let assetPoints = Math.max(0, Math.round(Number(reserveSource.asset) || 0));
             const consumedIds = new Set();
             const resolutionHistory = Array.isArray(actState.resolutionHistory) ? deepCloneValue(actState.resolutionHistory) : [];
 
@@ -331,13 +335,17 @@
                 let result;
                 try {
                     result = assetModule.applyAssetDeckCommand(assetDeck, command, {
-                        seed: `debug-act:${pending.id || Date.now()}`
+                        seed: `debug-act:${pending.id || Date.now()}`,
+                        assetPoints
                     });
                 } catch (error) {
                     result = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
                 }
 
                 if (result?.assetDeck) assetDeck = normalizeAssetDeckForDashboard(result.assetDeck);
+                if (Number.isFinite(Number(result?.assetPoints))) {
+                    assetPoints = Math.max(0, Math.round(Number(result.assetPoints) || 0));
+                }
                 const status = result?.ok ? 'resolved' : 'failed';
                 resolutionHistory.push({
                     ...deepCloneValue(pending),
@@ -349,7 +357,6 @@
                         commandKind: command.kind || command.type || '',
                         commandPayload: deepCloneValue(command.payload),
                         resultCode: result?.code || '',
-                        asset_count: Math.max(0, Math.round(Number(assetDeck.asset_count) || 0)),
                         error: result?.error || ''
                     }
                 });
@@ -358,6 +365,12 @@
 
             actState.pendingAssetDeckCommands = pendingCommands.filter((item) => !consumedIds.has(item.id));
             actState.resolutionHistory = resolutionHistory;
+            actState.reserve = {
+                combat: Math.max(0, Number(reserveSource.combat) || 0),
+                rest: Math.max(0, Number(reserveSource.rest) || 0),
+                asset: assetPoints,
+                vision: Math.max(0, Number(reserveSource.vision) || 0)
+            };
             world.act = actState;
             world.assetDeck = assetDeck;
             return world;

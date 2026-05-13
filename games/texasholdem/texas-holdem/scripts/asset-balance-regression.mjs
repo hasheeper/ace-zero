@@ -82,7 +82,6 @@ async function evalJs(client, expression) {
 
 function makeAssetDeck(cards = [], voidCards = []) {
   return {
-    asset_count: 0,
     general_slots_unlocked: 4,
     void_slots_unlocked: 2,
     active_general_cards: cards,

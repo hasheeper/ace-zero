@@ -36,7 +36,7 @@
 
       const CARD_ID_SET = new Set(catalog.map(card => normalizeId(card.id)).filter(Boolean));
       const RARITY_VALUES = ['bronze', 'silver', 'gold', 'rainbow'];
-      const KIND_VALUES = ['numeric', 'passive', 'skill', 'god'];
+      const KIND_VALUES = ['numeric', 'passive', 'skill', 'upgrade', 'god'];
       const SLOT_TYPES = ['general', 'void'];
       const POOL_VALUES = ['low', 'mid', 'high'];
       const HISTORY_LIMIT = 24;
@@ -86,6 +86,7 @@
         const requestId = normalizeId(raw.requestId, '');
         const pool = normalizeId(raw.pool, '');
         const slotType = normalizeId(raw.slotType, '');
+        const skillKey = normalizeSkillKey(raw.skillKey);
         if (kind) out.kind = kind;
         if (status) out.status = status;
         if (cardId) out.cardId = cardId;
@@ -93,6 +94,7 @@
         if (requestId) out.requestId = requestId;
         if (pool) out.pool = pool;
         if (slotType) out.slotType = slotType;
+        if (skillKey) out.skillKey = skillKey;
         ['amount', 'cost', 'free', 'general_slots_unlocked', 'fromLevel', 'toLevel'].forEach(key => {
           if (raw[key] != null && raw[key] !== '') out[key] = raw[key];
         });
@@ -120,7 +122,22 @@
         return normalizeSkillKey(card.skillKey || inferSkillKeyFromModifiers(card.modifiers));
       }
 
-      function createCardInstance(card, source = 'runtime') {
+      function getUpgradeModifier(card) {
+        const list = Array.isArray(card?.modifiers) ? card.modifiers : [];
+        return list.find(item => item && typeof item === 'object' && normalizeId(item.type || item.kind, '').toLowerCase() === 'skill_upgrade') || null;
+      }
+
+      function getUpgradeMaxFromLevel(card) {
+        const modifier = getUpgradeModifier(card);
+        if (!modifier) return 0;
+        return Math.max(0, Math.min(3, normalizeNonNegativeInt(modifier.maxFromLevel ?? modifier.maxLevel, 0)));
+      }
+
+      function isUpgradeCard(card) {
+        return normalizeId(card?.kind, '').toLowerCase() === 'upgrade' || !!getUpgradeModifier(card);
+      }
+
+      function createCardInstance(card, source = 'runtime', extras = {}) {
         const base = card && typeof card === 'object' ? card : {};
         const cardId = normalizeId(base.id || base.cardId, '');
         const nowValue = normalizeNonNegativeInt(now(), 0);
@@ -137,7 +154,8 @@
           slotTags: base.slotTags,
           modifiers: base.modifiers,
           source,
-          addedAt: nowValue
+          addedAt: nowValue,
+          ...extras
         });
       }
 
@@ -159,12 +177,15 @@
           gameTags: normalizeStringList(source.gameTags || catalogCard?.gameTags, { lower: true }),
           slotTags: slotTags.length ? slotTags : ['general'],
           unique: Boolean(source.unique ?? catalogCard?.unique),
+          consumable: Boolean(source.consumable ?? catalogCard?.consumable),
           modifiers: Array.isArray(source.modifiers || catalogCard?.modifiers)
             ? deepClone(source.modifiers || catalogCard.modifiers)
             : [],
           source: normalizeId(source.source, 'runtime'),
           addedAt: normalizeNonNegativeInt(source.addedAt, 0)
         };
+        const upgradeTargetSkillKey = normalizeSkillKey(source.upgradeTargetSkillKey || source.upgradeTarget || source.targetSkillKey);
+        if (upgradeTargetSkillKey) normalized.upgradeTargetSkillKey = upgradeTargetSkillKey;
         if (!normalized.instanceId) {
           normalized.instanceId = `${normalized.cardId || 'asset_card'}:${normalized.addedAt || 0}`;
         }
@@ -224,7 +245,8 @@
           cardId: card.cardId,
           level: card.level,
           source: card.source,
-          addedAt: card.addedAt
+          addedAt: card.addedAt,
+          ...(card.upgradeTargetSkillKey ? { upgradeTargetSkillKey: card.upgradeTargetSkillKey } : {})
         };
       }
 
@@ -262,7 +284,6 @@
         const state = normalizeAssetDeckState(value);
         return {
           version: state.version,
-          asset_count: state.asset_count,
           general_slots_unlocked: state.general_slots_unlocked,
           void_slots_unlocked: state.void_slots_unlocked,
           active_general_cards: state.active_general_cards.map(compactCardRef).filter(Boolean),
@@ -277,7 +298,6 @@
       function makeDefaultAssetDeckState() {
         return {
           version: 1,
-          asset_count: 0,
           general_slots_unlocked: config.initialGeneralSlots,
           void_slots_unlocked: config.voidSlots,
           active_general_cards: [],
@@ -362,7 +382,6 @@
         const uniqueFilteredCards = removeDuplicateUniqueCards(normalizedGeneralCards, normalizedVoidCards);
         return {
           version: Math.max(1, normalizePositiveInt(source.version, base.version)),
-          asset_count: normalizeNonNegativeInt(source.asset_count ?? source.assetCount, base.asset_count),
           general_slots_unlocked: generalSlotsUnlocked,
           void_slots_unlocked: voidSlotsUnlocked,
           active_general_cards: uniqueFilteredCards.general,
@@ -421,6 +440,18 @@
           .find(ref => getCardSkillKey(ref.card) === normalizedSkillKey) || null;
       }
 
+      function getUpgradeableSkillRefs(assetDeck, upgradeCard) {
+        const maxFromLevel = getUpgradeMaxFromLevel(upgradeCard);
+        if (!maxFromLevel) return [];
+        return getActiveCardRefs(assetDeck)
+          .filter(ref => {
+            const skillKey = getCardSkillKey(ref.card);
+            if (!skillKey) return false;
+            const level = Math.max(0, normalizeNonNegativeInt(ref.card.level, 0));
+            return level >= 1 && level <= maxFromLevel && level < 4;
+          });
+      }
+
       function findActiveUniqueRef(assetDeck, card) {
         const uniqueKey = getUniqueCardKey(card);
         if (!uniqueKey) return null;
@@ -439,13 +470,19 @@
         return candidateLevel >= activeLevel;
       }
 
+      function isUpgradeCardOfferEligible(assetDeck, card) {
+        if (!isUpgradeCard(card)) return true;
+        return getUpgradeableSkillRefs(assetDeck, card).length > 0;
+      }
+
       function getEligibleCatalogCards(assetDeck, pool, avoidCardIds = []) {
         const avoided = new Set(avoidCardIds.map(id => normalizeId(id, '')).filter(Boolean));
         return catalog
           .filter(card => Array.isArray(card.pools) && card.pools.includes(pool))
           .filter(card => !avoided.has(normalizeId(card.id, '')))
           .filter(card => !findActiveUniqueRef(assetDeck, createCardInstance(card, 'eligibility')))
-          .filter(card => isSkillCardOfferEligible(assetDeck, card));
+          .filter(card => isSkillCardOfferEligible(assetDeck, card))
+          .filter(card => isUpgradeCardOfferEligible(assetDeck, card));
       }
 
       function hashStringToSeed(input) {
@@ -501,11 +538,18 @@
           const bucket = rarityCandidates.length ? rarityCandidates : fallbackCandidates;
           if (!bucket.length) break;
           const picked = bucket[Math.floor(random() * bucket.length)] || bucket[0];
-          selected.push(picked);
+          const extras = {};
+          if (isUpgradeCard(picked)) {
+            const upgradeTargets = getUpgradeableSkillRefs(assetDeck, picked);
+            const target = upgradeTargets[Math.floor(random() * upgradeTargets.length)] || upgradeTargets[0];
+            if (!target) continue;
+            extras.upgradeTargetSkillKey = getCardSkillKey(target.card);
+          }
+          selected.push(createCardInstance(picked, `offer:${pool}`, extras));
           selectedIds.add(normalizeId(picked.id, ''));
         }
 
-        return selected.map(card => createCardInstance(card, `offer:${pool}`));
+        return selected;
       }
 
       function findSkillCatalogCard(skillKey, level) {
@@ -592,13 +636,87 @@
         ].slice(-HISTORY_LIMIT);
       }
 
-      function result(assetDeck, ok, code, extra = {}) {
+      function createAssetPointContext(options = {}) {
+        const initial = normalizeNonNegativeInt(
+          options.assetPoints ?? options.points,
+          0
+        );
+        let current = initial;
+        return {
+          get value() { return current; },
+          grant(amount) {
+            current += normalizeNonNegativeInt(amount, 0);
+          },
+          spend(cost) {
+            const normalizedCost = normalizeNonNegativeInt(cost, 0);
+            if (current < normalizedCost) return false;
+            current -= normalizedCost;
+            return true;
+          },
+          resultFields() {
+            return {
+              assetPoints: current,
+              assetDelta: current - initial
+            };
+          }
+        };
+      }
+
+      function result(assetDeck, ok, code, extra = {}, assetPointContext = null) {
         return {
           ok,
           code,
           assetDeck: compactAssetDeckState(assetDeck),
+          ...(assetPointContext ? assetPointContext.resultFields() : {}),
           ...extra
         };
+      }
+
+      function resolveUpgradeCardSelection(assetDeck, card) {
+        if (!isUpgradeCard(card)) return null;
+        const skillKey = normalizeSkillKey(card.upgradeTargetSkillKey);
+        const active = findActiveSkillRef(assetDeck, skillKey);
+        const maxFromLevel = getUpgradeMaxFromLevel(card);
+        if (!skillKey || !active || !maxFromLevel) {
+          clearCurrentPendingOffer(assetDeck);
+          assetDeck.pending_replace = null;
+          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, skillKey, status: 'skill_upgrade_invalid' });
+          return result(assetDeck, true, 'skill_upgrade_invalid', { consumed: card });
+        }
+
+        const activeLevel = Math.max(0, normalizeNonNegativeInt(active.card.level, 0));
+        if (activeLevel < 1 || activeLevel > maxFromLevel || activeLevel >= 4) {
+          clearCurrentPendingOffer(assetDeck);
+          assetDeck.pending_replace = null;
+          pushHistory(assetDeck, {
+            kind: 'choose_card',
+            cardId: card.cardId,
+            skillKey,
+            fromLevel: activeLevel,
+            status: 'skill_upgrade_ineligible'
+          });
+          return result(assetDeck, true, 'skill_upgrade_ineligible', { card: active.card, consumed: card });
+        }
+
+        const nextLevel = Math.min(4, activeLevel + 1);
+        const upgraded = createUpgradedSkillCard(active.card, active.card, nextLevel, 'skill_upgrade');
+        assetDeck[active.listKey][active.index] = upgraded;
+        clearCurrentPendingOffer(assetDeck);
+        assetDeck.pending_replace = null;
+        pushHistory(assetDeck, {
+          kind: 'choose_card',
+          cardId: card.cardId,
+          skillKey,
+          fromLevel: activeLevel,
+          toLevel: nextLevel,
+          status: 'skill_upgrade_consumed'
+        });
+        return result(assetDeck, true, 'skill_upgrade_consumed', {
+          card: upgraded,
+          consumed: card,
+          fromLevel: activeLevel,
+          toLevel: nextLevel
+        });
       }
 
       function chooseOfferCard(assetDeck, payload) {
@@ -622,6 +740,9 @@
           });
           return result(assetDeck, true, 'unique_already_active', { card: activeUnique.card, consumed: card });
         }
+
+        const upgradeResult = resolveUpgradeCardSelection(assetDeck, card);
+        if (upgradeResult) return upgradeResult;
 
         const skillResult = resolveSkillCardSelection(assetDeck, card);
         if (skillResult) return skillResult;
@@ -699,41 +820,43 @@
 
       function applyAssetDeckCommand(assetDeckInput, commandInput, options = {}) {
         const assetDeck = normalizeAssetDeckState(assetDeckInput);
+        const assetPointContext = createAssetPointContext(options);
         const command = commandInput && typeof commandInput === 'object' ? commandInput : {};
         const payload = command.payload && typeof command.payload === 'object' ? command.payload : {};
         const kind = normalizeId(command.kind || command.type, '').toLowerCase();
-        if (!kind) return result(assetDeck, false, 'missing_command');
+        if (!kind) return result(assetDeck, false, 'missing_command', {}, assetPointContext);
 
         if (kind === 'grant_asset') {
           const amount = normalizeNonNegativeInt(payload.amount, 0);
-          assetDeck.asset_count += amount;
+          assetPointContext.grant(amount);
           const requestId = normalizeId(payload.requestId || command.requestId, '');
           pushHistory(assetDeck, {
             kind,
             amount,
             ...(requestId ? { requestId } : {})
           });
-          return result(assetDeck, true, 'asset_granted', { amount });
+          return result(assetDeck, true, 'asset_granted', { amount }, assetPointContext);
         }
 
         if (kind === 'unlock_slot') {
           const cost = getUnlockCost(assetDeck);
-          if (cost == null) return result(assetDeck, false, 'slot_cap_reached');
-          if (assetDeck.asset_count < cost) return result(assetDeck, false, 'not_enough_asset', { cost });
-          assetDeck.asset_count -= cost;
+          if (cost == null) return result(assetDeck, false, 'slot_cap_reached', {}, assetPointContext);
+          if (!assetPointContext.spend(cost)) return result(assetDeck, false, 'not_enough_asset', { cost }, assetPointContext);
           assetDeck.general_slots_unlocked += 1;
           pushHistory(assetDeck, { kind, cost, general_slots_unlocked: assetDeck.general_slots_unlocked });
-          return result(assetDeck, true, 'slot_unlocked', { cost });
+          return result(assetDeck, true, 'slot_unlocked', { cost }, assetPointContext);
         }
 
         if (kind === 'open_offer') {
           const pool = normalizeEnum(payload.pool, POOL_VALUES, 'low');
           const cost = normalizeNonNegativeInt(payload.cost, config.poolCosts[pool] || 0);
-          if (assetDeck.asset_count < cost) return result(assetDeck, false, 'not_enough_asset', { cost });
+          if (!assetPointContext.spend(cost)) return result(assetDeck, false, 'not_enough_asset', { cost }, assetPointContext);
           const seed = normalizeId(payload.seed || options.seed, `asset:${pool}:${assetDeck.history.length}`);
           const choices = createOfferChoices(pool, seed, [], assetDeck);
-          if (!choices.length) return result(assetDeck, false, 'empty_pool', { pool });
-          assetDeck.asset_count -= cost;
+          if (!choices.length) {
+            assetPointContext.grant(cost);
+            return result(assetDeck, false, 'empty_pool', { pool }, assetPointContext);
+          }
           const offer = {
             id: `offer:${pool}:${hashStringToSeed(seed)}`,
             pool,
@@ -752,22 +875,24 @@
             cost,
             ...(requestId ? { requestId } : {})
           });
-          return result(assetDeck, true, 'offer_opened', { offer });
+          return result(assetDeck, true, 'offer_opened', { offer }, assetPointContext);
         }
 
         if (kind === 'refresh_offer') {
           const offer = assetDeck.pending_offer;
-          if (!offer) return result(assetDeck, false, 'no_pending_offer');
+          if (!offer) return result(assetDeck, false, 'no_pending_offer', {}, assetPointContext);
           const maxRefresh = normalizeNonNegativeInt(config.maxRefreshByPool[offer.pool], 1);
-          if (offer.refreshCount >= maxRefresh) return result(assetDeck, false, 'refresh_cap_reached', { maxRefresh });
+          if (offer.refreshCount >= maxRefresh) return result(assetDeck, false, 'refresh_cap_reached', { maxRefresh }, assetPointContext);
           const freeLimit = normalizeNonNegativeInt(config.freeRefreshByPool[offer.pool], 0);
           const free = offer.freeRefreshUsed < freeLimit;
           const cost = free ? 0 : normalizeNonNegativeInt(config.refreshCosts[offer.pool], 0);
-          if (assetDeck.asset_count < cost) return result(assetDeck, false, 'not_enough_asset', { cost });
+          if (!assetPointContext.spend(cost)) return result(assetDeck, false, 'not_enough_asset', { cost }, assetPointContext);
           const seed = normalizeId(payload.seed || options.seed, `${offer.id}:refresh:${offer.refreshCount + 1}`);
           const choices = createOfferChoices(offer.pool, seed, offer.choices.map(card => card.cardId), assetDeck);
-          if (!choices.length) return result(assetDeck, false, 'empty_pool', { pool: offer.pool });
-          assetDeck.asset_count -= cost;
+          if (!choices.length) {
+            assetPointContext.grant(cost);
+            return result(assetDeck, false, 'empty_pool', { pool: offer.pool }, assetPointContext);
+          }
           assetDeck.pending_offer = {
             ...offer,
             refreshCount: offer.refreshCount + 1,
@@ -775,7 +900,7 @@
             choices
           };
           pushHistory(assetDeck, { kind, pool: offer.pool, cost, free });
-          return result(assetDeck, true, 'offer_refreshed', { offer: assetDeck.pending_offer, cost, free });
+          return result(assetDeck, true, 'offer_refreshed', { offer: assetDeck.pending_offer, cost, free }, assetPointContext);
         }
 
         if (kind === 'choose_card') return chooseOfferCard(assetDeck, payload);

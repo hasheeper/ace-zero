@@ -62,13 +62,37 @@
         return level > 0 ? `LV ${level}` : String(card?.kind || 'CARD').toUpperCase();
     }
 
+    function getAssetCardEffectText(card) {
+        const explicit = typeof card?.effectText === 'string' ? card.effectText.trim() : '';
+        if (explicit) return explicit;
+        const modifiers = Array.isArray(card?.modifiers) ? card.modifiers : [];
+        const parts = modifiers.map((modifier) => {
+            const type = String(modifier?.type || modifier?.kind || '').toLowerCase();
+            const value = Number(modifier?.value) || 0;
+            const signed = `${value > 0 ? '+' : ''}${value}`;
+            if (type === 'mana_max_flat') return `Mana Max ${signed}`;
+            if (type === 'skill_cost_flat') return `Mana ${signed}`;
+            if (type === 'skill_cost_pct') return `Mana ${value > 0 ? '+' : ''}${Math.round(value * 100)}%`;
+            if (type === 'force_power_flat') return `效果 ${signed}`;
+            if (type === 'force_power_pct' || type === 'all_force_power_bonus') return `效果 ${value > 0 ? '+' : ''}${Math.round(value * 100)}%`;
+            if (type === 'risk_reward_roll') return '释放时随机 Mana / 效果';
+            if (type === 'skill_level_bonus') return 'Texas 技能等级 +1';
+            return '';
+        }).filter(Boolean);
+        if (parts.length) return parts.slice(0, 2).join(' / ');
+        return String(card?.skillKey || '').replace(/_/g, ' ') || String(card?.kind || 'ACTIVE CARD');
+    }
+
     function buildAssetCardTagsMarkup(card) {
-        const tags = [
-            card?.rarity,
-            card?.system,
-            ...(Array.isArray(card?.gameTags) ? card.gameTags : []),
-            ...(Array.isArray(card?.slotTags) ? card.slotTags : [])
-        ].map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean).slice(0, 4);
+        const baseTags = Array.isArray(card?.statusTags) && card.statusTags.length
+            ? card.statusTags
+            : [
+                card?.rarity,
+                card?.system,
+                ...(Array.isArray(card?.gameTags) ? card.gameTags : []),
+                ...(Array.isArray(card?.slotTags) ? card.slotTags : [])
+            ];
+        const tags = baseTags.map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean).slice(0, 5);
         return tags.map((tag) => `<span>${escapePartyHtml(tag.toUpperCase())}</span>`).join('');
     }
 
@@ -171,8 +195,12 @@
         { pool: 'high', level: 3, code: 'III', title: '三级卡池', label: 'HIGH EXTRACT', cost: 3, note: '高阶契令，开放虹卡权重。' }
     ]);
 
+    function getDisplayAssetPoints() {
+        return Math.max(0, Math.round(Number(appState.resources.assets) || 0));
+    }
+
     function buildAssetPoolCardMarkup(meta, assetSummary, plannedAsset) {
-        const points = Math.max(0, Math.round(Number(assetSummary?.points) || 0));
+        const points = getDisplayAssetPoints();
         const isActive = plannedAsset.maxAmount >= meta.level;
         const canOpen = isActive && points >= meta.cost && !assetSummary?.pending?.offer;
         const stateText = !isActive ? 'LOCKED' : (points >= meta.cost ? 'READY' : `NEED ${meta.cost}`);
@@ -448,10 +476,10 @@
             slotIndex != null ? `data-slot-index="${slotIndex}"` : '',
             confirmDestroy ? 'data-confirm-destroy="true"' : ''
         ].filter(Boolean).join(' ');
-        const accent = String(card.system || card.kind || '').toLowerCase().includes('void') ? 'var(--void)' : 'var(--asset)';
         const glyph = String(card.system || card.kind || 'A').slice(0, 1).toUpperCase();
+        const tags = buildAssetCardTagsMarkup(card);
         return `
-            <button class="cmd-card rarity-${escapePartyHtml(String(card.rarity || 'bronze').toLowerCase())}${compact ? ' is-compact' : ''}" style="--card-accent:${accent};" type="button" ${attrs}>
+            <button class="cmd-card rarity-${escapePartyHtml(String(card.rarity || 'bronze').toLowerCase())}${compact ? ' is-compact' : ''}" type="button" ${attrs}>
                 <div class="cmd-card-accent-line"></div>
                 <div class="bg-svg">${escapePartyHtml(glyph)}</div>
                 <span class="cmd-type">${escapePartyHtml(String(card.rarity || 'bronze').toUpperCase())} · ${escapePartyHtml(String(card.kind || 'card').toUpperCase())}</span>
@@ -459,7 +487,8 @@
                     <span class="cmd-name">${escapePartyHtml(getAssetCardDisplayName(card))}</span>
                     <span class="cmd-level">${escapePartyHtml(getAssetCardLevelLabel(card))}</span>
                 </div>
-                <div class="cmd-desc">${escapePartyHtml(String(card.skillKey || '').replace(/_/g, ' ') || String(card.kind || 'ACTIVE CARD'))}</div>
+                <div class="cmd-desc">${escapePartyHtml(getAssetCardEffectText(card))}</div>
+                ${tags ? `<div class="cmd-tags">${tags}</div>` : ''}
             </button>
         `;
     }
@@ -475,9 +504,9 @@
             const voidCopy = slotType === 'void';
             return `<div class="mini-slot empty"><span class="type">${voidCopy ? 'EMPTY VOID' : 'EMPTY'}</span><div class="name-row"><span class="name">${voidCopy ? '未装配零号参数' : '未装配指令'}</span></div></div>`;
         }
-        const accent = String(card.system || card.kind || '').toLowerCase().includes('void') || slotType === 'void' ? 'var(--void)' : 'var(--asset)';
+        const accent = slotType === 'void' ? 'var(--void)' : '';
         return `
-            <div class="mini-slot filled${canReplace ? ' is-replaceable' : ''}" style="--c:${accent};" data-asset-action="${canReplace ? 'replace-card' : ''}" data-slot-type="${escapePartyHtml(slotType)}" data-slot-index="${index}"${confirmDestroy ? ' data-confirm-destroy="true"' : ''}>
+            <div class="mini-slot filled rarity-${escapePartyHtml(String(card.rarity || 'bronze').toLowerCase())}${canReplace ? ' is-replaceable' : ''}"${accent ? ` style="--c:${accent};"` : ''} data-asset-action="${canReplace ? 'replace-card' : ''}" data-slot-type="${escapePartyHtml(slotType)}" data-slot-index="${index}"${confirmDestroy ? ' data-confirm-destroy="true"' : ''}>
                 <span class="type">${escapePartyHtml(String(card.kind || card.system || 'ASSET').toUpperCase())}</span>
                 <div class="name-row"><span class="name">${escapePartyHtml(getAssetCardDisplayName(card))}</span><span class="lvl">${escapePartyHtml(getAssetCardLevelLabel(card))}</span></div>
             </div>
@@ -512,7 +541,7 @@
                     <div class="offer-head"><span>CONTRACT EXTRACT${escapePartyHtml(queueText)}</span><strong>${escapePartyHtml(String(pendingOffer?.pool || 'POOL').toUpperCase())}</strong></div>
                     <div class="offer-grid">${offerMarkup}</div>
                     <div class="offer-foot">
-                        <span>DECK POINTS · ${assetSummary.points}</span>
+                        <span>ASSET · ${getDisplayAssetPoints()}</span>
                         <button class="action-btn" type="button" data-asset-action="refresh-offer">REROLL POOL</button>
                     </div>
                 </section>
@@ -551,7 +580,7 @@
                         <span class="detect-label">CONTRACT WAREHOUSE</span>
                         <span class="detect-target">${slots.generalUsed}<span> / ${slots.generalMax}</span></span>
                         <span class="detect-label">VOID ISOLATION · ${slots.voidUsed}/${slots.voidMax}</span>
-                        <span class="detect-label">ASSET POINTS · ${assetSummary.points}</span>
+                        <span class="detect-label">ASSET · ${getDisplayAssetPoints()}</span>
                         <div class="astrolabe-ring"><div class="magic-core"></div></div>
                         <button class="action-btn" type="button" data-asset-action="unlock-slot">EXPAND (1 ASSET)</button>
                         <button class="action-btn ghost" type="button" data-asset-action="close-warehouse">CLOSE</button>
@@ -602,7 +631,7 @@
                 <aside class="side-panel">
                     <div class="eyebrow">ASSET POINT</div>
                     <div class="big-title">契点</div>
-                    <div class="meter type-asset"><span>DECK POINTS</span><strong>${Math.max(0, Math.round(Number(assetSummary.points) || 0))}</strong></div>
+                    <div class="meter type-asset"><span>ASSET</span><strong>${getDisplayAssetPoints()}</strong></div>
                     <div class="note">投入契点激活一级 / 二级 / 三级卡池，满足条件后进入抽卡页面。</div>
                     <button class="action-btn" type="button" data-asset-action="open-warehouse">WAREHOUSE</button>
                 </aside>

@@ -587,6 +587,22 @@
           event.forceId = force && force._runtimeId || null;
           this._markAssetPassiveUsed(event.runtimeKey, event);
           this._emitAssetPassiveTriggered(event);
+        } else if (event.trigger === 'street_force_chance_flat') {
+          var type = event.forceType || (event.system === 'chaos' ? 'curse' : (event.system === 'psyche' ? 'psyche' : 'fortune'));
+          var passiveForce = this._queuePendingForce({
+            ownerId: event.ownerId,
+            type: type,
+            system: event.system || (type === 'curse' ? 'chaos' : (type === 'psyche' ? 'psyche' : 'moirai')),
+            skillKey: 'asset_passive',
+            source: 'asset',
+            power: Math.max(0, Number(event.value || 0)),
+            shield: event.shield === true,
+            randomTarget: event.randomTarget === true,
+            _assetPassive: true,
+            _assetSourceCardId: event.cardId
+          }, { reason: 'asset_passive', cardId: event.cardId, trigger: event.trigger });
+          event.forceId = passiveForce && passiveForce._runtimeId || null;
+          this._emitAssetPassiveTriggered(event);
         }
       }
       return events;
@@ -1079,11 +1095,13 @@
       }
       if (this.assetDeckAdapter && typeof this.assetDeckAdapter.resolveSkillCost === 'function') {
         var resolvedCost = this.assetDeckAdapter.resolveSkillCost(this.assetModifiers, skill, actualCost, {
-          passiveState: this._assetPassiveState
+          passiveState: this._assetPassiveState,
+          consumeAssetRisk: finalOptions && finalOptions.consumeAssetRisk === true
         });
         if (resolvedCost && resolvedCost.finalCost != null) {
           actualCost = resolvedCost.finalCost;
           if (skill) skill._assetCost = resolvedCost;
+          if (skill && Array.isArray(resolvedCost.riskRolls)) skill._assetRiskRolls = resolvedCost.riskRolls;
         }
       }
       return Math.max(0, Number(actualCost || 0));
@@ -1607,7 +1625,7 @@
       }
 
       // Mana 检查（特质可能修改消耗）
-      var actualCost = this._getSkillActualManaCost(skill, finalOptions);
+      var actualCost = this._getSkillActualManaCost(skill, Object.assign({}, finalOptions, { consumeAssetRisk: true }));
       if (actualCost > 0) {
         var manaPool = this.manaPools.get(skill.ownerId);
         if (!manaPool || manaPool.current < actualCost) {
@@ -2276,7 +2294,7 @@
 
     _prepareNpcSkillUse(skill, finalOptions) {
       if (skill && skill.pendingImplementation) return null;
-      var actualCost = this._getSkillActualManaCost(skill, finalOptions);
+      var actualCost = this._getSkillActualManaCost(skill, Object.assign({}, finalOptions, { consumeAssetRisk: true }));
       if (actualCost > 0) {
         const pool = this.manaPools.get(skill.ownerId);
         if (!pool || pool.current < actualCost) return null;
@@ -2633,6 +2651,9 @@
         source: skill.activation,
         skillKey: skill.skillKey
       };
+      if (Array.isArray(skill._assetRiskRolls) && skill._assetRiskRolls.length) {
+        force._assetRiskRolls = skill._assetRiskRolls.slice();
+      }
 
       // Curse 单体指向：委托外部 AI 选目标
       if (skill.effect === 'curse' && this.curseTargetFn) {

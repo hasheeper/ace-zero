@@ -501,13 +501,15 @@ function resolveAssetSummaryModule() {
 function buildDashboardAssetSummary(world) {
   const assetDeck = world?.assetDeck && typeof world.assetDeck === 'object' ? world.assetDeck : null;
   if (!assetDeck) return null;
+  const assetPoints = Math.max(0, Math.round(Number(world?.act?.reserve?.asset) || 0));
   const assetSummary = resolveAssetSummaryModule();
   if (assetSummary && typeof assetSummary.buildAssetDeckSummary === 'function') {
     try {
-      return assetSummary.buildAssetDeckSummary(assetDeck, {
+      const summary = assetSummary.buildAssetDeckSummary(assetDeck, {
         gameId: 'texas-holdem',
         mode: 'host'
       });
+      return summary && typeof summary === 'object' ? { ...summary, points: assetPoints } : summary;
     } catch (error) {
       console.warn('[ACE0 Dashboard] Asset summary failed:', error);
     }
@@ -515,7 +517,7 @@ function buildDashboardAssetSummary(world) {
   const generalCards = Array.isArray(assetDeck.active_general_cards) ? assetDeck.active_general_cards : [];
   const voidCards = Array.isArray(assetDeck.active_void_cards) ? assetDeck.active_void_cards : [];
   return {
-    points: Math.max(0, Math.round(Number(assetDeck.asset_count) || 0)),
+    points: assetPoints,
     slots: {
       generalUsed: generalCards.length,
       generalMax: Math.max(0, Math.round(Number(assetDeck.general_slots_unlocked) || 0)),

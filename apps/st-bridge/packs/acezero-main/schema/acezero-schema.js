@@ -171,7 +171,6 @@ function makeDefaultWorldLocation() {
 function makeDefaultAssetDeckState() {
   return {
     version: 1,
-    asset_count: 0,
     general_slots_unlocked: ASSET_DECK_INITIAL_GENERAL_SLOTS,
     void_slots_unlocked: ASSET_DECK_VOID_SLOTS,
     active_general_cards: [],
@@ -557,12 +556,10 @@ function normalizeActResolutionHistory(value) {
         phaseIndex: Math.max(0, Math.round(Number(item.phaseIndex) || 0)),
         status: normalizeTrimmedString(item.status, 'resolved') || 'resolved',
         outcome: normalizeTrimmedString(item.outcome, '')
-      };
-      const commandKind = normalizeTrimmedString(item.commandKind || payload.commandKind, '');
-      const assetCount = Number(item.assetCount ?? payload.asset_count);
-      if (commandKind) compact.commandKind = commandKind;
-      if (Number.isFinite(assetCount)) compact.assetCount = Math.max(0, Math.round(assetCount));
-      if (item.pool) compact.pool = normalizeTrimmedString(item.pool, '');
+    };
+    const commandKind = normalizeTrimmedString(item.commandKind || payload.commandKind, '');
+    if (commandKind) compact.commandKind = commandKind;
+    if (item.pool) compact.pool = normalizeTrimmedString(item.pool, '');
       if (item.error || payload.error) compact.error = normalizeTrimmedString(item.error || payload.error, '');
       return compact.id ? compact : null;
     })
@@ -910,7 +907,6 @@ const WorldAssetDeckSchema = z.record(z.string(), z.any())
       : Math.max(0, Math.min(ASSET_DECK_VOID_SLOTS, Math.round(Number(rawVoidSlots) || 0)));
     return {
       version: Math.max(1, Math.round(Number(source.version) || 1)),
-      asset_count: Math.max(0, Math.round(Number(source.asset_count ?? source.assetCount) || 0)),
       general_slots_unlocked: generalSlotsUnlocked,
       void_slots_unlocked: voidSlotsUnlocked,
       active_general_cards: normalizeAssetDeckCardList(source.active_general_cards || source.activeGeneralCards, 'general', generalSlotsUnlocked),

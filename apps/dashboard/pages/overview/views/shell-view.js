@@ -40,7 +40,6 @@
                 <span class="phase">${worldClock.phase}</span>
             </div>
         `;
-        const assetSummary = getCurrentAssetDeckSummary();
         const nodePoolMarkup = appData.topbar.nodePool.map((node) => `
             <div class="node-stat ${node.className}${getTotalInventoryCount(node.key) <= 0 ? ' is-empty' : ''}" title="${node.title}">
                 <div class="mini-sigil"><div class="sigil-${node.key}"></div></div>
@@ -55,7 +54,7 @@
                     resource.className === 'res-gold'
                         ? formatCompactResourceValue(appState.resources.funds)
                         : resource.className === 'res-assets'
-                            ? formatCompactResourceValue(assetSummary.points)
+                            ? formatCompactResourceValue(appState.resources.assets)
                         : resource.className === 'res-mana'
                             ? `${appState.resources.mana}/100`
                             : resource.className === 'res-danger'

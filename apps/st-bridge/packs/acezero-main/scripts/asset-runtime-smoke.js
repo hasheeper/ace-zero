@@ -10,7 +10,7 @@ const { sandbox, assetDeck } = loadAssetSandbox();
 
 function testDefaultState() {
   const state = assetDeck.makeDefaultAssetDeckState();
-  assertEqual(state.asset_count, 0, 'AssetDeck should default to 0 asset points');
+  assert(!Object.prototype.hasOwnProperty.call(state, 'asset_count'), 'AssetDeck should not store asset_count');
   assertEqual(state.general_slots_unlocked, 4, 'AssetDeck should default to 4 general slots');
   assertEqual(state.void_slots_unlocked, 2, 'AssetDeck should default to 2 void slots');
   assert(Array.isArray(state.active_general_cards), 'General cards should be an array');
@@ -19,7 +19,6 @@ function testDefaultState() {
 
 function testNormalizeClampsUnsafeState() {
   const normalized = assetDeck.normalizeAssetDeckState({
-    asset_count: -99,
     general_slots_unlocked: 99,
     void_slots_unlocked: 99,
     active_general_cards: [
@@ -27,12 +26,12 @@ function testNormalizeClampsUnsafeState() {
       { cardId: 'asset_void_anchor', instanceId: 'void-in-general', slotTags: ['void'] }
     ],
     active_void_cards: [
-      { cardId: 'asset_bootstrap_credit', instanceId: 'general-in-void', slotTags: ['general'] },
+      { cardId: 'asset_mana_max_bronze', instanceId: 'general-in-void', slotTags: ['general'] },
       { cardId: 'asset_void_anchor', instanceId: 'valid-void', slotTags: ['general', 'void'] }
     ]
   });
 
-  assertEqual(normalized.asset_count, 0, 'Asset points should clamp to non-negative');
+  assert(!Object.prototype.hasOwnProperty.call(normalized, 'asset_count'), 'Normalized AssetDeck should not store asset_count');
   assertEqual(normalized.general_slots_unlocked, 8, 'General slots should clamp to max');
   assertEqual(normalized.void_slots_unlocked, 2, 'Void slots should clamp to max');
   assertEqual(normalized.active_general_cards.length, 0, 'Invalid general cards should be removed');
@@ -42,22 +41,23 @@ function testNormalizeClampsUnsafeState() {
 
 function testUnlockSlotCostsAsset() {
   let state = assetDeck.makeDefaultAssetDeckState();
-  state = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 2 } }).assetDeck;
-  const unlocked = assetDeck.applyAssetDeckCommand(state, { kind: 'unlock_slot' });
+  const granted = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 2 } }, { assetPoints: 0 });
+  state = granted.assetDeck;
+  const unlocked = assetDeck.applyAssetDeckCommand(state, { kind: 'unlock_slot' }, { assetPoints: granted.assetPoints });
 
   assertEqual(unlocked.ok, true, 'Unlock should succeed with enough asset');
-  assertEqual(unlocked.assetDeck.asset_count, 1, 'First unlock should cost 1 asset');
+  assertEqual(unlocked.assetPoints, 1, 'First unlock should cost 1 asset');
+  assertEqual(unlocked.assetDelta, -1, 'Unlock result should report reserve asset delta');
   assertEqual(unlocked.assetDeck.general_slots_unlocked, 5, 'First unlock should open fifth general slot');
 }
 
 function testStorageStateStaysCompactButHydrates() {
   let state = assetDeck.makeDefaultAssetDeckState();
-  state = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 3 } }).assetDeck;
 
   const opened = assetDeck.applyAssetDeckCommand(state, {
     kind: 'open_offer',
     payload: { pool: 'low', seed: 'compact-storage-offer' }
-  });
+  }, { assetPoints: 3 });
   assert(!('debug' in opened.assetDeck), 'Stored AssetDeck state should not include debug');
   const storedChoice = opened.assetDeck.pending_offer.choices[0];
   assert(storedChoice.cardId, 'Stored offer choice should keep cardId');
@@ -86,12 +86,11 @@ function testHistoryKeepsStableWindow() {
 
 function testOfferChooseAndReplace() {
   let state = assetDeck.makeDefaultAssetDeckState();
-  state = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 10 } }).assetDeck;
 
   const opened = assetDeck.applyAssetDeckCommand(state, {
     kind: 'open_offer',
     payload: { pool: 'low', seed: 'phase1-offer' }
-  });
+  }, { assetPoints: 10 });
   assertEqual(opened.ok, true, 'Open offer should succeed');
   assertEqual(opened.assetDeck.pending_offer.choices.length, 3, 'Low pool should expose three choices');
 
@@ -111,7 +110,7 @@ function testOfferChooseAndReplace() {
       choices: [{ cardId: 'asset_void_anchor', instanceId: 'candidate-void', slotTags: ['general', 'void'], rarity: 'gold', kind: 'passive' }]
     },
     active_general_cards: Array.from({ length: 4 }, (_, index) => ({
-      cardId: 'asset_bootstrap_credit',
+      cardId: 'asset_mana_max_bronze',
       instanceId: `filled-general-${index}`,
       slotTags: ['general'],
       rarity: 'bronze',
@@ -136,66 +135,64 @@ function testOfferChooseAndReplace() {
 
 function testPoolCostsAndRefreshLimits() {
   let state = assetDeck.makeDefaultAssetDeckState();
-  state = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 10 } }).assetDeck;
 
   const low = assetDeck.applyAssetDeckCommand(state, {
     kind: 'open_offer',
     payload: { pool: 'low', seed: 'cost-low' }
-  });
+  }, { assetPoints: 10 });
   assertEqual(low.ok, true, 'Low pool should open');
-  assertEqual(low.assetDeck.asset_count, 9, 'Low pool should cost 1 Asset');
+  assertEqual(low.assetPoints, 9, 'Low pool should cost 1 Asset');
   const lowRefresh = assetDeck.applyAssetDeckCommand(low.assetDeck, {
     kind: 'refresh_offer',
     payload: { seed: 'cost-low-refresh' }
-  });
+  }, { assetPoints: low.assetPoints });
   assertEqual(lowRefresh.ok, true, 'Low pool free refresh should succeed');
   assertEqual(lowRefresh.cost, 0, 'Low pool first refresh should be free');
-  assertEqual(lowRefresh.assetDeck.asset_count, 9, 'Low pool free refresh should not spend Asset');
+  assertEqual(lowRefresh.assetPoints, 9, 'Low pool free refresh should not spend Asset');
   const lowRefreshAgain = assetDeck.applyAssetDeckCommand(lowRefresh.assetDeck, {
     kind: 'refresh_offer',
     payload: { seed: 'cost-low-refresh-again' }
-  });
+  }, { assetPoints: lowRefresh.assetPoints });
   assertEqual(lowRefreshAgain.ok, false, 'Low pool should only refresh once');
   assertEqual(lowRefreshAgain.code, 'refresh_cap_reached', 'Low pool should report refresh cap');
 
-  state = assetDeck.applyAssetDeckCommand(assetDeck.makeDefaultAssetDeckState(), { kind: 'grant_asset', payload: { amount: 10 } }).assetDeck;
+  state = assetDeck.makeDefaultAssetDeckState();
   const mid = assetDeck.applyAssetDeckCommand(state, {
     kind: 'open_offer',
     payload: { pool: 'mid', seed: 'cost-mid' }
-  });
+  }, { assetPoints: 10 });
   assertEqual(mid.ok, true, 'Mid pool should open');
-  assertEqual(mid.assetDeck.asset_count, 8, 'Mid pool should cost 2 Asset');
+  assertEqual(mid.assetPoints, 8, 'Mid pool should cost 2 Asset');
 
-  state = assetDeck.applyAssetDeckCommand(assetDeck.makeDefaultAssetDeckState(), { kind: 'grant_asset', payload: { amount: 10 } }).assetDeck;
+  state = assetDeck.makeDefaultAssetDeckState();
   const high = assetDeck.applyAssetDeckCommand(state, {
     kind: 'open_offer',
     payload: { pool: 'high', seed: 'cost-high' }
-  });
+  }, { assetPoints: 10 });
   assertEqual(high.ok, true, 'High pool should open');
-  assertEqual(high.assetDeck.asset_count, 7, 'High pool should cost 3 Asset');
+  assertEqual(high.assetPoints, 7, 'High pool should cost 3 Asset');
   const highRefresh = assetDeck.applyAssetDeckCommand(high.assetDeck, {
     kind: 'refresh_offer',
     payload: { seed: 'cost-high-refresh' }
-  });
+  }, { assetPoints: high.assetPoints });
   assertEqual(highRefresh.ok, true, 'High pool paid refresh should succeed');
   assertEqual(highRefresh.cost, 1, 'High pool refresh should cost 1 Asset');
-  assertEqual(highRefresh.assetDeck.asset_count, 6, 'High pool refresh should spend Asset');
+  assertEqual(highRefresh.assetPoints, 6, 'High pool refresh should spend Asset');
 }
 
 function testOfferQueuePreservesMultiplePhaseOffers() {
   let state = assetDeck.makeDefaultAssetDeckState();
-  state = assetDeck.applyAssetDeckCommand(state, { kind: 'grant_asset', payload: { amount: 3 } }).assetDeck;
 
   const low = assetDeck.applyAssetDeckCommand(state, {
     kind: 'open_offer',
     payload: { pool: 'low', seed: 'queue-low' }
-  });
+  }, { assetPoints: 3 });
   assertEqual(low.ok, true, 'First queued-offer test pool should open');
 
   const mid = assetDeck.applyAssetDeckCommand(low.assetDeck, {
     kind: 'open_offer',
     payload: { pool: 'mid', seed: 'queue-mid' }
-  });
+  }, { assetPoints: low.assetPoints });
   assertEqual(mid.ok, true, 'Second pool should be accepted while first offer is active');
   assertEqual(mid.assetDeck.pending_offer.pool, 'low', 'First offer should remain visible');
   assertEqual(mid.assetDeck.pending_offer_queue.length, 1, 'Second offer should wait in queue');
@@ -224,7 +221,6 @@ function testSkillMergeUpgradeAndOfferFilter() {
     modifiers: [{ type: 'skill_level', key: 'hex', value: 1 }]
   };
   let state = assetDeck.normalizeAssetDeckState({
-    asset_count: 10,
     active_general_cards: [baseSkill],
     pending_offer: {
       id: 'offer:low:hex-merge',
@@ -243,7 +239,6 @@ function testSkillMergeUpgradeAndOfferFilter() {
   assertEqual(merged.assetDeck.active_general_cards[0].level, 2, 'Same-level skill should upgrade by one level');
 
   state = assetDeck.normalizeAssetDeckState({
-    asset_count: 10,
     active_general_cards: [merged.assetDeck.active_general_cards[0]],
     pending_offer: {
       id: 'offer:high:hex-low',
@@ -259,7 +254,6 @@ function testSkillMergeUpgradeAndOfferFilter() {
   assertEqual(lower.assetDeck.active_general_cards[0].level, 2, 'Lower-level duplicate should not downgrade skill');
 
   state = assetDeck.normalizeAssetDeckState({
-    asset_count: 10,
     active_general_cards: [{
       ...baseSkill,
       instanceId: 'hex-max',
@@ -276,7 +270,7 @@ function testSkillMergeUpgradeAndOfferFilter() {
 function testVoidSlotRestriction() {
   const state = assetDeck.normalizeAssetDeckState({
     active_void_cards: [
-      { cardId: 'asset_bootstrap_credit', instanceId: 'bad-void', slotTags: ['general'] },
+      { cardId: 'asset_mana_max_bronze', instanceId: 'bad-void', slotTags: ['general'] },
       { cardId: 'asset_void_anchor', instanceId: 'good-void', slotTags: ['general', 'void'] }
     ]
   });
@@ -337,9 +331,9 @@ function testRainbowUniqueAndProtectedReplace() {
   const protectedReplaceState = assetDeck.normalizeAssetDeckState({
     active_general_cards: [
       { cardId: 'asset_rainbow_contract', instanceId: 'rainbow-active' },
-      { cardId: 'asset_bootstrap_credit', instanceId: 'normal-active' },
-      { cardId: 'asset_minor_guard', instanceId: 'normal-active-2' },
-      { cardId: 'asset_texas_mana_cell', instanceId: 'normal-active-3' }
+      { cardId: 'asset_mana_max_bronze', instanceId: 'normal-active' },
+      { cardId: 'asset_mana_reduce_bronze', instanceId: 'normal-active-2' },
+      { cardId: 'asset_mana_amp_bronze', instanceId: 'normal-active-3' }
     ],
     pending_offer: {
       id: 'offer:high:replace-rainbow',
@@ -370,6 +364,34 @@ function testRainbowUniqueAndProtectedReplace() {
   assertEqual(confirmed.removed.cardId, 'asset_rainbow_contract', 'Confirmed replacement should destroy the old rainbow card');
 }
 
+function testBoundSkillUpgradeCard() {
+  const state = assetDeck.normalizeAssetDeckState({
+    active_general_cards: [{
+      cardId: 'asset_skill_hex_l1',
+      instanceId: 'hex-upgrade-active',
+      skillKey: 'hex',
+      level: 1
+    }],
+    pending_offer: {
+      id: 'offer:upgrade:test',
+      pool: 'low',
+      choices: [{
+        cardId: 'asset_skill_upgrade_bronze',
+        instanceId: 'upgrade-choice',
+        upgradeTargetSkillKey: 'hex'
+      }]
+    }
+  });
+  const upgraded = assetDeck.applyAssetDeckCommand(state, {
+    kind: 'choose_card',
+    payload: { choiceIndex: 0, slotType: 'general' }
+  });
+  assertEqual(upgraded.ok, true, 'Bound upgrade card should resolve');
+  assertEqual(upgraded.code, 'skill_upgrade_consumed', 'Bound upgrade card should be consumed');
+  assertEqual(upgraded.assetDeck.active_general_cards[0].cardId, 'asset_skill_hex_l2', 'Bound upgrade should replace with next level skill card');
+  assertEqual(upgraded.assetDeck.active_general_cards[0].level, 2, 'Bound upgrade should increase skill by one level');
+}
+
 function testTexasCatalogCoverage() {
   const catalog = sandbox.ACE0AssetDeckData.ASSET_CARD_CATALOG;
   const texasCards = catalog.filter(card => Array.isArray(card.gameTags) && card.gameTags.includes('texas-holdem'));
@@ -385,16 +407,16 @@ function testTexasCatalogCoverage() {
   const ids = catalog.map(card => card.id);
   assertEqual(new Set(ids).size, ids.length, 'Asset card ids should be unique');
 
-  const modifierTypes = new Set(texasCards.flatMap(card => (card.modifiers || []).map(modifier => modifier.type)));
+  const modifierTypes = new Set(catalog.flatMap(card => (card.modifiers || []).map(modifier => modifier.type)));
   assert(modifierTypes.has('skill_level'), 'Texas catalog should include skill cards');
   assert(modifierTypes.has('mana_max_flat'), 'Texas catalog should include mana max cards');
   assert(modifierTypes.has('skill_cost_flat'), 'Texas catalog should include flat cost cards');
   assert(modifierTypes.has('skill_cost_pct'), 'Texas catalog should include percent cost cards');
   assert(modifierTypes.has('force_power_pct'), 'Texas catalog should include force power cards');
-  assert(modifierTypes.has('street_start_mana_gain'), 'Texas catalog should include street-start passive cards');
-  assert(modifierTypes.has('first_skill_cost_flat'), 'Texas catalog should include first-skill passive cards');
-  assert(modifierTypes.has('first_force_power_pct'), 'Texas catalog should include first-force passive cards');
-  assert(modifierTypes.has('once_per_hand_fortune_flat'), 'Texas catalog should include once-per-hand passive cards');
+  assert(modifierTypes.has('street_force_chance_flat'), 'Texas catalog should include street force passive cards');
+  assert(modifierTypes.has('risk_reward_roll'), 'Texas catalog should include high-risk roll cards');
+  assert(modifierTypes.has('skill_upgrade'), 'Texas catalog should include bound skill upgrade cards');
+  assert(modifierTypes.has('skill_level_bonus'), 'Texas catalog should include god skill-level bonus cards');
 }
 
 testDefaultState();
@@ -408,6 +430,7 @@ testOfferQueuePreservesMultiplePhaseOffers();
 testSkillMergeUpgradeAndOfferFilter();
 testVoidSlotRestriction();
 testRainbowUniqueAndProtectedReplace();
+testBoundSkillUpgradeCard();
 testTexasCatalogCoverage();
 
 console.log('asset-runtime-smoke ok');

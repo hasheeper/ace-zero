@@ -104,7 +104,8 @@ function testHostLoaderSettlesAssetThree() {
   assertEqual(settledAct.resolutionHistory.length, 2, 'host loader should append ACT resolution history entries');
   assertEqual(settledAct.resolutionHistory[0].outcome, 'asset_granted', 'first host result should be grant');
   assertEqual(settledAct.resolutionHistory[1].outcome, 'offer_opened', 'second host result should be offer');
-  assertEqual(nextState.world.assetDeck.asset_count, 0, 'grant + high offer should net to zero points');
+  assertEqual(settledAct.reserve.asset, 0, 'grant + high offer should net to zero reserve asset');
+  assert(!Object.prototype.hasOwnProperty.call(nextState.world.assetDeck, 'asset_count'), 'host loader should not write asset_count');
   assert(nextState.world.assetDeck.pending_offer, 'host loader should leave a pending high offer');
   assertEqual(nextState.world.assetDeck.pending_offer.pool, 'high', 'host loader should open high offer');
   assertEqual(nextState.world.assetDeck.history.length, 2, 'AssetDeck history should record both host-applied commands');
@@ -134,7 +135,7 @@ function testHostLoaderPreservesNonPendingCommands() {
   const settledAct = hooks.applyPendingActAssetDeckCommands(nextState, clone(nextActState));
 
   assertEqual(settledAct.pendingAssetDeckCommands.length, 1, 'host loader should preserve non-pending commands');
-  assertEqual(nextState.world.assetDeck.asset_count, 0, 'non-pending commands should not mutate AssetDeck');
+  assert(!Object.prototype.hasOwnProperty.call(nextState.world.assetDeck, 'asset_count'), 'non-pending commands should not write asset_count');
   assertEqual(settledAct.resolutionHistory.length, 0, 'non-pending commands should not append history');
 }
 
