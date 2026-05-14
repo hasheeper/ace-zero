@@ -119,6 +119,27 @@
     return typeof value === 'string' ? value.trim() : fallback;
   }
 
+  function buildDashboardAssetCommandSeed(actStateInput, assetDeckInput, commandInput) {
+    const actState = actStateInput && typeof actStateInput === 'object' && !Array.isArray(actStateInput) ? actStateInput : {};
+    const command = commandInput && typeof commandInput === 'object' && !Array.isArray(commandInput) ? commandInput : {};
+    const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload) ? command.payload : {};
+    const source = payload.source && typeof payload.source === 'object' && !Array.isArray(payload.source) ? payload.source : {};
+    const routeHistory = Array.isArray(actState.route_history) ? actState.route_history : [];
+    const kind = normalizeDashboardString(command.kind || command.type, 'command').toLowerCase() || 'command';
+    const nodeId = normalizeDashboardString(source.nodeId || actState.nodeId || routeHistory[routeHistory.length - 1], 'node') || 'node';
+    const nodeIndex = Math.max(1, Math.round(Number(source.nodeIndex ?? actState.nodeIndex) || 1));
+    const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(source.phaseIndex ?? actState.phase_index) || 0)));
+    const phaseNo = phaseIndex + 1;
+    const actId = normalizeDashboardString(source.actId || actState.id, 'act') || 'act';
+    const baseSeed = normalizeDashboardString(actState.seed, 'ASSET') || 'ASSET';
+    const offer = assetDeckInput?.pending_offer && typeof assetDeckInput.pending_offer === 'object' ? assetDeckInput.pending_offer : {};
+    const pool = normalizeDashboardString(payload.pool || offer.pool, '');
+    const poolPart = pool ? `:${pool.toLowerCase()}` : '';
+    const refreshCount = kind === 'refresh_offer' ? Math.max(1, Math.round(Number(offer.refreshCount) || 0) + 1) : 0;
+    const refreshPart = refreshCount ? `:refresh${refreshCount}` : '';
+    return `${baseSeed}:asset:${kind}:${actId}:${nodeId}:${nodeIndex}:phase${phaseNo}${poolPart}${refreshPart}`;
+  }
+
   function normalizePendingActAssetDeckCommands(actState) {
     const list = Array.isArray(actState?.pendingAssetDeckCommands) ? actState.pendingAssetDeckCommands : [];
     return list.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
@@ -359,7 +380,7 @@
       let commandResult;
       try {
         commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
-          seed: `act:${pending.id || Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+          seed: buildDashboardAssetCommandSeed(nextActState, currentAssetDeck, command),
           assetPoints: currentAssetPoints
         });
       } catch (error) {
@@ -592,7 +613,7 @@
     let commandResult;
     try {
       commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
-        seed: `host:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+        seed: buildDashboardAssetCommandSeed(actState, currentAssetDeck, command),
         assetPoints
       });
     } catch (error) {

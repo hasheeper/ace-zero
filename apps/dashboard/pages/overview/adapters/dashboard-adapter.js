@@ -335,7 +335,7 @@
                 let result;
                 try {
                     result = assetModule.applyAssetDeckCommand(assetDeck, command, {
-                        seed: `debug-act:${pending.id || Date.now()}`,
+                        seed: `debug-act:${pending.id || [actState.id || 'act', pending.nodeId || 'node', pending.nodeIndex || 0, pending.phaseIndex || 0, command.kind || command.type || 'command'].join(':')}`,
                         assetPoints
                     });
                 } catch (error) {

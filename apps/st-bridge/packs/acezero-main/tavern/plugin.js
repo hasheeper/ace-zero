@@ -1388,7 +1388,7 @@
             slotType: normalizedSlot
           }
         }, {
-          seed: `act-result:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+          seed: `act-result:${currentOfferId || requestedClearKey || 'offer'}:${index}:${normalizedSlot}`
         });
       } catch (error) {
         return { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };

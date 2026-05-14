@@ -1223,6 +1223,7 @@
     };
     actState.pendingAssetDeckCommands.push(request);
     const pool = amount >= 3 ? 'high' : amount >= 2 ? 'mid' : 'low';
+    const phaseNo = Math.max(1, Math.min(4, Math.round(Number(phaseIndex) || 0) + 1));
     actState.pendingAssetDeckCommands.push({
       id: `${actState.id}:${nodeId}:${phaseIndex}:asset_deck:open_offer:${pool}:${actState.resourceSpent.asset || 0}`,
       protocol: 'ace0.assetDeckCommand.v1',
@@ -1237,7 +1238,7 @@
         kind: 'open_offer',
         payload: {
           pool,
-          seed: `${actState.seed || DEFAULT_WORLD_ACT.seed}:asset-offer:${nodeId}:${phaseIndex}:${amount}`,
+          seed: `${actState.seed || DEFAULT_WORLD_ACT.seed}:asset-offer:${actState.id}:${nodeId}:${nodeIndex}:phase${phaseNo}:${amount}`,
           source: {
             type: 'act_asset_token_offer',
             actId: actState.id,
