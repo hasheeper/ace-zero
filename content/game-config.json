@@ -57,5 +57,472 @@
       "maxMana": 90,
       "mental": { "discipline": 70, "composureMax": 100, "resistProbe": 18, "resistPresence": 14, "resistTaunt": 14 }
     }
+  },
+
+  "assetDeck": {
+    "version": 1,
+    "general_slots_unlocked": 6,
+    "void_slots_unlocked": 2,
+    "active_general_cards": [
+      {
+        "instanceId": "asset_mana_max_silver:local-ui:1",
+        "cardId": "asset_mana_max_silver",
+        "name": "魔运电池 II",
+        "rarity": "silver",
+        "kind": "numeric",
+        "targetTags": [
+          "team"
+        ],
+        "gameTags": [
+          "any"
+        ],
+        "slotTags": [
+          "general"
+        ],
+        "effectText": "Mana Max +8",
+        "statusTags": [
+          "可叠加",
+          "常驻"
+        ],
+        "modifiers": [
+          {
+            "type": "mana_max_flat",
+            "value": 8
+          }
+        ],
+        "source": "local-ui",
+        "addedAt": 1
+      },
+      {
+        "instanceId": "asset_mana_reduce_silver:local-ui:2",
+        "cardId": "asset_mana_reduce_silver",
+        "name": "减幅咒式 II",
+        "rarity": "silver",
+        "kind": "numeric",
+        "targetTags": [
+          "team"
+        ],
+        "gameTags": [
+          "any"
+        ],
+        "slotTags": [
+          "general"
+        ],
+        "effectText": "Mana 消耗 -2，技能效果 -2",
+        "statusTags": [
+          "可叠加"
+        ],
+        "modifiers": [
+          {
+            "type": "skill_cost_flat",
+            "value": -2
+          },
+          {
+            "type": "force_power_flat",
+            "value": -2
+          }
+        ],
+        "source": "local-ui",
+        "addedAt": 2
+      },
+      {
+        "instanceId": "asset_texas_force_amplifier:local-ui:3",
+        "cardId": "asset_texas_force_amplifier",
+        "name": "强运增幅器",
+        "rarity": "gold",
+        "kind": "numeric",
+        "targetTags": [
+          "team"
+        ],
+        "gameTags": [
+          "texas-holdem"
+        ],
+        "slotTags": [
+          "general"
+        ],
+        "effectText": "Texas 技能效果 +12%",
+        "statusTags": [
+          "可叠加",
+          "Texas"
+        ],
+        "modifiers": [
+          {
+            "type": "force_power_pct",
+            "value": 0.12
+          }
+        ],
+        "source": "local-ui",
+        "addedAt": 3
+      },
+      {
+        "instanceId": "asset_rainbow_contract:local-ui:4",
+        "cardId": "asset_rainbow_contract",
+        "name": "彩虹契约",
+        "rarity": "rainbow",
+        "kind": "god",
+        "targetTags": [
+          "team"
+        ],
+        "gameTags": ["any"],
+        "slotTags": [
+          "general"
+        ],
+        "effectText": "所有技能效果 +8%",
+        "statusTags": ["唯一", "常驻"],
+        "modifiers": [
+          {
+            "type": "all_force_power_bonus",
+            "value": 0.08
+          }
+        ],
+        "source": "local-ui",
+        "addedAt": 4
+      }
+    ],
+    "active_void_cards": [
+      {
+        "instanceId": "asset_skill_insulation_l3:local-ui:5",
+        "cardId": "asset_skill_insulation_l3",
+        "name": "绝缘 III",
+        "rarity": "gold",
+        "kind": "skill",
+        "system": "void",
+        "skillKey": "insulation",
+        "level": 3,
+        "targetTags": [
+          "team"
+        ],
+        "gameTags": [
+          "texas-holdem"
+        ],
+        "slotTags": [
+          "general",
+          "void"
+        ],
+        "effectText": "insulation 加入卡组，等级 III",
+        "statusTags": [
+          "唯一升级",
+          "Texas"
+        ],
+        "modifiers": [
+          {
+            "type": "skill_level",
+            "key": "insulation",
+            "value": 3
+          }
+        ],
+        "source": "local-ui",
+        "addedAt": 5
+      },
+      {
+        "instanceId": "asset_void_anchor:local-ui:6",
+        "cardId": "asset_void_anchor",
+        "name": "虚空锚点",
+        "rarity": "gold",
+        "kind": "passive",
+        "targetTags": [
+          "team"
+        ],
+        "gameTags": [
+          "any"
+        ],
+        "slotTags": [
+          "general",
+          "void"
+        ],
+        "effectText": "Void 槽稳定占位",
+        "statusTags": [
+          "被动",
+          "VOID槽"
+        ],
+        "modifiers": [],
+        "source": "local-ui",
+        "addedAt": 6
+      }
+    ],
+    "pending_offer": {
+      "id": "offer:mid:local-ui-skills",
+      "pool": "mid",
+      "cost": 2,
+      "refreshCount": 0,
+      "freeRefreshUsed": 0,
+      "createdAt": 7,
+      "choices": [
+        {
+          "instanceId": "asset_skill_divine_order_l3:local-offer:0",
+          "cardId": "asset_skill_divine_order_l3",
+          "name": "神谕 III",
+          "rarity": "gold",
+          "kind": "skill",
+          "system": "moirai",
+          "skillKey": "divine_order",
+          "level": 3,
+          "targetTags": [
+            "team"
+          ],
+          "gameTags": [
+            "texas-holdem"
+          ],
+          "slotTags": [
+            "general"
+          ],
+          "effectText": "divine_order 加入卡组，等级 III",
+          "statusTags": [
+            "唯一升级",
+            "Texas"
+          ],
+          "modifiers": [
+            {
+              "type": "skill_level",
+              "key": "divine_order",
+              "value": 3
+            }
+          ],
+          "source": "local-offer",
+          "addedAt": 7
+        },
+        {
+          "instanceId": "asset_skill_catastrophe_l2:local-offer:1",
+          "cardId": "asset_skill_catastrophe_l2",
+          "name": "大灾变 II",
+          "rarity": "silver",
+          "kind": "skill",
+          "system": "chaos",
+          "skillKey": "catastrophe",
+          "level": 2,
+          "targetTags": [
+            "team"
+          ],
+          "gameTags": [
+            "texas-holdem"
+          ],
+          "slotTags": [
+            "general"
+          ],
+          "effectText": "catastrophe 加入卡组，等级 II",
+          "statusTags": [
+            "唯一升级",
+            "Texas"
+          ],
+          "modifiers": [
+            {
+              "type": "skill_level",
+              "key": "catastrophe",
+              "value": 2
+            }
+          ],
+          "source": "local-offer",
+          "addedAt": 8
+        },
+        {
+          "instanceId": "asset_skill_upgrade_silver:local-offer:2",
+          "cardId": "asset_skill_upgrade_silver",
+          "name": "技能升格 II",
+          "rarity": "silver",
+          "kind": "upgrade",
+          "targetTags": [
+            "team"
+          ],
+          "gameTags": [
+            "any"
+          ],
+          "slotTags": [
+            "general"
+          ],
+          "effectText": "绑定一张 LV1-LV2 技能卡，升一级",
+          "statusTags": [
+            "消耗",
+            "绑定目标"
+          ],
+          "modifiers": [
+            {
+              "type": "skill_upgrade",
+              "maxFromLevel": 2,
+              "value": 1
+            }
+          ],
+          "upgradeTargetSkillKey": "divine_order",
+          "source": "local-offer",
+          "addedAt": 9
+        }
+      ]
+    },
+    "pending_offer_queue": [
+      {
+        "id": "offer:high:local-ui-void",
+        "pool": "high",
+        "cost": 3,
+        "refreshCount": 0,
+        "freeRefreshUsed": 0,
+        "createdAt": 10,
+        "choices": [
+          {
+            "instanceId": "asset_skill_reality_l4:local-queue:0",
+            "cardId": "asset_skill_reality_l4",
+            "name": "Reality II",
+            "rarity": "rainbow",
+            "kind": "skill",
+            "system": "void",
+            "skillKey": "reality",
+            "level": 4,
+            "targetTags": [
+              "team"
+            ],
+            "gameTags": [
+              "texas-holdem"
+            ],
+            "slotTags": [
+              "general",
+              "void"
+            ],
+            "effectText": "reality 加入卡组，等级 IV",
+            "statusTags": [
+              "唯一升级",
+              "Texas"
+            ],
+            "modifiers": [
+              {
+                "type": "skill_level",
+                "key": "reality",
+                "value": 4
+              }
+            ],
+            "source": "local-queue",
+            "addedAt": 10
+          },
+          {
+            "instanceId": "asset_god_texas_skill_plus:local-queue:1",
+            "cardId": "asset_god_texas_skill_plus",
+            "name": "神卡：牌桌升格",
+            "rarity": "rainbow",
+            "kind": "god",
+            "targetTags": [
+              "team"
+            ],
+            "gameTags": [
+              "texas-holdem"
+            ],
+            "slotTags": [
+              "general"
+            ],
+            "effectText": "Texas 技能卡等级默认 +1",
+            "statusTags": [
+              "唯一",
+              "Texas"
+            ],
+            "modifiers": [
+              {
+                "type": "skill_level_bonus",
+                "value": 1
+              }
+            ],
+            "source": "local-queue",
+            "addedAt": 11
+          },
+          {
+            "instanceId": "asset_texas_force_amplifier:local-queue:2",
+            "cardId": "asset_texas_force_amplifier",
+            "name": "强运增幅器",
+            "rarity": "gold",
+            "kind": "numeric",
+            "targetTags": [
+              "team"
+            ],
+            "gameTags": [
+              "texas-holdem"
+            ],
+            "slotTags": [
+              "general"
+            ],
+            "effectText": "Texas 技能效果 +12%",
+            "statusTags": [
+              "可叠加",
+              "Texas"
+            ],
+            "modifiers": [
+              {
+                "type": "force_power_pct",
+                "value": 0.12
+              }
+            ],
+            "source": "local-queue",
+            "addedAt": 12
+          }
+        ]
+      }
+    ],
+    "pending_replace": {
+      "card": {
+        "instanceId": "asset_skill_divine_order_l4:local-replace:0",
+        "cardId": "asset_skill_divine_order_l4",
+        "name": "神谕 IV",
+        "rarity": "rainbow",
+        "kind": "skill",
+        "system": "moirai",
+        "skillKey": "divine_order",
+        "level": 4,
+        "targetTags": [
+          "team"
+        ],
+        "gameTags": [
+          "texas-holdem"
+        ],
+        "slotTags": [
+          "general"
+        ],
+        "effectText": "divine_order 加入卡组，等级 IV",
+        "statusTags": [
+          "唯一升级",
+          "Texas"
+        ],
+        "modifiers": [
+          {
+            "type": "skill_level",
+            "key": "divine_order",
+            "value": 4
+          }
+        ],
+        "source": "local-replace",
+        "addedAt": 13
+      },
+      "allowedSlots": [
+        "general"
+      ],
+      "reason": "slot_full",
+      "confirm_destroy": true,
+      "confirm_target": {
+        "slotType": "general",
+        "targetIndex": 3
+      }
+    },
+    "history": [
+      {
+        "kind": "choose_card",
+        "cardId": "asset_mana_max_silver",
+        "slotType": "general",
+        "status": "equipped",
+        "at": 1
+      },
+      {
+        "kind": "choose_card",
+        "cardId": "asset_mana_reduce_silver",
+        "slotType": "general",
+        "status": "equipped",
+        "at": 2
+      },
+      {
+        "kind": "choose_card",
+        "cardId": "asset_skill_insulation_l3",
+        "slotType": "void",
+        "status": "equipped",
+        "at": 5
+      },
+      {
+        "kind": "choose_card",
+        "cardId": "asset_skill_divine_order_l4",
+        "status": "pending_replace",
+        "at": 13
+      }
+    ]
   }
 }

@@ -617,7 +617,7 @@
           if (!flat) return '';
           return (entry.scope === 'owner' && entry.key ? 'Owner ' + entry.key + ' ' : '') + (flat > 0 ? '+' : '') + flat + ' MP';
         }).filter(Boolean).join(', ');
-        this.containers.manaText.textContent = 'MP ' + mana.current + '/' + mana.max + (manaAsset ? ' · ASSET +' + manaAsset : '');
+        this.containers.manaText.textContent = 'MP ' + mana.current + '/' + mana.max;
         this.containers.manaText.title = summaryManaText
           ? 'Asset mana modifiers: ' + summaryManaText
           : manaAsset
@@ -3855,7 +3855,6 @@
       if (assetCards.length) {
         var levels = assetCards.map(function(card) { return Number(card.level || 0); }).filter(Boolean);
         var maxLevel = levels.length ? Math.max.apply(Math, levels) : skill.level;
-        labels.push('ASSET LV' + maxLevel);
         titleLines.push('Asset skill level: LV ' + maxLevel);
         sources = sources.concat(assetCards.map(function(card) {
           return card && card.cardId ? card.cardId : null;

@@ -1399,7 +1399,12 @@
           ? this.assetDeckAdapter.resolveManaMax(this.assetModifiers, ownerId, manaConfig.max)
           : null;
         var maxMana = resolvedMana && resolvedMana.max != null ? resolvedMana.max : manaConfig.max;
-        var currentMana = (manaConfig.current != null) ? manaConfig.current : maxMana;
+        var assetMaxDelta = resolvedMana && Number(resolvedMana.flatDelta || 0) > 0
+          ? Number(resolvedMana.flatDelta || 0)
+          : 0;
+        var currentMana = (manaConfig.current != null)
+          ? Number(manaConfig.current || 0) + assetMaxDelta
+          : maxMana;
         this.manaPools.set(ownerId, {
           current: Math.min(currentMana, maxMana),
           max: maxMana,
