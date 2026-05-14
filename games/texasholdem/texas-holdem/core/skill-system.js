@@ -1078,6 +1078,167 @@
       return { ok: true };
     }
 
+    _getSkillAvailabilityMessage(reason, meta) {
+      const data = meta || {};
+      const messages = {
+        SKILL_NOT_FOUND: '技能不存在',
+        NOT_ACTIVE_TYPE: '被动技能无法手动激活',
+        PENDING_IMPLEMENTATION: '技能模块接入中',
+        NOT_BETTING_PHASE: '当前阶段不可用',
+        NOT_PLAYER_TURN: '未到行动回合',
+        PHASE_DISABLED: '当前街不可用',
+        PENDING_FORCE: '同类技能已待结算',
+        BACKLASH_ACTIVE: '魔运反噬中',
+        NO_USES_REMAINING: '本局已使用完毕',
+        STREET_USE_LIMIT: '本街已使用',
+        ON_COOLDOWN: '冷却中 (' + (data.cooldown || 0) + '轮)',
+        SEALED: '封印中 (' + (data.sealed || 0) + '轮)',
+        INSUFFICIENT_MANA: '魔运不足 (需要 ' + (data.cost || 0) + ')',
+        MATCH_SCOPED_USED: '本局已发动过',
+        NO_BENEDICTION_TARGET: '需要指定一个非自身目标',
+        NO_RULING_TARGET: '需要指定一个有效的改判目标',
+        NO_VV_TARGET: '需要指定一个有效的建仓/清算目标',
+        NO_VV_POSITION: '该目标没有可清算的当前投资轮',
+        INVALID_VV_ENTRY_SIZE: '需要选择 1 / 2 / 3 档建仓',
+        INVALID_VV_DIRECTION: '需要选择看涨或看跌方向',
+        NO_DEBT_TARGET: '目标没有债蚀',
+        NO_WILD_CARD: '没有可用鬼牌',
+        NO_REWRITE_TARGET: '需要指定诅咒目标',
+        INVALID_BLIND_BOX_TARGETS: '盲盒派对需要两个有效目标',
+        INSUFFICIENT_WILD_CARD: '鬼牌不足',
+        NO_COTA_EMPTY_SLOT: '没有空槽位',
+        INVALID_COTA_CARD_TYPE: '需要选择要发入的牌',
+        INVALID_COTA_MODE: '需要选择收牌或铺牌'
+      };
+      return messages[reason] || '技能不可用';
+    }
+
+    _getSkillAvailabilityFailure(skill, reason, extra) {
+      const payload = Object.assign({
+        ok: false,
+        disabled: true,
+        reason: reason,
+        message: this._getSkillAvailabilityMessage(reason, extra),
+        skill: skill && skill.skillKey,
+        cooldown: skill ? Math.max(0, Number(skill.currentCooldown || 0)) : 0,
+        sealed: skill ? Math.max(0, Number(skill._sealed || 0)) : 0,
+        cost: 0,
+        flags: {}
+      }, extra || {});
+      payload.message = payload.message || this._getSkillAvailabilityMessage(reason, payload);
+      return payload;
+    }
+
+    _isSkillQueuedForOwner(skill) {
+      if (!skill || !Array.isArray(this.pendingForces)) return false;
+      for (var i = 0; i < this.pendingForces.length; i++) {
+        var force = this.pendingForces[i];
+        if (!force || force.ownerId !== skill.ownerId) continue;
+        if (force.type === skill.effect) return true;
+        if (skill.effect === EFFECT.CURSE && force.type === 'curse') return true;
+      }
+      return false;
+    }
+
+    _isSkillRiverAllowed(skill) {
+      if (!skill) return false;
+      if (RIVER_INFO_EFFECTS[skill.effect]) return true;
+      return skill.effect === EFFECT.SKILL_SEAL;
+    }
+
+    getSkillAvailability(uniqueIdOrSkill, gameContext, options) {
+      const rawOptions = options || {};
+      const skill = typeof uniqueIdOrSkill === 'string'
+        ? this.skills.get(uniqueIdOrSkill)
+        : uniqueIdOrSkill;
+      if (!skill) return this._getSkillAvailabilityFailure(null, 'SKILL_NOT_FOUND');
+
+      var finalOptions = Object.assign({}, rawOptions);
+      var ctx = finalOptions.gameContext || gameContext || null;
+      if (finalOptions.resolveOptions !== false && finalOptions._resolvedAvailabilityOptions !== true) {
+        finalOptions = this._resolveSkillExecutionOptions(skill, null, ctx, finalOptions);
+        ctx = finalOptions.gameContext || ctx;
+      }
+
+      const isToggle = skill.activation === ACTIVATION.TOGGLE;
+      const isActive = skill.activation === ACTIVATION.ACTIVE;
+      const isTriggered = skill.activation === ACTIVATION.TRIGGERED;
+      const allowTriggered = rawOptions.allowTriggered === true;
+      const cost = this._getSkillActualManaCost(skill, Object.assign({}, finalOptions, { consumeAssetRisk: false }));
+      const flags = {
+        noUsesLeft: skill.usesPerGame > 0 && skill.gameUsesRemaining <= 0,
+        streetUseCapped: skill.usesPerStreet > 0 && this._getStreetScopedUseCount(skill) >= skill.usesPerStreet,
+        queued: rawOptions.checkPendingForces === true && this._isSkillQueuedForOwner(skill)
+      };
+
+      if (!isActive && !isToggle && !(allowTriggered && isTriggered)) {
+        return this._getSkillAvailabilityFailure(skill, 'NOT_ACTIVE_TYPE', { cost: cost, flags: flags });
+      }
+      if (skill.pendingImplementation) {
+        return this._getSkillAvailabilityFailure(skill, 'PENDING_IMPLEMENTATION', { cost: cost, flags: flags });
+      }
+
+      const phase = ctx && ctx.phase ? String(ctx.phase) : '';
+      const bettingPhase = ['preflop', 'flop', 'turn', 'river'].indexOf(phase) >= 0;
+      if ((rawOptions.requireBettingPhase === true || rawOptions.enforcePhaseRules === true) && phase && !bettingPhase) {
+        return this._getSkillAvailabilityFailure(skill, 'NOT_BETTING_PHASE', { cost: cost, flags: flags });
+      }
+      const requirePlayerTurn = rawOptions.requirePlayerTurn === true ||
+        (skill.ownerType === 'human' && ctx && Object.prototype.hasOwnProperty.call(ctx, 'isPlayerTurn') && rawOptions.allowOutOfTurn !== true);
+      if (requirePlayerTurn && ctx && ctx.isPlayerTurn !== true) {
+        return this._getSkillAvailabilityFailure(skill, 'NOT_PLAYER_TURN', { cost: cost, flags: flags });
+      }
+      if (rawOptions.enforcePhaseRules === true && phase === 'river' && !this._isSkillRiverAllowed(skill)) {
+        return this._getSkillAvailabilityFailure(skill, 'PHASE_DISABLED', { cost: cost, flags: flags });
+      }
+
+      if (rawOptions.skipOptionValidation !== true) {
+        var validation = this._validateSkillExecution(skill, ctx, finalOptions);
+        if (!validation.ok) {
+          return this._getSkillAvailabilityFailure(skill, validation.reason, Object.assign({ cost: cost, flags: flags }, validation));
+        }
+      }
+
+      const ownerBacklash = this._getBacklashState(skill.ownerId);
+      if (ownerBacklash.active) {
+        return this._getSkillAvailabilityFailure(skill, 'BACKLASH_ACTIVE', { counter: ownerBacklash.counter, cost: cost, flags: flags });
+      }
+      if (flags.noUsesLeft) {
+        return this._getSkillAvailabilityFailure(skill, 'NO_USES_REMAINING', { usesPerGame: skill.usesPerGame, cost: cost, flags: flags });
+      }
+      if (flags.streetUseCapped) {
+        return this._getSkillAvailabilityFailure(skill, 'STREET_USE_LIMIT', { usesPerStreet: skill.usesPerStreet, cost: cost, flags: flags });
+      }
+      if (skill.currentCooldown > 0) {
+        return this._getSkillAvailabilityFailure(skill, 'ON_COOLDOWN', { cooldown: skill.currentCooldown, cost: cost, flags: flags });
+      }
+      if (skill._sealed > 0) {
+        return this._getSkillAvailabilityFailure(skill, 'SEALED', { sealed: skill._sealed, cost: cost, flags: flags });
+      }
+      if (flags.queued) {
+        return this._getSkillAvailabilityFailure(skill, 'PENDING_FORCE', { cost: cost, flags: flags });
+      }
+      if (cost > 0) {
+        var manaPool = this.manaPools.get(skill.ownerId);
+        if (!manaPool || manaPool.current < cost) {
+          return this._getSkillAvailabilityFailure(skill, 'INSUFFICIENT_MANA', { cost: cost, flags: flags });
+        }
+      }
+
+      return {
+        ok: true,
+        disabled: false,
+        reason: null,
+        message: '',
+        skill: skill.skillKey,
+        cooldown: Math.max(0, Number(skill.currentCooldown || 0)),
+        sealed: Math.max(0, Number(skill._sealed || 0)),
+        cost: cost,
+        flags: flags,
+        options: finalOptions
+      };
+    }
+
     _getSkillDynamicManaCost(skill, finalOptions) {
       if (!skill) return 0;
       var cost = Math.max(0, Number(skill.manaCost || 0));
@@ -1588,50 +1749,17 @@
         return this._toggleSkill(skill);
       }
 
-      if (skill.activation !== ACTIVATION.ACTIVE) return { success: false, reason: 'NOT_ACTIVE_TYPE' };
-      if (skill.pendingImplementation) {
-        return { success: false, reason: 'PENDING_IMPLEMENTATION', skill: skill.skillKey };
-      }
-      var validation = this._validateSkillExecution(
-        skill,
-        finalOptions && finalOptions.gameContext ? finalOptions.gameContext : null,
-        finalOptions
-      );
-      if (!validation.ok) {
-        return Object.assign({ success: false, skill: skill.skillKey }, validation);
+      var availability = this.getSkillAvailability(skill, finalOptions && finalOptions.gameContext ? finalOptions.gameContext : null, Object.assign({}, finalOptions, {
+        _resolvedAvailabilityOptions: true,
+        checkPendingForces: true,
+        enforcePhaseRules: true
+      }));
+      if (!availability.ok) {
+        return Object.assign({ success: false }, availability);
       }
 
-      const ownerBacklash = this._getBacklashState(skill.ownerId);
-      if (ownerBacklash.active) {
-        return { success: false, reason: 'BACKLASH_ACTIVE', counter: ownerBacklash.counter };
-      }
-
-      // 整局使用次数检查
-      if (skill.usesPerGame > 0 && skill.gameUsesRemaining <= 0) {
-        return { success: false, reason: 'NO_USES_REMAINING', usesPerGame: skill.usesPerGame };
-      }
-
-      // 每街使用次数检查
-      if (skill.usesPerStreet > 0 && this._getStreetScopedUseCount(skill) >= skill.usesPerStreet) {
-        return { success: false, reason: 'STREET_USE_LIMIT', usesPerStreet: skill.usesPerStreet };
-      }
-
-      // 冷却检查
-      if (skill.currentCooldown > 0) {
-        return { success: false, reason: 'ON_COOLDOWN', cooldown: skill.currentCooldown };
-      }
-      if (skill._sealed > 0) {
-        return { success: false, reason: 'SEALED', sealed: skill._sealed };
-      }
-
-      // Mana 检查（特质可能修改消耗）
+      // Mana 检查（特质与 asset risk 可能修改最终消耗）
       var actualCost = this._getSkillActualManaCost(skill, Object.assign({}, finalOptions, { consumeAssetRisk: true }));
-      if (actualCost > 0) {
-        var manaPool = this.manaPools.get(skill.ownerId);
-        if (!manaPool || manaPool.current < actualCost) {
-          return { success: false, reason: 'INSUFFICIENT_MANA', cost: actualCost };
-        }
-      }
 
       var blindBoxScopeKey = null;
       if (skill.effect === EFFECT.BLIND_BOX) {
@@ -2034,13 +2162,14 @@
         for (const [, skill] of this.skills) {
           if (skill.ownerId !== playerId) continue;
           if (skill.ownerType === 'human') continue;
-          if (skill.activation !== ACTIVATION.ACTIVE) continue;
-          if (skill.currentCooldown > 0) continue;
-          if (skill._sealed > 0) continue;
           if (allowed.indexOf(skill.effect) < 0) continue;
-          if (skill.usesPerGame > 0 && skill.gameUsesRemaining <= 0) continue;
-          if (skill.usesPerStreet > 0 && this._getStreetScopedUseCount(skill) >= skill.usesPerStreet) continue;
-          if (gameContext.phase === 'river' && !RIVER_INFO_EFFECTS[skill.effect]) continue;
+          var baseAvailability = this.getSkillAvailability(skill, gameContext, {
+            resolveOptions: false,
+            skipOptionValidation: true,
+            enforcePhaseRules: true,
+            allowOutOfTurn: true
+          });
+          if (!baseAvailability.ok) continue;
           candidates.push(skill);
         }
 
@@ -2059,8 +2188,12 @@
           var finalOptions = this._resolveSkillExecutionOptions(skill, owner, gameContext, {
             gameContext: gameContext
           });
-          var validation = this._validateSkillExecution(skill, gameContext, finalOptions);
-          if (!validation.ok) continue;
+          var availability = this.getSkillAvailability(skill, gameContext, Object.assign({}, finalOptions, {
+            _resolvedAvailabilityOptions: true,
+            enforcePhaseRules: true,
+            allowOutOfTurn: true
+          }));
+          if (!availability.ok) continue;
 
           var preparedTurn = this._prepareNpcSkillUse(skill, finalOptions);
           if (!preparedTurn) continue;
@@ -2505,10 +2638,13 @@
       for (const [, skill] of this.skills) {
         if (skill.activation !== ACTIVATION.TRIGGERED) continue;
         if (!skill.trigger) continue;
-        // 冷却中不触发
-        if (skill.currentCooldown > 0) continue;
-        // 整局次数用尽不触发
-        if (skill.usesPerGame > 0 && skill.gameUsesRemaining <= 0) continue;
+        const availability = this.getSkillAvailability(skill, gameContext, {
+          allowTriggered: true,
+          allowOutOfTurn: true,
+          resolveOptions: false,
+          skipOptionValidation: true
+        });
+        if (!availability.ok) continue;
         // 已弃牌不触发
         const owner = gameContext.players ? gameContext.players.find(p => p.id === skill.ownerId) : null;
         if (owner && !this._isPlayerAvailable(owner)) continue;
@@ -3229,7 +3365,7 @@
         rinoMana: rinoMana.current,
         rinoManaMax: rinoMana.max,
         pendingForces: this.pendingForces.map(f => ({
-          owner: f.ownerName, type: f.type, level: f.level, system: f.system, power: f.power
+          owner: f.ownerName, ownerId: f.ownerId, type: f.type, level: f.level, system: f.system, power: f.power
         })),
         skills: Array.from(this.skills.values()).map(s => ({
           uniqueId: s.uniqueId,
@@ -3247,6 +3383,8 @@
           assetCost: s._assetCost || null,
           assetCards: Array.isArray(s.assetCards) ? s.assetCards.slice() : [],
           cooldown: s.currentCooldown,
+          sealed: Math.max(0, Number(s._sealed || 0)),
+          _sealed: Math.max(0, Number(s._sealed || 0)),
           usesPerGame: s.usesPerGame || 0,
           gameUsesRemaining: s.gameUsesRemaining != null ? s.gameUsesRemaining : 0,
           usesPerStreet: s.usesPerStreet || 0,

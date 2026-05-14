@@ -682,11 +682,6 @@
       if (!this.skillSystem) return;
       var ss = this.skillSystem.getState();
       var ctx = this._gameCtx;
-      var isBettingPhase = ['preflop', 'flop', 'turn', 'river'].indexOf(ctx.phase) >= 0;
-      var isPlayerTurn = isBettingPhase && ctx.isPlayerTurn;
-      var mana = this.skillSystem.getMana(this.humanPlayerId);
-      var canUse = isPlayerTurn && !ss.backlash.active;
-      var isRiver = ctx.phase === 'river';
 
       // 检查是否已有同 effect 的 force pending（玩家方）
       var queuedEffects = {};
@@ -707,12 +702,20 @@
         var behavior = btnInfo.behavior;
         if (!btn) continue;
 
-        var cost = Number(this._getRenderedManaCost(liveSkill) || 0);
+        var availability = this.skillSystem.getSkillAvailability(skill.uniqueId, ctx, {
+          gameContext: ctx,
+          resolveOptions: false,
+          skipOptionValidation: true,
+          checkPendingForces: true,
+          enforcePhaseRules: true,
+          requireBettingPhase: true,
+          requirePlayerTurn: true
+        });
+        var cost = Number((availability && availability.cost != null ? availability.cost : this._getRenderedManaCost(liveSkill)) || 0);
         var disabled = true;
-
-        // 整局使用次数限制
-        var noUsesLeft = liveSkill.usesPerGame > 0 && liveSkill.gameUsesRemaining <= 0;
-        var streetUseCapped = liveSkill.usesPerStreet > 0 && liveSkill.streetUses >= liveSkill.usesPerStreet;
+        var flags = availability && availability.flags ? availability.flags : {};
+        var noUsesLeft = !!flags.noUsesLeft;
+        var streetUseCapped = !!flags.streetUseCapped;
 
         switch (behavior) {
           case BEHAVIOR.PASSIVE:
@@ -721,51 +724,47 @@
             btn.classList.remove('skill-active');
             break;
           case BEHAVIOR.FORCE:
-            // 力量型：river 无意义，同 effect 不能重复激活，需要 mana
-            disabled = !canUse || mana.current < cost || liveSkill.currentCooldown > 0 || noUsesLeft || streetUseCapped;
-            if (isRiver) disabled = true;
-            if (queuedEffects[liveSkill.effect]) disabled = true;
+            disabled = !availability.ok;
             btn.classList.toggle('skill-active', !!queuedEffects[liveSkill.effect]);
-            // 整局已用完：特殊样式
             btn.classList.toggle('skill-exhausted', noUsesLeft || streetUseCapped);
             break;
           case BEHAVIOR.CURSE:
-            // 诅咒/冻结型：需要选目标，river 无意义（不影响选牌），需要 mana
-            disabled = !canUse || mana.current < cost || liveSkill.currentCooldown > 0 || noUsesLeft || streetUseCapped;
-            if (isRiver && liveSkill.effect !== 'skill_seal') disabled = true; // 冻结令在 river 仍可用
-            if (queuedEffects['curse'] && liveSkill.effect === 'curse') disabled = true;
+            disabled = !availability.ok;
             btn.classList.toggle('skill-active', !!queuedEffects[liveSkill.effect]);
             btn.classList.toggle('skill-exhausted', noUsesLeft || streetUseCapped);
             break;
           case BEHAVIOR.LOCK:
-            // VV 估价眼：独立的锁定型技能，不再走旧 Psyche 守护壳子
-            disabled = !canUse || mana.current < cost || liveSkill.currentCooldown > 0 || noUsesLeft || streetUseCapped;
+            disabled = !availability.ok;
             btn.classList.remove('skill-active');
             btn.classList.toggle('skill-exhausted', noUsesLeft || streetUseCapped);
             break;
           case BEHAVIOR.PSYCHE:
-            // Psyche 双重效果: river 无意义(反制部分影响发牌)，同 effect 不能重复
-            disabled = !canUse || mana.current < cost || liveSkill.currentCooldown > 0 || streetUseCapped;
-            if (isRiver) disabled = true;
-            if (queuedEffects[liveSkill.effect]) disabled = true;
+            disabled = !availability.ok;
             btn.classList.toggle('skill-active', !!queuedEffects[liveSkill.effect]);
+            btn.classList.toggle('skill-exhausted', noUsesLeft || streetUseCapped);
+            break;
+          case BEHAVIOR.MENTAL:
+            disabled = !availability.ok;
+            btn.classList.remove('skill-active');
+            btn.classList.toggle('skill-exhausted', noUsesLeft || streetUseCapped);
             break;
           case BEHAVIOR.TOGGLE:
             // 兼容旧 toggle 行为；当前 Void 绝缘已改为主动技能。
-            disabled = !isBettingPhase;
+            disabled = !availability.ok;
             btn.classList.toggle('skill-active', !!skill.active);
             btn.classList.toggle('toggle-on', !!skill.active);
             break;
         }
 
         // 封印状态视觉提示
-        var isSealed = liveSkill._sealed > 0;
+        var sealedTurns = Math.max(0, Number((availability && availability.sealed) || 0));
+        var isSealed = sealedTurns > 0;
         btn.classList.toggle('skill-sealed', isSealed);
         if (isSealed) {
           disabled = true;
           // 在 cost badge 显示封印剩余回合
           var costBadge = btn.querySelector('.cost-badge');
-          if (costBadge && !liveSkill.showAsPassiveCard) costBadge.textContent = '🔒' + liveSkill._sealed;
+          if (costBadge && !liveSkill.showAsPassiveCard) costBadge.textContent = 'LOCK ' + sealedTurns;
         } else {
           var costBadge2 = btn.querySelector('.cost-badge');
           if (costBadge2 && !liveSkill.showAsPassiveCard) {
@@ -776,6 +775,7 @@
         if (disabled && behavior !== BEHAVIOR.TOGGLE) {
           btn.classList.remove('skill-active');
         }
+        btn.title = disabled && availability && availability.message ? availability.message : '';
         btn.disabled = disabled;
       }
     }
@@ -864,7 +864,12 @@
           SKILL_NOT_FOUND: '技能不存在',
           NOT_ACTIVE_TYPE: '被动技能无法手动激活',
           BACKLASH_ACTIVE: '魔运反噬中',
+          NOT_BETTING_PHASE: '当前阶段不可用',
+          NOT_PLAYER_TURN: '未到行动回合',
+          PHASE_DISABLED: '当前街不可用',
+          PENDING_FORCE: '同类技能已待结算',
           ON_COOLDOWN: '冷却中 (' + (result.cooldown || 0) + '轮)',
+          SEALED: '封印中 (' + (result.sealed || 0) + '轮)',
           INSUFFICIENT_MANA: '魔运不足 (需要 ' + (result.cost || 0) + ')',
           PENDING_IMPLEMENTATION: '技能模块接入中',
           NO_USES_REMAINING: '本局已使用完毕',
@@ -886,7 +891,7 @@
           INVALID_COTA_CARD_FAMILY: '需要选择要整理的牌类',
           MATCH_SCOPED_USED: '本局已发动过'
         };
-        if (this.onMessage) this.onMessage(reasons[result.reason] || '技能不可用');
+        if (this.onMessage) this.onMessage(result.message || reasons[result.reason] || '技能不可用');
         return;
       }
 
@@ -1384,7 +1389,12 @@
         SKILL_NOT_FOUND: '技能不存在',
         NOT_ACTIVE_TYPE: '被动技能无法手动激活',
         BACKLASH_ACTIVE: '魔运反噬中',
+        NOT_BETTING_PHASE: '当前阶段不可用',
+        NOT_PLAYER_TURN: '未到行动回合',
+        PHASE_DISABLED: '当前街不可用',
+        PENDING_FORCE: '同类技能已待结算',
         ON_COOLDOWN: '冷却中 (' + (result.cooldown || 0) + '轮)',
+        SEALED: '封印中 (' + (result.sealed || 0) + '轮)',
         INSUFFICIENT_MANA: '魔运不足 (需要 ' + (result.cost || 0) + ')',
         PENDING_IMPLEMENTATION: '技能模块接入中',
         STREET_USE_LIMIT: '本街已使用',
@@ -1405,7 +1415,7 @@
         INVALID_COTA_CARD_FAMILY: '需要选择要整理的牌类',
         MATCH_SCOPED_USED: '本局已发动过'
       };
-      if (this.onMessage) this.onMessage(reasons[result.reason] || '技能不可用');
+      if (this.onMessage) this.onMessage(result.message || reasons[result.reason] || '技能不可用');
     }
 
     _getRuntimeLedger() {

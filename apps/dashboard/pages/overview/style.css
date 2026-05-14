@@ -3977,13 +3977,14 @@
             --card-accent: var(--rest);
             --card-accent-rgb: 77, 255, 217;
             position: relative;
+            min-height: 174px;
             height: 100%;
             width: 100%;
             display: flex;
             flex-direction: column;
             align-items: flex-start;
             justify-content: flex-start;
-            padding: 24px 26px;
+            padding: 20px 22px;
             border: 0;
             background: transparent;
             color: #fff;
@@ -4031,12 +4032,35 @@
             box-shadow: 0 0 5px var(--card-accent);
         }
         .drawer .cmd-type { z-index: 2; color: color-mix(in srgb, var(--card-accent) 72%, #fff); font: 900 10px/1 var(--font-ui); letter-spacing: 1.5px; }
+        .drawer .cmd-name-row {
+            width: 100%;
+            min-height: 48px;
+            align-items: flex-start;
+        }
+        .drawer .cmd-name {
+            min-width: 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.2;
+        }
+        .drawer .cmd-level {
+            flex: 0 0 auto;
+            white-space: nowrap;
+            font: 900 10px/1 var(--font-ui);
+        }
         .drawer .cmd-desc {
             z-index: 2;
             margin-top: 8px;
             color: rgba(255,255,255,0.7);
             font: 800 11px/1.35 var(--font-ui);
             letter-spacing: 0;
+            min-height: 30px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
         .drawer .cmd-tags {
             z-index: 2;
@@ -4045,6 +4069,8 @@
             flex-wrap: wrap;
             gap: 5px;
             padding-top: 10px;
+            max-height: 34px;
+            overflow: hidden;
         }
         .drawer .cmd-tags span {
             border: 1px solid rgba(var(--card-accent-rgb), 0.28);
@@ -4054,7 +4080,12 @@
             font: 900 8px/1 var(--font-ui);
             letter-spacing: 0.9px;
         }
-        .drawer .choice { display: block; min-width: 0; min-height: 154px; }
+        .drawer .cmd-card.is-ineffective,
+        .mini-slot.is-ineffective {
+            opacity: 0.62;
+            filter: saturate(0.72);
+        }
+        .drawer .choice { display: block; min-width: 0; min-height: 174px; }
         .offer-overlay,
         .warehouse-overlay,
         .tint-overlay {

@@ -13,6 +13,7 @@
   const files = [
     './asset/data.js',
     './asset/runtime.js',
+    './asset/summary.js',
     './act/data.js',
     './act/generated-data.js',
     './act/generated-runtime.js',

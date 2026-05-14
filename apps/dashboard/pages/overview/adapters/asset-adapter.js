@@ -124,9 +124,76 @@
 
     function buildFallbackAssetDeckSummary(assetDeck, gameId = getDashboardAssetSummaryGameId()) {
         const normalized = normalizeAssetDeckForDashboard(assetDeck);
-        const generalCards = Array.isArray(normalized.active_general_cards) ? deepCloneValue(normalized.active_general_cards) : [];
-        const voidCards = Array.isArray(normalized.active_void_cards) ? deepCloneValue(normalized.active_void_cards) : [];
+        const assetModule = getAssetDeckModuleApi();
+        const catalog = assetModule && typeof assetModule.getCatalog === 'function' ? assetModule.getCatalog() : [];
+        const catalogList = Array.isArray(catalog) ? catalog : [];
+        const summarizeCard = (cardInput, slotType, slotIndex) => {
+            const card = cardInput && typeof cardInput === 'object' && !Array.isArray(cardInput) ? cardInput : {};
+            const cardId = String(card.cardId || card.id || '').trim();
+            const meta = catalogList.find((item) => item && String(item.id || item.cardId || '').trim() === cardId) || {};
+            const modifiers = Array.isArray(card.modifiers || meta.modifiers) ? deepCloneValue(card.modifiers || meta.modifiers) : [];
+            const kind = String(card.kind || meta.kind || 'numeric').trim().toLowerCase() || 'numeric';
+            const system = String(card.system || meta.system || '').trim().toLowerCase();
+            const skillKey = String(card.skillKey || meta.skillKey || card.upgradeTargetSkillKey || meta.upgradeTargetSkillKey || '').trim();
+            const level = Math.max(0, Math.round(Number(card.level ?? meta.level) || 0));
+            const gameTags = Array.isArray(card.gameTags || meta.gameTags) ? deepCloneValue(card.gameTags || meta.gameTags) : [];
+            const slotTags = Array.isArray(card.slotTags || meta.slotTags) ? deepCloneValue(card.slotTags || meta.slotTags) : [slotType || 'general'];
+            const effective = !gameTags.length || gameTags.includes('any') || gameTags.includes('general') || gameTags.includes(gameId) || gameTags.includes('texas') || gameTags.includes('texas-holdem');
+            const statusTags = [
+                kind === 'skill' ? '技能唯一' : '可叠加',
+                slotTags.includes('void') ? 'VOID槽' : '',
+                gameTags.includes('texas') || gameTags.includes('texas-holdem') ? 'Texas' : '',
+                skillKey ? `目标:${skillKey.replace(/_/g, ' ')}` : '',
+                effective ? '' : '未生效'
+            ].filter(Boolean).slice(0, 5);
+            const effectText = String(card.effectText || '').trim()
+                || (kind === 'skill' && skillKey ? `${skillKey.replace(/_/g, ' ')} ${level > 0 ? `LV ${level}` : ''}`.trim() : '')
+                || (modifiers[0] && String(modifiers[0].type || modifiers[0].kind || '').replace(/_/g, ' '))
+                || kind.replace(/_/g, ' ')
+                || 'Asset effect';
+            return {
+                instanceId: card.instanceId || '',
+                cardId,
+                name: card.name || meta.name || cardId || 'Asset Card',
+                rarity: String(card.rarity || meta.rarity || 'bronze').trim().toLowerCase() || 'bronze',
+                kind,
+                system,
+                skillKey,
+                level,
+                gameTags,
+                slotTags,
+                slotType,
+                slotIndex,
+                effective,
+                effectText,
+                statusTags,
+                modifiers
+            };
+        };
+        const generalCards = Array.isArray(normalized.active_general_cards)
+            ? normalized.active_general_cards.map((card, index) => summarizeCard(card, 'general', index))
+            : [];
+        const voidCards = Array.isArray(normalized.active_void_cards)
+            ? normalized.active_void_cards.map((card, index) => summarizeCard(card, 'void', index))
+            : [];
         const allCards = [...generalCards, ...voidCards];
+        const summarizeOffer = (offerInput) => {
+            if (!offerInput || typeof offerInput !== 'object' || Array.isArray(offerInput)) return null;
+            const choices = Array.isArray(offerInput.choices)
+                ? offerInput.choices.map((card, index) => summarizeCard(card, 'offer', index))
+                : [];
+            if (!choices.length) return null;
+            return {
+                ...deepCloneValue(offerInput),
+                choices
+            };
+        };
+        const pendingReplace = normalized.pending_replace && typeof normalized.pending_replace === 'object'
+            ? {
+                ...deepCloneValue(normalized.pending_replace),
+                card: summarizeCard(normalized.pending_replace.card || normalized.pending_replace.candidate, 'replace', 0)
+            }
+            : null;
         return {
             version: 1,
             gameId,
@@ -151,9 +218,9 @@
                 inactive: 0
             },
             pending: {
-                offer: normalized.pending_offer,
-                offerQueue: Array.isArray(normalized.pending_offer_queue) ? deepCloneValue(normalized.pending_offer_queue) : [],
-                replace: normalized.pending_replace
+                offer: summarizeOffer(normalized.pending_offer),
+                offerQueue: Array.isArray(normalized.pending_offer_queue) ? normalized.pending_offer_queue.map(summarizeOffer).filter(Boolean) : [],
+                replace: pendingReplace
             },
             recentHistory: Array.isArray(normalized.history) ? normalized.history.slice(-5) : [],
             gameplay: {

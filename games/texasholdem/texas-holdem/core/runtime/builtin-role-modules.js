@@ -798,7 +798,6 @@
   function hasReadyOwnerSkill(roleCtx, effect) {
     var ctx = roleCtx.ctx || {};
     var owner = roleCtx.owner || {};
-    var mana = roleCtx.mana || {};
     var skillSystem = ctx.skillSystem;
     if (!skillSystem || !skillSystem.skills) return false;
 
@@ -808,10 +807,15 @@
       if (candidate.ownerId !== owner.id) return;
       if (candidate.effect !== effect) return;
       if (candidate.activation !== 'active') return;
-      if (candidate.currentCooldown > 0) return;
-      if (candidate._sealed > 0) return;
-      if (candidate.usesPerGame > 0 && candidate.gameUsesRemaining <= 0) return;
-      if (typeof mana.current === 'number' && mana.current < (candidate.manaCost || 0)) return;
+      if (typeof skillSystem.getSkillAvailability === 'function') {
+        var availability = skillSystem.getSkillAvailability(candidate, ctx, {
+          allowOutOfTurn: true,
+          enforcePhaseRules: true,
+          resolveOptions: false,
+          skipOptionValidation: true
+        });
+        if (!availability.ok) return;
+      }
       found = true;
     });
 

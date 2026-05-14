@@ -463,8 +463,12 @@
       if (protectId != null) options.protectId = protectId;
 
       var finalOptions = skillSystem._resolveSkillExecutionOptions(selectedSkill, owner, gameCtx, options);
-      var validation = skillSystem._validateSkillExecution(selectedSkill, gameCtx, finalOptions);
-      if (!validation.ok) continue;
+      var availability = skillSystem.getSkillAvailability(selectedSkill, gameCtx, Object.assign({}, finalOptions, {
+        _resolvedAvailabilityOptions: true,
+        enforcePhaseRules: true,
+        allowOutOfTurn: true
+      }));
+      if (!availability.ok) continue;
 
       var prepared = skillSystem._prepareNpcSkillUse(selectedSkill, finalOptions);
       if (!prepared) continue;

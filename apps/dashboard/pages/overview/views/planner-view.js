@@ -47,26 +47,22 @@
         observePlannerLayout(drawer, auxContainer);
     }
 
-    function getAssetCardDisplayName(card) {
-        if (card?.name) return card.name;
+    function buildAssetCardViewModel(card) {
+        if (!card) return null;
         const assetModule = getAssetDeckModuleApi();
         const catalog = assetModule && typeof assetModule.getCatalog === 'function' ? assetModule.getCatalog() : [];
         const catalogCard = Array.isArray(catalog)
             ? catalog.find((item) => item?.id === card?.cardId)
             : null;
-        return catalogCard?.name || card?.name || card?.cardId || 'EMPTY';
-    }
-
-    function getAssetCardLevelLabel(card) {
-        const level = Math.max(0, Math.round(Number(card?.level) || 0));
-        return level > 0 ? `LV ${level}` : String(card?.kind || 'CARD').toUpperCase();
-    }
-
-    function getAssetCardEffectText(card) {
+        const name = catalogCard?.name || card?.name || card?.cardId || 'EMPTY';
+        const rarity = String(card?.rarity || catalogCard?.rarity || 'bronze').toLowerCase();
+        const kind = String(card?.kind || catalogCard?.kind || 'card').toLowerCase();
+        const system = String(card?.system || catalogCard?.system || '').toLowerCase();
+        const level = Math.max(0, Math.round(Number(card?.level ?? catalogCard?.level) || 0));
+        const levelLabel = level > 0 ? `LV ${level}` : kind.toUpperCase();
         const explicit = typeof card?.effectText === 'string' ? card.effectText.trim() : '';
-        if (explicit) return explicit;
-        const modifiers = Array.isArray(card?.modifiers) ? card.modifiers : [];
-        const parts = modifiers.map((modifier) => {
+        const modifiers = Array.isArray(card?.modifiers || catalogCard?.modifiers) ? (card.modifiers || catalogCard.modifiers) : [];
+        const modifierParts = modifiers.map((modifier) => {
             const type = String(modifier?.type || modifier?.kind || '').toLowerCase();
             const value = Number(modifier?.value) || 0;
             const signed = `${value > 0 ? '+' : ''}${value}`;
@@ -79,20 +75,49 @@
             if (type === 'skill_level_bonus') return 'Texas 技能等级 +1';
             return '';
         }).filter(Boolean);
-        if (parts.length) return parts.slice(0, 2).join(' / ');
-        return String(card?.skillKey || '').replace(/_/g, ' ') || String(card?.kind || 'ACTIVE CARD');
-    }
-
-    function buildAssetCardTagsMarkup(card) {
+        const effectText = explicit
+            || (modifierParts.length ? modifierParts.slice(0, 2).join(' / ') : '')
+            || String(card?.skillKey || catalogCard?.skillKey || '').replace(/_/g, ' ')
+            || kind.replace(/_/g, ' ')
+            || 'ACTIVE CARD';
         const baseTags = Array.isArray(card?.statusTags) && card.statusTags.length
             ? card.statusTags
             : [
-                card?.rarity,
-                card?.system,
-                ...(Array.isArray(card?.gameTags) ? card.gameTags : []),
-                ...(Array.isArray(card?.slotTags) ? card.slotTags : [])
+                rarity,
+                system,
+                ...(Array.isArray(card?.gameTags || catalogCard?.gameTags) ? (card.gameTags || catalogCard.gameTags) : []),
+                ...(Array.isArray(card?.slotTags || catalogCard?.slotTags) ? (card.slotTags || catalogCard.slotTags) : [])
             ];
         const tags = baseTags.map((tag) => typeof tag === 'string' ? tag.trim() : '').filter(Boolean).slice(0, 5);
+        return {
+            name,
+            rarity,
+            kind,
+            system,
+            level,
+            levelLabel,
+            effectText,
+            tags,
+            glyph: String(system || kind || 'A').slice(0, 1).toUpperCase(),
+            typeLabel: `${String(rarity || 'bronze').toUpperCase()} · ${String(kind || 'card').toUpperCase()}`,
+            effective: card?.effective !== false
+        };
+    }
+
+    function getAssetCardDisplayName(card) {
+        return buildAssetCardViewModel(card)?.name || 'EMPTY';
+    }
+
+    function getAssetCardLevelLabel(card) {
+        return buildAssetCardViewModel(card)?.levelLabel || 'CARD';
+    }
+
+    function getAssetCardEffectText(card) {
+        return buildAssetCardViewModel(card)?.effectText || 'ACTIVE CARD';
+    }
+
+    function buildAssetCardTagsMarkup(card) {
+        const tags = buildAssetCardViewModel(card)?.tags || [];
         return tags.map((tag) => `<span>${escapePartyHtml(tag.toUpperCase())}</span>`).join('');
     }
 
@@ -476,18 +501,18 @@
             slotIndex != null ? `data-slot-index="${slotIndex}"` : '',
             confirmDestroy ? 'data-confirm-destroy="true"' : ''
         ].filter(Boolean).join(' ');
-        const glyph = String(card.system || card.kind || 'A').slice(0, 1).toUpperCase();
-        const tags = buildAssetCardTagsMarkup(card);
+        const view = buildAssetCardViewModel(card);
+        const tags = view.tags.map((tag) => `<span>${escapePartyHtml(tag.toUpperCase())}</span>`).join('');
         return `
-            <button class="cmd-card rarity-${escapePartyHtml(String(card.rarity || 'bronze').toLowerCase())}${compact ? ' is-compact' : ''}" type="button" ${attrs}>
+            <button class="cmd-card rarity-${escapePartyHtml(view.rarity)}${compact ? ' is-compact' : ''}${view.effective ? '' : ' is-ineffective'}" type="button" ${attrs}>
                 <div class="cmd-card-accent-line"></div>
-                <div class="bg-svg">${escapePartyHtml(glyph)}</div>
-                <span class="cmd-type">${escapePartyHtml(String(card.rarity || 'bronze').toUpperCase())} · ${escapePartyHtml(String(card.kind || 'card').toUpperCase())}</span>
+                <div class="bg-svg">${escapePartyHtml(view.glyph)}</div>
+                <span class="cmd-type">${escapePartyHtml(view.typeLabel)}</span>
                 <div class="cmd-name-row">
-                    <span class="cmd-name">${escapePartyHtml(getAssetCardDisplayName(card))}</span>
-                    <span class="cmd-level">${escapePartyHtml(getAssetCardLevelLabel(card))}</span>
+                    <span class="cmd-name">${escapePartyHtml(view.name)}</span>
+                    <span class="cmd-level">${escapePartyHtml(view.levelLabel)}</span>
                 </div>
-                <div class="cmd-desc">${escapePartyHtml(getAssetCardEffectText(card))}</div>
+                <div class="cmd-desc">${escapePartyHtml(view.effectText)}</div>
                 ${tags ? `<div class="cmd-tags">${tags}</div>` : ''}
             </button>
         `;
@@ -504,11 +529,12 @@
             const voidCopy = slotType === 'void';
             return `<div class="mini-slot empty"><span class="type">${voidCopy ? 'EMPTY VOID' : 'EMPTY'}</span><div class="name-row"><span class="name">${voidCopy ? '未装配零号参数' : '未装配指令'}</span></div></div>`;
         }
+        const view = buildAssetCardViewModel(card);
         const accent = slotType === 'void' ? 'var(--void)' : '';
         return `
-            <div class="mini-slot filled rarity-${escapePartyHtml(String(card.rarity || 'bronze').toLowerCase())}${canReplace ? ' is-replaceable' : ''}"${accent ? ` style="--c:${accent};"` : ''} data-asset-action="${canReplace ? 'replace-card' : ''}" data-slot-type="${escapePartyHtml(slotType)}" data-slot-index="${index}"${confirmDestroy ? ' data-confirm-destroy="true"' : ''}>
-                <span class="type">${escapePartyHtml(String(card.kind || card.system || 'ASSET').toUpperCase())}</span>
-                <div class="name-row"><span class="name">${escapePartyHtml(getAssetCardDisplayName(card))}</span><span class="lvl">${escapePartyHtml(getAssetCardLevelLabel(card))}</span></div>
+            <div class="mini-slot filled rarity-${escapePartyHtml(view.rarity)}${canReplace ? ' is-replaceable' : ''}${view.effective ? '' : ' is-ineffective'}"${accent ? ` style="--c:${accent};"` : ''} data-asset-action="${canReplace ? 'replace-card' : ''}" data-slot-type="${escapePartyHtml(slotType)}" data-slot-index="${index}"${confirmDestroy ? ' data-confirm-destroy="true"' : ''}>
+                <span class="type">${escapePartyHtml(String(view.kind || view.system || 'ASSET').toUpperCase())}</span>
+                <div class="name-row"><span class="name">${escapePartyHtml(view.name)}</span><span class="lvl">${escapePartyHtml(view.levelLabel)}</span></div>
             </div>
         `;
     }
