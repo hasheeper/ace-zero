@@ -294,6 +294,7 @@
       // UI 容器
       this.containers = {
         skillPanel: null,     // 技能按钮容器
+        manaModule: null,      // mana 池模块容器
         manaBar: null,        // mana 条填充元素
         manaText: null,       // mana 文字
         backlashIndicator: null,
@@ -421,7 +422,11 @@
             assetDeckAdapter: window.AssetDeckAdapter || null,
             heroId: heroId,
             onTraitManaGain: function(ownerId, amount) {
-              if (amount > 0) self.skillSystem.regenMana(ownerId, amount);
+              if (amount <= 0) return;
+              var pool = typeof self.skillSystem.getManaPool === 'function'
+                ? self.skillSystem.getManaPool(ownerId)
+                : null;
+              self.skillSystem.regenMana(pool && pool.id ? pool.id : ownerId, amount);
             }
           });
           this.moz.combatFormula = cf;
@@ -588,41 +593,45 @@
     updateDisplay() {
       if (!this.skillSystem) return;
       const ss = this.skillSystem.getState();
-      const mana = this.skillSystem.getMana(this.humanPlayerId);
+      const manaPools = typeof this.skillSystem.getManaPoolsForOwner === 'function'
+        ? this.skillSystem.getManaPoolsForOwner(this.humanPlayerId)
+        : [];
+      const mana = manaPools.length
+        ? manaPools.reduce(function(acc, pool) {
+          acc.current += Number(pool.current || 0);
+          acc.max += Number(pool.max || 0);
+          return acc;
+        }, { current: 0, max: 0 })
+        : this.skillSystem.getManaPool(this.humanPlayerId);
 
-      // Mana 条
-      if (this.containers.manaBar) {
+      var summaryManaEntries = Array.isArray(this._getAssetSummaryGameplay().mana)
+        ? this._getAssetSummaryGameplay().mana
+        : [];
+      var summaryManaText = summaryManaEntries.map(function(entry) {
+        var flat = Number(entry && entry.flat || 0);
+        if (!flat) return '';
+        return (entry.scope === 'owner' && entry.key ? 'Owner ' + entry.key + ' ' : '') + (flat > 0 ? '+' : '') + flat + ' MP';
+      }).filter(Boolean).join(', ');
+      var renderPools = manaPools.length ? manaPools : [mana];
+      if (this.containers.manaModule && renderPools.length) {
+        this.containers.manaModule.innerHTML = renderPools.map(function(pool, index) {
+          var current = Math.max(0, Math.round(Number(pool.current || 0)));
+          var max = Math.max(0, Math.round(Number(pool.max || 0)));
+          var pct = max > 0 ? Math.max(0, Math.min(100, (current / max) * 100)) : 0;
+          var tone = pct > 50 ? 'high' : (pct > 20 ? 'medium' : 'low');
+          var rawLabel = pool.casterName || pool.casterRoleId || pool.casterSlot || (renderPools.length > 1 ? 'POOL ' + (index + 1) : 'MP');
+          var label = String(rawLabel).replace(/[<>&"]/g, function(ch) {
+            return ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[ch];
+          });
+          return '<div class="mp-pool-row">' +
+            '<div class="mp-pool-meta"><span class="mp-pool-label">' + label + '</span><span class="mp-pool-value">' + current + '/' + max + '</span></div>' +
+            '<div class="mp-slot"><div class="mp-fluid mana-fill ' + tone + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+          '</div>';
+        }).join('');
+        this.containers.manaModule.title = summaryManaText ? 'Asset mana modifiers: ' + summaryManaText : '';
+      } else if (this.containers.manaBar) {
         const pct = mana.max > 0 ? (mana.current / mana.max) * 100 : 0;
         this.containers.manaBar.style.width = pct + '%';
-        if (!this._manaBarBase) {
-          this._manaBarBase = this.containers.manaBar.classList.contains('mp-fluid') ? 'mp-fluid mana-fill' : 'mana-fill';
-        }
-        var baseClass = this._manaBarBase;
-        if (pct > 50) {
-          this.containers.manaBar.className = baseClass + ' high';
-        } else if (pct > 20) {
-          this.containers.manaBar.className = baseClass + ' medium';
-        } else {
-          this.containers.manaBar.className = baseClass + ' low';
-        }
-      }
-
-      if (this.containers.manaText) {
-        var manaAsset = mana.assetMax && Number(mana.assetMax.flatDelta || 0);
-        var summaryManaEntries = Array.isArray(this._getAssetSummaryGameplay().mana)
-          ? this._getAssetSummaryGameplay().mana
-          : [];
-        var summaryManaText = summaryManaEntries.map(function(entry) {
-          var flat = Number(entry && entry.flat || 0);
-          if (!flat) return '';
-          return (entry.scope === 'owner' && entry.key ? 'Owner ' + entry.key + ' ' : '') + (flat > 0 ? '+' : '') + flat + ' MP';
-        }).filter(Boolean).join(', ');
-        this.containers.manaText.textContent = 'MP ' + mana.current + '/' + mana.max;
-        this.containers.manaText.title = summaryManaText
-          ? 'Asset mana modifiers: ' + summaryManaText
-          : manaAsset
-          ? 'Base MP ' + (mana.baseMax || (mana.max - manaAsset)) + ' + Asset ' + manaAsset
-          : '';
       }
 
       // 反噬指示器
@@ -913,7 +922,7 @@
         caster: caster,
         level: skill.level,
         system: skill.system,
-        manaRemaining: this.skillSystem.getMana(this.humanPlayerId).current
+        manaRemaining: this._getSkillManaRemaining(skill)
       });
     }
 
@@ -1017,7 +1026,7 @@
         system: skill.system,
         target: target.name,
         targetId: target.id,
-        manaRemaining: this.skillSystem.getMana(this.humanPlayerId).current
+        manaRemaining: this._getSkillManaRemaining(skill)
       });
 
       this.updateDisplay();
@@ -1416,6 +1425,14 @@
         MATCH_SCOPED_USED: '本局已发动过'
       };
       if (this.onMessage) this.onMessage(result.message || reasons[result.reason] || '技能不可用');
+    }
+
+    _getSkillManaRemaining(skill) {
+      if (!this.skillSystem || !skill) return 0;
+      var pool = typeof this.skillSystem.getManaPool === 'function' && skill.manaPoolId
+        ? this.skillSystem.getManaPool(skill.manaPoolId)
+        : this.skillSystem.getManaPool(this.humanPlayerId);
+      return pool ? pool.current : 0;
     }
 
     _getRuntimeLedger() {
@@ -1989,7 +2006,7 @@
               targetId: target.id,
               entrySize: state.entrySize,
               direction: state.direction,
-              manaRemaining: self.skillSystem.getMana(self.humanPlayerId).current
+              manaRemaining: self._getSkillManaRemaining(skill)
             });
             self.updateDisplay();
             self.updateButtons();
@@ -3444,7 +3461,7 @@
         infoValue: result.infoValue,
         noise: result.noise,
         effectiveInfo: result.effectiveInfo,
-        manaRemaining: this.skillSystem.getMana(this.humanPlayerId).current
+        manaRemaining: this._getSkillManaRemaining(skill)
       });
     }
 

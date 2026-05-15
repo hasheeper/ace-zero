@@ -964,8 +964,10 @@
 
   function getPlayerManaPool(runtimeApi, ownerId) {
     var skillSystem = getSkillSystem(runtimeApi);
-    if (!skillSystem || !skillSystem.manaPools || typeof skillSystem.manaPools.get !== 'function') return null;
-    return skillSystem.manaPools.get(ownerId) || null;
+    if (!skillSystem) return null;
+    if (typeof skillSystem.getManaPool === 'function') return skillSystem.getManaPool(ownerId) || null;
+    if (typeof skillSystem.getMana === 'function') return skillSystem.getMana(ownerId) || null;
+    return null;
   }
 
   function getPlayerSkills(runtimeApi, ownerId) {
@@ -2874,7 +2876,10 @@
     var previous = Math.max(0, Number(pool.current || 0));
     pool.current = Math.max(0, Math.min(pool.max, Math.round(nextValue)));
     skillSystem.emit('mana:changed', {
-      ownerId: ownerId,
+      ownerId: pool.ownerId != null ? pool.ownerId : ownerId,
+      manaPoolId: pool.id || null,
+      casterRoleId: pool.casterRoleId || null,
+      casterSlot: pool.casterSlot || null,
       previous: previous,
       current: pool.current,
       max: pool.max,

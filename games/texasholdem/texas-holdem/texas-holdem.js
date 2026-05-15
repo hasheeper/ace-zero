@@ -101,8 +101,8 @@
   }
 
   function getConfigAssetDeck(config) {
-    return (config && config.assetDeck)
-      || (config && config.world && config.world.assetDeck)
+    return (config && config.world && config.world.assetDeck)
+      || (config && config.assetDeck)
       || null;
   }
 
@@ -144,6 +144,9 @@
   function shouldDisableTutorialMoz() {
     var script = getTutorialScript();
     return !!(script && script.disableMoz);
+  }
+  function getPreloadedGameConfig() {
+    return window.__ACEZERO_GAME_CONFIG__ || null;
   }
   function shouldDisableTutorialAISkills() {
     var script = getTutorialScript();
@@ -1021,6 +1024,7 @@
 
   skillUI.init(skillSystem, moz, {
     skillPanel: document.getElementById('skill-panel'),
+    manaModule: document.querySelector('.mp-module'),
     manaBar: document.getElementById('mana-bar'),
     manaText: document.getElementById('mana-text'),
     backlashIndicator: document.getElementById('backlash-indicator'),
@@ -1672,6 +1676,7 @@
 
   // 记录 hero 每手开始时的筹码，用于计算 funds_delta
   let _heroStartChips = 0;
+  let _heroStartManaPools = [];
 
   // ========== 工具函数 ==========
   /**
@@ -1688,6 +1693,26 @@
       if (p.seat) map.seats[p.seat] = p.id;
     });
     return map;
+  }
+
+  function collectHeroManaPools() {
+    var heroPlayer = getHeroPlayer();
+    var heroId = heroPlayer ? heroPlayer.id : getHeroIndex();
+    var pools = skillSystem && typeof skillSystem.getManaPoolsForOwner === 'function'
+      ? skillSystem.getManaPoolsForOwner(heroId)
+      : [];
+    if (!pools.length && skillSystem) pools = [skillSystem.getMana(heroId)];
+    return pools.filter(Boolean).map(function(pool) {
+      return {
+        id: pool.id || null,
+        ownerId: pool.ownerId != null ? pool.ownerId : heroId,
+        casterName: pool.casterName || pool.casterRoleId || pool.casterSlot || 'MP',
+        casterRoleId: pool.casterRoleId || null,
+        casterSlot: pool.casterSlot || null,
+        current: Math.max(0, Math.round(Number(pool.current || 0))),
+        max: Math.max(0, Math.round(Number(pool.max || 0)))
+      };
+    });
   }
 
   function getHeroPlayer() {
@@ -3952,6 +3977,7 @@
     // 快照 hero 开始筹码（用于 funds_delta 计算）
     var heroPlayer = gameState.players.find(function(p) { return p.type === 'human'; });
     _heroStartChips = heroPlayer ? heroPlayer.chips : 0;
+    _heroStartManaPools = collectHeroManaPools();
 
     // 诊断日志：玩家排列
     console.log('[GAME] 玩家列表:', gameState.players.map(function(p, i) {
@@ -4751,8 +4777,20 @@
     gameLogger.entries.forEach(function (e) {
       if (e.pot > maxPot) maxPot = e.pot;
     });
-    // 收集 mana 信息（使用真实 hero ID）
-    var heroMana = skillSystem.getMana(getHeroIndex());
+    // 收集 mana 信息（按主/副手独立池）
+    var heroManaPools = collectHeroManaPools();
+    var heroMana = heroManaPools.length ? heroManaPools[0] : skillSystem.getMana(getHeroIndex());
+    var beforeByPool = {};
+    _heroStartManaPools.forEach(function(pool) {
+      if (pool && pool.id) beforeByPool[pool.id] = pool;
+    });
+    var heroManaRoster = heroManaPools.map(function(pool) {
+      var before = beforeByPool[pool.id] || null;
+      return Object.assign({}, pool, {
+        before: before ? before.current : pool.current,
+        delta: before ? pool.current - before.current : 0
+      });
+    });
 
     // 计算 hero 资金变化
     var heroP = gameState.players.find(function(p) { return p.type === 'human'; });
@@ -4786,6 +4824,7 @@
       bigBlind: getBigBlind(),
       maxPot: maxPot,
       heroMana: heroMana,
+      heroManaPools: heroManaRoster,
       fundsDelta: fundsDelta,
       fundsUp: fundsDelta > 0 ? fundsDelta : 0,
       fundsDown: fundsDelta < 0 ? -fundsDelta : 0
@@ -5106,6 +5145,12 @@
 
   // ========== 配置加载 ==========
   async function loadConfig() {
+    var preloadedConfig = getPreloadedGameConfig();
+    if (!_externalConfigApplied && preloadedConfig) {
+      await applyExternalConfig(preloadedConfig, 'preloaded');
+      return;
+    }
+
     // 如果外部配置（postMessage）已经到达，跳过静态文件加载
     if (_externalConfigApplied) {
       console.log('[CONFIG] 外部配置已存在，跳过 game-config.json 加载');
@@ -5172,6 +5217,7 @@
     }
     refreshTutorialController();
   }
+  window.__acezeroApplyGameConfig = applyExternalConfig;
 
   // ========== postMessage 监听 ==========
   // 接收来自主引擎 (index.html) 的配置数据

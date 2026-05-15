@@ -5,8 +5,8 @@
   "heroChips": 4000,
 
   "hero": {
-    "vanguard": { "name": "RINO", "level": 5, "trait": "crimson_crown" },
-    "rearguard": { "name": "RINO_REAR", "level": 4, "trait": "obsessive_love" },
+    "vanguard": { "name": "RINO", "level": 5, "trait": "crimson_crown", "mana": 50, "maxMana": 100 },
+    "rearguard": { "name": "SIA", "level": 2, "trait": "obsessive_love", "mana": 20, "maxMana": 60 },
     "attrs": { "moirai": 80, "chaos": 20, "psyche": 30, "void": 0 },
     "vanguardSkills": [
       { "key": "grand_wish", "level": 4 },
@@ -14,7 +14,9 @@
       { "key": "analysis", "level": 3 },
       { "key": "premonition", "level": 2 }
     ],
-    "rearguardSkills": [],
+    "rearguardSkills": [
+      { "key": "hex", "level": 1 }
+    ],
     "mana": 100,
     "maxMana": 100,
     "mental": { "discipline": 62, "composureMax": 100, "resistProbe": 14, "resistPresence": 12, "resistTaunt": 12 }
@@ -100,7 +102,7 @@
         "rarity": "silver",
         "kind": "numeric",
         "targetTags": [
-          "team"
+          "SIA"
         ],
         "gameTags": [
           "any"
@@ -190,7 +192,7 @@
         "skillKey": "insulation",
         "level": 3,
         "targetTags": [
-          "team"
+          "SIA"
         ],
         "gameTags": [
           "texas-holdem"

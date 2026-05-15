@@ -428,11 +428,12 @@
       //          active, description, target?, trigger?, cooldown?, currentCooldown? }
       this.skills = new Map();
 
-      // 每个实体的 mana 池
-      // key: ownerId, value: { current, max, regen }
+      // 每个角色的 mana 池。ownerId 仍表示牌桌玩家，manaPoolId 表示主/副手资源池。
+      // key: manaPoolId, value: { ownerId, casterSlot, casterRoleId, current, max, regen }
       this.manaPools = new Map();
+      this.ownerManaPools = new Map();
 
-      // 反噬状态（按玩家独立计数；backlash 保留给 hero 面板读取）
+      // 反噬状态（按 manaPoolId 独立计数；backlash 保留给 hero 面板读取）
       this.backlash = { active: false, counter: 0 };
       this.backlashStates = new Map();
 
@@ -465,13 +466,13 @@
       this._hooks = {};
 
       this.on('mana:changed', (payload) => {
-        if (!payload || payload.ownerId == null) return;
+        if (!payload || (payload.ownerId == null && payload.manaPoolId == null)) return;
         const current = Number(payload.current);
         if (!Number.isFinite(current)) return;
         const previous = Number.isFinite(Number(payload.previous))
           ? Number(payload.previous)
           : current;
-        this._maybeTriggerBacklash(payload.ownerId, previous, current, payload.reason || 'mana_changed');
+        this._maybeTriggerBacklash(payload.manaPoolId != null ? payload.manaPoolId : payload.ownerId, previous, current, payload.reason || 'mana_changed');
       });
 
       // 统一运行时总线（由主引擎注入）
@@ -567,15 +568,17 @@
       for (var i = 0; i < events.length; i++) {
         var event = events[i];
         if (!event) continue;
+        var eventPoolId = event.manaPoolId != null ? event.manaPoolId : event.ownerId;
         if (event.trigger === 'street_start_mana_gain') {
-          var before = this.getMana(event.ownerId).current;
-          this.regenMana(event.ownerId, Math.max(0, Number(event.value || 0)), 'asset_passive:street_start_mana_gain');
-          var after = this.getMana(event.ownerId).current;
+          var before = this.getMana(eventPoolId).current;
+          this.regenMana(eventPoolId, Math.max(0, Number(event.value || 0)), 'asset_passive:street_start_mana_gain');
+          var after = this.getMana(eventPoolId).current;
           event.actualValue = Math.max(0, after - before);
           this._emitAssetPassiveTriggered(event);
         } else if (event.trigger === 'once_per_hand_fortune_flat') {
           var force = this._queuePendingForce({
             ownerId: event.ownerId,
+            manaPoolId: this._resolveManaPoolId(eventPoolId),
             type: 'fortune',
             system: 'moirai',
             skillKey: 'asset_passive',
@@ -627,6 +630,43 @@
       return entries.filter(function(entry) {
         return String(entry && entry.skillKey || '').trim().toLowerCase() === normalizedKey;
       });
+    }
+
+    _makeManaPoolId(ownerId, slot, seat) {
+      var cleanSlot = String(slot || 'default').trim().toLowerCase() || 'default';
+      if (seat) return 'seat:' + String(seat) + ':' + cleanSlot;
+      if (cleanSlot === 'vanguard' || cleanSlot === 'rearguard') return 'hero:' + cleanSlot;
+      return 'owner:' + String(ownerId) + ':' + cleanSlot;
+    }
+
+    _addOwnerManaPool(ownerId, poolId, isDefault) {
+      if (ownerId == null || !poolId) return;
+      var key = String(ownerId);
+      var list = this.ownerManaPools.get(key) || [];
+      if (list.indexOf(poolId) < 0) list.push(poolId);
+      if (isDefault && list[0] !== poolId) {
+        list = [poolId].concat(list.filter(function(id) { return id !== poolId; }));
+      }
+      this.ownerManaPools.set(key, list);
+    }
+
+    _resolveManaPoolId(ownerOrPoolId) {
+      if (ownerOrPoolId == null) return null;
+      var direct = String(ownerOrPoolId);
+      if (this.manaPools.has(direct)) return direct;
+      if (this.manaPools.has(ownerOrPoolId)) return ownerOrPoolId;
+      var list = this.ownerManaPools.get(String(ownerOrPoolId));
+      return list && list.length ? list[0] : null;
+    }
+
+    _getSkillManaPoolId(skill) {
+      if (!skill) return null;
+      return this._resolveManaPoolId(skill.manaPoolId != null ? skill.manaPoolId : skill.ownerId);
+    }
+
+    _getSkillManaPool(skill) {
+      var poolId = this._getSkillManaPoolId(skill);
+      return poolId ? this.manaPools.get(poolId) : null;
     }
 
     hasStatusMark(ownerId, key) {
@@ -884,7 +924,7 @@
         owner: resolvedOwner,
         ctx: gameContext,
         pendingForces: this.pendingForces,
-        mana: this.getMana(skill.ownerId),
+        mana: this._getSkillManaPool(skill),
         options: options
       }, {
         selectSkillTarget: this._defaultSelectSkillTarget.bind(this),
@@ -1120,6 +1160,7 @@
         reason: reason,
         message: this._getSkillAvailabilityMessage(reason, extra),
         skill: skill && skill.skillKey,
+        manaPoolId: skill ? this._getSkillManaPoolId(skill) : null,
         cooldown: skill ? Math.max(0, Number(skill.currentCooldown || 0)) : 0,
         sealed: skill ? Math.max(0, Number(skill._sealed || 0)) : 0,
         cost: 0,
@@ -1134,6 +1175,7 @@
       for (var i = 0; i < this.pendingForces.length; i++) {
         var force = this.pendingForces[i];
         if (!force || force.ownerId !== skill.ownerId) continue;
+        if (force._assetPassive) continue;
         if (force.type === skill.effect) return true;
         if (skill.effect === EFFECT.CURSE && force.type === 'curse') return true;
       }
@@ -1199,7 +1241,7 @@
         }
       }
 
-      const ownerBacklash = this._getBacklashState(skill.ownerId);
+      const ownerBacklash = this._getBacklashState(this._getSkillManaPoolId(skill));
       if (ownerBacklash.active) {
         return this._getSkillAvailabilityFailure(skill, 'BACKLASH_ACTIVE', { counter: ownerBacklash.counter, cost: cost, flags: flags });
       }
@@ -1219,7 +1261,7 @@
         return this._getSkillAvailabilityFailure(skill, 'PENDING_FORCE', { cost: cost, flags: flags });
       }
       if (cost > 0) {
-        var manaPool = this.manaPools.get(skill.ownerId);
+        var manaPool = this._getSkillManaPool(skill);
         if (!manaPool || manaPool.current < cost) {
           return this._getSkillAvailabilityFailure(skill, 'INSUFFICIENT_MANA', { cost: cost, flags: flags });
         }
@@ -1231,6 +1273,7 @@
         reason: null,
         message: '',
         skill: skill.skillKey,
+        manaPoolId: this._getSkillManaPoolId(skill),
         cooldown: Math.max(0, Number(skill.currentCooldown || 0)),
         sealed: Math.max(0, Number(skill._sealed || 0)),
         cost: cost,
@@ -1289,6 +1332,7 @@
     registerFromConfig(config, playerIdMap) {
       this.skills.clear();
       this.manaPools.clear();
+      this.ownerManaPools.clear();
       this.setAssetModifiers(config && config.assetModifiers ? config.assetModifiers : null);
 
       // 解析玩家ID映射
@@ -1304,25 +1348,53 @@
         const h = config.hero;
         const level = this._getCharLevel(h);
         const name = this._getCharName(h);
-        const manaConfig = this._buildManaConfig(h, level);
 
         // v5 格式：区分主手/副手技能
         const vName = (h.vanguard && h.vanguard.name) || 'KAZU';
         const rName = (h.rearguard && h.rearguard.name) || null;
+        const vLevel = h.vanguard && h.vanguard.level != null ? h.vanguard.level : level;
+        const rLevel = h.rearguard && h.rearguard.level != null ? h.rearguard.level : 0;
 
         if (h.vanguardSkills || h.rearguardSkills) {
-          // 注册 mana 池（共享一个池）
-          this._registerManaPool(heroId, manaConfig);
+          const vPoolId = this._makeManaPoolId(heroId, 'vanguard');
+          const vManaConfig = this._buildManaConfig(h.vanguard || h, vLevel, h);
+          this._registerManaPool(vPoolId, vManaConfig, {
+            ownerId: heroId,
+            ownerName: name,
+            casterName: vName,
+            casterSlot: 'vanguard',
+            casterRoleId: vName,
+            isDefault: true
+          });
           // 主手技能
           if (h.vanguardSkills) {
-            this._registerSkillList(heroId, name, 'human', h.vanguardSkills, vName);
+            this._registerSkillList(heroId, name, 'human', h.vanguardSkills, vName, {
+              casterSlot: 'vanguard',
+              casterRoleId: vName,
+              manaPoolId: vPoolId
+            });
           }
           // 副手技能
           if (h.rearguardSkills && rName) {
-            this._registerSkillList(heroId, name, 'human', h.rearguardSkills, rName);
+            const rPoolId = this._makeManaPoolId(heroId, 'rearguard');
+            const rManaConfig = this._buildManaConfig(h.rearguard || {}, rLevel, h);
+            this._registerManaPool(rPoolId, rManaConfig, {
+              ownerId: heroId,
+              ownerName: name,
+              casterName: rName,
+              casterSlot: 'rearguard',
+              casterRoleId: rName,
+              isDefault: false
+            });
+            this._registerSkillList(heroId, name, 'human', h.rearguardSkills, rName, {
+              casterSlot: 'rearguard',
+              casterRoleId: rName,
+              manaPoolId: rPoolId
+            });
           }
         } else {
           // 兼容旧格式：单一 skills 数组
+          const manaConfig = this._buildManaConfig(h, level);
           this._registerEntity(heroId, name, 'human', h.skills || {}, manaConfig);
         }
       }
@@ -1339,7 +1411,10 @@
           const level = this._getCharLevel(s);
           const name = this._getCharName(s) || seat;
           const manaConfig = this._buildManaConfig(s, level);
-          this._registerEntity(npcId, name, 'ai', s.skills || {}, manaConfig);
+          this._registerEntity(npcId, name, 'ai', s.skills || {}, manaConfig, {
+            seat: seat,
+            casterSlot: 'default'
+          });
           fallbackIndex++;
         }
       }
@@ -1368,14 +1443,16 @@
       return null;
     }
 
-    _buildManaConfig(char, level) {
+    _buildManaConfig(char, level, legacyChar) {
       const manaTemplate = MANA_BY_LEVEL[Math.min(5, level)] || MANA_BY_LEVEL[0];
+      const legacy = legacyChar || null;
       const manaConfig = {
-        max: (char && char.maxMana != null) ? char.maxMana : manaTemplate.max,
-        regen: (char && char.manaRegen != null) ? char.manaRegen : manaTemplate.regen
+        max: (char && char.maxMana != null) ? char.maxMana : ((legacy && legacy.maxMana != null) ? legacy.maxMana : manaTemplate.max),
+        regen: (char && char.manaRegen != null) ? char.manaRegen : ((legacy && legacy.manaRegen != null) ? legacy.manaRegen : manaTemplate.regen)
       };
-      manaConfig.current = (char && char.mana != null)
-        ? Math.min(char.mana, manaConfig.max)
+      const rawCurrent = (char && char.mana != null) ? char.mana : ((legacy && legacy.mana != null) ? legacy.mana : null);
+      manaConfig.current = (rawCurrent != null)
+        ? Math.min(rawCurrent, manaConfig.max)
         : manaConfig.max;
       return manaConfig;
     }
@@ -1393,25 +1470,59 @@
      * 注册 Mana 池（不注册技能）
      * @private
      */
-    _registerManaPool(ownerId, manaConfig) {
+    _registerManaPool(poolId, manaConfig, meta) {
       if (manaConfig) {
+        var finalMeta = meta || {};
         var resolvedMana = this.assetDeckAdapter && typeof this.assetDeckAdapter.resolveManaMax === 'function'
-          ? this.assetDeckAdapter.resolveManaMax(this.assetModifiers, ownerId, manaConfig.max)
+          ? this.assetDeckAdapter.resolveManaMax(this.assetModifiers, poolId, manaConfig.max, {
+            ownerId: finalMeta.ownerId,
+            casterSlot: finalMeta.casterSlot || 'default',
+            casterRoleId: finalMeta.casterRoleId || finalMeta.casterName || null,
+            teamTags: Number(manaConfig.max || 0) > 0
+              ? ['team', finalMeta.casterSlot, finalMeta.casterRoleId, finalMeta.casterName, finalMeta.ownerName].filter(Boolean)
+              : [finalMeta.casterSlot, finalMeta.casterRoleId, finalMeta.casterName, finalMeta.ownerName].filter(Boolean)
+          })
           : null;
         var maxMana = resolvedMana && resolvedMana.max != null ? resolvedMana.max : manaConfig.max;
+        var sourceTargetKeys = [
+          finalMeta.casterRoleId,
+          finalMeta.casterName,
+          finalMeta.casterSlot,
+          finalMeta.ownerName
+        ].map(function(item) { return String(item == null ? '' : item).trim().toLowerCase(); }).filter(Boolean);
+        var hasExplicitManaTarget = !!(resolvedMana && Array.isArray(resolvedMana.sources) && resolvedMana.sources.some(function(source) {
+          if (!source) return false;
+          if (source.ownerId != null || source.owner) return true;
+          var tags = Array.isArray(source.targetTags) ? source.targetTags : [];
+          return tags.some(function(tag) {
+            tag = String(tag || '').trim().toLowerCase();
+            return tag && sourceTargetKeys.indexOf(tag) >= 0;
+          });
+        }));
+        if (Number(manaConfig.max || 0) <= 0 && resolvedMana && Number(resolvedMana.baseMax || 0) <= 0 && !hasExplicitManaTarget) {
+          maxMana = 0;
+          if (resolvedMana.flatDelta) resolvedMana = Object.assign({}, resolvedMana, { max: 0, flatDelta: 0 });
+        }
         var assetMaxDelta = resolvedMana && Number(resolvedMana.flatDelta || 0) > 0
           ? Number(resolvedMana.flatDelta || 0)
           : 0;
         var currentMana = (manaConfig.current != null)
           ? Number(manaConfig.current || 0) + assetMaxDelta
           : maxMana;
-        this.manaPools.set(ownerId, {
+        this.manaPools.set(poolId, {
+          id: poolId,
+          ownerId: finalMeta.ownerId,
+          ownerName: finalMeta.ownerName || null,
+          casterName: finalMeta.casterName || finalMeta.ownerName || null,
+          casterSlot: finalMeta.casterSlot || 'default',
+          casterRoleId: finalMeta.casterRoleId || finalMeta.casterName || null,
           current: Math.min(currentMana, maxMana),
           max: maxMana,
           regen: (manaConfig.regen != null) ? manaConfig.regen : 1,
           baseMax: manaConfig.max,
           assetMax: resolvedMana || null
         });
+        this._addOwnerManaPool(finalMeta.ownerId != null ? finalMeta.ownerId : poolId, poolId, finalMeta.isDefault !== false);
       }
     }
 
@@ -1419,11 +1530,11 @@
      * 注册一组技能（带 casterName）
      * @private
      */
-    _registerSkillList(ownerId, ownerName, ownerType, skillList, casterName) {
+    _registerSkillList(ownerId, ownerName, ownerType, skillList, casterName, meta) {
       const entries = this._normalizeSkillEntries(skillList);
 
       for (const entry of entries) {
-        this._registerSingleSkill(ownerId, ownerName, ownerType, entry.key, casterName, entry);
+        this._registerSingleSkill(ownerId, ownerName, ownerType, entry.key, casterName, entry, meta || {});
       }
     }
 
@@ -1431,15 +1542,28 @@
      * 注册单个实体的所有技能（兼容旧格式）
      * @private
      */
-    _registerEntity(ownerId, ownerName, ownerType, skillList, manaConfig) {
+    _registerEntity(ownerId, ownerName, ownerType, skillList, manaConfig, meta) {
       // Mana 池
-      this._registerManaPool(ownerId, manaConfig);
+      var finalMeta = meta || {};
+      var poolId = finalMeta.manaPoolId || this._makeManaPoolId(ownerId, finalMeta.casterSlot || 'default', finalMeta.seat || null);
+      this._registerManaPool(poolId, manaConfig, {
+        ownerId: ownerId,
+        ownerName: ownerName,
+        casterName: ownerName,
+        casterSlot: finalMeta.casterSlot || 'default',
+        casterRoleId: ownerName,
+        isDefault: true
+      });
 
       // 展开技能，支持 ["grand_wish"]、{ grand_wish: 2 }、[{ key, level }]
       const entries = this._normalizeSkillEntries(skillList);
 
       for (const entry of entries) {
-        this._registerSingleSkill(ownerId, ownerName, ownerType, entry.key, ownerName, entry);
+        this._registerSingleSkill(ownerId, ownerName, ownerType, entry.key, ownerName, entry, {
+          casterSlot: finalMeta.casterSlot || 'default',
+          casterRoleId: ownerName,
+          manaPoolId: poolId
+        });
       }
     }
 
@@ -1471,7 +1595,7 @@
      * 注册单个技能
      * @private
      */
-    _registerSingleSkill(ownerId, ownerName, ownerType, skillKey, casterName, entry) {
+    _registerSingleSkill(ownerId, ownerName, ownerType, skillKey, casterName, entry, meta) {
       const requestedLevel = entry && entry.level != null ? entry.level : null;
       const catalog = lookupSkill(skillKey, requestedLevel);
       if (!catalog) {
@@ -1484,16 +1608,24 @@
       const initialActive = (activation === ACTIVATION.PASSIVE);
       const ownerRole = this._getRoleMetaFromName(ownerName);
       const casterRole = this._getRoleMetaFromName(casterName || ownerName);
+      const finalMeta = meta || {};
+      const casterSlot = finalMeta.casterSlot || 'default';
+      const manaPoolId = finalMeta.manaPoolId || this._resolveManaPoolId(ownerId) || ownerId;
+      const uniquePrefix = casterSlot === 'default' || casterSlot === 'vanguard'
+        ? String(ownerId)
+        : String(ownerId) + '_' + casterSlot;
 
       const skill = {
-        uniqueId: ownerId + '_' + canonicalSkillKey,
+        uniqueId: uniquePrefix + '_' + canonicalSkillKey,
         ownerId: ownerId,
         ownerName: ownerName,
         ownerType: ownerType,
         casterName: casterName || ownerName,
+        casterSlot: casterSlot,
+        manaPoolId: manaPoolId,
         roleId: ownerRole.roleId,
         roleVariant: ownerRole.roleVariant,
-        casterRoleId: casterRole.roleId,
+        casterRoleId: finalMeta.casterRoleId || casterRole.roleId,
         casterRoleVariant: casterRole.roleVariant,
         skillKey: canonicalSkillKey,
         icon: catalog.icon || null,
@@ -1541,7 +1673,8 @@
       this.skills.set(skill.uniqueId, skill);
       this._log('SKILL_REGISTERED', {
         owner: ownerName, caster: casterName, key: canonicalSkillKey, effect: skill.effect,
-        activation: activation, level: skill.level, system: skill.system, kind: skill.kind, power: skill.power
+        activation: activation, level: skill.level, system: skill.system, kind: skill.kind, power: skill.power,
+        manaPoolId: skill.manaPoolId, casterSlot: skill.casterSlot, casterRoleId: skill.casterRoleId
       });
     }
 
@@ -1549,7 +1682,9 @@
 
     _getStreetScopedSkillKey(skill) {
       if (!skill) return null;
-      return String(skill.ownerId) + '_' + String(skill.skillKey);
+      return skill.uniqueId
+        ? String(skill.uniqueId)
+        : [skill.ownerId, skill.manaPoolId || skill.casterSlot || 'default', skill.skillKey].map(String).join('_');
     }
 
     _getStreetScopedUseCount(skill) {
@@ -1569,11 +1704,22 @@
     }
 
     getMana(ownerId) {
-      return this.manaPools.get(ownerId) || { current: 0, max: 0, regen: 0 };
+      var poolId = this._resolveManaPoolId(ownerId);
+      return poolId ? this.manaPools.get(poolId) : { current: 0, max: 0, regen: 0 };
     }
 
-    _getBacklashState(ownerId) {
-      const state = this.backlashStates.get(ownerId);
+    getManaPool(poolId) {
+      var resolved = this._resolveManaPoolId(poolId);
+      return resolved ? this.manaPools.get(resolved) : { current: 0, max: 0, regen: 0 };
+    }
+
+    getManaPoolsForOwner(ownerId) {
+      var list = this.ownerManaPools.get(String(ownerId)) || [];
+      return list.map((poolId) => this.manaPools.get(poolId)).filter(Boolean);
+    }
+
+    _getBacklashState(poolId) {
+      const state = this.backlashStates.get(poolId);
       return state
         ? { active: !!state.active, counter: Math.max(0, Number(state.counter || 0)) }
         : { active: false, counter: 0 };
@@ -1581,40 +1727,53 @@
 
     _syncHeroBacklashState() {
       const heroId = this._heroId != null ? this._heroId : 0;
-      this.backlash = this._getBacklashState(heroId);
+      var pools = this.getManaPoolsForOwner(heroId);
+      var active = pools.map((pool) => this._getBacklashState(pool.id)).filter(function(state) { return state.active; });
+      this.backlash = active.length
+        ? { active: true, counter: Math.max.apply(Math, active.map(function(state) { return state.counter; })) }
+        : { active: false, counter: 0 };
     }
 
-    _syncBacklashMark(ownerId) {
-      const state = this._getBacklashState(ownerId);
+    _syncBacklashMark(poolId) {
+      const pool = this.manaPools.get(poolId);
+      const ownerId = pool && pool.ownerId != null ? pool.ownerId : poolId;
+      const markKey = 'backlash_state:' + String(poolId);
+      const state = this._getBacklashState(poolId);
       if (!state.active || state.counter <= 0) {
-        this.clearStatusMark(ownerId, 'backlash_state');
+        this.clearStatusMark(ownerId, markKey);
         return;
       }
-      this.setStatusMark(ownerId, 'backlash_state', {
+      this.setStatusMark(ownerId, markKey, {
         icon: '../../../assets/svg/burning-skull.svg',
         iconMode: 'mask',
         tone: 'backlash',
         count: state.counter,
-        title: '魔运反噬',
+        title: '魔运反噬' + (pool && pool.casterName ? ' · ' + pool.casterName : ''),
         detail: '持续 ' + state.counter + ' 街'
       });
     }
 
-    _triggerBacklash(ownerId, reason) {
-      if (ownerId == null) return;
+    _triggerBacklash(poolId, reason) {
+      poolId = this._resolveManaPoolId(poolId) || poolId;
+      if (poolId == null) return;
+      const pool = this.manaPools.get(poolId) || {};
       const heroId = this._heroId != null ? this._heroId : 0;
-      const wasHeroActive = ownerId === heroId ? !!this.backlash.active : false;
-      this.backlashStates.set(ownerId, { active: true, counter: 3 });
-      this._syncBacklashMark(ownerId);
+      const wasHeroActive = pool.ownerId === heroId ? !!this.backlash.active : false;
+      this.backlashStates.set(poolId, { active: true, counter: 3 });
+      this._syncBacklashMark(poolId);
       this._syncHeroBacklashState();
       this._log('BACKLASH_TRIGGERED', {
-        ownerId,
+        ownerId: pool.ownerId,
+        manaPoolId: poolId,
+        casterRoleId: pool.casterRoleId || null,
+        casterSlot: pool.casterSlot || null,
         duration: 3,
         reason: reason || 'mana_zero'
       });
-      if (ownerId === heroId) {
+      if (pool.ownerId === heroId) {
         this.emit('backlash:start', {
-          ownerId,
+          ownerId: pool.ownerId,
+          manaPoolId: poolId,
           counter: 3,
           reason: reason || 'mana_zero',
           refreshed: wasHeroActive
@@ -1622,36 +1781,38 @@
       }
     }
 
-    _maybeTriggerBacklash(ownerId, previous, current, reason) {
+    _maybeTriggerBacklash(poolId, previous, current, reason) {
       const prev = Math.max(0, Number(previous || 0));
       const next = Math.max(0, Number(current || 0));
       if (prev <= 0 || next > 0) return;
-      this._triggerBacklash(ownerId, reason);
+      this._triggerBacklash(poolId, reason);
     }
 
     _advanceBacklashStreet(phase) {
-      for (const [ownerId, state] of Array.from(this.backlashStates.entries())) {
+      for (const [poolId, state] of Array.from(this.backlashStates.entries())) {
+        const pool = this.manaPools.get(poolId) || {};
         if (!state || !state.active || state.counter <= 0) {
-          this.backlashStates.delete(ownerId);
-          this._syncBacklashMark(ownerId);
+          this.backlashStates.delete(poolId);
+          this._syncBacklashMark(poolId);
           continue;
         }
         state.counter--;
         if (state.counter <= 0) {
           state.active = false;
-          this.backlashStates.delete(ownerId);
-          this._syncBacklashMark(ownerId);
+          this.backlashStates.delete(poolId);
+          this._syncBacklashMark(poolId);
           const heroId = this._heroId != null ? this._heroId : 0;
-          if (ownerId === heroId) {
+          if (pool.ownerId === heroId) {
             this._syncHeroBacklashState();
-            this.emit('backlash:end', { ownerId, phase: phase || null });
+            this.emit('backlash:end', { ownerId: pool.ownerId, manaPoolId: poolId, phase: phase || null });
           }
         } else {
-          this.backlashStates.set(ownerId, state);
-          this._syncBacklashMark(ownerId);
+          this.backlashStates.set(poolId, state);
+          this._syncBacklashMark(poolId);
         }
         this._log('BACKLASH_TICK', {
-          ownerId,
+          ownerId: pool.ownerId,
+          manaPoolId: poolId,
           phase: phase || null,
           remaining: Math.max(0, state.counter)
         });
@@ -1659,14 +1820,25 @@
       this._syncHeroBacklashState();
     }
 
-    spendMana(ownerId, amount) {
-      const pool = this.manaPools.get(ownerId);
+    spendMana(poolId, amount) {
+      const resolvedPoolId = this._resolveManaPoolId(poolId);
+      const pool = resolvedPoolId ? this.manaPools.get(resolvedPoolId) : null;
       if (!pool || pool.current < amount) return false;
       const before = pool.current;
       pool.current -= amount;
-      this._log('MANA_SPENT', { ownerId, amount, remaining: pool.current });
+      this._log('MANA_SPENT', {
+        ownerId: pool.ownerId,
+        manaPoolId: resolvedPoolId,
+        casterRoleId: pool.casterRoleId || null,
+        casterSlot: pool.casterSlot || null,
+        amount,
+        remaining: pool.current
+      });
       this.emit('mana:changed', {
-        ownerId,
+        ownerId: pool.ownerId,
+        manaPoolId: resolvedPoolId,
+        casterRoleId: pool.casterRoleId || null,
+        casterSlot: pool.casterSlot || null,
         previous: before,
         current: pool.current,
         max: pool.max,
@@ -1675,26 +1847,33 @@
       return true;
     }
 
-    regenMana(ownerId, amount, reason) {
-      const pool = this.manaPools.get(ownerId);
+    regenMana(poolId, amount, reason) {
+      const resolvedPoolId = this._resolveManaPoolId(poolId);
+      const pool = resolvedPoolId ? this.manaPools.get(resolvedPoolId) : null;
       if (!pool) return;
       const before = pool.current;
       let add = (amount != null) ? amount : pool.regen;
       if (amount == null && this.traitRegenFn) {
-        add = this.traitRegenFn(ownerId, add);
+        add = this.traitRegenFn(pool.ownerId, add, pool);
       }
       pool.current = Math.max(0, Math.min(pool.max, pool.current + add));
       const finalReason = reason || (amount != null ? 'runtime_regen' : 'street_regen');
       if (pool.current !== before) {
         this._log('MANA_GAINED', {
-          ownerId,
+          ownerId: pool.ownerId,
+          manaPoolId: resolvedPoolId,
+          casterRoleId: pool.casterRoleId || null,
+          casterSlot: pool.casterSlot || null,
           amount: pool.current - before,
           current: pool.current,
           reason: finalReason
         });
       }
       this.emit('mana:changed', {
-        ownerId,
+        ownerId: pool.ownerId,
+        manaPoolId: resolvedPoolId,
+        casterRoleId: pool.casterRoleId || null,
+        casterSlot: pool.casterSlot || null,
         previous: before,
         current: pool.current,
         max: pool.max,
@@ -1702,21 +1881,28 @@
       });
     }
 
-    loseMana(ownerId, amount, reason) {
-      const pool = this.manaPools.get(ownerId);
+    loseMana(poolId, amount, reason) {
+      const resolvedPoolId = this._resolveManaPoolId(poolId);
+      const pool = resolvedPoolId ? this.manaPools.get(resolvedPoolId) : null;
       if (!pool) return 0;
       const loss = Math.max(0, Math.round(Number(amount || 0)));
       const before = pool.current;
       pool.current = Math.max(0, before - loss);
       this.emit('mana:changed', {
-        ownerId,
+        ownerId: pool.ownerId,
+        manaPoolId: resolvedPoolId,
+        casterRoleId: pool.casterRoleId || null,
+        casterSlot: pool.casterSlot || null,
         previous: before,
         current: pool.current,
         max: pool.max,
         reason: reason || 'runtime_penalty'
       });
       this._log('MANA_LOST', {
-        ownerId: ownerId,
+        ownerId: pool.ownerId,
+        manaPoolId: resolvedPoolId,
+        casterRoleId: pool.casterRoleId || null,
+        casterSlot: pool.casterSlot || null,
         amount: before - pool.current,
         current: pool.current,
         reason: reason || 'runtime_penalty'
@@ -1797,7 +1983,7 @@
         }
       }
 
-      if (actualCost > 0 && !this.spendMana(skill.ownerId, actualCost)) {
+      if (actualCost > 0 && !this.spendMana(this._getSkillManaPoolId(skill), actualCost)) {
         return { success: false, reason: 'INSUFFICIENT_MANA', cost: actualCost };
       }
       this._consumeAssetCostPassives(skill);
@@ -2011,10 +2197,14 @@
 
       var activationLog = {
         owner: skill.ownerName,
+        caster: skill.casterName,
         key: skill.skillKey,
         effect: skill.effect,
         manaCost: actualCost,
-        baseManaCost: skill.manaCost
+        baseManaCost: skill.manaCost,
+        manaPoolId: skill.manaPoolId || null,
+        casterRoleId: skill.casterRoleId || null,
+        casterSlot: skill.casterSlot || null
       };
       if (skill.effect === EFFECT.RULE_REWRITE) {
         activationLog.rewriteMode = finalOptions && finalOptions.rewriteMode != null
@@ -2421,7 +2611,7 @@
       if (skill && skill.pendingImplementation) return false;
       // 委托给外部 AI 决策（SkillAI）
       if (this.skillDecideFn) {
-        const mana = this.getMana(skill.ownerId);
+        const mana = this._getSkillManaPool(skill);
         if (gameContext && !gameContext.skillSystem) gameContext.skillSystem = this;
         return this.skillDecideFn(skill, owner, gameContext, this.pendingForces, mana);
       }
@@ -2434,9 +2624,9 @@
       if (skill && skill.pendingImplementation) return null;
       var actualCost = this._getSkillActualManaCost(skill, Object.assign({}, finalOptions, { consumeAssetRisk: true }));
       if (actualCost > 0) {
-        const pool = this.manaPools.get(skill.ownerId);
+        const pool = this._getSkillManaPool(skill);
         if (!pool || pool.current < actualCost) return null;
-        this.spendMana(skill.ownerId, actualCost);
+        this.spendMana(this._getSkillManaPoolId(skill), actualCost);
       }
       if (skill && skill.effect === EFFECT.BLIND_BOX) {
         var blindBoxScopeKey = 'skill:' + String(skill.ownerId) + ':blind_box:match_once';
@@ -3365,10 +3555,24 @@
     getState() {
       const heroId = this._heroId != null ? this._heroId : 0;
       const rinoMana = this.getMana(heroId);
+      const manaPools = Array.from(this.manaPools.entries()).map(entry => ({
+        id: entry[0],
+        ownerId: entry[1].ownerId,
+        ownerName: entry[1].ownerName,
+        casterName: entry[1].casterName,
+        casterSlot: entry[1].casterSlot,
+        casterRoleId: entry[1].casterRoleId,
+        current: entry[1].current,
+        max: entry[1].max,
+        regen: entry[1].regen,
+        baseMax: entry[1].baseMax,
+        assetMax: entry[1].assetMax || null
+      }));
       return {
         backlash: { ...this.backlash },
         rinoMana: rinoMana.current,
         rinoManaMax: rinoMana.max,
+        manaPools: manaPools,
         pendingForces: this.pendingForces.map(f => ({
           owner: f.ownerName, ownerId: f.ownerId, type: f.type, level: f.level, system: f.system, power: f.power
         })),
@@ -3376,6 +3580,11 @@
           uniqueId: s.uniqueId,
           owner: s.ownerName,
           ownerId: s.ownerId,
+          caster: s.casterName,
+          casterName: s.casterName,
+          casterSlot: s.casterSlot || 'default',
+          casterRoleId: s.casterRoleId || null,
+          manaPoolId: s.manaPoolId || null,
           key: s.skillKey,
           effect: s.effect,
           level: s.level,

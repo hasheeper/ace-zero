@@ -446,14 +446,13 @@
     const vTrait = getCharTrait(vName, vLv, 'vanguard');
     const rTrait = rName ? getCharTrait(rName, rLv, 'rearguard') : null;
 
-    // 魔运值：选择主手/副手中 maxMana 最高的那个
+    // 魔运值：主手/副手独立。legacy hero.mana/maxMana 仅保留给旧前端 fallback。
     const vMaxMana = (vData.maxMana != null) ? vData.maxMana : (MANA_BY_LEVEL[vLv] || { max: 0 }).max;
     const rMaxMana = rName ? ((rData.maxMana != null) ? rData.maxMana : (MANA_BY_LEVEL[rLv] || { max: 0 }).max) : 0;
-
-    const manaSource = (rMaxMana > vMaxMana) ? rData : vData;
-    const manaLevel = (rMaxMana > vMaxMana) ? rLv : vLv;
-    const maxMana = Math.max(vMaxMana, rMaxMana);
-    const mana = (manaSource.mana != null) ? manaSource.mana : maxMana;
+    const vMana = (vData.mana != null) ? Math.min(vData.mana, vMaxMana) : vMaxMana;
+    const rMana = rName ? ((rData.mana != null) ? Math.min(rData.mana, rMaxMana) : rMaxMana) : 0;
+    const legacyMaxMana = vMaxMana;
+    const legacyMana = vMana;
 
     // 赌局筹码：NPC 使用 table chips，hero 使用 MVU funds（上限为 table chips）
     const tableChips = _goldFundsToSilverUnits(battle.chips != null ? battle.chips : 10);
@@ -466,20 +465,31 @@
         name: resolveFrontendCharacterName(vName, hero),
         level: vLv,
         displayName: resolveFrontendCharacterName(vName, hero),
-        roleId: vName
+        roleId: vName,
+        mana: vMana,
+        maxMana: vMaxMana,
+        manaRegen: (vData.manaRegen != null) ? vData.manaRegen : ((MANA_BY_LEVEL[vLv] || { regen: 0 }).regen || 0)
       },
       attrs: { ...attrs },
       vanguardSkills: vanguardSkills,
       rearguardSkills: rearguardSkills,
-      mana: mana,
-      maxMana: maxMana,
+      mana: legacyMana,
+      maxMana: legacyMaxMana,
       heroDisplayName: resolveHeroAliasDisplayName(hero, HERO_INTERNAL_KEY)
     };
     if (vTrait) heroConfig.vanguard.trait = vTrait;
 
     // 副手：仅当指定时才写入
     if (rName) {
-      heroConfig.rearguard = { name: rName, level: rLv, displayName: resolveDisplayCharacterName(rName), roleId: rName };
+      heroConfig.rearguard = {
+        name: rName,
+        level: rLv,
+        displayName: resolveDisplayCharacterName(rName),
+        roleId: rName,
+        mana: rMana,
+        maxMana: rMaxMana,
+        manaRegen: (rData.manaRegen != null) ? rData.manaRegen : ((MANA_BY_LEVEL[rLv] || { regen: 0 }).regen || 0)
+      };
       if (rTrait) heroConfig.rearguard.trait = rTrait;
     }
 
@@ -537,7 +547,7 @@
           minBet: 10,
           maxBet: Math.floor(heroChips / 2),
           defaultBet: 50,
-          mana: { enabled: true, pool: maxMana },
+          mana: { enabled: true, pool: legacyMaxMana },
           dealer: { rpsStrategy: 'random' }
         }
       );

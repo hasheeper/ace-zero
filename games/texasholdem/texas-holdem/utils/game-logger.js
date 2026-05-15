@@ -973,7 +973,21 @@
           var pl = context.players[p];
           summaryParts.push(_replaceHeroNameInText(pl.name, context) + ' Chips: ' + Currency.compact(pl.chips || 0));
         }
-        if (context.heroMana && context.heroMana.max > 0) {
+        if (Array.isArray(context.heroManaPools) && context.heroManaPools.length) {
+          summaryParts.push('[MANA POOLS]');
+          context.heroManaPools.forEach(function(pool) {
+            if (!pool || Number(pool.max || 0) <= 0) return;
+            var label = pool.casterRoleId || pool.casterName || pool.casterSlot || 'MP';
+            var before = pool.before != null ? Number(pool.before || 0) : Number(pool.current || 0);
+            var current = Number(pool.current || 0);
+            var delta = pool.delta != null ? Number(pool.delta || 0) : current - before;
+            summaryParts.push(
+              label + ': ' + before + ' -> ' + current + '/' + Number(pool.max || 0) +
+              ' (delta ' + (delta > 0 ? '+' : '') + delta + ')' +
+              (pool.casterSlot ? ' slot=' + pool.casterSlot : '')
+            );
+          });
+        } else if (context.heroMana && context.heroMana.max > 0) {
           summaryParts.push('Mana: ' + context.heroMana.current + '/' + context.heroMana.max);
         }
         resultSummary = summaryParts.join('\n');
@@ -1003,7 +1017,7 @@
       var variableRules = [
         '1. 变量变更只准按本次牌局日志与结算写，禁止脑补。',
         '2. 金钱只看【POKER_RESULT】和【FUNDS_UPDATE】',
-        '3. 魔运 / mana 只有日志或结算明确写出时才更新；技能使用、好运抽取、命运偏转不自动等于局外 mana 变化。'
+        '3. 魔运 / mana 只按 [MANA POOLS] 或结算明确写出的 per-roster delta 更新；主手/副手分别更新，不合并成一个池。'
       ].join('\n');
       var combatSettlement = window.ACE0CombatSettlement && typeof window.ACE0CombatSettlement.buildSettlementFromSession === 'function'
         ? window.ACE0CombatSettlement.buildSettlementFromSession({

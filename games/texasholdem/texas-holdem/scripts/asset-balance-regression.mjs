@@ -229,9 +229,14 @@ function buildInjection(config, scenarioName) {
   return `
     (() => {
       const config = ${JSON.stringify(config).replace(/</g, '\\u003c')};
+      window.__ACEZERO_GAME_CONFIG__ = config;
       window.__ACEZERO_ASSET_BALANCE_SCENARIO__ = ${JSON.stringify(scenarioName)};
       window.__ACEZERO_ASSET_BALANCE_CONFIG__ = config;
       function send() {
+        if (typeof window.__acezeroApplyGameConfig === 'function') {
+          void window.__acezeroApplyGameConfig(config, 'asset-balance-regression');
+          return;
+        }
         window.postMessage({ type: 'acezero-game-data', payload: config, source: 'asset-balance-regression' }, '*');
       }
       send();

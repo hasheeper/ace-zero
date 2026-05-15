@@ -167,8 +167,13 @@ async function main() {
   const injection = `
     (() => {
       const config = ${JSON.stringify(assetConfig).replace(/</g, '\\u003c')};
+      window.__ACEZERO_GAME_CONFIG__ = config;
       window.__ACEZERO_ASSET_REGRESSION_CONFIG__ = config;
       function send() {
+        if (typeof window.__acezeroApplyGameConfig === 'function') {
+          void window.__acezeroApplyGameConfig(config, 'injected');
+          return;
+        }
         window.postMessage({ type: 'acezero-game-data', payload: config, source: 'injected' }, '*');
       }
       send();
@@ -186,9 +191,13 @@ async function main() {
   await client.send('Page.enable');
   await client.send('Runtime.enable');
   await client.send('Log.enable');
+  await client.send('Network.enable');
+  await client.send('Network.setCacheDisabled', { cacheDisabled: true });
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: injection });
   await client.send('Page.navigate', { url: TARGET_URL });
   await evalJs(client, `new Promise(resolve => setTimeout(resolve, 5200))`);
+  await evalJs(client, injection);
+  await evalJs(client, `new Promise(resolve => setTimeout(resolve, 800))`);
 
   const afterClick = await evalJs(client, `(async () => {
     document.querySelector('#splash-deal')?.click();
@@ -206,6 +215,8 @@ async function main() {
       hasAdapter: !!window.AssetDeckAdapter,
       hasSkillSystem: !!ss,
       hasCombatFormula: !!window.moz?.combatFormula,
+      hasApplyHook: typeof window.__acezeroApplyGameConfig === 'function',
+      injectedCardIds: window.__ACEZERO_GAME_CONFIG__?.world?.assetDeck?.active_general_cards?.map(card => card.cardId) || [],
       assetAppliedCards: ss?.assetModifiers?.debug?.applied?.map(item => item.type) || [],
       minorWishLevel: minor?.level ?? null,
       minorWishCost: minor && ss?.getSkillActualManaCost ? ss.getSkillActualManaCost(minor, {}) : null,
@@ -259,8 +270,8 @@ async function main() {
     .slice(0, 40);
 
   client.close();
-  if (!afterClick.beforeState.skillPanelText.includes('ASSET')) {
-    throw new Error(`Expected skill card to render Asset explanation tags: ${JSON.stringify(afterClick.beforeState, null, 2)}`);
+  if (!afterClick.beforeState.skillPanelText.includes('-3 MP')) {
+    throw new Error(`Expected skill card to render Asset cost modifier tags: ${JSON.stringify(afterClick.beforeState, null, 2)}`);
   }
   if (afterClick.beforeState.minorWishCost !== 3) {
     throw new Error(`Expected first-cast passive to reduce minor_wish to 3 MP: ${JSON.stringify(afterClick.beforeState, null, 2)}`);

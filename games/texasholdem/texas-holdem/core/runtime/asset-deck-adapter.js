@@ -73,6 +73,10 @@
       cardName: (card && card.name) || null,
       type: type || normalizeKey(modifier && (modifier.type || modifier.kind)),
       key: (modifier && (modifier.key || modifier.skillKey)) || (card && card.skillKey) || null,
+      ownerId: modifier && modifier.ownerId != null ? modifier.ownerId : (card && card.ownerId != null ? card.ownerId : null),
+      owner: (modifier && modifier.owner) || (card && card.owner) || null,
+      targetTags: normalizeTags((modifier && modifier.targetTags) || (card && card.targetTags)),
+      scope: normalizeKey((modifier && (modifier.scope || modifier.assetScope || modifier.targetScope)) || (card && (card.scope || card.assetScope || card.targetScope))),
       value: value != null ? value : toNumber(modifier && modifier.value, 0)
     };
   }
@@ -168,7 +172,7 @@
   function resolveTeamScope(modifier, card) {
     return normalizeTags(
       modifier.teamTags || modifier.targetTeamTags ||
-      (card && (card.teamTags || card.targetTeamTags))
+      (card && (card.teamTags || card.targetTeamTags || card.targetTags))
     );
   }
 
@@ -533,12 +537,19 @@
     return compiled;
   }
 
-  function resolveManaMax(compiled, ownerId, baseMax) {
+  function resolveManaMax(compiled, ownerId, baseMax, context) {
     var mods = compiled && compiled.manaMax;
     var base = Math.max(0, Number(baseMax || 0));
     if (!mods) return { max: base, baseMax: base, flatDelta: 0 };
     var ownerKey = normalizeKey(ownerId);
-    var scoped = collectScopedValues(mods.scoped, { ownerId: ownerId }, null);
+    var tags = normalizeTags(context && context.teamTags);
+    var scoped = collectScopedValues(mods.scoped, {
+      ownerId: ownerId,
+      teamTags: tags,
+      tags: tags,
+      ownerType: context && context.ownerType,
+      side: context && context.side
+    }, context || null);
     var flatDelta = toNumber(mods.globalFlat, 0) + toNumber(mods.byOwner && mods.byOwner[ownerKey], 0) + scoped.flat;
     var sources = [];
     if (Array.isArray(mods.sources)) sources = sources.concat(mods.sources);
@@ -786,6 +797,21 @@
 
   function mergeSkillLevel(skillList, skillKey, level) {
     if (!skillKey || !level) return skillList || {};
+    if (Array.isArray(skillList)) {
+      var found = false;
+      var nextList = skillList.map(function(entry) {
+        if (!entry || typeof entry !== 'object') return entry;
+        var key = normalizeKey(entry.key || entry.skillKey);
+        if (key !== skillKey) return entry;
+        found = true;
+        return Object.assign({}, entry, {
+          key: entry.key || skillKey,
+          level: Math.max(Number(entry.level || entry.rank || 0), level)
+        });
+      });
+      if (!found) nextList.push({ key: skillKey, level: level });
+      return nextList;
+    }
     var list = skillList || {};
     var existing = list[skillKey];
     if (existing && typeof existing === 'object') {
@@ -834,9 +860,6 @@
 
   function resolveHeroSkillSlot(hero, entry, vanguardSkills, rearguardSkills) {
     var skillKey = normalizeKey(entry && entry.skillKey);
-    if (hasSkillLevel(vanguardSkills, skillKey)) return 'vanguard';
-    if (hasSkillLevel(rearguardSkills, skillKey)) return 'rearguard';
-
     var tags = normalizeTags(entry && entry.targetTags);
     var vName = normalizeKey(hero && hero.vanguard && hero.vanguard.name);
     var rName = normalizeKey(hero && hero.rearguard && hero.rearguard.name);
@@ -844,8 +867,11 @@
     if (rName && tags.indexOf(rName) >= 0) return 'rearguard';
     if (tags.indexOf('kazu') >= 0) return vName === 'kazu' || !rName ? 'vanguard' : (rName === 'kazu' ? 'rearguard' : 'vanguard');
     if (tags.indexOf('rino') >= 0) return vName === 'rino' ? 'vanguard' : (rName === 'rino' ? 'rearguard' : 'rearguard');
-    if (normalizeKey(entry && entry.system) === 'void') return 'vanguard';
-    return 'vanguard';
+    var hasVanguard = hasSkillLevel(vanguardSkills, skillKey);
+    var hasRearguard = hasSkillLevel(rearguardSkills, skillKey);
+    if (hasVanguard && !hasRearguard) return 'vanguard';
+    if (hasRearguard && !hasVanguard) return 'rearguard';
+    return null;
   }
 
   function applySkillLevelsToConfig(config, compiled, options) {
@@ -885,6 +911,24 @@
       nextCompiled.skillLevelBySkill[skillKey] = Math.max(nextCompiled.skillLevelBySkill[skillKey] || 0, level);
       nextCompiled.skillLevelEntries.push(cloneJson(entry, entry));
       var slot = resolveHeroSkillSlot(next.hero, entry, next.hero.vanguardSkills, next.hero.rearguardSkills);
+      if (!slot) {
+        if (!Array.isArray(next.hero.pendingAssetSkillAssignments)) next.hero.pendingAssetSkillAssignments = [];
+        next.hero.pendingAssetSkillAssignments.push({
+          cardId: entry && entry.cardId || null,
+          skillKey: skillKey,
+          level: level,
+          targetTags: normalizeTags(entry && entry.targetTags),
+          reason: 'ambiguous_skill_owner'
+        });
+        nextCompiled.debug.ignored.push({
+          cardId: entry && entry.cardId || null,
+          type: 'skill_level',
+          key: skillKey,
+          level: level,
+          reason: 'pending_assignment'
+        });
+        return;
+      }
       if (slot === 'vanguard') {
         next.hero.vanguardSkills = mergeSkillLevel(next.hero.vanguardSkills, skillKey, level);
       } else {
