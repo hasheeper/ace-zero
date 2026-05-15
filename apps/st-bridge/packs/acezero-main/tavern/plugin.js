@@ -206,13 +206,13 @@
     }
   }
 
-  function deepMergePlainObject(base, patch) {
+  function mergeMvuPatch(base, patch) {
     if (!isPlainObject(patch)) return cloneJsonData(patch, patch);
     const output = isPlainObject(base) ? { ...base } : {};
     Object.entries(patch).forEach(([key, value]) => {
       if (value === undefined) return;
       if (isPlainObject(value) && isPlainObject(output[key])) {
-        output[key] = deepMergePlainObject(output[key], value);
+        output[key] = mergeMvuPatch(output[key], value);
       } else {
         output[key] = cloneJsonData(value, value);
       }
@@ -354,18 +354,18 @@
       if (typeof updateVariablesWith === 'function') {
         await updateVariablesWith((vars) => {
           const currentVars = isPlainObject(vars) ? vars : {};
-          const currentStatData = isPlainObject(currentVars.stat_data) ? currentVars.stat_data : {};
           return {
             ...currentVars,
-            stat_data: deepMergePlainObject(currentStatData, patch)
+            stat_data: mergeMvuPatch(currentVars.stat_data, patch)
           };
         }, { type: 'message' });
         return;
       }
 
       const vars = typeof getVariables === 'function' ? await getVariables({ type: 'message' }) : {};
-      const currentStatData = isPlainObject(vars?.stat_data) ? vars.stat_data : {};
-      await insertOrAssignVariables({ stat_data: deepMergePlainObject(currentStatData, patch) }, { type: 'message' });
+      await insertOrAssignVariables({
+        stat_data: mergeMvuPatch(isPlainObject(vars?.stat_data) ? vars.stat_data : {}, patch)
+      }, { type: 'message' });
     } catch (e) {
       console.error(`${PLUGIN_NAME} MVU 变量写入失败:`, e);
     }
