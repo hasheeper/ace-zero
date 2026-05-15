@@ -86,8 +86,8 @@
                 resources: [
                     { label: 'FUNDS', value: '1,250', className: 'res-gold' },
                     { label: 'ASSET', value: '0', className: 'res-assets' },
-                    { label: 'MAJOR DEBT', value: '395,000,000', className: 'res-danger' },
-                    { label: 'DEBT', value: '0', className: 'res-debt' }
+                    { label: 'DEBT', value: '0', className: 'res-debt' },
+                    { label: 'MAJOR DEBT', value: '395,000,000', className: 'res-danger' }
                 ]
             },
             sidebar: {
