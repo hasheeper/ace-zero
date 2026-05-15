@@ -193,6 +193,33 @@
     return typeof value === 'string' ? value.trim() : fallback;
   }
 
+  function isPlainObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function cloneJsonData(value, fallback = null) {
+    if (value === undefined || value === null) return fallback;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function deepMergePlainObject(base, patch) {
+    if (!isPlainObject(patch)) return cloneJsonData(patch, patch);
+    const output = isPlainObject(base) ? { ...base } : {};
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (isPlainObject(value) && isPlainObject(output[key])) {
+        output[key] = deepMergePlainObject(output[key], value);
+      } else {
+        output[key] = cloneJsonData(value, value);
+      }
+    });
+    return output;
+  }
+
   function normalizeActResourceKey(value, fallback = 'vision') {
     const normalized = _normalizeTrimmedString(value, fallback).toLowerCase();
     return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
@@ -323,7 +350,22 @@
 
   async function updateEraVars(data) {
     try {
-      await insertOrAssignVariables({ stat_data: data }, { type: 'message' });
+      const patch = isPlainObject(data) ? data : {};
+      if (typeof updateVariablesWith === 'function') {
+        await updateVariablesWith((vars) => {
+          const currentVars = isPlainObject(vars) ? vars : {};
+          const currentStatData = isPlainObject(currentVars.stat_data) ? currentVars.stat_data : {};
+          return {
+            ...currentVars,
+            stat_data: deepMergePlainObject(currentStatData, patch)
+          };
+        }, { type: 'message' });
+        return;
+      }
+
+      const vars = typeof getVariables === 'function' ? await getVariables({ type: 'message' }) : {};
+      const currentStatData = isPlainObject(vars?.stat_data) ? vars.stat_data : {};
+      await insertOrAssignVariables({ stat_data: deepMergePlainObject(currentStatData, patch) }, { type: 'message' });
     } catch (e) {
       console.error(`${PLUGIN_NAME} MVU 变量写入失败:`, e);
     }
@@ -967,7 +1009,12 @@
   /**
    * 生成前：读取 MVU 变量 → 注入 hero 状态摘要到 AI 上下文
    */
-  async function handleGenerationBefore() {
+  async function handleGenerationBefore(options = {}) {
+    if (options.dryRun === true) {
+      console.log(`${PLUGIN_NAME} dryRun 生成前注入跳过`);
+      return;
+    }
+
     try {
       const expansionPromptState = getExpansionPromptStateStore();
 
@@ -1211,8 +1258,10 @@
   // 手动编辑后的重注入已由 message_edited 覆盖
 
   // 生成前：注入 hero 状态摘要
-  eventOn('GENERATION_AFTER_COMMANDS', async () => {
-    await handleGenerationBefore();
+  eventOn('GENERATION_AFTER_COMMANDS', async (type, option, dryRun) => {
+    await handleGenerationBefore({
+      dryRun: dryRun === true || option?.dryRun === true || option?.dry_run === true
+    });
   });
 
   // 优选路径：MVU 消息更新前拦截（AI 同时输出 UpdateVariable 时）
