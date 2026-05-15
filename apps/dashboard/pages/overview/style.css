@@ -2787,6 +2787,87 @@
             opacity: 0.6;
         }
 
+        .action-preview-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .action-preview-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .action-preview-row {
+            --action-color: rgba(207,181,59,0.74);
+            min-width: 0;
+            display: grid;
+            grid-template-columns: 52px minmax(0, 1fr) 50px;
+            align-items: center;
+            gap: 8px;
+            min-height: 29px;
+            padding: 6px 7px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.04);
+            border-left: 2px solid var(--action-color);
+            background:
+                linear-gradient(90deg, color-mix(in srgb, var(--action-color) 14%, transparent), transparent 72%),
+                rgba(0,0,0,0.16);
+            font-family: var(--font-ui);
+            color: var(--action-color);
+            box-shadow: inset 0 0 12px rgba(0,0,0,0.18);
+        }
+
+        .action-preview-row.type-combat { --action-color: var(--warn-red); }
+        .action-preview-row.type-rest { --action-color: var(--future-pale); }
+        .action-preview-row.type-asset { --action-color: var(--gold-main); }
+        .action-preview-row.type-vision { --action-color: var(--flow-up); }
+        .action-preview-row.type-encounter { --action-color: rgba(218, 176, 255, 0.76); }
+
+        .action-preview-row.is-next {
+            border-style: dashed;
+            background:
+                linear-gradient(90deg, color-mix(in srgb, var(--action-color) 10%, transparent), transparent 76%),
+                rgba(0,0,0,0.12);
+            opacity: 0.86;
+        }
+
+        .action-preview-time,
+        .action-preview-row em {
+            min-width: 0;
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 0.7px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .action-preview-time {
+            color: rgba(255,255,255,0.44);
+        }
+
+        .action-preview-row strong {
+            min-width: 0;
+            color: rgba(255,255,255,0.86);
+            font-family: var(--font-cn);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 0 10px color-mix(in srgb, var(--action-color) 34%, transparent);
+        }
+
+        .action-preview-row em {
+            color: var(--action-color);
+            font-style: normal;
+            text-align: right;
+            opacity: 0.82;
+        }
+
         .act-mode-panel {
             display: flex;
             flex-direction: column;

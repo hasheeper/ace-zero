@@ -271,6 +271,379 @@
         return appData.planner.phases[phaseIndex]?.title || String(phaseIndex + 1);
     }
 
+    function getActionPhaseTimingLabel(phaseIndex) {
+        const phaseCount = PHASE_SLOT_IDS.length;
+        const current = Math.max(0, Math.min(phaseCount, Math.round(Number(appState.currentPhaseIndex) || 0)));
+        const target = Math.max(0, Math.min(phaseCount - 1, Math.round(Number(phaseIndex) || 0)));
+        const delta = Math.max(0, target - current);
+        return delta <= 0 ? '当前段' : `${delta}段后`;
+    }
+
+    function getActionAmount(token) {
+        return Math.max(1, Math.min(3, Math.round(Number(token?.amount) || 1)));
+    }
+
+    function getActionResourceLabel(key) {
+        return RESOURCE_LABEL_MAP[key] || RESOURCE_TYPE_MAP[key] || String(key || '').toUpperCase();
+    }
+
+    function normalizeActionPreviewKey(key) {
+        const raw = typeof key === 'string' ? key.trim().toLowerCase() : '';
+        if (raw === 'encounter') return 'encounter';
+        return normalizeResourceKey(raw, 'vision');
+    }
+
+    function getActionTag(key, amount = 1, fallback = '') {
+        const type = RESOURCE_TYPE_MAP[key] || fallback || String(key || '').toUpperCase();
+        return amount > 1 ? `${type} ${getPhaseRomanLabel(amount - 1)}` : type;
+    }
+
+    function getAssetActionTitle(amount) {
+        if (amount >= 3) return '高阶契约展开';
+        if (amount === 2) return '中阶契约展开';
+        return '低阶契约展开';
+    }
+
+    function getVisionActionTitle(amount) {
+        if (amount >= 3) return '跃迁待命';
+        if (amount === 2) return '既定相位待命';
+        return '探路预告';
+    }
+
+    function getRestActionTitle(token) {
+        const tint = normalizeRestTintKey(token?.tint || token?.controlType || token?.targetKey, 'neutral');
+        if (tint && tint !== 'neutral') return `Mana 回稳 · ${getActionResourceLabel(tint)}倾向`;
+        return 'Mana 回稳';
+    }
+
+    function getActionPreviewForToken(token) {
+        const key = normalizeResourceKey(token?.key, '');
+        if (!key) return null;
+        const amount = getActionAmount(token);
+        if (key === 'combat') return { key, amount, title: '交锋回响待命', tag: getActionTag(key, amount) };
+        if (key === 'rest') return { key, amount, title: getRestActionTitle(token), tag: getActionTag(key, amount) };
+        if (key === 'asset') return { key, amount, title: getAssetActionTitle(amount), tag: getActionTag(key, amount) };
+        if (key === 'vision') return { key, amount, title: getVisionActionTitle(amount), tag: getActionTag(key, amount) };
+        return null;
+    }
+
+    function getActionPreviewForPhase(phaseIndex, options = {}) {
+        const phase = appData.planner.phases[phaseIndex];
+        if (!phase) return null;
+        const nodeId = typeof options.nodeId === 'string' && options.nodeId.trim()
+            ? options.nodeId.trim()
+            : getCurrentNodeData().presentNode;
+        const idPrefix = typeof options.idPrefix === 'string' && options.idPrefix.trim()
+            ? options.idPrefix.trim()
+            : 'phase';
+        const includePlanToken = options.includePlanToken !== false;
+        const visionReplacement = typeof getReadyVisionReplacementForPhase === 'function'
+            ? getReadyVisionReplacementForPhase(nodeId, phaseIndex)
+            : null;
+        if (visionReplacement) {
+            const key = normalizeResourceKey(visionReplacement.key, 'vision');
+            return {
+                id: `${idPrefix}:${nodeId}:${phaseIndex}:vision-replace:${key}`,
+                key,
+                title: `相位改写为${getActionResourceLabel(key)}`,
+                tag: 'VISION',
+                phaseIndex,
+                carry: true,
+                system: true
+            };
+        }
+
+        const fixedKind = typeof getFixedPhaseKind === 'function'
+            ? normalizeResourceKey(getFixedPhaseKind(nodeId, phaseIndex), '')
+            : '';
+        if (fixedKind) {
+            return {
+                id: `${idPrefix}:${nodeId}:${phaseIndex}:fixed:${fixedKind}`,
+                key: fixedKind,
+                title: `既定${getActionResourceLabel(fixedKind)}相位`,
+                tag: 'FIXED',
+                phaseIndex,
+                carry: phaseIndex >= PHASE_SLOT_IDS.length - 1,
+                system: true
+            };
+        }
+
+        if (!includePlanToken) return null;
+        const token = appState.phaseSlots[phase.slotId];
+        const preview = getActionPreviewForToken(token);
+        if (!preview) return null;
+        const isVisionSight = preview.key === 'vision' && preview.amount <= 1;
+        return {
+            id: `${idPrefix}:${nodeId}:${phaseIndex}:${preview.key}`,
+            ...preview,
+            phaseIndex,
+            carry: !isVisionSight && phaseIndex >= PHASE_SLOT_IDS.length - 1,
+            effectPhaseIndex: isVisionSight ? phaseIndex + 1 : null,
+            effectTitle: isVisionSight ? '探路生效' : '',
+            system: false
+        };
+    }
+
+    function getCarryActionTitle(preview) {
+        if (!preview) return '';
+        if (preview.title.startsWith('相位改写为')) return preview.title;
+        if (preview.key === 'combat') return '交锋回响延续';
+        if (preview.key === 'rest') return '节点倾向留存';
+        if (preview.key === 'asset') return '契约牌面待选';
+        if (preview.key === 'vision') {
+            if (preview.amount >= 3 || preview.title.includes('跃迁')) return '跃迁入口待命';
+            if (preview.amount === 2 || preview.title.includes('既定相位')) return '相位改写待命';
+            return '视野延至前路';
+        }
+        return preview.title;
+    }
+
+    function pushActionPreviewRow(rows, seen, row) {
+        if (!row || !row.title) return;
+        const id = row.id || `${row.timeLabel}:${row.key}:${row.title}:${row.tag || ''}`;
+        if (seen.has(id)) return;
+        seen.add(id);
+        rows.push({
+            id,
+            key: normalizeActionPreviewKey(row.key),
+            timeLabel: row.timeLabel || 'NEXT I',
+            title: row.title,
+            tag: row.tag || '',
+            next: row.next === true
+        });
+    }
+
+    function appendActionEffectRow(rows, seen, preview, currentPhaseIndex, phaseCount) {
+        if (!preview?.effectTitle) return;
+        const effectPhaseIndex = Number.isFinite(Number(preview.effectPhaseIndex))
+            ? Math.round(Number(preview.effectPhaseIndex))
+            : phaseCount;
+        if (effectPhaseIndex < currentPhaseIndex) return;
+        pushActionPreviewRow(rows, seen, {
+            id: `effect:${preview.id}`,
+            key: preview.key,
+            timeLabel: effectPhaseIndex < phaseCount ? getActionPhaseTimingLabel(effectPhaseIndex) : 'NEXT I',
+            title: preview.effectTitle,
+            tag: 'SIGHT',
+            next: effectPhaseIndex >= phaseCount
+        });
+    }
+
+    function getEncounterActionName(marker) {
+        const key = typeof marker?.charKey === 'string' ? marker.charKey.trim().toLowerCase() : '';
+        const registry = (typeof window !== 'undefined' && window.dashboardCharacters) || {};
+        const meta = registry[key] || null;
+        return meta?.watermark || meta?.name || marker?.debugLabel || marker?.charKey || 'UNKNOWN';
+    }
+
+    function getEncounterActionPreviewForPhase(phaseIndex, nodeId = getCurrentNodeData().presentNode, idPrefix = 'phase') {
+        const marker = typeof getEncounterMarkerForPhase === 'function'
+            ? getEncounterMarkerForPhase(nodeId, phaseIndex)
+            : null;
+        if (!marker) return null;
+        const name = getEncounterActionName(marker);
+        const isPreSignal = marker.type === 'pre_signal';
+        return {
+            id: `${idPrefix}:${nodeId}:${phaseIndex}:encounter:${marker.id || marker.charKey || marker.type || 'marker'}`,
+            key: 'encounter',
+            title: `${isPreSignal ? '人物预兆' : '人物相遇'} · ${name}`,
+            tag: isPreSignal ? 'SIGNAL' : 'MEET'
+        };
+    }
+
+    function getNextActionPreviewNodeIds() {
+        const currentNodeData = getCurrentNodeData();
+        const currentNodeId = currentNodeData.presentNode;
+        const nodeIds = [];
+        if (currentNodeData.nextForcedNodeId) nodeIds.push(currentNodeData.nextForcedNodeId);
+        if (typeof getRouteOptions === 'function') {
+            getRouteOptions().forEach((nodeId) => nodeIds.push(nodeId));
+        }
+        return nodeIds
+            .filter((nodeId) => typeof nodeId === 'string' && nodeId.trim() && nodeId !== currentNodeId)
+            .map((nodeId) => nodeId.trim())
+            .filter((nodeId, index, list) => list.indexOf(nodeId) === index);
+    }
+
+    function appendNextNodeSystemActionRows(rows, seen) {
+        getNextActionPreviewNodeIds().forEach((nodeId) => {
+            for (let phaseIndex = 0; phaseIndex < PHASE_SLOT_IDS.length; phaseIndex += 1) {
+                const encounterPreview = getEncounterActionPreviewForPhase(phaseIndex, nodeId, 'next');
+                if (encounterPreview) {
+                    pushActionPreviewRow(rows, seen, {
+                        ...encounterPreview,
+                        timeLabel: `NEXT ${getPhaseRomanLabel(phaseIndex)}`,
+                        next: true
+                    });
+                }
+                const fixedPreview = getActionPreviewForPhase(phaseIndex, {
+                    nodeId,
+                    idPrefix: 'next',
+                    includePlanToken: false
+                });
+                if (!fixedPreview) continue;
+                pushActionPreviewRow(rows, seen, {
+                    id: fixedPreview.id,
+                    key: fixedPreview.key,
+                    timeLabel: `NEXT ${getPhaseRomanLabel(phaseIndex)}`,
+                    title: fixedPreview.title,
+                    tag: fixedPreview.tag,
+                    next: true
+                });
+            }
+        });
+    }
+
+    function getNextFixedPhaseIndexForActionPreview(nodeId) {
+        const current = Math.max(0, Math.min(PHASE_SLOT_IDS.length, Math.round(Number(appState.currentPhaseIndex) || 0)));
+        for (let phaseIndex = current; phaseIndex < PHASE_SLOT_IDS.length; phaseIndex += 1) {
+            if (typeof getFixedPhaseKind === 'function' && getFixedPhaseKind(nodeId, phaseIndex)) return phaseIndex;
+        }
+        return null;
+    }
+
+    function appendPendingActionRows(rows, seen) {
+        const vision = getVisionStateForDashboard();
+        const pendingReplace = vision.pendingReplace;
+        const currentNodeId = getCurrentNodeData().presentNode;
+        const currentPhaseIndex = Math.max(0, Math.min(PHASE_SLOT_IDS.length, Math.round(Number(appState.currentPhaseIndex) || 0)));
+        if (pendingReplace && pendingReplace.status === 'ready') {
+            const targetNodeId = typeof pendingReplace.nodeId === 'string' ? pendingReplace.nodeId : '';
+            const targetPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(pendingReplace.phaseIndex) || 0)));
+            const targetNodeIndex = Math.max(0, Math.round(Number(pendingReplace.nodeIndex) || 0));
+            const isVisibleCurrentPhase = targetNodeId === currentNodeId
+                && targetPhaseIndex >= currentPhaseIndex;
+            const isPastCurrentPhase = targetNodeId === currentNodeId && targetPhaseIndex < currentPhaseIndex;
+            const isFutureNode = targetNodeId !== currentNodeId
+                && targetNodeIndex > Math.max(0, Math.round(Number(appState.currentNodeIndex) || 0));
+            if (!isVisibleCurrentPhase) {
+                const key = normalizeResourceKey(pendingReplace.replacementKey || pendingReplace.key, 'vision');
+                if (!isPastCurrentPhase && isFutureNode) {
+                    pushActionPreviewRow(rows, seen, {
+                        id: `pending:vision-ready:${targetNodeId}:${targetPhaseIndex}:${key}`,
+                        key,
+                        timeLabel: 'NEXT I',
+                        title: `相位改写为${getActionResourceLabel(key)}`,
+                        tag: 'VISION',
+                        next: true
+                    });
+                }
+            }
+        } else if (pendingReplace && ['charged', 'choosing'].includes(pendingReplace.status)) {
+            const charges = Math.max(1, Math.round(Number(pendingReplace.charges) || 1));
+            const nextFixedPhaseIndex = getNextFixedPhaseIndexForActionPreview(currentNodeId);
+            pushActionPreviewRow(rows, seen, {
+                id: `pending:vision-charged:${charges}`,
+                key: 'vision',
+                timeLabel: nextFixedPhaseIndex === null ? 'NEXT I' : getActionPhaseTimingLabel(nextFixedPhaseIndex),
+                title: '既定相位待命',
+                tag: `VISION ${charges}`,
+                next: nextFixedPhaseIndex === null
+            });
+        }
+
+        if (vision.jumpReady || appData.runtime.frontendSnapshot?.routeMode === 'jump') {
+            pushActionPreviewRow(rows, seen, {
+                id: 'pending:vision-jump',
+                key: 'vision',
+                timeLabel: 'NEXT I',
+                title: '跃迁待命',
+                tag: 'JUMP',
+                next: true
+            });
+        }
+
+        const assetSummary = getCurrentAssetDeckSummary();
+        const offer = assetSummary.pending?.offer;
+        if (offer) {
+            const pool = String(offer.pool || 'low').toLowerCase();
+            pushActionPreviewRow(rows, seen, {
+                id: `pending:asset-offer:${offer.id || pool}`,
+                key: 'asset',
+                timeLabel: '当前段',
+                title: `${pool === 'high' ? '高阶' : pool === 'mid' ? '中阶' : '低阶'}契约待选`,
+                tag: 'OFFER',
+                next: false
+            });
+        }
+        const queue = Array.isArray(assetSummary.pending?.offerQueue) ? assetSummary.pending.offerQueue : [];
+        if (queue.length) {
+            pushActionPreviewRow(rows, seen, {
+                id: `pending:asset-queue:${queue.length}`,
+                key: 'asset',
+                timeLabel: '当前段',
+                title: `契约队列待命 x${queue.length}`,
+                tag: 'QUEUE',
+                next: false
+            });
+        }
+    }
+
+    function buildActionPreviewPanelMarkup() {
+        const planConfirmed = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+        const phaseCount = PHASE_SLOT_IDS.length;
+        const current = Math.max(0, Math.min(phaseCount, Math.round(Number(appState.currentPhaseIndex) || 0)));
+        const rows = [];
+        const seen = new Set();
+
+        for (let phaseIndex = 0; phaseIndex < phaseCount; phaseIndex += 1) {
+            const shouldShowPhaseAction = phaseIndex >= current;
+            if (shouldShowPhaseAction) {
+                const encounterPreview = getEncounterActionPreviewForPhase(phaseIndex);
+                if (encounterPreview) {
+                    pushActionPreviewRow(rows, seen, {
+                        ...encounterPreview,
+                        timeLabel: getActionPhaseTimingLabel(phaseIndex)
+                    });
+                }
+            }
+            const preview = getActionPreviewForPhase(phaseIndex);
+            if (!preview) continue;
+            const canShowPreview = shouldShowPhaseAction && (planConfirmed || preview.system === true);
+            if (canShowPreview) {
+                pushActionPreviewRow(rows, seen, {
+                    id: preview.id,
+                    key: preview.key,
+                    timeLabel: getActionPhaseTimingLabel(phaseIndex),
+                    title: preview.title,
+                    tag: preview.tag
+                });
+                if (preview.carry) {
+                    pushActionPreviewRow(rows, seen, {
+                        id: `carry:${preview.id}`,
+                        key: preview.key,
+                        timeLabel: 'NEXT I',
+                        title: getCarryActionTitle(preview),
+                        tag: preview.key === 'vision' ? 'INTEL' : (RESOURCE_TYPE_MAP[preview.key] || ''),
+                        next: true
+                    });
+                }
+            }
+            if (planConfirmed || preview.system === true) {
+                appendActionEffectRow(rows, seen, preview, current, phaseCount);
+            }
+        }
+
+        appendNextNodeSystemActionRows(rows, seen);
+        appendPendingActionRows(rows, seen);
+        if (!rows.length) return '';
+
+        return `
+            <div class="action-preview-panel">
+                <div class="section-header"><span>ACTIONS</span></div>
+                <div class="action-preview-list">
+                    ${rows.slice(0, 7).map((row) => `
+                        <div class="action-preview-row type-${escapePartyHtml(row.key)}${row.next ? ' is-next' : ''}">
+                            <span class="action-preview-time">${escapePartyHtml(row.timeLabel)}</span>
+                            <strong>${escapePartyHtml(row.title)}</strong>
+                            <em>${escapePartyHtml(row.tag)}</em>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     function buildVisionReadyReplacementMarkup(pendingReplace) {
         if (!pendingReplace || pendingReplace.status !== 'ready') return '';
         const nodeId = typeof pendingReplace.nodeId === 'string' ? pendingReplace.nodeId : '';
@@ -738,6 +1111,7 @@
         `).join('');
         const rosterMarkup = buildRosterSectionsMarkup();
         const actPanelMarkup = buildActModePanelMarkup();
+        const actionPreviewMarkup = buildActionPreviewPanelMarkup();
         const actToggleMarkup = isOverviewDebugMode()
             ? `<div class="act-panel-control"><button class="act-panel-mini-toggle${appState.actPanelCollapsed === true ? ' is-collapsed' : ''}" type="button" data-act-panel-toggle aria-expanded="${appState.actPanelCollapsed === true ? 'false' : 'true'}">${appState.actPanelCollapsed === true ? 'SHOW ACT' : 'HIDE ACT'}</button></div>`
             : '';
@@ -748,6 +1122,7 @@
                 <span class="hero-title">${nodeData.title}</span>
                 <span class="hero-subtitle">${nodeData.subtitle}</span>
             </div>
+            ${actionPreviewMarkup}
             <div>
                 <div class="section-header"><span>${appData.intel.rewardsTitle}</span></div>
                 <div class="token-ledger-list">${rewardMarkup}</div>

@@ -1473,7 +1473,7 @@ function createExecutionRuntimeContext() {
             window.clearTimeout(syncState.autoCommitTimer);
             syncState.autoCommitTimer = null;
         }
-        refreshPlannerUI();
+        refreshAllUI();
         commitActStateToHost();
         return true;
     }
@@ -1624,7 +1624,6 @@ function createExecutionRuntimeContext() {
     }
 
     function getEncounterMarkersForNode(nodeId) {
-        if (!isNodeDetailVisible(nodeId)) return [];
         const markers = Array.isArray(appData.runtime.frontendSnapshot?.encounterMarkers)
             ? appData.runtime.frontendSnapshot.encounterMarkers
             : [];
@@ -2680,6 +2679,10 @@ function createExecutionRuntimeContext() {
             isRouteSelectionActive,
             getRouteOptions,
             getRouteOptionLabel,
+            getFixedPhaseKind,
+            getReadyVisionReplacementForPhase,
+            getEncounterMarkerForPhase,
+            isPhasePlanConfirmedForCurrentNode,
             deepCloneValue,
             normalizePendingAssetDeckCommandsForDashboard,
             getCurrentAssetDeckSummary,
