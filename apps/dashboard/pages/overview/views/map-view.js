@@ -50,10 +50,128 @@
         return Number.isFinite(parsed) ? parsed : fallback;
     }
 
+    function setTextIfChanged(el, value) {
+        if (!el || el.textContent === value) return false;
+        el.textContent = value;
+        return true;
+    }
+
+    function setClassNameIfChanged(el, value) {
+        if (!el || el.className === value) return false;
+        el.className = value;
+        return true;
+    }
+
+    function setAttributeIfChanged(el, name, value) {
+        if (!el || el.getAttribute(name) === value) return false;
+        el.setAttribute(name, value);
+        return true;
+    }
+
+    function setStylePxIfChanged(el, prop, value) {
+        const nextValue = `${value}px`;
+        if (!el || el.style[prop] === nextValue) return false;
+        el.style[prop] = nextValue;
+        return true;
+    }
+
+    function setDatasetValueIfChanged(el, name, value) {
+        if (!el || el.dataset[name] === value) return false;
+        el.dataset[name] = value;
+        return true;
+    }
+
+    function removeAttributeIfPresent(el, name) {
+        if (!el?.hasAttribute(name)) return false;
+        el.removeAttribute(name);
+        return true;
+    }
+
+    function getNodeElementParts(nodeEl) {
+        if (nodeEl.__ace0MapParts) return nodeEl.__ace0MapParts;
+        const parts = {
+            labelEl: nodeEl.querySelector('.node-label'),
+            sublabelEl: nodeEl.querySelector('.node-sublabel'),
+            ringEl: nodeEl.querySelector('.astrolabe-ring')
+        };
+        nodeEl.__ace0MapParts = parts;
+        return parts;
+    }
+
     function getNodeCenter(id) {
         const el = global.document?.getElementById(id);
         if (!el) return { x: 0, y: 0 };
-        return { x: Number.parseFloat(el.style.left), y: Number.parseFloat(el.style.top) };
+        return {
+            x: parsePxPosition(el.style.left, 0),
+            y: parsePxPosition(el.style.top, 0)
+        };
+    }
+
+    function getNodeCenterFromCache(cache, id) {
+        if (!cache.has(id)) cache.set(id, getNodeCenter(id));
+        return cache.get(id);
+    }
+
+    function getCurveMetrics(start, end) {
+        const dx = end.x - start.x;
+        const cy = dx * 0.45;
+        return {
+            c1x: start.x + cy,
+            c1y: start.y,
+            c2x: end.x - cy,
+            c2y: end.y
+        };
+    }
+
+    function rememberGeometry(item, start, end) {
+        const changed = (
+            item.lastStartX !== start.x
+            || item.lastStartY !== start.y
+            || item.lastEndX !== end.x
+            || item.lastEndY !== end.y
+        );
+        if (!changed) return false;
+        item.lastStartX = start.x;
+        item.lastStartY = start.y;
+        item.lastEndX = end.x;
+        item.lastEndY = end.y;
+        item.staticPathD = '';
+        item.segmentSamples = null;
+        return true;
+    }
+
+    function getStaticPathD(item, start, end) {
+        if (item.staticPathD) return item.staticPathD;
+        if (item.isJumpPath) {
+            item.staticPathD = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+            return item.staticPathD;
+        }
+        const { c1x, c1y, c2x, c2y } = getCurveMetrics(start, end);
+        item.staticPathD = `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${end.x} ${end.y}`;
+        return item.staticPathD;
+    }
+
+    function getSegmentSamples(item, start, end) {
+        if (item.segmentSamples) return item.segmentSamples;
+        const { c1x, c1y, c2x, c2y } = getCurveMetrics(start, end);
+        item.segmentSamples = Array.from({ length: SEGMENTS }, (_, index) => {
+            const t = (index + 1) / SEGMENTS;
+            const mt = 1 - t;
+            const pX = mt * mt * mt * start.x + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * end.x;
+            const pY = mt * mt * mt * start.y + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * end.y;
+            const dX = 3 * mt * mt * (c1x - start.x) + 6 * mt * t * (c2x - c1x) + 3 * t * t * (end.x - c2x);
+            const dY = 3 * mt * mt * (c1y - start.y) + 6 * mt * t * (c2y - c1y) + 3 * t * t * (end.y - c2y);
+            const len = Math.sqrt(dX * dX + dY * dY) || 1;
+            return {
+                t,
+                pX,
+                pY,
+                nX: -dY / len,
+                nY: dX / len,
+                damping: Math.sin(t * Math.PI)
+            };
+        });
+        return item.segmentSamples;
     }
 
     function create(ctx = {}) {
@@ -62,7 +180,11 @@
         const autoLayoutRules = { ...(appData.map?.layout || {}) };
         let active = true;
         let drawLoopRunning = false;
-        let renderQueue = [];
+        let staticRenderQueue = [];
+        let dynamicRenderQueue = [];
+        let staticPathsDirty = true;
+        let renderSignature = '';
+        const nodeCenterCache = new Map();
         let initializedCamera = false;
         let currentFocusNodeId = call(ctx, 'getMapFocusNodeId') || appData.map?.focusNodeId || '';
         let scale = 1;
@@ -74,6 +196,12 @@
         let isDragging = false;
         let startMouseX = 0;
         let startMouseY = 0;
+        let lastTransform = '';
+
+        function invalidateNodeCenterCache() {
+            nodeCenterCache.clear();
+            staticPathsDirty = true;
+        }
 
         function getViewport() {
             return getDomElement(ctx, 'getViewport', 'mapViewport');
@@ -93,7 +221,11 @@
 
         function updateTransform() {
             const layer = getLayer();
-            if (layer) layer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+            const nextTransform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+            if (layer && lastTransform !== nextTransform) {
+                lastTransform = nextTransform;
+                layer.style.transform = nextTransform;
+            }
         }
 
         function syncViewportSize() {
@@ -165,13 +297,14 @@
         }
 
         function applyAutoMacroLayout() {
+            let layoutChanged = false;
             (call(ctx, 'getMapColumns') || []).forEach((column, columnIndex) => {
                 const x = autoLayoutRules.startX + (autoLayoutRules.columnGap * columnIndex);
                 const offsets = getRowOffsets(column.nodeIds.length);
                 const gridLine = global.document?.getElementById(column.lineId);
 
                 if (gridLine) {
-                    gridLine.style.left = `${x}px`;
+                    setStylePxIfChanged(gridLine, 'left', x);
                 }
 
                 column.nodeIds.forEach((nodeId, nodeIndex) => {
@@ -181,10 +314,11 @@
                     const baseOffset = offsets[nodeIndex] || 0;
                     const laneOffset = getLaneAnchorValue(nodeId, column.nodeIds.length);
                     const y = autoLayoutRules.centerY + (baseOffset * 0.45) + (laneOffset * 0.65) + micro.dy;
-                    node.style.left = `${x + micro.dx}px`;
-                    node.style.top = `${y}px`;
+                    layoutChanged = setStylePxIfChanged(node, 'left', x + micro.dx) || layoutChanged;
+                    layoutChanged = setStylePxIfChanged(node, 'top', y) || layoutChanged;
                 });
             });
+            if (layoutChanged) invalidateNodeCenterCache();
         }
 
         function getFocusNodeCenter() {
@@ -207,7 +341,7 @@
         function getCameraFitMetrics() {
             const layer = getLayer();
             const currentIndex = Math.max(1, Math.round(Number(appState.currentNodeIndex) || 1));
-            const maxIndex = currentIndex + Math.max(0, Math.round(Number(call(ctx, 'getVisionSightValue')) || 0));
+            const maxIndex = currentIndex + Math.max(0, Math.round(Number(call(ctx, 'getVisionSightValue')) || 0)) + 1;
             const minIndex = Math.max(1, currentIndex - 1);
             const fitNodes = Array.from(layer?.querySelectorAll('.az-node:not(.node-fog-hidden)') || [])
                 .map((node) => ({
@@ -304,9 +438,9 @@
             const presentNodeX = presentNode ? parsePxPosition(presentNode.style.left, NaN) : NaN;
 
             layerMetrics = { width: layerWidth, height: layerHeight };
-            layer.style.width = `${layerWidth}px`;
-            layer.style.height = `${layerHeight}px`;
-            canvas.setAttribute('viewBox', `0 0 ${layerWidth} ${layerHeight}`);
+            setStylePxIfChanged(layer, 'width', layerWidth);
+            setStylePxIfChanged(layer, 'height', layerHeight);
+            setAttributeIfChanged(canvas, 'viewBox', `0 0 ${layerWidth} ${layerHeight}`);
 
             (call(ctx, 'getMapColumns') || []).forEach((column) => {
                 const line = global.document?.getElementById(column.lineId);
@@ -315,16 +449,16 @@
                 const lineLeft = column.nodeIds.includes(currentNodeData.presentNode) && Number.isFinite(presentNodeX)
                     ? presentNodeX
                     : parsePxPosition(line.style.left, 0);
-                line.style.left = `${lineLeft}px`;
-                line.style.top = `${bounds.top}px`;
-                line.style.height = `${Math.max(40, bounds.bottom - bounds.top)}px`;
+                setStylePxIfChanged(line, 'left', lineLeft);
+                setStylePxIfChanged(line, 'top', bounds.top);
+                setStylePxIfChanged(line, 'height', Math.max(40, bounds.bottom - bounds.top));
             });
 
             const mapLayerMeta = getMapLayerMeta();
             if (mapLayerMeta) {
                 const currentNodeTemplate = call(ctx, 'getCurrentNodeTemplate');
                 const currentNodeDebugLabel = call(ctx, 'getNodeDebugLabel', currentNodeTemplate);
-                mapLayerMeta.textContent = call(ctx, 'shouldShowMapProgressMeta')
+                let metaText = call(ctx, 'shouldShowMapProgressMeta')
                     ? (
                         call(ctx, 'isRouteSelectionActive')
                             ? `MACRO THREAT MAP · NODE ${String(appState.currentNodeIndex + 1).padStart(2, '0')}`
@@ -334,8 +468,9 @@
                     )
                     : `MACRO THREAT MAP · NODE ${String(appState.currentNodeIndex).padStart(2, '0')}`;
                 if (currentNodeDebugLabel) {
-                    mapLayerMeta.textContent += ` · ${currentNodeDebugLabel}`;
+                    metaText += ` · ${currentNodeDebugLabel}`;
                 }
+                setTextIfChanged(mapLayerMeta, metaText);
             }
         }
 
@@ -350,11 +485,29 @@
             scale = Math.max(0.32, fittedScale);
         }
 
-        function getControlledNodeEntry(nodeId) {
-            const actState = call(ctx, 'buildCurrentActStateSnapshot') || {};
-            const controlledNodes = actState.controlledNodes && typeof actState.controlledNodes === 'object'
+        function getControlledNodesFromActState(actState) {
+            const controlledNodes = actState?.controlledNodes && typeof actState.controlledNodes === 'object'
                 ? actState.controlledNodes
                 : {};
+            return controlledNodes;
+        }
+
+        function buildMapRenderContext() {
+            const currentNodeData = call(ctx, 'getCurrentNodeData') || {};
+            const routeSelectionActive = call(ctx, 'isRouteSelectionActive');
+            return {
+                currentNodeData,
+                pathNodeIds: Array.isArray(currentNodeData.pathNodes) && currentNodeData.pathNodes.length
+                    ? currentNodeData.pathNodes
+                    : appState.routeHistory,
+                routeOptionIds: routeSelectionActive ? (call(ctx, 'getRouteOptions') || []) : [],
+                isJumpRouteMode: appData.runtime?.frontendSnapshot?.routeMode === 'jump',
+                controlledNodes: getControlledNodesFromActState(call(ctx, 'buildCurrentActStateSnapshot') || {})
+            };
+        }
+
+        function getControlledNodeEntry(nodeId, renderContext) {
+            const controlledNodes = renderContext?.controlledNodes || getControlledNodesFromActState(call(ctx, 'buildCurrentActStateSnapshot') || {});
             const entry = controlledNodes[nodeId];
             return entry && typeof entry === 'object' ? entry : null;
         }
@@ -365,34 +518,35 @@
             return `type-${originalType}`;
         }
 
-        function getDisplayTypeKeyForMapNode(node) {
-            const controlledEntry = getControlledNodeEntry(node.id);
+        function getDisplayTypeKeyForMapNode(node, renderContext) {
+            const controlledEntry = getControlledNodeEntry(node.id, renderContext);
             const controlType = call(ctx, 'normalizeRestTintKey', controlledEntry?.type, '');
             if (controlType) return controlType;
             return getOriginalNodeTypeClass(node).replace('type-', '');
         }
 
-        function getMapClassNameForNode(node) {
+        function getMapClassNameForNode(node, renderContext = null) {
+            const mapRenderContext = renderContext || buildMapRenderContext();
             const isBranchNode = node.classes.includes('node-branch');
             const hasFixedPhase = node.classes.includes('node-has-fixed-phase');
             const classList = ['az-node'];
-            const currentNodeData = call(ctx, 'getCurrentNodeData') || {};
+            const currentNodeData = mapRenderContext.currentNodeData || {};
             const isBossNode = call(ctx, 'isBossNodeId', node.id);
             const isFinaleNode = call(ctx, 'isFinaleNodeId', node.id);
-            const controlledEntry = getControlledNodeEntry(node.id);
+            const controlledEntry = getControlledNodeEntry(node.id, mapRenderContext);
             const controlType = call(ctx, 'normalizeRestTintKey', controlledEntry?.type, '');
             const detailVisible = call(ctx, 'isNodeDetailVisible', node.id);
-            const displayTypeClass = detailVisible ? `type-${getDisplayTypeKeyForMapNode(node)}` : '';
-            const pathNodeIds = Array.isArray(currentNodeData.pathNodes) && currentNodeData.pathNodes.length
-                ? currentNodeData.pathNodes
-                : appState.routeHistory;
-            const routeSelectionActive = call(ctx, 'isRouteSelectionActive');
-            const routeOptionIds = routeSelectionActive ? (call(ctx, 'getRouteOptions') || []) : [];
+            const positionPreviewVisible = detailVisible || call(ctx, 'isNodePositionPreviewVisible', node.id);
+            const displayTypeClass = detailVisible ? `type-${getDisplayTypeKeyForMapNode(node, mapRenderContext)}` : '';
+            const pathNodeIds = mapRenderContext.pathNodeIds;
+            const routeOptionIds = mapRenderContext.routeOptionIds;
             const isRouteChoiceNode = routeOptionIds.includes(node.id);
-            const isJumpRouteChoice = isRouteChoiceNode && appData.runtime?.frontendSnapshot?.routeMode === 'jump';
-            const encounterMarkers = call(ctx, 'getEncounterMarkersForNode', node.id) || [];
+            const isJumpRouteChoice = isRouteChoiceNode && mapRenderContext.isJumpRouteMode;
+            const encounterMarkers = detailVisible ? (call(ctx, 'getEncounterMarkersForNode', node.id) || []) : [];
 
-            if (node.id === currentNodeData.presentNode) {
+            if (!detailVisible) {
+                classList.push('node-future', 'node-position-preview');
+            } else if (node.id === currentNodeData.presentNode) {
                 classList.push(isBossNode ? 'node-reckoning' : isFinaleNode ? 'node-finale' : 'node-present');
             } else if ((pathNodeIds || []).includes(node.id)) {
                 classList.push('node-path');
@@ -414,15 +568,16 @@
                 }
             }
 
-            if (isBranchNode) classList.push('node-branch');
+            if (isBranchNode && detailVisible) classList.push('node-branch');
             if (hasFixedPhase && detailVisible) classList.push('node-has-fixed-phase');
             if (displayTypeClass) classList.push(displayTypeClass);
             if (node.id !== currentNodeData.presentNode && !(pathNodeIds || []).includes(node.id) && !(currentNodeData.deadNodes || []).includes(node.id)) {
                 classList.push(call(ctx, 'isNodeInVisionRange', node.id) ? 'node-visible' : 'node-obscured');
             }
-            if (!detailVisible) classList.push('node-intel-hidden', 'node-fog-hidden');
+            if (!detailVisible) classList.push('node-intel-hidden');
+            if (!positionPreviewVisible) classList.push('node-fog-hidden');
             if (call(ctx, 'isNodeTemporarilyRevealedByIntel', node.id)) classList.push('node-intel-revealed');
-            if (controlledEntry) {
+            if (controlledEntry && detailVisible) {
                 classList.push('node-controlled', `control-${controlType || 'neutral'}`);
             }
             if (encounterMarkers.length) {
@@ -432,48 +587,53 @@
         }
 
         function updateMapUI() {
+            const mapRenderContext = buildMapRenderContext();
             (call(ctx, 'getMapColumns') || []).forEach((column) => {
                 const lineEl = global.document?.getElementById(column.lineId);
                 if (!lineEl) return;
-                lineEl.className = `grid-base-line ${call(ctx, 'getCurrentColumnLineClass', column)}${call(ctx, 'isColumnVisibleInMapFog', column) ? '' : ' grid-line-fog-hidden'}`;
+                setClassNameIfChanged(
+                    lineEl,
+                    `grid-base-line ${call(ctx, 'getCurrentColumnLineClass', column)}${call(ctx, 'isColumnVisibleInMapFog', column) ? '' : ' grid-line-fog-hidden'}`
+                );
             });
 
             (call(ctx, 'getMapNodes') || []).forEach((node) => {
                 const nodeEl = global.document?.getElementById(node.id);
                 if (!nodeEl) return;
-                nodeEl.className = getMapClassNameForNode(node);
-                const labelEl = nodeEl.querySelector('.node-label');
-                const sublabelEl = nodeEl.querySelector('.node-sublabel');
+                setClassNameIfChanged(nodeEl, getMapClassNameForNode(node, mapRenderContext));
+                const { labelEl, sublabelEl, ringEl } = getNodeElementParts(nodeEl);
                 const detailVisible = call(ctx, 'isNodeDetailVisible', node.id);
-                if (labelEl) labelEl.textContent = node.label;
-                if (sublabelEl) sublabelEl.textContent = detailVisible ? node.sublabel : 'UNKNOWN';
-                nodeEl.dataset.displayType = detailVisible ? getDisplayTypeKeyForMapNode(node) : 'unknown';
-                const controlledEntry = getControlledNodeEntry(node.id);
+                setTextIfChanged(labelEl, detailVisible ? node.label : '');
+                setTextIfChanged(sublabelEl, detailVisible ? node.sublabel : '');
+                setDatasetValueIfChanged(nodeEl, 'displayType', detailVisible ? getDisplayTypeKeyForMapNode(node, mapRenderContext) : 'unknown');
+                const controlledEntry = getControlledNodeEntry(node.id, mapRenderContext);
                 const controlType = call(ctx, 'normalizeRestTintKey', controlledEntry?.type, '');
-                const encounterMarkup = call(ctx, 'buildEncounterBadgeMarkup', node.id);
-                const ringEl = nodeEl.querySelector('.astrolabe-ring');
+                const encounterMarkup = detailVisible ? call(ctx, 'buildEncounterBadgeMarkup', node.id) : '';
                 const encounterEl = ringEl?.querySelector('.encounter-badge');
                 if (ringEl) {
                     if (encounterMarkup) {
-                        if (encounterEl) encounterEl.outerHTML = encounterMarkup;
-                        else ringEl.insertAdjacentHTML('afterbegin', encounterMarkup);
+                        if (encounterEl) {
+                            if (encounterEl.outerHTML !== encounterMarkup) encounterEl.outerHTML = encounterMarkup;
+                        } else {
+                            ringEl.insertAdjacentHTML('afterbegin', encounterMarkup);
+                        }
                     } else if (encounterEl) {
                         encounterEl.remove();
                     }
                 }
-                const encounterMarker = (call(ctx, 'getEncounterMarkersForNode', node.id) || [])[0] || null;
+                const encounterMarker = detailVisible ? (call(ctx, 'getEncounterMarkersForNode', node.id) || [])[0] || null : null;
                 if (encounterMarker) {
-                    nodeEl.dataset.encounterChar = encounterMarker.charKey;
+                    setDatasetValueIfChanged(nodeEl, 'encounterChar', encounterMarker.charKey);
                 } else {
-                    nodeEl.removeAttribute('data-encounter-char');
+                    removeAttributeIfPresent(nodeEl, 'data-encounter-char');
                 }
                 if (controlType) {
-                    nodeEl.dataset.controlType = controlType;
+                    setDatasetValueIfChanged(nodeEl, 'controlType', controlType);
                 } else {
-                    nodeEl.removeAttribute('data-control-type');
+                    removeAttributeIfPresent(nodeEl, 'data-control-type');
                 }
             });
-            setFocusNodeId(call(ctx, 'getCurrentNodeData')?.mapFocus || currentFocusNodeId);
+            setFocusNodeId(mapRenderContext.currentNodeData?.mapFocus || currentFocusNodeId);
         }
 
         function refresh() {
@@ -562,23 +722,48 @@
                 .filter((conn) => call(ctx, 'isConnectionVisibleInMapFog', conn));
             if (!canvas) return;
             if (!(call(ctx, 'getMapNodes') || []).length || !renderedTopology.length) {
-                canvas.innerHTML = '';
-                renderQueue = [];
+                if (canvas.childNodes.length) canvas.replaceChildren();
+                staticRenderQueue = [];
+                dynamicRenderQueue = [];
+                renderSignature = '';
+                staticPathsDirty = true;
                 return;
             }
-            canvas.innerHTML = '';
-            renderQueue = [];
-            renderedTopology.forEach((conn) => {
+            const renderEntries = renderedTopology.map((conn) => {
                 const type = getConnectionTypeForCurrentNode(conn);
                 const layers = THEMES[type] || THEMES.future;
                 const laneClass = getConnectionLaneKey(conn);
+                return { conn, type, layers, laneClass };
+            });
+            const nextRenderSignature = renderEntries
+                .map((entry) => `${entry.conn.from}>${entry.conn.to}:${entry.conn.isJumpPath ? 'jump' : 'path'}:${entry.type}:${entry.laneClass}:${entry.layers.map((cfg) => cfg.class).join(',')}`)
+                .join('|');
+            const nextPathCount = renderEntries.reduce((count, entry) => count + entry.layers.length, 0);
+
+            if (renderSignature === nextRenderSignature && canvas.childNodes.length === nextPathCount) {
+                return;
+            }
+
+            canvas.replaceChildren();
+            staticRenderQueue = [];
+            dynamicRenderQueue = [];
+            const fragment = global.document.createDocumentFragment();
+            renderEntries.forEach(({ conn, laneClass, layers }) => {
                 layers.forEach((cfg) => {
                     const pathEl = global.document.createElementNS(SVG_NS, 'path');
                     pathEl.setAttribute('class', `magic-thread ${cfg.class} ${laneClass}`);
-                    canvas.appendChild(pathEl);
-                    renderQueue.push({ pathEl, fromId: conn.from, toId: conn.to, laneClass, isJumpPath: conn.isJumpPath === true, ...cfg });
+                    fragment.appendChild(pathEl);
+                    const item = { pathEl, fromId: conn.from, toId: conn.to, laneClass, isJumpPath: conn.isJumpPath === true, ...cfg };
+                    if (item.isStatic || item.isJumpPath) {
+                        staticRenderQueue.push(item);
+                    } else {
+                        dynamicRenderQueue.push(item);
+                    }
                 });
             });
+            canvas.appendChild(fragment);
+            renderSignature = nextRenderSignature;
+            staticPathsDirty = true;
         }
 
         function fitToFocus() {
@@ -598,6 +783,8 @@
 
         function renderedCanvasChanged() {
             setCanvasGetter(() => global.document?.getElementById('fate-canvas') || null);
+            renderSignature = '';
+            invalidateNodeCenterCache();
             rebuild();
             ensureDrawLoop();
         }
@@ -651,6 +838,12 @@
                 panY = event.clientY - startMouseY;
                 updateTransform();
             });
+            global.document?.addEventListener('visibilitychange', () => {
+                if (!global.document.hidden) {
+                    drawLoopRunning = false;
+                    ensureDrawLoop();
+                }
+            });
         }
 
         function start() {
@@ -670,61 +863,53 @@
         }
 
         function ensureDrawLoop() {
-            if (!active || drawLoopRunning) return;
+            if (!active || drawLoopRunning || global.document?.hidden) return;
             drawLoopRunning = true;
             global.requestAnimationFrame(draw);
         }
 
         function draw() {
-            if (!active) {
+            if (!active || global.document?.hidden) {
                 drawLoopRunning = false;
                 return;
             }
             const time = global.performance?.now ? global.performance.now() : Date.now();
 
-            renderQueue.forEach((item) => {
-                const start = getNodeCenter(item.fromId);
-                const end = getNodeCenter(item.toId);
-                if (item.isJumpPath) {
-                    item.pathEl.setAttribute('d', `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
-                    return;
-                }
+            if (staticPathsDirty) {
+                staticRenderQueue.forEach((item) => {
+                    const start = getNodeCenterFromCache(nodeCenterCache, item.fromId);
+                    const end = getNodeCenterFromCache(nodeCenterCache, item.toId);
+                    const geometryChanged = rememberGeometry(item, start, end);
+                    const pathD = getStaticPathD(item, start, end);
+                    if (geometryChanged || item.renderedPathD !== pathD) {
+                        item.renderedPathD = pathD;
+                        item.pathEl.setAttribute('d', pathD);
+                    }
+                });
+                staticPathsDirty = false;
+            }
 
-                const dx = end.x - start.x;
-                const cy = dx * 0.45;
-                const c1x = start.x + cy;
-                const c1y = start.y;
-                const c2x = end.x - cy;
-                const c2y = end.y;
-
-                if (item.isStatic) {
-                    item.pathEl.setAttribute('d', `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${end.x} ${end.y}`);
-                    return;
-                }
+            dynamicRenderQueue.forEach((item) => {
+                const start = getNodeCenterFromCache(nodeCenterCache, item.fromId);
+                const end = getNodeCenterFromCache(nodeCenterCache, item.toId);
+                rememberGeometry(item, start, end);
 
                 let d = `M ${start.x} ${start.y} `;
-                for (let i = 1; i <= SEGMENTS; i += 1) {
-                    const t = i / SEGMENTS;
-                    const mt = 1 - t;
-                    const pX = mt * mt * mt * start.x + 3 * mt * mt * t * c1x + 3 * mt * t * t * c2x + t * t * t * end.x;
-                    const pY = mt * mt * mt * start.y + 3 * mt * mt * t * c1y + 3 * mt * t * t * c2y + t * t * t * end.y;
-
-                    const dX = 3 * mt * mt * (c1x - start.x) + 6 * mt * t * (c2x - c1x) + 3 * t * t * (end.x - c2x);
-                    const dY = 3 * mt * mt * (c1y - start.y) + 6 * mt * t * (c2y - c1y) + 3 * t * t * (end.y - c2y);
-                    const len = Math.sqrt(dX * dX + dY * dY) || 1;
-                    const nX = -dY / len;
-                    const nY = dX / len;
-
-                    const damping = Math.sin(t * Math.PI);
-                    const wave = Math.sin((t * Math.PI * item.freq) + (time * item.speed) + item.phaseOffset);
-                    const offset = item.mathAmp * damping * wave;
-
-                    d += `L ${pX + nX * offset} ${pY + nY * offset} `;
+                const samples = getSegmentSamples(item, start, end);
+                for (let i = 0; i < samples.length; i += 1) {
+                    const sample = samples[i];
+                    const wave = Math.sin((sample.t * Math.PI * item.freq) + (time * item.speed) + item.phaseOffset);
+                    const offset = item.mathAmp * sample.damping * wave;
+                    d += `L ${sample.pX + sample.nX * offset} ${sample.pY + sample.nY * offset} `;
                 }
                 item.pathEl.setAttribute('d', d);
             });
 
-            global.requestAnimationFrame(draw);
+            if (dynamicRenderQueue.length) {
+                global.requestAnimationFrame(draw);
+            } else {
+                drawLoopRunning = false;
+            }
         }
 
         return Object.freeze({

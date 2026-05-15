@@ -1394,6 +1394,32 @@
             transform: scale(0.5);
             background: rgba(5, 7, 10, 0.94);
         }
+        .node-position-preview:not(.node-present):not(.node-path) {
+            filter: none;
+            cursor: default;
+        }
+        .node-position-preview:not(.node-present):not(.node-path) .node-label,
+        .node-position-preview:not(.node-present):not(.node-path) .node-sublabel {
+            display: none;
+        }
+        .node-position-preview:not(.node-present):not(.node-path) .astrolabe-ring {
+            width: 28px;
+            height: 28px;
+            border-color: rgba(176, 180, 186, 0.16);
+            background: radial-gradient(circle, rgba(176,180,186,0.025) 0%, rgba(12,15,20,0.18) 70%);
+            box-shadow: 0 0 7px rgba(176,180,186,0.045), inset 0 0 6px rgba(176,180,186,0.025);
+            opacity: 0.56;
+        }
+        .node-position-preview:not(.node-present):not(.node-path) .magic-core {
+            width: 6px;
+            height: 6px;
+            background: rgba(238, 243, 255, 0.28);
+            box-shadow: 0 0 6px rgba(238,243,255,0.045);
+        }
+        .node-position-preview:not(.node-present):not(.node-path) .magic-core::after {
+            transform: scale(0.48);
+            background: rgba(5, 7, 10, 0.9);
+        }
         .node-intel-revealed:not(.node-route-choice):not(.node-present):not(.node-path) .node-label {
             color: rgba(180, 246, 234, 0.86);
             opacity: 0.96;

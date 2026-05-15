@@ -360,11 +360,11 @@
         `).join('');
         const nodeMarkup = getMapNodes().map((node) => `
             <div class="${getMapClassNameForNode(node)}" id="${node.id}">
-                <div class="node-label">${escapePartyHtml(node.label)}</div>
-                <div class="node-sublabel">${escapePartyHtml(isNodeDetailVisible(node.id) ? node.sublabel : 'UNKNOWN')}</div>
+                <div class="node-label">${escapePartyHtml(isNodeDetailVisible(node.id) ? node.label : '')}</div>
+                <div class="node-sublabel">${escapePartyHtml(isNodeDetailVisible(node.id) ? node.sublabel : '')}</div>
                 <div class="astrolabe-ring">
                     <div class="node-fixed-envelope" aria-hidden="true"></div>
-                    ${buildEncounterBadgeMarkup(node.id)}
+                    ${isNodeDetailVisible(node.id) ? buildEncounterBadgeMarkup(node.id) : ''}
                     <div class="magic-core"></div>
                 </div>
             </div>

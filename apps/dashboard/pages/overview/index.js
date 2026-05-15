@@ -709,6 +709,26 @@ function createExecutionRuntimeContext() {
         };
     }
 
+    function normalizeDebugFloorKeyPart(value, fallback) {
+        const normalized = typeof value === 'string' || typeof value === 'number'
+            ? String(value).trim()
+            : '';
+        return (normalized || fallback).replace(/[\s:|]+/g, '-');
+    }
+
+    function getDebugFloorKeyForActState(actState = {}) {
+        const source = actState && typeof actState === 'object' ? actState : {};
+        const nodeIndex = Math.max(1, Math.round(Number(source.nodeIndex ?? appState.currentNodeIndex) || 1));
+        const routeHistory = Array.isArray(source.route_history)
+            ? source.route_history.map((value) => typeof value === 'string' ? value.trim() : '').filter(Boolean)
+            : [];
+        const fallbackNodeId = getDefaultPresentNodeId(getNodeTemplate(nodeIndex)) || appState.currentNodeId || `node-${nodeIndex}`;
+        const nodeId = routeHistory[nodeIndex - 1] || routeHistory[routeHistory.length - 1] || fallbackNodeId;
+        const actId = normalizeDebugFloorKeyPart(source.id || getCurrentChapterId(), 'debug-act');
+        const seed = normalizeDebugFloorKeyPart(source.seed || appData.campaign.seed, 'debug-seed');
+        return `debug-floor:${actId}:${seed}:${nodeIndex}:${normalizeDebugFloorKeyPart(nodeId, 'node')}`;
+    }
+
     function isPhasePlanConfirmedForCurrentNode() {
         const lock = normalizePhasePlanLock(appState.phasePlanLock);
         return lock.locked === true
@@ -994,9 +1014,12 @@ function createExecutionRuntimeContext() {
         const actState = world?.act;
         const frontendSnapshot = extractFrontendSnapshot(normalizedPayload);
         const nextOfferIdentity = getAssetPendingOfferIdentity(world?.assetDeck);
-        const nextFloorKey = typeof normalizedPayload?.meta?.floorKey === 'string'
+        let nextFloorKey = typeof normalizedPayload?.meta?.floorKey === 'string'
             ? normalizedPayload.meta.floorKey.trim()
             : '';
+        if (!nextFloorKey && isOverviewDebugMode()) {
+            nextFloorKey = getDebugFloorKeyForActState(actState);
+        }
 
         syncHeroResourcesFromPayload(normalizedPayload);
         syncDashboardCharactersFromHeroPayload(normalizedPayload);
@@ -1424,6 +1447,9 @@ function createExecutionRuntimeContext() {
         if (!canUseInteractivePlannerControls()) return false;
         if (isRouteSelectionActive()) return false;
         if (isPhasePlanConfirmedForCurrentNode()) return false;
+        if (!appState.currentFloorKey && isOverviewDebugMode()) {
+            appState.currentFloorKey = getDebugFloorKeyForActState(buildActStateForCommit());
+        }
         if (!appState.currentFloorKey) {
             syncState.statusText = 'SYNC FAILED';
             syncState.errorText = '当前楼层标识缺失，无法确认规划。';
@@ -2077,6 +2103,12 @@ function createExecutionRuntimeContext() {
         if (nodeIndex < 0) return false;
         if (nodeIndex <= appState.currentNodeIndex) return true;
         return isNodeInVisionRange(nodeId);
+    }
+
+    function isNodePositionPreviewVisible(nodeId) {
+        const nodeIndex = getNodeIndex(nodeId);
+        if (nodeIndex < 0) return false;
+        return nodeIndex <= appState.currentNodeIndex + getVisionSightValue() + 1;
     }
 
     function isColumnVisibleInMapFog(column) {
@@ -3258,6 +3290,7 @@ function createExecutionRuntimeContext() {
             isImmediateNextNode,
             isNodeInVisionRange,
             isNodeDetailVisible,
+            isNodePositionPreviewVisible,
             isNodeTemporarilyRevealedByIntel,
             getEncounterMarkersForNode,
             buildEncounterBadgeMarkup,
