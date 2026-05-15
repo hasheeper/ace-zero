@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages
+name: Validate static app
 
 on:
   push:
@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -67,37 +65,3 @@ jobs:
             fi
             echo "OK $file"
           done
-
-  deploy:
-    name: Deploy
-    needs: validate
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Prepare static artifact
-        run: |
-          set -euo pipefail
-          mkdir -p _site
-          rsync -a \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude '_site' \
-            ./ _site/
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: _site
-          include-hidden-files: true
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
