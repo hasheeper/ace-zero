@@ -370,6 +370,7 @@
     }
 
     function buildCombatSettlementRowsMarkup(actState, options = {}) {
+        const isActPanel = options.panel === 'act';
         const rowClass = options.panel === 'act'
             ? 'vision-task-row combat-task-row type-combat'
             : 'row combat-request-row type-combat';
@@ -378,9 +379,9 @@
             .slice(0, 3)
             .map((item) => `
                 <div class="${rowClass}">
-                    <span>PENDING</span>
+                    <span>${isActPanel ? 'PENDING' : 'WAITING'}</span>
                     <strong>${escapePartyHtml(formatCombatRequestLabel(item))} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
-                    <em>EXT</em>
+                    <em>${isActPanel ? 'EXT' : 'ECHO'}</em>
                 </div>
             `).join('');
         const historyRows = (Array.isArray(actState?.resolutionHistory) ? actState.resolutionHistory : [])
@@ -394,7 +395,7 @@
                     <em>HIST</em>
                 </div>
             `).join('');
-        return pendingRows || historyRows || `<div class="${options.panel === 'act' ? 'vision-task-row combat-task-row' : 'row'} is-empty"><strong>-</strong><span>不生成假收益</span><em>LOCK</em></div>`;
+        return pendingRows || historyRows || `<div class="${options.panel === 'act' ? 'vision-task-row combat-task-row' : 'row'} is-empty"><strong>-</strong><span>${isActPanel ? '不生成假收益' : '暂无交锋回响'}</span><em>${isActPanel ? 'LOCK' : 'QUIET'}</em></div>`;
     }
 
     function buildCombatSettlementPanelMarkup(actState) {

@@ -215,9 +215,9 @@
     }
 
     const ASSET_POOL_META = Object.freeze([
-        { pool: 'low', level: 1, code: 'I', title: '一级卡池', label: 'LOW EXTRACT', cost: 1, note: '基础契令，偏向铜 / 银。' },
-        { pool: 'mid', level: 2, code: 'II', title: '二级卡池', label: 'MID EXTRACT', cost: 2, note: '进阶契令，提升金卡概率。' },
-        { pool: 'high', level: 3, code: 'III', title: '三级卡池', label: 'HIGH EXTRACT', cost: 3, note: '高阶契令，开放虹卡权重。' }
+        { pool: 'low', level: 1, code: 'I', title: '低阶牌池', label: 'LOW DRAW', cost: 1, note: '铜银契令，稳住起手。' },
+        { pool: 'mid', level: 2, code: 'II', title: '中阶牌池', label: 'MID DRAW', cost: 2, note: '金色回响开始浮现。' },
+        { pool: 'high', level: 3, code: 'III', title: '高阶牌池', label: 'HIGH DRAW', cost: 3, note: '虹色契约进入视野。' }
     ]);
 
     function getDisplayAssetPoints() {
@@ -269,7 +269,7 @@
                 </div>
             `;
         }).filter(Boolean).join('');
-        return rows || `<div class="row is-empty"><strong>-</strong><span>没有更多${escapePartyHtml(RESOURCE_LABEL_MAP[normalizedKey] || '')}点</span><em>EMPTY</em></div>`;
+        return rows || `<div class="row is-empty"><strong>-</strong><span>尚未排入${escapePartyHtml(RESOURCE_LABEL_MAP[normalizedKey] || '')}相位</span><em>EMPTY</em></div>`;
     }
 
     function buildControlledNodeSummaryMarkup() {
@@ -280,33 +280,34 @@
         const rows = controlled.slice(-4).reverse().map(([nodeId, entry]) => {
             const type = normalizeRestTintKey(entry?.type || entry?.tint || entry?.key, 'neutral');
             const label = type === 'neutral' ? 'NEUTRAL' : (RESOURCE_TYPE_MAP[type] || type.toUpperCase());
+            const tintLabel = type === 'neutral' ? '默认' : (RESOURCE_LABEL_MAP[type] || label);
             return `
                 <div class="row type-${type}">
                     <strong>${escapePartyHtml(label.slice(0, 1))}</strong>
-                    <span>${escapePartyHtml(getRouteOptionLabel(nodeId) || nodeId)} · ${escapePartyHtml(label)} tint</span>
-                    <em>+0.25</em>
+                    <span>${escapePartyHtml(getRouteOptionLabel(nodeId) || nodeId)} · ${escapePartyHtml(tintLabel)}倾向</span>
+                    <em>TINT</em>
                 </div>
             `;
         }).join('');
-        return rows || '<div class="row is-empty"><strong>-</strong><span>没有更多控制节点</span><em>EMPTY</em></div>';
+        return rows || '<div class="row is-empty"><strong>-</strong><span>尚未留下节点倾向</span><em>EMPTY</em></div>';
     }
 
     function getRestTintActionMeta(tintKey, token = getSelectedRestSlotToken()) {
         const normalized = normalizeRestTintKey(tintKey, 'neutral');
         const currentTint = token ? normalizeRestTintKey(token.tint || token.controlType || token.targetKey, 'neutral') : 'neutral';
         const labelMap = {
-            neutral: { title: '默认休整', note: '只结算回复，不追加节点染色。' },
-            rest: { title: '休整染色', note: '稳定节奏，强化后续回复窗口。' },
-            asset: { title: '契点染色', note: '倾向后续契约池与技能槽操作。' },
-            vision: { title: '情报染色', note: '倾向视野、路径与固定相位信息。' },
-            combat: { title: '交锋接口', note: '先保留接口，等待战斗 adapter 接入。' }
+            neutral: { title: '默认休整', note: '只回稳 Mana，不留下倾向。' },
+            rest: { title: '休整倾向', note: '把节奏留在当前节点。' },
+            asset: { title: '契令倾向', note: '让牌池与仓库更容易接上。' },
+            vision: { title: '情报倾向', note: '让前路与既定相位更清晰。' },
+            combat: { title: '交锋倾向', note: '把下一次风险推向赌桌。' }
         };
         if (normalized === 'neutral') {
             return {
                 disabled: !token,
                 active: currentTint === 'neutral',
                 ...(labelMap.neutral),
-                note: token ? labelMap.neutral.note : '先选择一个未来 Rest 相位。'
+                note: token ? labelMap.neutral.note : '先选择一个未来休整相位。'
             };
         }
         const source = getPreferredSourceForKey(normalized);
@@ -316,7 +317,7 @@
             active: currentTint === normalized,
             ...(labelMap[normalized] || { title: getRestTintLabel(normalized), note: '' }),
             note: !token
-                ? '先选择一个未来 Rest 相位。'
+                ? '先选择一个未来休整相位。'
                 : (disabled ? `${RESOURCE_LABEL_MAP[normalized] || normalized} 点不足。` : (labelMap[normalized]?.note || ''))
         };
     }
@@ -342,19 +343,19 @@
         const routeMode = appData.runtime.frontendSnapshot?.routeMode || '';
         let label = '探路';
         let value = `可见到 NODE ${String(Math.min(getCampaignTotalNodes(), appState.currentNodeIndex + sight)).padStart(2, '0')}`;
-        let note = 'Vision 1 会扩大未来节点可见范围。';
+        let note = '情报会照亮更远的节点。';
         if (pending && pending.status === 'ready') {
-            label = '固定相位替换';
+            label = '既定相位改写';
             value = 'READY';
-            note = '抵达目标相位时，底部 phase bar 会要求 KEEP 或替换。';
+            note = '抵达目标相位时，可选择保留或改写。';
         } else if (pending && ['charged', 'choosing'].includes(pending.status)) {
-            label = '固定相位替换';
+            label = '既定相位改写';
             value = `CHARGED x${Math.max(1, Math.round(Number(pending.charges) || 1))}`;
-            note = '等待下一个可替换 fixed phase。';
+            note = '等待下一个可被改写的既定相位。';
         } else if (vision.jumpReady || routeMode === 'jump') {
             label = '跃迁';
             value = isRouteSelectionActive() ? 'CHOOSE ROUTE' : 'READY';
-            note = isRouteSelectionActive() ? '可在下方候选中选择跃迁目标。' : '抵达 route 阶段后可跨线选择。';
+            note = isRouteSelectionActive() ? '可在下方候选中选择跃迁目标。' : '岔路出现时可跨线选择。';
         }
         return `
             <div class="resource-next-step">
@@ -373,30 +374,30 @@
                     <div class="eyebrow">COMBAT POINT</div>
                     <div class="big-title">交锋点</div>
                     ${buildResourceMeterMarkup('combat')}
-                    <div class="note">只生成外部结算请求，不伪造收益。</div>
-                    <button class="action-btn" type="button">REQUEST QUEUE</button>
+                    <div class="note">把风险推向赌桌，等待交锋回响。</div>
+                    <button class="action-btn" type="button">ECHO LOG</button>
                 </aside>
                 <main class="main-panel">
-                    <div class="section-head"><span>COMBAT RULES</span><strong>外部结算</strong></div>
+                    <div class="section-head"><span>COMBAT FLOW</span><strong>赌桌 · 交锋 · 回响</strong></div>
                     <div class="rule-grid">
-                        ${buildRuleCardMarkup('combat', 1, '小游戏', '低风险外部请求。')}
-                        ${buildRuleCardMarkup('combat', 2, '精英德州', '生成精英对局请求。')}
-                        ${buildRuleCardMarkup('combat', 3, 'Boss 德州', '等待 adapter 回写。')}
+                        ${buildRuleCardMarkup('combat', 1, '小交锋', '轻压一注，试探局势。')}
+                        ${buildRuleCardMarkup('combat', 2, '精英局', '把筹码压向更深的桌面。')}
+                        ${buildRuleCardMarkup('combat', 3, 'Boss 局', '高压对决，等待回响落定。')}
                     </div>
                     <div class="queue-grid">
                         <div class="queue-card"><span>COMBAT PHASES</span>
                             ${buildScheduledResourceSlotsMarkup('combat')}
                         </div>
-                        <div class="queue-card"><span>EXTERNAL REQUESTS</span>
+                        <div class="queue-card"><span>COMBAT ECHOES</span>
                             ${buildCombatSettlementRowsMarkup(actState)}
                         </div>
                     </div>
                 </main>
                 <aside class="detail-panel">
                     <div class="detail-icon">C</div>
-                    <div class="detail-title">请求详情</div>
-                    <div class="detail-text">最终由德州或小游戏 adapter 决定收益、损失与状态回写。</div>
-                    <div class="detail-box"><span>ADAPTER</span><strong>PENDING</strong></div>
+                    <div class="detail-title">交锋回响</div>
+                    <div class="detail-text">胜负、损失与收获会在交锋结算后回到这里。</div>
+                    <div class="detail-box"><span>ECHO</span><strong>WAITING</strong></div>
                 </aside>
             </div>
         `;
@@ -407,6 +408,12 @@
         const selectedTint = selectedRest
             ? normalizeRestTintKey(selectedRest.tint || selectedRest.controlType || selectedRest.targetKey, 'neutral')
             : 'neutral';
+        const selectedTintLabel = selectedTint === 'neutral'
+            ? 'NEUTRAL'
+            : (RESOURCE_LABEL_MAP[selectedTint] || RESOURCE_TYPE_MAP[selectedTint] || selectedTint.toUpperCase());
+        const restDetailText = selectedTint === 'neutral'
+            ? '默认休整只回稳 Mana，不留下额外倾向。'
+            : `当前倾向 ${selectedTintLabel}，会消耗对应点数并留下节点倾向。`;
         const showTintOverlay = Boolean(selectedRest && appState.restTintPopupSlotId);
         return `
             <div class="resource-shell${getPlannedModuleClass('rest')}" data-planned-resource="rest">
@@ -414,15 +421,15 @@
                     <div class="eyebrow">REST POINT</div>
                     <div class="big-title">休整点</div>
                     ${buildResourceMeterMarkup('rest')}
-                    <div class="note">回复 Mana、染色节点、稳定节奏。</div>
+                    <div class="note">回稳 Mana，让当前节点染上倾向。</div>
                     <button class="action-btn" type="button" data-open-rest-tint>SET TINT</button>
                 </aside>
                 <main class="main-panel">
-                    <div class="section-head"><span>REST RULES</span><strong>回复 · 染色 · 营收</strong></div>
+                    <div class="section-head"><span>REST FLOW</span><strong>回复 · 倾向 · 回稳</strong></div>
                     <div class="rule-grid">
-                        ${buildRuleCardMarkup('rest', 1, '回复 25%', '可追加节点染色。')}
-                        ${buildRuleCardMarkup('rest', 2, '回复 66%', '固定营收 +0.25。')}
-                        ${buildRuleCardMarkup('rest', 3, '回复 100%', '完整重整。')}
+                        ${buildRuleCardMarkup('rest', 1, '浅休整', '回稳少量 Mana。')}
+                        ${buildRuleCardMarkup('rest', 2, '深呼吸', '回稳大半 Mana，倾向更稳。')}
+                        ${buildRuleCardMarkup('rest', 3, '完整整备', '把状态拉回可战。')}
                     </div>
                     <div class="queue-grid">
                         <div class="queue-card"><span>REST PHASES</span>
@@ -435,15 +442,15 @@
                 </main>
                 <aside class="detail-panel">
                     <div class="detail-icon">R</div>
-                    <div class="detail-title">染色状态</div>
-                    <div class="detail-text">当前选择 ${escapePartyHtml(selectedTint.toUpperCase())}，不额外消耗其他点数。</div>
-                    <div class="detail-box"><span>CURRENT</span><strong>${escapePartyHtml(selectedTint.toUpperCase())}</strong></div>
+                    <div class="detail-title">节点倾向</div>
+                    <div class="detail-text">${escapePartyHtml(restDetailText)}</div>
+                    <div class="detail-box"><span>CURRENT</span><strong>${escapePartyHtml(selectedTintLabel)}</strong></div>
                 </aside>
                 ${showTintOverlay ? `<div class="tint-overlay" id="restTintOverlay" role="dialog" aria-label="Rest Tint">
                     <section class="tint-panel">
-                        <div class="tint-head"><span>REST RESOLUTION</span><strong>SELECT TINT</strong></div>
+                        <div class="tint-head"><span>REST TENDENCY</span><strong>SELECT TINT</strong></div>
                         <div class="tint-grid">${buildRestTintActionsMarkup()}</div>
-                        <div class="tint-foot"><span>DEFAULT POPUP · ON RESOLVE</span><button class="action-btn" type="button" data-close-rest-tint>SKIP</button></div>
+                        <div class="tint-foot"><span>TINT CHOICE · OPTIONAL</span><button class="action-btn" type="button" data-close-rest-tint>KEEP PLAIN</button></div>
                     </section>
                 </div>` : ''}
             </div>
@@ -460,15 +467,15 @@
                     <div class="eyebrow">VISION POINT</div>
                     <div class="big-title">情报点</div>
                     <div class="meter type-vision"><span>SIGHT</span><strong>${sight}</strong></div>
-                    <div class="note">有限视野、固定相位替换、跃迁路径。</div>
-                    <button class="action-btn" type="button">SCAN ROUTE</button>
+                    <div class="note">照亮前路，改写既定相位。</div>
+                    <button class="action-btn" type="button">SIGHTLINE</button>
                 </aside>
                 <main class="main-panel">
-                    <div class="section-head"><span>VISION RULES</span><strong>视野 · 替换 · 跃迁</strong></div>
+                    <div class="section-head"><span>VISION FLOW</span><strong>探路 · 改写 · 跃迁</strong></div>
                     <div class="rule-grid">
-                        ${buildRuleCardMarkup('vision', 1, '探路', '当前视野 +2。')}
-                        ${buildRuleCardMarkup('vision', 2, '替换相位', '可替换固定事件。')}
-                        ${buildRuleCardMarkup('vision', 3, '跃迁', '显示连续路径线。')}
+                        ${buildRuleCardMarkup('vision', 1, '探路', '前路再亮一层。')}
+                        ${buildRuleCardMarkup('vision', 2, '改写', '为既定相位留下一次选择。')}
+                        ${buildRuleCardMarkup('vision', 3, '跃迁', '让远处岔路进入待命。')}
                     </div>
                     <div class="queue-grid">
                         <div class="queue-card"><span>VISION PHASES</span>
@@ -481,8 +488,8 @@
                 </main>
                 <aside class="detail-panel">
                     <div class="detail-icon">V</div>
-                    <div class="detail-title">跃迁就绪</div>
-                    <div class="detail-text">抵达 route 阶段后可以跨线选择。</div>
+                    <div class="detail-title">前路待命</div>
+                    <div class="detail-text">岔路出现时，可以跨线选择。</div>
                     <div class="detail-box"><span>NEXT STEP</span><strong>${vision.jumpReady ? 'READY' : escapePartyHtml(String(replaceStatus).toUpperCase())}</strong></div>
                 </aside>
             </div>
@@ -590,9 +597,9 @@
         const focusedCard = pendingReplace?.card || generalCards.find(Boolean) || voidCards.find(Boolean);
         const replaceMarkup = pendingReplace?.card
             ? `<div class="asset-replace-callout">
-                    <span>${pendingReplace.confirm_destroy ? 'CONFIRM DESTROY' : 'PENDING REPLACE'}</span>
+                    <span>${pendingReplace.confirm_destroy ? 'CONFIRM BREAK' : 'REPLACE READY'}</span>
                     <strong>${escapePartyHtml(getAssetCardDisplayName(pendingReplace.card))}</strong>
-                    <em>${pendingReplace.confirm_destroy ? 'Protected Rainbow/God card selected. Click the highlighted slot again to destroy it.' : 'Choose a highlighted occupied slot. Old card will be destroyed.'}</em>
+                    <em>${pendingReplace.confirm_destroy ? '高阶契约受保护，再次点击高亮槽位才会摧毁旧牌。' : '选择一个高亮槽位，新契约会替换旧牌。'}</em>
                 </div>`
             : '';
         const focusedType = focusedCard
@@ -633,7 +640,7 @@
                             <div class="dp-desc">${escapePartyHtml(focusedDesc)}</div>
                             <div class="dp-action-area">
                                 <div class="dp-note">[ STATUS: ACTIVE ]</div>
-                                <button class="btn-unequip" type="button" disabled>REPLACE & DESTROY OLD CARD</button>
+                                <button class="btn-unequip" type="button" disabled>WAITING FOR REPLACE SLOT</button>
                             </div>
                         ` : ''}
                     </aside>
@@ -663,11 +670,11 @@
                     <div class="eyebrow">ASSET POINT</div>
                     <div class="big-title">契点</div>
                     <div class="meter type-asset"><span>ASSET</span><strong>${getDisplayAssetPoints()}</strong></div>
-                    <div class="note">投入契点激活一级 / 二级 / 三级卡池，满足条件后进入抽卡页面。</div>
+                    <div class="note">把契令送入牌池，抽取后进入仓库。</div>
                     <button class="action-btn" type="button" data-asset-action="open-warehouse">WAREHOUSE</button>
                 </aside>
                 <main class="main-panel">
-                    <div class="section-head"><span>ASSET RULES</span><strong>卡池 · 抽取 · 仓库</strong></div>
+                    <div class="section-head"><span>ASSET POOLS</span><strong>牌池 · 抽取 · 仓库</strong></div>
                     ${buildAssetPoolPanelMarkup(assetSummary)}
                     <div class="queue-grid">
                         <div class="queue-card"><span>ASSET PHASES</span>
@@ -680,8 +687,8 @@
                 </main>
                 <aside class="detail-panel">
                     <div class="detail-icon">A</div>
-                    <div class="detail-title">契约卡池</div>
-                    <div class="detail-text">${pendingOffer ? '当前已有抽卡页面等待选择。' : '激活卡池并消耗 Deck Points 后，会弹出抽卡页面。'}</div>
+                    <div class="detail-title">契约牌池</div>
+                    <div class="detail-text">${pendingOffer ? '牌面已展开，等待选择。' : '点亮牌池后，会展开本轮契约。'}</div>
                     <div class="detail-box"><span>NEXT STEP</span><strong>${pendingOffer ? 'CHOOSE CARD' : 'OPEN POOL'}</strong></div>
                     <button class="action-btn" type="button" data-asset-action="open-warehouse">OPEN WAREHOUSE</button>
                 </aside>
