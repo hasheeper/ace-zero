@@ -181,12 +181,6 @@
         ].filter(Boolean).join('');
     }
 
-    function formatActDecimal(value) {
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) return '0';
-        return String(Math.round(numeric * 100) / 100);
-    }
-
     function getCurrentActStateForPanel() {
         return buildCurrentActStateSnapshot();
     }
@@ -507,6 +501,7 @@
         const pendingReplace = vision.pendingReplace;
         const currentNodeId = getCurrentNodeData().presentNode;
         const currentPhaseIndex = Math.max(0, Math.min(PHASE_SLOT_IDS.length, Math.round(Number(appState.currentPhaseIndex) || 0)));
+        const nextPreviewNodeIds = getNextActionPreviewNodeIds();
         if (pendingReplace && pendingReplace.status === 'ready') {
             const targetNodeId = typeof pendingReplace.nodeId === 'string' ? pendingReplace.nodeId : '';
             const targetPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(pendingReplace.phaseIndex) || 0)));
@@ -516,13 +511,14 @@
             const isPastCurrentPhase = targetNodeId === currentNodeId && targetPhaseIndex < currentPhaseIndex;
             const isFutureNode = targetNodeId !== currentNodeId
                 && targetNodeIndex > Math.max(0, Math.round(Number(appState.currentNodeIndex) || 0));
+            const isCoveredByNextSystemPreview = nextPreviewNodeIds.includes(targetNodeId);
             if (!isVisibleCurrentPhase) {
                 const key = normalizeResourceKey(pendingReplace.replacementKey || pendingReplace.key, 'vision');
-                if (!isPastCurrentPhase && isFutureNode) {
+                if (!isPastCurrentPhase && isFutureNode && !isCoveredByNextSystemPreview) {
                     pushActionPreviewRow(rows, seen, {
                         id: `pending:vision-ready:${targetNodeId}:${targetPhaseIndex}:${key}`,
                         key,
-                        timeLabel: 'NEXT I',
+                        timeLabel: `NEXT ${getPhaseRomanLabel(targetPhaseIndex)}`,
                         title: `相位改写为${getActionResourceLabel(key)}`,
                         tag: 'VISION',
                         next: true
