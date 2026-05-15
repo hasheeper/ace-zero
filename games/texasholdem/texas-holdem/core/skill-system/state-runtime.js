@@ -318,17 +318,6 @@
       return force;
     },
 
-    _replacePendingForces(nextForces, meta) {
-      var previous = Array.isArray(this.pendingForces) ? this.pendingForces.slice() : [];
-      this.pendingForces = Array.isArray(nextForces) ? nextForces : [];
-      this.emit('forces:replaced', {
-        before: previous.map(this._snapshotForce.bind(this)),
-        after: this.pendingForces.map(this._snapshotForce.bind(this)),
-        meta: meta || null
-      });
-      return this.pendingForces;
-    },
-
     _isSelfProtectEffect(effect) {
       return effect === EFFECT.PSYCHE ||
         effect === EFFECT.VOID ||

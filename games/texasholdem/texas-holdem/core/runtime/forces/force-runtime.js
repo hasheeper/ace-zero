@@ -11,7 +11,6 @@
     lastQueued: null,
     lastRemoved: null,
     lastMutated: null,
-    lastReplaced: null,
     lastStreetResolved: null,
     lastResolvedSnapshot: [],
     lastPsycheEvents: [],
@@ -43,14 +42,10 @@
     runtimeApi.runtimeFlow.on('force:mutated', function(payload) {
       state.lastMutated = clone(payload);
     });
-    runtimeApi.runtimeFlow.on('forces:replaced', function(payload) {
-      state.lastReplaced = clone(payload);
-    });
     runtimeApi.runtimeFlow.on('hand:start', function() {
       state.lastQueued = null;
       state.lastRemoved = null;
       state.lastMutated = null;
-      state.lastReplaced = null;
       state.lastStreetResolved = null;
       state.lastResolvedSnapshot = [];
       state.lastPsycheEvents = [];
@@ -60,7 +55,6 @@
       state.lastQueued = null;
       state.lastRemoved = null;
       state.lastMutated = null;
-      state.lastReplaced = null;
       state.lastStreetResolved = null;
       state.lastResolvedSnapshot = [];
       state.lastPsycheEvents = [];
@@ -564,7 +558,6 @@
         queued: clone(state.lastQueued),
         removed: clone(state.lastRemoved),
         mutated: clone(state.lastMutated),
-        replaced: clone(state.lastReplaced),
         streetResolved: clone(state.lastStreetResolved)
       };
     },
@@ -573,7 +566,6 @@
       state.lastQueued = null;
       state.lastRemoved = null;
       state.lastMutated = null;
-      state.lastReplaced = null;
       state.lastStreetResolved = null;
       state.lastResolvedSnapshot = [];
       state.lastPsycheEvents = [];
