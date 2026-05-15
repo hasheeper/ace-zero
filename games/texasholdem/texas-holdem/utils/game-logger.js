@@ -468,6 +468,79 @@
     return _mapHeroNames(lines, context);
   }
 
+  function getManaPoolAggregateKey(pool) {
+    if (!pool) return '';
+    if (pool.id != null && String(pool.id).trim()) return 'id:' + String(pool.id);
+    var owner = pool.ownerId != null ? String(pool.ownerId) : '';
+    var role = pool.casterRoleId || pool.casterName || pool.casterSlot || 'MP';
+    return 'fallback:' + owner + ':' + String(role);
+  }
+
+  function normalizeManaPoolForSummary(pool) {
+    if (!pool || Number(pool.max || 0) <= 0) return null;
+    var current = Math.max(0, Math.round(Number(pool.current || 0)));
+    var before = pool.before != null
+      ? Math.max(0, Math.round(Number(pool.before || 0)))
+      : current;
+    var delta = pool.delta != null
+      ? Math.round(Number(pool.delta || 0))
+      : current - before;
+    return {
+      id: pool.id || null,
+      ownerId: pool.ownerId != null ? pool.ownerId : null,
+      casterName: pool.casterName || null,
+      casterRoleId: pool.casterRoleId || null,
+      casterSlot: pool.casterSlot || null,
+      before: before,
+      current: current,
+      delta: delta,
+      max: Math.max(0, Math.round(Number(pool.max || 0)))
+    };
+  }
+
+  function buildSessionManaPools(roundsForPrompt, fallbackContext) {
+    var byKey = Object.create(null);
+    var order = [];
+    var rounds = Array.isArray(roundsForPrompt) ? roundsForPrompt : [];
+
+    function visitContext(ctx) {
+      var pools = Array.isArray(ctx && ctx.heroManaPools) ? ctx.heroManaPools : [];
+      for (var i = 0; i < pools.length; i++) {
+        var pool = normalizeManaPoolForSummary(pools[i]);
+        if (!pool) continue;
+        var key = getManaPoolAggregateKey(pool);
+        if (!key) continue;
+        if (!byKey[key]) {
+          byKey[key] = {
+            id: pool.id,
+            ownerId: pool.ownerId,
+            casterName: pool.casterName,
+            casterRoleId: pool.casterRoleId,
+            casterSlot: pool.casterSlot,
+            before: pool.before,
+            current: pool.current,
+            delta: 0,
+            max: pool.max
+          };
+          order.push(key);
+        }
+        byKey[key].current = pool.current;
+        byKey[key].delta += pool.delta;
+        byKey[key].max = pool.max || byKey[key].max;
+        byKey[key].casterName = byKey[key].casterName || pool.casterName;
+        byKey[key].casterRoleId = byKey[key].casterRoleId || pool.casterRoleId;
+        byKey[key].casterSlot = byKey[key].casterSlot || pool.casterSlot;
+      }
+    }
+
+    for (var r = 0; r < rounds.length; r++) {
+      visitContext(rounds[r] && rounds[r].context);
+    }
+    if (order.length === 0) visitContext(fallbackContext);
+
+    return order.map(function(key) { return byKey[key]; });
+  }
+
   // ============================================
   // 【连续行动去重】多人连续 CHECK/FOLD → 合并
   // ============================================
@@ -973,9 +1046,10 @@
           var pl = context.players[p];
           summaryParts.push(_replaceHeroNameInText(pl.name, context) + ' Chips: ' + Currency.compact(pl.chips || 0));
         }
-        if (Array.isArray(context.heroManaPools) && context.heroManaPools.length) {
+        var sessionManaPools = buildSessionManaPools(roundsForPrompt, context);
+        if (sessionManaPools.length) {
           summaryParts.push('[MANA POOLS]');
-          context.heroManaPools.forEach(function(pool) {
+          sessionManaPools.forEach(function(pool) {
             if (!pool || Number(pool.max || 0) <= 0) return;
             var label = pool.casterRoleId || pool.casterName || pool.casterSlot || 'MP';
             var before = pool.before != null ? Number(pool.before || 0) : Number(pool.current || 0);
