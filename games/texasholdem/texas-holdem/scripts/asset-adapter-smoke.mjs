@@ -8,9 +8,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const adapterPath = path.join(root, 'core/runtime/assets/asset-deck-adapter.js');
 const skillSystemPath = path.join(root, 'core/skill-system.js');
+const skillSystemDir = path.dirname(skillSystemPath);
 
 const sandbox = { console };
 sandbox.global = sandbox;
+sandbox.__aceSkillSystemLoad = (relativePath) => {
+  const fullPath = path.join(skillSystemDir, relativePath);
+  vm.runInContext(fs.readFileSync(fullPath, 'utf8'), sandbox, { filename: fullPath });
+};
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(adapterPath, 'utf8'), sandbox, { filename: adapterPath });
 vm.runInContext(fs.readFileSync(skillSystemPath, 'utf8'), sandbox, { filename: skillSystemPath });
