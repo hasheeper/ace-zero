@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../../..');
 
-const adapterPath = path.join(repoRoot, 'games/texasholdem/texas-holdem/core/runtime/asset-deck-adapter.js');
+const adapterPath = path.join(repoRoot, 'games/texasholdem/texas-holdem/core/runtime/assets/asset-deck-adapter.js');
 const summaryPath = path.join(repoRoot, 'apps/st-bridge/packs/acezero-main/asset/summary.js');
 const basePath = path.join(repoRoot, 'games/shared/mini-game-base.js');
 

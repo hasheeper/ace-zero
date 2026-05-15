@@ -557,7 +557,14 @@
       );
 
       // 只清除 selectCard 时已存在的 pending forces，保留之后新增的
-      if (this.skillSystem.pendingForces.length === snapshotLen) {
+      if (typeof this.skillSystem._removePendingForces === 'function') {
+        this.skillSystem._removePendingForces(function (_force, index) {
+          return index < snapshotLen;
+        }, {
+          reason: 'moz_select_consumed',
+          phase: (this._gameCtx && this._gameCtx.phase) || null
+        });
+      } else if (this.skillSystem.pendingForces.length === snapshotLen) {
         this.skillSystem.pendingForces = [];
       } else {
         // 有新 forces 在 selectCard 期间加入（如触发型技能），保留它们

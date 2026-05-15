@@ -433,7 +433,8 @@
               break;
             }
             case 'curse': {
-              const targetId = force.targetId != null ? force.targetId : (this._heroId != null ? this._heroId : 0);
+              const targetId = force.targetId != null ? force.targetId : null;
+              if (targetId == null) break;
               const targetScore = u.scores[targetId] || 0;
               const loseRate = 1 - (targetScore / 100);
               contribution = force.effectivePower * loseRate;
@@ -523,6 +524,7 @@
 
       this._debugResolutionStage('OPPOSITION_START', resolved, trace);
       this.applyInactiveParticipantFilter(resolved, context, trace);
+      this.applyTargetSemantics(resolved, context, trace);
       this.applyReality(resolved, context, trace);
       this.applyInsulation(resolved, context, trace);
       this.applyForceLocks(resolved, context, trace);
@@ -578,6 +580,23 @@
       return ids;
     }
 
+    applyTargetSemantics(resolved, context, trace) {
+      for (const f of resolved) {
+        if (!f || f._suppressed) continue;
+        if (f.type !== 'curse') continue;
+        if (f.targetId != null) continue;
+
+        f.effectivePower = 0;
+        f._suppressed = true;
+        f._suppressedBy = 'missing_curse_target';
+        this._pushResolutionTrace(trace, 'missing_curse_target', {
+          force: f.skillKey || f.type,
+          ownerId: f.ownerId
+        });
+      }
+      return resolved;
+    }
+
     _normalizeForce(force) {
       const f = Object.assign({}, force || {});
       f.type = f.type || f.kind || 'meta';
@@ -606,7 +625,7 @@
 
     _getForceRecipientId(force) {
       if (!force) return null;
-      if (force.type === 'curse') return force.targetId != null ? force.targetId : (this._heroId != null ? this._heroId : 0);
+      if (force.type === 'curse') return force.targetId != null ? force.targetId : null;
       if (force.targetId != null) return force.targetId;
       if (force.protectId != null) return force.protectId;
       return force.ownerId != null ? force.ownerId : null;
@@ -827,7 +846,7 @@
         for (const curse of resolved.filter(f => f.type === 'curse')) {
           if (!curse || curse.effectivePower <= 0) continue;
           if (curse.ownerId === psyche.ownerId) continue;
-          if (curse.targetId != null && curse.targetId !== protectId) continue;
+          if (curse.targetId == null || curse.targetId !== protectId) continue;
 
           if (curse._lockActive && this._canPsycheConvertCurse(psyche, curse, protectId)) {
             curse._lockActive = false;
@@ -1013,10 +1032,10 @@
       if (psyche.curseSourceId != null && curse.ownerId !== psyche.curseSourceId) return false;
       const direction = String(psyche.curseDirection || 'self_loss');
       if (direction === 'self_loss') {
-        return curse.targetId == null || curse.targetId === protectId;
+        return curse.targetId != null && curse.targetId === protectId;
       }
       if (direction === 'target_loss') {
-        return psyche.targetId == null || curse.targetId === psyche.targetId;
+        return psyche.targetId != null && curse.targetId === psyche.targetId;
       }
       return true;
     }

@@ -1934,6 +1934,9 @@
       );
       const targetOverride = finalOptions && finalOptions.targetId != null ? finalOptions.targetId : null;
       const protectOverride = finalOptions && finalOptions.protectId != null ? finalOptions.protectId : null;
+      const activationContext = finalOptions && finalOptions.gameContext
+        ? finalOptions.gameContext
+        : (options && options.gameContext ? options.gameContext : null);
 
       // Toggle 类型：切换开/关状态
       if (skill.activation === ACTIVATION.TOGGLE) {
@@ -2006,7 +2009,7 @@
       var _activateExtra = {};
       switch (skill.effect) {
         case EFFECT.PSYCHE: {
-          var typedForce = this._skillToForce(skill);
+          var typedForce = this._skillToForce(skill, activationContext);
           if (protectOverride != null) typedForce.protectId = protectOverride;
           if (targetOverride != null) typedForce.targetId = targetOverride;
           if (finalOptions.curseSourceId != null) typedForce.curseSourceId = finalOptions.curseSourceId;
@@ -2022,7 +2025,7 @@
             this._emitSkillActivated({ skill: skill, type: 'void', reality: realityResult }, finalOptions);
             break;
           }
-          var voidForce = this._skillToForce(skill);
+          var voidForce = this._skillToForce(skill, activationContext);
           if (protectOverride != null) voidForce.protectId = protectOverride;
           if (targetOverride != null) voidForce.targetId = targetOverride;
           this._queuePendingForce(voidForce, { reason: 'skill_activate', effect: skill.effect });
@@ -2031,12 +2034,12 @@
         }
         case EFFECT.ROYAL_DECREE:
           // 敕令：超强 fortune，直接加入 pendingForces
-          this._queuePendingForce(this._skillToForce(skill), { reason: 'skill_activate', effect: skill.effect });
+          this._queuePendingForce(this._skillToForce(skill, activationContext), { reason: 'skill_activate', effect: skill.effect });
           this._emitSkillActivated({ skill: skill, type: 'royal_decree' }, finalOptions);
           break;
         case EFFECT.HEART_READ: {
           // 读心：信息技能，显示对手下注倾向
-          var hForce = this._skillToForce(skill);
+          var hForce = this._skillToForce(skill, activationContext);
           if (protectOverride != null) hForce.protectId = protectOverride;
           this._queuePendingForce(hForce, { reason: 'skill_activate', effect: skill.effect });
           this._emitSkillActivated({ skill: skill, type: 'heart_read' }, finalOptions);
@@ -2187,7 +2190,7 @@
 
         default: {
           // fortune / curse / psyche / void → 加入 pendingForces
-          var force = this._skillToForce(skill);
+          var force = this._skillToForce(skill, activationContext);
           if (targetOverride != null && force.type === 'curse') force.targetId = targetOverride;
           this._queuePendingForce(force, { reason: 'skill_activate', effect: skill.effect });
           this._emitSkillActivated({ skill: skill, type: 'force' }, finalOptions);
@@ -2429,7 +2432,7 @@
         if (!force || force.ownerId === ownerId) continue;
         var isChaos = force.system === SKILL_SYSTEM.CHAOS || force.type === EFFECT.CURSE;
         if (!isChaos) continue;
-        var targetsOwner = force.targetId == null || force.targetId === ownerId;
+        var targetsOwner = force.targetId === ownerId;
         if (!targetsOwner) continue;
         hasTargetedCurse = true;
         threatPower += Math.max(0, Number(force.power || force.effectivePower || 0));
@@ -2887,7 +2890,7 @@
         if (shouldActivate && !skill.active) {
           skill.active = true;
           // 触发技能产生 force
-          this._queuePendingForce(this._skillToForce(skill), {
+          this._queuePendingForce(this._skillToForce(skill, gameContext), {
             reason: 'skill_triggered',
             effect: skill.effect
           });
@@ -2942,7 +2945,7 @@
         if (skill.activation !== ACTIVATION.PASSIVE && skill.activation !== ACTIVATION.TOGGLE) continue;
         if (foldedIds.has(skill.ownerId)) continue;
 
-        forces.push(this._skillToForce(skill));
+        forces.push(this._skillToForce(skill, gameContext));
       }
 
       // 3. 本回合 pending forces（主动技能 + NPC 技能 + triggered）
@@ -2957,7 +2960,6 @@
 
     /**
      * 将技能转为 force 对象（供 MonteOfZero 消费）
-     * @param {object} skill
      * @param {object} [gameContext] - 用于 curse 智能选目标
      */
     _skillToForce(skill, gameContext) {

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const adapterPath = path.join(root, 'core/runtime/asset-deck-adapter.js');
+const adapterPath = path.join(root, 'core/runtime/assets/asset-deck-adapter.js');
 
 const sandbox = { console };
 sandbox.global = sandbox;

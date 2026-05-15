@@ -14,7 +14,7 @@ const {
 const { sandbox, assetDeck } = loadAssetSandbox();
 sandbox.global = sandbox;
 
-const adapterPath = path.join(REPO_ROOT, 'games/texasholdem/texas-holdem/core/runtime/asset-deck-adapter.js');
+const adapterPath = path.join(REPO_ROOT, 'games/texasholdem/texas-holdem/core/runtime/assets/asset-deck-adapter.js');
 vm.runInContext(fs.readFileSync(adapterPath, 'utf8'), sandbox, { filename: adapterPath });
 
 const summary = sandbox.ACE0AssetDeckSummary.create({

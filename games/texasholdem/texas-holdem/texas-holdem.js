@@ -2636,6 +2636,141 @@
   }
 
   // ========== AI操作 ==========
+  function cloneVisibleAIForce(force) {
+    if (!force) return null;
+    return {
+      ownerId: force.ownerId,
+      ownerName: force.ownerName || null,
+      type: force.type || force.kind || force.effect || null,
+      system: force.system || null,
+      kind: force.kind || force.type || null,
+      power: Math.max(0, Number(force.power || force.effectivePower || 0)),
+      effectivePower: Math.max(0, Number(force.effectivePower != null ? force.effectivePower : force.power || 0)),
+      level: force.level || null,
+      maxLevel: force.maxLevel || null,
+      matrix: Array.isArray(force.matrix) ? force.matrix.slice(0, 3) : null,
+      lockChance: force.lockChance || 0,
+      special: Object.assign({}, force.special || {}),
+      activationId: force.activationId || null,
+      activation: force.activation || null,
+      source: force.source || null,
+      skillKey: force.skillKey || null,
+      targetId: force.targetId != null ? force.targetId : null,
+      protectId: force.protectId != null ? force.protectId : null,
+      _runtimeId: force._runtimeId != null ? force._runtimeId : null
+    };
+  }
+
+  function getVisibleSkillForceType(skill) {
+    const fortuneEffects = ['royal_decree', 'miracle', 'lucky_find', 'absolution', 'benediction'];
+    if (!skill) return null;
+    if (skill.kind) return skill.kind;
+    if (fortuneEffects.indexOf(skill.effect) >= 0) return 'fortune';
+    return skill.effect || null;
+  }
+
+  function buildVisibleAIForceSnapshot() {
+    if (typeof skillSystem === 'undefined' || !skillSystem) return [];
+    const forces = [];
+    const foldedSet = new Set(gameState.players.filter(p => p.folded || p.isActive === false).map(p => p.id));
+
+    try {
+      if (skillSystem.backlashStates && typeof skillSystem.backlashStates.entries === 'function') {
+        for (const [ownerId, state] of Array.from(skillSystem.backlashStates.entries())) {
+          if (!state || !state.active || state.counter <= 0) continue;
+          forces.push({
+            ownerId: -1,
+            ownerName: 'SYSTEM',
+            type: 'backlash',
+            kind: 'backlash',
+            power: 50,
+            effectivePower: 50,
+            targetId: ownerId,
+            source: 'backlash'
+          });
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    try {
+      if (skillSystem.skills && typeof skillSystem.skills.values === 'function') {
+        for (const sk of skillSystem.skills.values()) {
+          if (!sk || !sk.active) continue;
+          if (sk.activation !== 'passive' && sk.activation !== 'toggle') continue;
+          if (foldedSet.has(sk.ownerId)) continue;
+          forces.push({
+            ownerId: sk.ownerId,
+            ownerName: sk.ownerName || null,
+            type: getVisibleSkillForceType(sk),
+            system: sk.system || null,
+            kind: sk.kind || getVisibleSkillForceType(sk),
+            power: Math.max(0, Number(sk.power || 0)),
+            effectivePower: Math.max(0, Number(sk.power || 0)),
+            level: sk.level || null,
+            maxLevel: sk.maxLevel || null,
+            matrix: Array.isArray(sk.matrix) ? sk.matrix.slice(0, 3) : null,
+            lockChance: sk.lockChance || 0,
+            special: Object.assign({}, sk.special || {}),
+            activationId: sk._activationId || null,
+            activation: sk.activation,
+            source: sk.activation,
+            skillKey: sk.skillKey || null,
+            targetId: sk.targetId != null ? sk.targetId : null,
+            protectId: sk.protectId != null ? sk.protectId : null
+          });
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    try {
+      const pending = Array.isArray(skillSystem.pendingForces) ? skillSystem.pendingForces : [];
+      for (const force of pending) {
+        if (!force) continue;
+        if (foldedSet.has(force.ownerId) && !force._persistAfterOwnerFold) continue;
+        const cloned = cloneVisibleAIForce(force);
+        if (cloned) forces.push(cloned);
+      }
+    } catch (e) { /* ignore */ }
+
+    return forces.filter(function(force) {
+      return !!force && (force.type === 'fortune' || force.type === 'curse' || force.type === 'backlash' ||
+        force.kind === 'fortune' || force.kind === 'curse' || force.kind === 'backlash');
+    });
+  }
+
+  function computeNetForceFromSnapshot(playerId, forces) {
+    if (!Array.isArray(forces)) return 0;
+    let myFortune = 0;
+    let enemyCurse = 0;
+    for (const force of forces) {
+      if (!force) continue;
+      const type = force.type || force.kind;
+      const power = Math.max(0, Number(force.effectivePower != null ? force.effectivePower : force.power || 0));
+      if (type === 'fortune' && force.ownerId === playerId) myFortune += power;
+      if (type === 'curse' && force.ownerId !== playerId && force.targetId === playerId) enemyCurse += power;
+    }
+    return myFortune - enemyCurse;
+  }
+
+  function buildVisibleAIPlayersFor(observer) {
+    return getActivePlayers().map(function(p) {
+      return {
+        id: p.id,
+        name: p.name,
+        folded: !!p.folded,
+        isActive: p.isActive !== false,
+        chips: p.chips || 0,
+        currentBet: p.currentBet || 0,
+        totalBet: p.totalBet || 0,
+        isHuman: !p.ai,
+        cardsKnown: p.id === observer.id,
+        cards: p.id === observer.id ? (p.cards || []).map(function(card) {
+          return { rank: card.rank, suit: card.suit };
+        }) : []
+      };
+    });
+  }
+
   function aiTurn(player) {
     // 🛡️ 防止弃牌玩家复活行动
     if (player.folded || !player.isActive) {
@@ -2654,35 +2789,12 @@
     // 计算该 AI 的最高魔运等级（影响弃牌倾向）
     const playerSkills = skillSystem.getPlayerSkills(player.id);
     const maxMagicLevel = playerSkills.reduce((max, s) => Math.max(max, Number(s.level || 0)), 0);
+    const visibleForces = buildVisibleAIForceSnapshot();
 
-    // 计算净魔运力量（己方 fortune - 敌方 curse）用于 pro/boss 魔运感知
-    // 合并 passive forces + pendingForces（不调用 collectActiveForces 以避免 backlash 副作用）
-    let netForce = 0;
+    // 计算净魔运力量（己方 fortune - 敌方 curse）作为旧版魔运评分兜底。
+    let netForce = computeNetForceFromSnapshot(player.id, visibleForces);
     let opponentManaRatio = 0.5;
     if (typeof skillSystem !== 'undefined') {
-      try {
-        const foldedSet = new Set(gameState.players.filter(p => p.folded).map(p => p.id));
-        // passive/toggle forces
-        const passiveForces = [];
-        for (const [, sk] of skillSystem.skills) {
-          if (!sk.active) continue;
-          if (sk.activation !== 'passive' && sk.activation !== 'toggle') continue;
-          if (foldedSet.has(sk.ownerId)) continue;
-          passiveForces.push({
-            ownerId: sk.ownerId,
-            type: sk.effect === 'royal_decree' ? 'fortune' : sk.effect,
-            power: sk.power || 0,
-            targetId: sk.targetId
-          });
-        }
-        const allForces = passiveForces.concat(skillSystem.pendingForces.filter(f => !foldedSet.has(f.ownerId)));
-        const myFortune = allForces.filter(f => f.ownerId === player.id && f.type === 'fortune')
-          .reduce((s, f) => s + (f.power || 0), 0);
-        const enemyCurse = allForces.filter(f => f.ownerId !== player.id && f.type === 'curse' &&
-          (f.targetId == null || f.targetId === player.id))
-          .reduce((s, f) => s + (f.power || 0), 0);
-        netForce = myFortune - enemyCurse;
-      } catch (e) { /* ignore */ }
       // 对手平均 mana 百分比（pro/boss 用于对手建模）
       try {
         const opps = getActivePlayers().filter(p => p.id !== player.id);
@@ -2698,21 +2810,49 @@
 
     // 收集对手难度档案（pro/boss 用于读牌）
     const opponentProfiles = [];
-    for (const opp of getActivePlayers()) {
+    const activeOpponentsForProfile = getActivePlayers().filter(function(opp) {
+      return opp && opp.id !== player.id;
+    });
+    let currentAggressorId = null;
+    let currentAggressorBet = -1;
+    if (toCall > 0) {
+      for (const opp of activeOpponentsForProfile) {
+        const currentBet = Math.max(0, Number(opp.currentBet || 0));
+        if (currentBet > currentAggressorBet) {
+          currentAggressorBet = currentBet;
+          currentAggressorId = opp.id;
+        }
+      }
+    }
+    let primaryThreatId = currentAggressorId;
+    if (primaryThreatId == null) {
+      let primaryThreatStack = -1;
+      for (const opp of activeOpponentsForProfile) {
+        const liveStack = Math.max(0, Number(opp.chips || 0)) + Math.max(0, Number(opp.currentBet || 0));
+        if (liveStack > primaryThreatStack) {
+          primaryThreatStack = liveStack;
+          primaryThreatId = opp.id;
+        }
+      }
+    }
+    for (const opp of activeOpponentsForProfile) {
       if (opp.id === player.id) continue;
       opponentProfiles.push({
         id: opp.id,
         name: opp.name,
-        difficulty: opp.ai ? opp.ai.difficultyType : 'regular',
+        difficulty: opp.ai ? opp.ai.difficultyType : 'human',
         risk: opp.ai ? opp.ai.riskType : 'balanced',
         currentBet: opp.currentBet || 0,
         totalBet: opp.totalBet || 0,
         chips: opp.chips || 0,
-        isHuman: !opp.ai
+        isHuman: !opp.ai,
+        isCurrentAggressor: currentAggressorId != null && opp.id === currentAggressorId,
+        isPrimaryThreat: primaryThreatId != null && opp.id === primaryThreatId
       });
     }
 
     const context = {
+      playerId: player.id,
       playerName: player.name,
       holeCards: player.cards,
       boardCards: gameState.board,
@@ -2729,6 +2869,8 @@
       heroId: getHeroPlayer().id,
       raiseCount: gameState.raiseCount || 0,
       opponentProfiles: opponentProfiles,
+      visiblePlayers: buildVisibleAIPlayersFor(player),
+      visibleForces: visibleForces,
       bigBlind: getBigBlind(),
       currentMana: (function() {
         const mana = skillSystem.getMana(player.id);
@@ -2805,12 +2947,6 @@
       if (!isCurse || (force.ownerId === sourceId && force.targetId === sourceId)) continue;
       if (force.targetId != null) {
         if (targetIds.indexOf(force.targetId) < 0) targetIds.push(force.targetId);
-      } else {
-        for (var pi = 0; pi < gameState.players.length; pi++) {
-          var player = gameState.players[pi];
-          if (!player || player.id === sourceId || player.type === 'human' || player.folded || player.isActive === false) continue;
-          if (targetIds.indexOf(player.id) < 0) targetIds.push(player.id);
-        }
       }
     }
 

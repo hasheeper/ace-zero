@@ -18,7 +18,7 @@ AssetDeck
 
 AssetLedger
   德州牌桌内临时资源账本
-  已存在于 games/texasholdem/texas-holdem/core/runtime/asset-ledger.js
+  已存在于 games/texasholdem/texas-holdem/core/runtime/assets/asset-ledger.js
   记录 VV 头寸、COTA 牌列、Eulalia 合同、临时角色标记
 ```
 
@@ -496,7 +496,7 @@ Host commit 状态显示重复
 games/texasholdem/texas-holdem/core/skill-system.js
 games/texasholdem/texas-holdem/rpg/combat-formula.js
 games/texasholdem/texas-holdem/ui/skill-ui.js
-games/texasholdem/texas-holdem/core/runtime/force-runtime.js
+games/texasholdem/texas-holdem/core/runtime/forces/force-runtime.js
 games/texasholdem/texas-holdem/texas-holdem.js
 ```
 
@@ -734,7 +734,7 @@ node apps/st-bridge/packs/acezero-main/scripts/encounter-host-smoke.js
 推荐新增文件：
 
 ```text
-games/texasholdem/texas-holdem/core/runtime/asset-deck-adapter.js
+games/texasholdem/texas-holdem/core/runtime/assets/asset-deck-adapter.js
 ```
 
 输入：
@@ -910,7 +910,7 @@ if (remaining <= 0) {
 验证：
 
 ```bash
-node --check games/texasholdem/texas-holdem/core/runtime/asset-deck-adapter.js
+node --check games/texasholdem/texas-holdem/core/runtime/assets/asset-deck-adapter.js
 node --check games/texasholdem/texas-holdem/core/skill-system.js
 node --check games/texasholdem/texas-holdem/ui/skill-ui.js
 node --check games/texasholdem/texas-holdem/rpg/combat-formula.js
@@ -1257,7 +1257,7 @@ mahjong：先只读 any，不做正式 adapter
 已落地文件：
 
 ```text
-games/texasholdem/texas-holdem/core/runtime/asset-deck-adapter.js
+games/texasholdem/texas-holdem/core/runtime/assets/asset-deck-adapter.js
 games/blackjack/blackjack.html
 games/blackjack/blackjack.js
 games/shared/mini-game-base.js
