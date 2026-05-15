@@ -3200,7 +3200,7 @@
         }
 
         .roster-section + .roster-section {
-            margin-top: 18px;
+            margin-top: 0;
         }
 
         .roster-slot {

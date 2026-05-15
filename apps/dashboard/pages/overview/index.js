@@ -3133,6 +3133,7 @@ function createExecutionRuntimeContext() {
             return;
         }
 
+        if (!isOverviewDebugMode()) return;
         if (e.target.matches?.('input[data-debug-action]')) return;
         const debugActionButton = e.target.closest('[data-debug-action]');
         if (!debugActionButton) return;
@@ -3142,6 +3143,7 @@ function createExecutionRuntimeContext() {
     });
 
     document.addEventListener('change', (e) => {
+        if (!isOverviewDebugMode()) return;
         const input = e.target.closest?.('input[data-debug-action]');
         if (!input) return;
         const action = input.dataset.debugAction;
@@ -3199,7 +3201,21 @@ function createExecutionRuntimeContext() {
     });
 
     document.addEventListener('click', (e) => {
-        const keepAction = e.target.closest('#toggle-planner, #confirm-phase-plan, #commit-act-state, .route-option-btn, [data-debug-action], [data-vision-phase-action], [data-planner-tab], [data-planner-edit-mode], [data-open-rest-tint], [data-rest-tint], [data-close-rest-tint], [data-asset-action]');
+        const keepActionSelector = [
+            '#toggle-planner',
+            '#confirm-phase-plan',
+            '#commit-act-state',
+            '.route-option-btn',
+            '[data-vision-phase-action]',
+            '[data-planner-tab]',
+            '[data-planner-edit-mode]',
+            '[data-open-rest-tint]',
+            '[data-rest-tint]',
+            '[data-close-rest-tint]',
+            '[data-asset-action]',
+            isOverviewDebugMode() ? '[data-debug-action]' : ''
+        ].filter(Boolean).join(', ');
+        const keepAction = e.target.closest(keepActionSelector);
         if (keepAction) return;
 
         const keep = e.target.closest('.token-dispenser, .phase-core.drop-zone, .mounted-token, #inventory, .view, .asset-layout, .az-node');
