@@ -1,8 +1,6 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+const { loadMahjongRuntimeBridgeIntoSandbox } = require('./lib/runtime-bridge-sandbox');
 
 function assert(condition, message) {
   if (!condition) {
@@ -11,8 +9,6 @@ function assert(condition, message) {
 }
 
 function loadBridgeIntoSandbox() {
-  const bridgePath = path.resolve(__dirname, '../frontend/scripts/runtime/bridge/runtime-bridge.js');
-  const source = fs.readFileSync(bridgePath, 'utf8');
   const coachStateCalls = [];
   const customEvents = [];
   const coachStatusTexts = [];
@@ -93,7 +89,7 @@ function loadBridgeIntoSandbox() {
   };
 
   sandbox.window = sandbox;
-  vm.runInNewContext(source, sandbox, { filename: bridgePath });
+  loadMahjongRuntimeBridgeIntoSandbox(sandbox);
 
   return {
     bridge: sandbox.AceMahjongRuntimeBridge,

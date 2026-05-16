@@ -7,11 +7,21 @@
   const RANK_TRANSLATE = {1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: 'T', 11: 'J', 12: 'Q', 13: 'K'};
   const runtimeFlow = window.__ACE_RUNTIME_FLOW__ || (window.RuntimeFlow ? new window.RuntimeFlow() : null);
   window.__ACE_RUNTIME_FLOW__ = runtimeFlow;
+  const texasTutorialConfigLoader = window.AceTexasTutorialConfigLoader;
+  const texasHostRuntimeFactory = window.AceTexasHostRuntime;
+  const texasRaiseControlsFactory = window.AceTexasRaiseControls;
+  if (!texasTutorialConfigLoader || typeof texasTutorialConfigLoader.resolve !== 'function') {
+    throw new Error('AceTexasTutorialConfigLoader is required before texas-holdem.js');
+  }
+  if (!texasHostRuntimeFactory || typeof texasHostRuntimeFactory.create !== 'function') {
+    throw new Error('AceTexasHostRuntime is required before texas-holdem.js');
+  }
+  if (!texasRaiseControlsFactory || typeof texasRaiseControlsFactory.create !== 'function') {
+    throw new Error('AceTexasRaiseControls is required before texas-holdem.js');
+  }
 
   // ========== 游戏配置（从JSON加载或使用默认值） ==========
   let gameConfig = null;
-  let _externalConfigApplied = false;
-  let _configSource = null; // 'injected' | 'static'
   let tutorialController = null;
 
   // 默认配置（新格式）
@@ -178,109 +188,8 @@
     );
   }
 
-  function pickTutorialIndexProfile(indexConfig, preferredId) {
-    var profiles = Array.isArray(indexConfig && indexConfig.profiles) ? indexConfig.profiles : [];
-    if (!profiles.length) return null;
-
-    var rememberedId = null;
-    try {
-      rememberedId = globalThis.localStorage
-        ? localStorage.getItem('acezero:tutorial-profile:texas-holdem')
-        : null;
-    } catch (e) { /* ignore */ }
-
-    var targetId = preferredId || rememberedId || null;
-    if (targetId) {
-      var exact = profiles.find(function (profile) {
-        return profile && profile.id === targetId;
-      });
-      if (exact) return exact;
-    }
-
-    var novice = profiles.find(function (profile) {
-      return profile && /novice|newbie|intro/i.test(String(profile.id || ''));
-    });
-    return novice || profiles[0] || null;
-  }
-
-  function pickTutorialIndexCourse(profile, preferredId) {
-    var courses = Array.isArray(profile && profile.courses) ? profile.courses : [];
-    if (!courses.length) {
-      if (profile && profile.configPath) {
-        return {
-          id: profile.id || 'default-course',
-          configPath: profile.configPath
-        };
-      }
-      return null;
-    }
-
-    var rememberedId = null;
-    try {
-      if (globalThis.localStorage && profile && profile.id) {
-        rememberedId = localStorage.getItem('acezero:tutorial-course:texas-holdem:' + profile.id);
-      }
-    } catch (e) { /* ignore */ }
-
-    var targetId = preferredId || rememberedId || null;
-    if (targetId) {
-      var exact = courses.find(function (course) {
-        return course && course.id === targetId;
-      });
-      if (exact) return exact;
-    }
-
-    return courses[0] || null;
-  }
-
   async function maybeResolveTutorialConfig(config) {
-    if (!config || !config.tutorialConfigPath || config._tutorialResolved) return config;
-
-    var tutorialPath = String(config.tutorialConfigPath || '').trim();
-    if (!tutorialPath) return config;
-
-    var candidates = [tutorialPath];
-    if (tutorialPath.charAt(0) !== '/' &&
-        tutorialPath.indexOf('./') !== 0 &&
-        tutorialPath.indexOf('../') !== 0) {
-      candidates.push('../../' + tutorialPath);
-      candidates.push('../../../' + tutorialPath);
-    }
-
-    for (var i = 0; i < candidates.length; i++) {
-      try {
-        var resp = await fetch(candidates[i]);
-        if (!resp.ok) continue;
-        var tutorialConfig = await resp.json();
-        if (tutorialConfig && tutorialConfig.sessionMode === 'tutorial-index' && Array.isArray(tutorialConfig.profiles)) {
-          var selectedProfile = pickTutorialIndexProfile(tutorialConfig, config.tutorialProfile || null);
-          var selectedCourse = pickTutorialIndexCourse(selectedProfile, config.tutorialCourse || null);
-          var selectedPath = selectedCourse && selectedCourse.configPath;
-          if (!selectedProfile || !selectedPath) {
-            return Object.assign({}, config, {
-              _tutorialResolved: true
-            });
-          }
-          return maybeResolveTutorialConfig(Object.assign({}, config, {
-            sessionMode: 'tutorial',
-            tutorialProfile: selectedProfile.id || null,
-            tutorialCourse: selectedCourse && selectedCourse.id || null,
-            tutorialConfigPath: selectedPath,
-            tutorialLauncherPath: tutorialPath
-          }));
-        }
-        return Object.assign({}, config, tutorialConfig, {
-          tutorialLauncher: {
-            profile: config.tutorialProfile || null,
-            course: config.tutorialCourse || null,
-            path: config.tutorialLauncherPath || tutorialPath
-          },
-          _tutorialResolved: true
-        });
-      } catch (e) { /* try next */ }
-    }
-
-    return config;
+    return texasTutorialConfigLoader.resolve(config);
   }
 
   /**
@@ -561,6 +470,7 @@
   };
 
   const RAISE_PRESET_SELECTOR = '[data-raise-preset]';
+  let raiseControls = null;
 
   // Grimoire 抽屉开关
   if (UI.magicKey) {
@@ -793,120 +703,31 @@
   }
 
   function hideRaiseControls() {
-    if (UI.raiseControls) UI.raiseControls.style.display = 'none';
-    if (UI.raiseBackdrop) UI.raiseBackdrop.style.display = 'none';
-    document.body.classList.remove('raise-open');
+    if (raiseControls) raiseControls.hide();
   }
 
   function showRaiseControls() {
-    if (!UI.raiseControls) return;
-    UI.raiseControls.style.display = 'block';
-    if (UI.raiseBackdrop) UI.raiseBackdrop.style.display = 'block';
-    document.body.classList.add('raise-open');
+    if (raiseControls) raiseControls.show();
   }
 
   function syncRaiseAmountDisplay(value) {
-    if (!UI.raiseAmountDisplay) return;
-    UI.raiseAmountDisplay.innerHTML = Currency.htmlAmount(parseInt(value || 0, 10));
+    if (raiseControls) raiseControls.syncAmountDisplay(value);
   }
 
   function setRaiseSliderValue(value) {
-    if (!UI.raiseSlider) return;
-    var min = parseInt(UI.raiseSlider.min || '0', 10);
-    var max = parseInt(UI.raiseSlider.max || '0', 10);
-    var nextValue = Math.max(min, Math.min(max, parseInt(value || min, 10)));
-    UI.raiseSlider.value = nextValue;
-    syncRaiseAmountDisplay(nextValue);
+    if (raiseControls) raiseControls.setValue(value);
   }
 
   function nudgeRaiseSlider(direction) {
-    if (!UI.raiseSlider) return;
-    var min = parseInt(UI.raiseSlider.min || '0', 10);
-    var max = parseInt(UI.raiseSlider.max || '0', 10);
-    var step = parseInt(UI.raiseSlider.step || '1', 10) || 1;
-    var current = parseInt(UI.raiseSlider.value || String(min), 10);
-    var range = Math.max(step, max - min);
-    var onePercent = Math.max(step, Math.round(range * 0.01 / step) * step);
-    setRaiseSliderValue(current + onePercent * direction);
+    if (raiseControls) raiseControls.nudge(direction);
   }
 
   function applyRaisePreset(preset) {
-    var player = getHeroPlayer();
-    if (!player || !UI.raiseSlider) return;
-    var toCall = Math.max(0, gameState.currentBet - (player.currentBet || 0));
-    var min = parseInt(UI.raiseSlider.min || '0', 10);
-    var max = parseInt(UI.raiseSlider.max || '0', 10);
-    var target = min;
-
-    switch (preset) {
-      case 'half':
-        target = Math.max(min, Math.round(max * 0.5));
-        break;
-      case 'pot':
-        target = Math.max(min, Math.min(max, Math.max(getBigBlind(), gameState.pot + toCall)));
-        break;
-      case 'max':
-        target = max;
-        break;
-      case 'min':
-      default:
-        target = min;
-        break;
-    }
-
-    setRaiseSliderValue(target);
+    if (raiseControls) raiseControls.applyPreset(preset);
   }
 
   function bindRaiseSliderGestures() {
-    if (!UI.raiseSlider || !UI.raiseSliderShell) return;
-    var isDragging = false;
-
-    function sliderStep() {
-      return parseInt(UI.raiseSlider.step || '1', 10) || 1;
-    }
-
-    function updateByClientX(clientX) {
-      var rect = UI.raiseSliderShell.getBoundingClientRect();
-      var ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
-      var clampedRatio = Math.max(0, Math.min(1, ratio));
-      var min = parseInt(UI.raiseSlider.min || '0', 10);
-      var max = parseInt(UI.raiseSlider.max || '0', 10);
-      var step = sliderStep();
-      var raw = min + (max - min) * clampedRatio;
-      var snapped = Math.round(raw / step) * step;
-      setRaiseSliderValue(snapped);
-    }
-
-    UI.raiseSliderShell.addEventListener('pointerdown', function(event) {
-      if (
-        event.target === UI.raiseSlider ||
-        event.target.closest(RAISE_PRESET_SELECTOR) ||
-        event.target.closest('.raise-adjust-btn') ||
-        event.target === UI.btnConfirmRaise ||
-        event.target === UI.btnCancelRaise
-      ) return;
-      isDragging = true;
-      updateByClientX(event.clientX);
-      if (UI.raiseSliderShell.setPointerCapture) UI.raiseSliderShell.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    });
-
-    UI.raiseSliderShell.addEventListener('pointermove', function(event) {
-      if (!isDragging) return;
-      updateByClientX(event.clientX);
-    });
-
-    function endDrag(event) {
-      if (!isDragging) return;
-      isDragging = false;
-      if (event && UI.raiseSliderShell.releasePointerCapture) {
-        try { UI.raiseSliderShell.releasePointerCapture(event.pointerId); } catch (e) {}
-      }
-    }
-
-    UI.raiseSliderShell.addEventListener('pointerup', endDrag);
-    UI.raiseSliderShell.addEventListener('pointercancel', endDrag);
-    UI.raiseSliderShell.addEventListener('lostpointercapture', function() { isDragging = false; });
+    if (raiseControls) raiseControls.bindGestures();
   }
 
   function showEndhandModal(title, resultText) {
@@ -1677,6 +1498,15 @@
   // 记录 hero 每手开始时的筹码，用于计算 funds_delta
   let _heroStartChips = 0;
   let _heroStartManaPools = [];
+
+  raiseControls = texasRaiseControlsFactory.create({
+    ui: UI,
+    currency: Currency,
+    presetSelector: RAISE_PRESET_SELECTOR,
+    getHeroPlayer: getHeroPlayer,
+    getGameState: function() { return gameState; },
+    getBigBlind: getBigBlind
+  });
 
   // ========== 工具函数 ==========
   /**
@@ -5279,51 +5109,27 @@
 
   window.addEventListener('resize', fitTableToScreen);
 
+  function registerBuiltinRoleModules() {
+    if (window.AceRuntimeAPI &&
+        window.AceBuiltinModules &&
+        typeof window.AceBuiltinModules.registerBuiltinRoleModules === 'function') {
+      window.AceBuiltinModules.registerBuiltinRoleModules(window.AceRuntimeAPI);
+    }
+  }
+
+  const hostRuntime = texasHostRuntimeFactory.create({
+    getPreloadedConfig: getPreloadedGameConfig,
+    setConfig: function(config) {
+      gameConfig = config;
+    },
+    resolveTutorialConfig: maybeResolveTutorialConfig,
+    registerRuntimeModules: registerBuiltinRoleModules,
+    refreshTutorialController: refreshTutorialController
+  });
+
   // ========== 配置加载 ==========
   async function loadConfig() {
-    var preloadedConfig = getPreloadedGameConfig();
-    if (!_externalConfigApplied && preloadedConfig) {
-      await applyExternalConfig(preloadedConfig, 'preloaded');
-      return;
-    }
-
-    // 如果外部配置（postMessage）已经到达，跳过静态文件加载
-    if (_externalConfigApplied) {
-      console.log('[CONFIG] 外部配置已存在，跳过 game-config.json 加载');
-      return;
-    }
-
-    // 在 iframe 中运行时，配置始终由主引擎通过 postMessage 提供
-    // 不自己 fetch game-config.json，避免竞争
-    if (window.parent && window.parent !== window) {
-      console.log('[CONFIG] 在 iframe 中运行，等待主引擎 postMessage 配置');
-      return;
-    }
-
-    // 独立运行时：加载同构的本地 game-config.json；正常 App/STver 模式由 apps/game 统一注入。
-    const configPaths = ['../../../content/game-config.json', 'game-config.json'];
-    
-    for (const path of configPaths) {
-      if (_externalConfigApplied) return;
-      try {
-        const response = await fetch(path);
-        if (_externalConfigApplied) return;
-        if (response.ok) {
-          gameConfig = await response.json();
-          gameConfig = await maybeResolveTutorialConfig(gameConfig);
-          _configSource = 'static';
-          console.log('[CONFIG] 从', path, '加载:', gameConfig);
-          if (window.AceRuntimeAPI &&
-              window.AceBuiltinModules &&
-              typeof window.AceBuiltinModules.registerBuiltinRoleModules === 'function') {
-            window.AceBuiltinModules.registerBuiltinRoleModules(window.AceRuntimeAPI);
-          }
-          return;
-        }
-      } catch (e) { /* try next */ }
-    }
-    
-    console.log('[CONFIG] 使用默认内置配置');
+    return hostRuntime.loadConfig();
   }
 
   /**
@@ -5331,60 +5137,22 @@
    * @param {Object} config - 注入的配置对象
    */
   async function applyExternalConfig(config, source) {
-    if (!config) return;
-    source = source || 'static';
-    // 已有配置 → 如果已经是 injected，拒绝任何重复；
-    // 如果之前是 static，允许 injected 覆盖
-    if (_externalConfigApplied) {
-      if (_configSource === 'injected' || source !== 'injected') {
-        console.log('[CONFIG] 配置已应用，忽略重复 [' + source + ']');
-        return;
-      }
-      console.log('[CONFIG] injected 配置覆盖之前的 static 配置');
-    }
-    gameConfig = await maybeResolveTutorialConfig(config);
-    _externalConfigApplied = true;
-    _configSource = source;
-    console.log('[CONFIG] 外部配置已应用 [' + source + ']:', gameConfig);
-    if (window.AceRuntimeAPI &&
-        window.AceBuiltinModules &&
-        typeof window.AceBuiltinModules.registerBuiltinRoleModules === 'function') {
-      window.AceBuiltinModules.registerBuiltinRoleModules(window.AceRuntimeAPI);
-    }
-    refreshTutorialController();
+    return hostRuntime.applyExternalConfig(config, source);
   }
   window.__acezeroApplyGameConfig = applyExternalConfig;
 
   // ========== postMessage 监听 ==========
   // 接收来自主引擎 (index.html) 的配置数据
-  window.addEventListener('message', function (event) {
-    const msg = event?.data;
-    if (!msg || msg.type !== 'acezero-game-data') return;
-    const source = msg.source || 'static';
-    console.log('[CONFIG] 收到主引擎 postMessage 配置 [' + source + ']');
-    void applyExternalConfig(msg.payload, source);
-  });
+  hostRuntime.bindHostMessages();
 
   // 主动向父窗口请求配置
   function requestConfigFromEngine() {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'acezero-data-request' }, '*');
-    }
+    hostRuntime.requestConfigFromEngine();
   }
 
   // ========== 等待 RPG 模块就绪 ==========
   function waitForRPG() {
-    if (window.__rpgReady) return Promise.resolve();
-    return new Promise(function (resolve) {
-      window.addEventListener('rpg:ready', resolve, { once: true });
-      // 安全超时：2秒后即使 RPG 没加载也继续（降级运行）
-      setTimeout(function () {
-        if (!window.__rpgReady) {
-          console.warn('[INIT] RPG 模块未在 2s 内加载，降级运行');
-        }
-        resolve();
-      }, 2000);
-    });
+    return hostRuntime.waitForRPG();
   }
 
   // ========== 初始化 ==========
@@ -5399,13 +5167,7 @@
 
     // 如果在 iframe 中，主动请求配置
     requestConfigFromEngine();
-    try {
-      if (window.parent && window.parent !== window) {
-        requestAnimationFrame(function () {
-          window.parent.postMessage({ type: 'acezero-game-ready' }, '*');
-        });
-      }
-    } catch (_) {}
+    hostRuntime.notifyGameReady();
   }
   
   init();

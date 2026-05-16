@@ -1,9 +1,27 @@
 (function initAce0OverviewShellView(global) {
-    // Intentionally not strict: this view keeps migrated markup helpers in a
-    // ctx-backed with scope while overview is still a static-script app.
-
     function create(ctx = {}) {
-        with (ctx) {
+        const {
+            adapterState,
+            appData,
+            appState,
+            buildEncounterBadgeMarkup,
+            deepCloneValue,
+            escapePartyHtml,
+            formatCompactResourceValue,
+            getActModuleApi,
+            getCampaignNodes,
+            getCampaignTotalNodes,
+            getCurrentChapterId,
+            getCurrentColumnLineClass,
+            getMapClassNameForNode,
+            getMapColumns,
+            getMapNodes,
+            getTotalInventoryCount,
+            isColumnVisibleInMapFog,
+            isNodeDetailVisible,
+            normalizeWorldClock
+        } = ctx;
+
     const TOPBAR_TWO_ROW_WIDTH = 1180;
     const TOPBAR_THREE_ROW_WIDTH = 760;
     let topbarResizeObserver = null;
@@ -403,14 +421,13 @@
     }
 
 
-            return Object.freeze({
-                renderTopbar,
-                renderSidebar,
-                syncSidePanelChrome,
-                renderMapLayer,
-                needsMapLayerRebuild
-            });
-        }
+        return Object.freeze({
+            renderTopbar,
+            renderSidebar,
+            syncSidePanelChrome,
+            renderMapLayer,
+            needsMapLayerRebuild
+        });
     }
 
     global.ACE0OverviewShellView = Object.freeze({ create });

@@ -24,10 +24,44 @@
 
   const CANONICAL_SEAT_KEYS = ['bottom', 'right', 'top', 'left'];
   const createBrowserGameSessionRuntime = global.AceMahjongCreateBrowserGameSessionRuntime || null;
-  let legacyRuntimeFactoryLoadPromise = null;
   const coachStateListeners = new Set();
   const coachAnalysisStateListeners = new Set();
   const AUTO_COACH_STORAGE_KEY = 'acezero.majiang.autoCoachEnabled';
+  const bridgeActionNormalizerModule = global.AceMahjongBridgeActionNormalizer || null;
+  const bridgeRuntimeFactoryModule = global.AceMahjongBridgeRuntimeFactory || null;
+  const bridgeFrontendEffectsModule = global.AceMahjongBridgeFrontendEffects || null;
+
+  if (!bridgeActionNormalizerModule || typeof bridgeActionNormalizerModule.create !== 'function') {
+    logRuntime('error', 'AceMahjongBridgeActionNormalizer 未加载，跳过 runtime bridge 初始化');
+    console.error('[MahjongRuntimeBridge] AceMahjongBridgeActionNormalizer 未加载。');
+    return;
+  }
+  if (!bridgeRuntimeFactoryModule || typeof bridgeRuntimeFactoryModule.create !== 'function') {
+    logRuntime('error', 'AceMahjongBridgeRuntimeFactory 未加载，跳过 runtime bridge 初始化');
+    console.error('[MahjongRuntimeBridge] AceMahjongBridgeRuntimeFactory 未加载。');
+    return;
+  }
+  if (!bridgeFrontendEffectsModule || typeof bridgeFrontendEffectsModule.create !== 'function') {
+    logRuntime('error', 'AceMahjongBridgeFrontendEffects 未加载，跳过 runtime bridge 初始化');
+    console.error('[MahjongRuntimeBridge] AceMahjongBridgeFrontendEffects 未加载。');
+    return;
+  }
+
+  const bridgeActionNormalizer = bridgeActionNormalizerModule.create({
+    resolvePrimaryHumanSeat
+  });
+  const bridgeRuntimeFactory = bridgeRuntimeFactoryModule.create({
+    logRuntime,
+    clone,
+    actionNormalizer: bridgeActionNormalizer
+  });
+  const bridgeFrontendEffects = bridgeFrontendEffectsModule.create({
+    global,
+    logRuntime,
+    clone,
+    canonicalSeatKeys: CANONICAL_SEAT_KEYS
+  });
+
   function createFallbackCoachContextStore() {
     let activeRoundContext = null;
     let eventSeq = 0;
@@ -1622,250 +1656,79 @@
   }
 
   function inferBrowserActionType(action) {
-    if (!action) return null;
-    if (typeof action.type === 'string' && action.type && action.type !== 'ui-action') return action.type;
-    if (typeof action.key === 'string' && action.key) {
-      return action.key.split(':')[0];
-    }
-    return null;
+    return bridgeActionNormalizer.inferBrowserActionType(action);
   }
 
   function normalizeBrowserActionPayload(action) {
-    if (!action || typeof action !== 'object') return {};
-    return action.payload && typeof action.payload === 'object'
-      ? { ...action.payload }
-      : {};
+    return bridgeActionNormalizer.normalizeBrowserActionPayload(action);
   }
 
   function normalizeBrowserActionType(type = null) {
-    const normalized = String(type || '').trim().toLowerCase();
-    if (!normalized) return null;
-    if (['discard', 'discard-index', 'pass', 'hule'].includes(normalized)) return normalized;
-    if (['call', 'chi', 'peng', 'pon'].includes(normalized)) return 'call';
-    if (['kan', 'gang', 'daiminkan', 'ankan', 'kakan'].includes(normalized)) return 'kan';
-    return normalized;
+    return bridgeActionNormalizer.normalizeBrowserActionType(type);
   }
 
   function summarizeBrowserRuntimeAction(action = null, runtime = null) {
-    const type = normalizeBrowserActionType(inferBrowserActionType(action));
-    const payload = normalizeBrowserActionPayload(action);
-    if (!type) return null;
-    if (!['discard', 'discard-index', 'call', 'kan', 'pass', 'hule'].includes(type)) return null;
-    const normalizedType = type === 'discard-index' ? 'discard' : type;
-    let tileCode = typeof payload.tileCode === 'string' ? payload.tileCode : null;
-    if (!tileCode && normalizedType === 'discard' && Number.isInteger(payload.tileIndex) && runtime) {
-      const seatKey = typeof payload.seat === 'string' ? payload.seat : resolvePrimaryHumanSeat();
-      const handCodes = getRuntimeSeatHandCodes(runtime, seatKey);
-      if (payload.tileIndex >= 0 && payload.tileIndex < handCodes.length) {
-        tileCode = handCodes[payload.tileIndex] || null;
-      }
-    }
-    return {
-      type: normalizedType,
-      seat: typeof payload.seat === 'string' ? payload.seat : resolvePrimaryHumanSeat(),
-      tileCode,
-      fromSeat: typeof payload.fromSeat === 'string' ? payload.fromSeat : null,
-      callType: typeof payload.callType === 'string' ? payload.callType : null,
-      meldString: typeof payload.meldString === 'string'
-        ? payload.meldString
-        : (typeof payload.meld === 'string' ? payload.meld : null),
-      riichi: Boolean(payload.riichi)
-    };
+    return bridgeActionNormalizer.summarizeBrowserRuntimeAction(action, runtime);
   }
 
   function buildRuntimeDispatchAction(action = null, runtime = null) {
-    if (!action || typeof action !== 'object') return action;
-    if (action.type !== 'ui-action') return action;
-    const normalized = summarizeBrowserRuntimeAction(action, runtime);
-    if (!normalized || !normalized.type) return action;
-    const payload = normalizeBrowserActionPayload(action);
-    return {
-      ...action,
-      type: normalized.type,
-      payload: {
-        ...payload,
-        seat: normalized.seat || payload.seat || null,
-        tileCode: normalized.tileCode || payload.tileCode || null,
-        fromSeat: normalized.fromSeat || payload.fromSeat || null,
-        callType: normalized.callType || payload.callType || null,
-        meldString: normalized.meldString || payload.meldString || payload.meld || null,
-        meld: normalized.meldString || payload.meld || payload.meldString || null,
-        riichi: normalized.riichi
-      }
-    };
+    return bridgeActionNormalizer.buildRuntimeDispatchAction(action, runtime);
   }
 
   function summarizeAction(action) {
-    if (!action) return null;
-    return {
-      key: action.key || null,
-      type: action.type || null,
-      seat: action.payload && action.payload.seat ? action.payload.seat : null,
-      label: action.label || null
-    };
+    return bridgeActionNormalizer.summarizeAction(action);
   }
 
   function getRuntimeSnapshotSafe(runtime) {
-    if (!runtime || typeof runtime.getSnapshot !== 'function') return null;
-    return runtime.getSnapshot();
+    return bridgeActionNormalizer.getRuntimeSnapshotSafe(runtime);
   }
 
   function getSnapshotSeatHandCodes(snapshot, seatKey) {
-    const seat = snapshot && snapshot.seats ? snapshot.seats[seatKey] : null;
-    const handTiles = seat && Array.isArray(seat.handTiles) ? seat.handTiles : [];
-    return handTiles
-      .map((tile) => tile && tile.code ? tile.code : null)
-      .filter(Boolean);
+    return bridgeActionNormalizer.getSnapshotSeatHandCodes(snapshot, seatKey);
   }
 
   function getRuntimeSeatHandCodes(runtime, seatKey) {
-    const snapshotCodes = getSnapshotSeatHandCodes(getRuntimeSnapshotSafe(runtime), seatKey);
-    if (snapshotCodes.length) return snapshotCodes;
-    if (runtime && typeof runtime.getSeatHandCodes === 'function') {
-      return runtime.getSeatHandCodes(seatKey);
-    }
-    return [];
+    return bridgeActionNormalizer.getRuntimeSeatHandCodes(runtime, seatKey);
   }
 
   function getRuntimeSeatHandTileIndex(runtime, seatKey, tileCode) {
-    const handCodes = getRuntimeSeatHandCodes(runtime, seatKey);
-    const normalizedCode = typeof tileCode === 'string' ? tileCode.trim().toLowerCase() : '';
-    if (!normalizedCode) return -1;
-    for (let index = handCodes.length - 1; index >= 0; index -= 1) {
-      const currentCode = String(handCodes[index] || '').replace(/[\*_\+\=\-]$/, '').toLowerCase();
-      if (currentCode === normalizedCode) return index;
-    }
-    return -1;
+    return bridgeActionNormalizer.getRuntimeSeatHandTileIndex(runtime, seatKey, tileCode);
   }
 
   function normalizeRoundResultTileCode(tileCode) {
-    const value = String(tileCode || '').trim();
-    const match = value.match(/^[mpsz][0-9]/i);
-    return match ? match[0].toLowerCase() : null;
+    return bridgeFrontendEffects.normalizeRoundResultTileCode(tileCode);
   }
 
   function extractHuleYakuNames(result = null) {
-    return result && Array.isArray(result.hupai)
-      ? result.hupai.map((item) => item && item.name).filter(Boolean)
-      : [];
+    return bridgeFrontendEffects.extractHuleYakuNames(result);
   }
 
   function buildHuleLogSummary(result = null) {
-    if (!result || typeof result !== 'object') {
-      return {
-        番数: null,
-        符数: null,
-        役种名称: []
-      };
-    }
-    return {
-      番数: Number.isFinite(Number(result.fanshu)) ? Number(result.fanshu) : result.fanshu ?? null,
-      符数: Number.isFinite(Number(result.fu)) ? Number(result.fu) : result.fu ?? null,
-      役种名称: extractHuleYakuNames(result)
-    };
+    return bridgeFrontendEffects.buildHuleLogSummary(result);
   }
 
   function buildSeatWindLogDetail(snapshot = null) {
-    const info = snapshot && snapshot.info ? snapshot.info : null;
-    const seatWinds = info && info.seatWinds && typeof info.seatWinds === 'object'
-      ? info.seatWinds
-      : null;
-    const seatWindMap = {};
-
-    CANONICAL_SEAT_KEYS.forEach((seatKey) => {
-      const windState = seatWinds && seatWinds[seatKey] ? seatWinds[seatKey] : null;
-      seatWindMap[seatKey] = windState && typeof windState.label === 'string' && windState.label
-        ? windState.label
-        : null;
-    });
-
-    const dealerSeat = info && typeof info.dealerSeat === 'string' ? info.dealerSeat : null;
-    const turnSeat = info && typeof info.turnSeat === 'string' ? info.turnSeat : null;
-
-    return {
-      风位映射: seatWindMap,
-      dealerSeat,
-      dealerWind: dealerSeat && seatWindMap[dealerSeat] ? seatWindMap[dealerSeat] : null,
-      turnSeat,
-      turnWind: turnSeat && seatWindMap[turnSeat] ? seatWindMap[turnSeat] : null
-    };
+    return bridgeFrontendEffects.buildSeatWindLogDetail(snapshot);
   }
 
   function formatRoundCutInLabel(matchState = null) {
-    if (!matchState || typeof matchState !== 'object') return '东一局';
-    const windLabels = ['东', '南', '西', '北'];
-    const zhuangfeng = Number.isInteger(matchState.zhuangfeng) ? matchState.zhuangfeng : 0;
-    const jushu = Number.isInteger(matchState.jushu) ? matchState.jushu : 0;
-    return `${windLabels[zhuangfeng] || '东'}${jushu + 1}局`;
+    return bridgeFrontendEffects.formatRoundCutInLabel(matchState);
   }
 
   function formatSpacedCutInLabel(label = '') {
-    return String(label || '')
-      .trim()
-      .split('')
-      .filter(Boolean)
-      .join(' ');
+    return bridgeFrontendEffects.formatSpacedCutInLabel(label);
   }
 
   function queueWinnerReveal(table, event, roundResult, options = {}) {
-    if (!table || typeof table.playWinnerRevealForSeat !== 'function') return;
-    if (!roundResult || roundResult.type !== 'hule') return;
-    const winnerSeat = roundResult.winnerSeat || null;
-    if (!winnerSeat) return;
-
-    const snapshot = event && event.snapshot ? event.snapshot : null;
-    const truthSeats = snapshot && snapshot.views && snapshot.views.truthView && snapshot.views.truthView.seats
-      ? snapshot.views.truthView.seats
-      : null;
-    const seatSnapshot = truthSeats && truthSeats[winnerSeat]
-      ? truthSeats[winnerSeat]
-      : (snapshot && snapshot.seats ? snapshot.seats[winnerSeat] : null);
-    const handTiles = seatSnapshot && Array.isArray(seatSnapshot.handTiles)
-      ? seatSnapshot.handTiles.map((tile) => ({ ...tile }))
-      : [];
-    const winningTileCode = normalizeRoundResultTileCode(roundResult.rongpai || roundResult.tileCode || null);
-    const delayMs = Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 420;
-
-    window.setTimeout(() => {
-      try {
-        table.playWinnerRevealForSeat(winnerSeat, {
-          handTiles,
-          winningTileCode,
-          autoClearMs: 0
-        });
-      } catch (error) {
-        logRuntime('warn', '和牌后赢家推平动画播放失败', {
-          winnerSeat,
-          winningTileCode,
-          message: error && error.message ? error.message : String(error)
-        });
-      }
-    }, Math.max(0, delayMs));
+    return bridgeFrontendEffects.queueWinnerReveal(table, event, roundResult, options);
   }
 
   function queueSettlementPanel(table, payload = {}, options = {}) {
-    if (!table || typeof table.openSettlementPanel !== 'function') return;
-    const delayMs = Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 720;
-    window.setTimeout(() => {
-      try {
-        table.openSettlementPanel(payload);
-      } catch (error) {
-        logRuntime('warn', '结算面板打开失败', {
-          message: error && error.message ? error.message : String(error),
-          roundType: payload && payload.roundResult ? payload.roundResult.type : null
-        });
-      }
-    }, Math.max(0, delayMs));
+    return bridgeFrontendEffects.queueSettlementPanel(table, payload, options);
   }
 
   function isRuntimeAwaitingBottomDiscard(runtime) {
-    const snapshot = getRuntimeSnapshotSafe(runtime);
-    if (!snapshot) return false;
-    const turnSeat = snapshot.turnSeat
-      || (snapshot.info ? snapshot.info.turnSeat : null)
-      || null;
-    return snapshot.phase === BROWSER_RUNTIME_PHASES.AWAIT_DISCARD
-      && turnSeat === 'bottom';
+    return bridgeActionNormalizer.isRuntimeAwaitingBottomDiscard(runtime);
   }
 
   function dispatchRuntimeAction(runtime, action) {
@@ -2003,202 +1866,44 @@
   }
 
   function isRuntimeContractCompatible(runtime) {
-    return Boolean(
-      runtime
-      && typeof runtime.start === 'function'
-      && typeof runtime.dispatch === 'function'
-      && typeof runtime.getSnapshot === 'function'
-      && typeof runtime.subscribe === 'function'
-    );
+    return bridgeRuntimeFactory.isRuntimeContractCompatible(runtime);
   }
 
   function findExternalRuntimeFactory() {
-    const candidates = [
-      global.AceMahjongFormalRuntimeFactory,
-      global.AceMahjongEngineRuntimeFactory,
-      global.AceMahjongRuntimeFactory,
-      global.AceMahjongEngine
-    ].filter(Boolean);
-
-    for (const candidate of candidates) {
-      if (candidate && typeof candidate.createRuntime === 'function') {
-        return candidate;
-      }
-    }
-
-    return null;
+    return bridgeRuntimeFactory.findExternalRuntimeFactory();
   }
 
   function resolveLegacyRuntimeScriptUrl() {
-    if (typeof global.AceMahjongLegacyRuntimeScriptUrl === 'string' && global.AceMahjongLegacyRuntimeScriptUrl) {
-      return global.AceMahjongLegacyRuntimeScriptUrl;
-    }
-    if (typeof document === 'undefined' || !document.querySelectorAll) return null;
-    const script = Array.from(document.querySelectorAll('script[src]')).find((node) => (
-      typeof node.src === 'string' && /runtime-bridge\.js(?:\?|$)/.test(node.src)
-    ));
-    if (!script || !script.src) return null;
-    try {
-      return new URL('../formal/legacy-runtime-factory.js', script.src).toString();
-    } catch (error) {
-      return null;
-    }
+    return bridgeRuntimeFactory.resolveLegacyRuntimeScriptUrl();
   }
 
   function loadScriptOnce(url) {
-    if (!url) {
-      return Promise.reject(new Error('Legacy runtime script URL could not be resolved.'));
-    }
-    if (typeof document === 'undefined' || !document.createElement) {
-      return Promise.reject(new Error('Dynamic legacy runtime loading requires document access.'));
-    }
-
-    const existingScript = Array.from(document.querySelectorAll('script[src]')).find((node) => node.src === url);
-    if (existingScript && global.AceMahjongLegacyBrowserRuntimeFactory) {
-      return Promise.resolve(global.AceMahjongLegacyBrowserRuntimeFactory);
-    }
-    if (existingScript && !global.AceMahjongLegacyBrowserRuntimeFactory) {
-      return Promise.reject(new Error('Legacy runtime script tag already exists, but factory is not available.'));
-    }
-
-    if (legacyRuntimeFactoryLoadPromise) {
-      return legacyRuntimeFactoryLoadPromise;
-    }
-
-    legacyRuntimeFactoryLoadPromise = new Promise((resolve, reject) => {
-      const script = existingScript || document.createElement('script');
-      if (!existingScript) {
-        script.src = url;
-        script.async = false;
-      }
-
-      const cleanup = () => {
-        script.removeEventListener('load', handleLoad);
-        script.removeEventListener('error', handleError);
-      };
-      const handleLoad = () => {
-        cleanup();
-        if (global.AceMahjongLegacyBrowserRuntimeFactory) {
-          resolve(global.AceMahjongLegacyBrowserRuntimeFactory);
-          return;
-        }
-        reject(new Error('Legacy runtime script loaded, but factory was not registered.'));
-      };
-      const handleError = () => {
-        cleanup();
-        reject(new Error(`Failed to load legacy runtime script: ${url}`));
-      };
-
-      script.addEventListener('load', handleLoad, { once: true });
-      script.addEventListener('error', handleError, { once: true });
-
-      if (!existingScript) {
-        const parent = document.head || document.body || document.documentElement;
-        parent.appendChild(script);
-      }
-    }).finally(() => {
-      legacyRuntimeFactoryLoadPromise = null;
-    });
-
-    return legacyRuntimeFactoryLoadPromise;
+    return bridgeRuntimeFactory.loadScriptOnce(url);
   }
 
   async function ensureLegacyRuntimeFactory() {
-    if (global.AceMahjongLegacyBrowserRuntimeFactory) {
-      return global.AceMahjongLegacyBrowserRuntimeFactory;
-    }
-
-    const scriptUrl = resolveLegacyRuntimeScriptUrl();
-    const factory = await loadScriptOnce(scriptUrl);
-    if (!factory || typeof factory.createRuntime !== 'function') {
-      throw new Error('AceMahjongLegacyBrowserRuntimeFactory is required for legacy fallback runtime.');
-    }
-    return factory;
+    return bridgeRuntimeFactory.ensureLegacyRuntimeFactory();
   }
 
   async function createLegacyRuntime(config = {}) {
-    const legacyFactory = await ensureLegacyRuntimeFactory();
-    if (!legacyFactory || typeof legacyFactory.createRuntime !== 'function') {
-      throw new Error('AceMahjongLegacyBrowserRuntimeFactory is required for legacy fallback runtime.');
-    }
-    return legacyFactory.createRuntime(config, getLegacyRuntimeDependencies());
+    return bridgeRuntimeFactory.createLegacyRuntime(config);
   }
 
   function shouldAllowLegacyFallback(config = {}) {
-    return Boolean(global.AceMahjongEnableLegacyRuntimeFallback)
-      || Boolean(config && config.runtime && config.runtime.allowLegacyFallback)
-      || Boolean(config && config.testing && config.testing.allowLegacyRuntimeFallback);
+    return bridgeRuntimeFactory.shouldAllowLegacyFallback(config);
   }
 
   function describeRuntime(runtime) {
-    if (!runtime) {
-      return {
-        kind: 'unknown-runtime',
-        source: 'unknown',
-        mode: null
-      };
-    }
-
-    return {
-      kind: runtime.kind || 'unknown-runtime',
-      source: runtime.source || 'unknown',
-      mode: runtime.mode || null
-    };
+    return bridgeRuntimeFactory.describeRuntime(runtime);
   }
 
   function getLegacyRuntimeDependencies() {
-    return {
-      clone,
-      inferBrowserActionType,
-      normalizeBrowserActionPayload,
-      logRuntime
-    };
+    return bridgeRuntimeFactory.getLegacyRuntimeDependencies();
   }
 
   async function createPreferredRuntime(config = {}) {
-    const externalFactory = findExternalRuntimeFactory();
-
-    if (externalFactory && typeof externalFactory.createRuntime === 'function') {
-      try {
-        const runtime = await Promise.resolve(externalFactory.createRuntime(config));
-        if (runtime) {
-          return {
-            runtime,
-            externalFactory,
-            source: 'external-factory'
-          };
-        }
-      } catch (error) {
-        if (!shouldAllowLegacyFallback(config)) {
-          logRuntime('error', '外部 runtime 工厂创建失败，且 legacy fallback 未启用', {
-            message: error && error.message ? error.message : String(error)
-          });
-          throw error;
-        }
-        logRuntime('warn', '外部 runtime 工厂创建失败，按显式配置回退到 legacy browser runtime', {
-          message: error && error.message ? error.message : String(error)
-        });
-      }
-    }
-
-    if (!shouldAllowLegacyFallback(config)) {
-      throw new Error('Formal runtime unavailable, and legacy fallback is disabled.');
-    }
-
-    return {
-      runtime: await createLegacyRuntime(config),
-      externalFactory: null,
-      source: 'legacy-browser-runtime'
-    };
+    return bridgeRuntimeFactory.createPreferredRuntime(config);
   }
-
-  const BROWSER_RUNTIME_PHASES = Object.freeze({
-    AWAIT_DRAW: 'await_draw',
-    AWAIT_DISCARD: 'await_discard',
-    AWAIT_REACTION: 'await_reaction',
-    AWAIT_RESOLUTION: 'await_resolution',
-    ROUND_END: 'round_end'
-  });
 
   function bindRuntimeToFrontend(runtime) {
     runtime.subscribe((event) => {

@@ -61,6 +61,9 @@
 - [controllers/execution-controller.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/controllers/execution-controller.js)
   Phase/node/route/vision 执行流与 planner drawer 内部 DOM 绑定。execution runtime 仍保留推进语义核心。
 
+- [scripts/validate-overview-boundaries.js](/Users/liuhang/Documents/ace-zero/apps/dashboard/pages/overview/scripts/validate-overview-boundaries.js)
+  Node VM 边界验证：检查 `apps/dashboard/index.html` 的 overview script 顺序、classic globals 安装与基础 `create(ctx)` API。
+
 ## Loading Order
 
 `apps/dashboard/index.html` 需要按以下顺序加载：
@@ -88,7 +91,7 @@
 - 章节真相不要写回 overview；host 模式只消费真实 payload。
 - 新增 runtime/view/adapter 仍通过 `window.ACE0Overview*` 暴露，保持 browser-debug 友好。
 - `window.ACE0DashboardDebug`、`window.__acezeroHomeRefreshIntel`、`window.__acezeroHomePageActive` 仍由 `index.js` 暴露。
-- `adapters/asset-adapter.js` 与 `controllers/*` 已改为显式 ctx 解构；`views/*` 中的大型 markup 模块仍处于 `with(ctx)` 过渡形态。
+- `adapters/asset-adapter.js`、`controllers/*` 与 `views/*` 都使用显式 ctx 解构，不再使用 `with(ctx)` 过渡形态。
 - 如果改拓扑、lane 或 fog 规则，要同步检查 `index.js` 与 `views/map-view.js` 的地图刷新边界。
 - `index.js` 中的 `renderTopbar/renderSidebar/renderMapLayer/renderIntelPanel/renderPlannerDrawer/renderPhaseBar` 是过渡期兼容 wrapper；实现只保留在 `views/*`，避免重复业务逻辑。
 - `index.js` 中的 AssetDeck、debug action、planner token、execution/route/vision 操作函数是过渡期兼容 wrapper；实现只保留在 `adapters/asset-adapter.js` 与 `controllers/*`。
@@ -112,9 +115,18 @@
 
 因此前三阶段后的收口策略是：`index.js` 保持为页面 composition layer，不再为“降行数”继续拆分。后续只有在出现明确新职责时再新增模块；常规维护优先更新对应 adapter/controller/view，而不是回填 `index.js`。
 
+## Ownership Rules
+
+- 新增或调整 UI markup：优先放入 `views/*`，`index.js` 只保留 wrapper 和刷新编排。
+- 新增用户操作、按钮命令、拖拽/点击交互：优先放入 `controllers/*`。
+- 新增 host bridge、payload normalize、local/debug adapter 行为：优先放入 `adapters/*`。
+- 新增 ACT progression、planner rule、map topology 等纯运行时规则：优先放入 `runtime/*`。
+- `index.js` 只承接 composition root、ctx builder、页面级 refresh flow、event delegation 与公开 debug/home API。
+
 ## Regression
 
 ```bash
+node apps/dashboard/pages/overview/scripts/validate-overview-boundaries.js
 node --check apps/dashboard/pages/overview/index.js
 node --check apps/dashboard/pages/overview/core/boot.js
 node --check apps/dashboard/pages/overview/core/state.js

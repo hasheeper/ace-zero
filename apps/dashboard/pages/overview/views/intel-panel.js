@@ -1,9 +1,54 @@
 (function initAce0OverviewIntelPanel(global) {
-    // Intentionally not strict: this module uses a ctx-backed with scope so the
-    // migrated markup helpers can keep their original browser-debug shape.
-
     function create(ctx = {}) {
-        with (ctx) {
+        const {
+            ENCOUNTER_DEBUG_CHARACTER_KEYS,
+            ENCOUNTER_DEBUG_FLAG_OPTIONS,
+            ENCOUNTER_DEBUG_TAG_OPTIONS,
+            ENCOUNTER_REASON_LABELS,
+            PHASE_SLOT_IDS,
+            RESOURCE_KEYS,
+            RESOURCE_LABEL_MAP,
+            RESOURCE_TYPE_MAP,
+            WORLD_LOCATION_LAYERS,
+            adapterState,
+            appData,
+            appState,
+            buildCurrentActStateSnapshot,
+            buildInitialDebugPayload,
+            canAdvanceCurrentPhase,
+            canExecuteCurrentNode,
+            canUseNodeAdvanceControl,
+            canUsePhaseAdvanceControl,
+            deepCloneValue,
+            extractHeroPayload,
+            getActModuleApi,
+            getAdapterModeLabel,
+            getCampaignConfig,
+            getCampaignTotalNodes,
+            getCurrentAssetDeckSummary,
+            getCurrentEncounterDebugContext,
+            getCurrentNodeData,
+            getCurrentWorldLocation,
+            getDebugChapterTransitionOption,
+            getDebugEncounterContext,
+            getEncounterMarkerForPhase,
+            getFixedPhaseKind,
+            getReadyVisionReplacementForPhase,
+            getRouteOptionLabel,
+            getRouteOptions,
+            getSeedDisplayLabel,
+            getVisionStateForDashboard,
+            getWorldLocationLayerLabel,
+            isOverviewDebugMode,
+            isPhasePlanConfirmedForCurrentNode,
+            isRouteSelectionActive,
+            normalizeActStage,
+            normalizePendingAssetDeckCommandsForDashboard,
+            normalizeResourceKey,
+            normalizeRestTintKey,
+            syncState
+        } = ctx;
+
     const PARTY_ORDER = [
         { key: 'rino',    suit: '♥', exclusiveLabel: 'Bond',         exclusiveCn: '羁绊度' },
         { key: 'kuzuha',  suit: '♣', exclusiveLabel: 'Debtbind',     exclusiveCn: '债缚度' },
@@ -1138,15 +1183,14 @@
     }
 
 
-            return Object.freeze({
-                escapePartyHtml,
-                getPhaseRomanLabel,
-                buildVisionPanelMarkup,
-                buildCombatSettlementRowsMarkup,
-                buildActModePanelMarkup,
-                renderIntelPanel
-            });
-        }
+        return Object.freeze({
+            escapePartyHtml,
+            getPhaseRomanLabel,
+            buildVisionPanelMarkup,
+            buildCombatSettlementRowsMarkup,
+            buildActModePanelMarkup,
+            renderIntelPanel
+        });
     }
 
     global.ACE0OverviewIntelPanel = Object.freeze({ create });

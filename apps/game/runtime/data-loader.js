@@ -1,14 +1,19 @@
+import {
+  isGameDataMessage,
+  requestGameDataFromParent
+} from './game-protocol.js';
+
 /**
  * ===========================================
  * DATA-LOADER.JS - 外部数据加载系统
  * ===========================================
- * 
+ *
  * 职责:
  * - 接收 STver.html / 父级 App Host 通过 postMessage 注入的 game-config
  * - 缓存统一 game-config（hero、seats、blinds 等）并通知 apps/game host
  * - 静态 fallback 由 apps/game/index.html 统一读取 content/game-config.json
  * - 主动向父窗口请求数据
- * 
+ *
  * JSON 格式 (game-config v4):
  * {
  *   "blinds": [10, 20],
@@ -23,106 +28,108 @@
  * }
  */
 
-(function () {
-  'use strict';
+/**
+ * @typedef {import('./game-protocol.js').AceZeroGameConfig} AceZeroGameConfig
+ */
 
-  // ============================================
-  // 外部注入数据存储
-  // ============================================
-  let _injectedConfig = null;
-  let _configCallbacks = [];
+/**
+ * @typedef {Object} AceZeroDataLoader
+ * @property {() => AceZeroGameConfig | null} getInjectedConfig
+ * @property {(callback: (config: AceZeroGameConfig) => void) => void} onConfigLoaded
+ * @property {(json: unknown) => { valid: boolean, errors: string[] }} validateGameConfig
+ * @property {() => void} requestDataFromParent
+ */
+
+/**
+ * @param {{ windowRef?: Window | null, documentRef?: Document | null, logger?: Console }} [options]
+ * @returns {AceZeroDataLoader}
+ */
+export function createAceZeroDataLoader(options = {}) {
+  const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
+  const documentRef = options.documentRef || (typeof document !== 'undefined' ? document : null);
+  const logger = options.logger || console;
+
+  /** @type {AceZeroGameConfig | null} */
+  let injectedConfig = null;
+  /** @type {Array<(config: AceZeroGameConfig) => void>} */
+  let configCallbacks = [];
 
   /**
    * 获取已注入的外部配置
-   * @returns {Object|null}
+   * @returns {AceZeroGameConfig | null}
    */
   function getInjectedConfig() {
-    return _injectedConfig;
+    return injectedConfig;
   }
 
   /**
-   * 注册配置加载回调
-   * 如果配置已加载，立即执行；否则等待注入
-   * @param {Function} callback - 回调函数，参数为配置对象
+   * 注册配置加载回调。如果配置已加载，立即执行；否则等待注入。
+   * @param {(config: AceZeroGameConfig) => void} callback
    */
   function onConfigLoaded(callback) {
-    if (_injectedConfig) {
-      callback(_injectedConfig);
+    if (injectedConfig) {
+      callback(injectedConfig);
     } else {
-      _configCallbacks.push(callback);
+      configCallbacks.push(callback);
     }
   }
 
   /**
    * 应用注入的配置数据
-   * @param {Object} data - 注入的 JSON 数据
+   * @param {AceZeroGameConfig} data
    */
   function applyInjectedConfig(data) {
     if (!data) return;
-    // 已有配置 → 忽略重复投递
-    if (_injectedConfig) {
-      console.log('[DATA-LOADER] 配置已加载，忽略重复投递');
+    // 已有配置 -> 忽略重复投递
+    if (injectedConfig) {
+      logger.log('[DATA-LOADER] 配置已加载，忽略重复投递');
       return;
     }
 
-    _injectedConfig = data;
+    injectedConfig = data;
     const heroName = (data.hero && data.hero.vanguard && data.hero.vanguard.name) || '(none)';
-    console.log('[DATA-LOADER] 外部配置已加载, hero:', heroName);
+    logger.log('[DATA-LOADER] 外部配置已加载, hero:', heroName);
 
     // 如果 texas-holdem.js 已加载，直接应用配置
-    if (typeof window.applyExternalConfig === 'function') {
+    if (windowRef && typeof windowRef.applyExternalConfig === 'function') {
       try {
-        window.applyExternalConfig(data);
-        console.log('[DATA-LOADER] ✓ 已调用 applyExternalConfig');
-      } catch (e) {
-        console.error('[DATA-LOADER] applyExternalConfig 失败:', e);
+        windowRef.applyExternalConfig(data);
+        logger.log('[DATA-LOADER] ✓ 已调用 applyExternalConfig');
+      } catch (error) {
+        logger.error('[DATA-LOADER] applyExternalConfig 失败:', error);
       }
     }
 
-    // 触发所有等待中的回调
-    _configCallbacks.forEach(cb => {
-      try { cb(data); } catch (e) {
-        console.error('[DATA-LOADER] 回调执行失败:', e);
+    configCallbacks.forEach((callback) => {
+      try {
+        callback(data);
+      } catch (error) {
+        logger.error('[DATA-LOADER] 回调执行失败:', error);
       }
     });
-    _configCallbacks = [];
+    configCallbacks = [];
   }
 
-  // ============================================
-  // postMessage 监听 - 接收 STver.html 或父级 App Host 的统一 game-config
-  // ============================================
-  window.addEventListener('message', function (event) {
-    const msg = event?.data;
-    if (!msg || msg.type !== 'acezero-game-data') return;
+  function handleMessage(event) {
+    const msg = event && event.data;
+    if (!isGameDataMessage(msg)) return;
 
-    console.log('[DATA-LOADER] 收到 postMessage 数据:', msg.payload);
+    logger.log('[DATA-LOADER] 收到 postMessage 数据:', msg.payload);
     applyInjectedConfig(msg.payload);
-  });
+  }
 
-  // ============================================
-  // 主动请求数据（如果在 iframe 中）
-  // ============================================
+  /**
+   * 主动请求数据（如果在 iframe 中）
+   */
   function requestDataFromParent() {
-    if (window.parent && window.parent !== window) {
-      console.log('[DATA-LOADER] 向父窗口请求数据...');
-      window.parent.postMessage({ type: 'acezero-data-request' }, '*');
-    }
+    const didRequest = requestGameDataFromParent(windowRef);
+    if (didRequest) logger.log('[DATA-LOADER] 向父窗口请求数据...');
   }
 
-  // 页面加载后主动请求一次
-  if (document.readyState === 'complete') {
-    requestDataFromParent();
-  } else {
-    window.addEventListener('load', requestDataFromParent);
-  }
-
-  // ============================================
-  // 验证配置 JSON 格式
-  // ============================================
   /**
    * 验证游戏配置 JSON 格式
-   * @param {Object} json - 配置数据
-   * @returns {Object} { valid: boolean, errors: string[] }
+   * @param {unknown} json
+   * @returns {{ valid: boolean, errors: string[] }}
    */
   function validateGameConfig(json) {
     const errors = [];
@@ -132,15 +139,17 @@
       return { valid: false, errors };
     }
 
+    const config = json;
+
     // 新格式验证：hero + seats
-    if (json.hero) {
-      if (!json.hero.vanguard || !json.hero.vanguard.name) {
+    if (config.hero) {
+      if (!config.hero.vanguard || !config.hero.vanguard.name) {
         errors.push('hero.vanguard.name is required');
       }
     }
 
-    if (json.seats && typeof json.seats === 'object') {
-      for (const [seat, cfg] of Object.entries(json.seats)) {
+    if (config.seats && typeof config.seats === 'object') {
+      for (const [seat, cfg] of Object.entries(config.seats)) {
         if (!cfg.vanguard || !cfg.vanguard.name) {
           errors.push(`seats.${seat}: vanguard.name is required`);
         }
@@ -150,14 +159,30 @@
     return { valid: errors.length === 0, errors };
   }
 
-  // ============================================
-  // 导出到全局
-  // ============================================
-  window.AceZeroDataLoader = {
-    getInjectedConfig: getInjectedConfig,
-    onConfigLoaded: onConfigLoaded,
-    validateGameConfig: validateGameConfig,
-    requestDataFromParent: requestDataFromParent
+  const api = {
+    getInjectedConfig,
+    onConfigLoaded,
+    validateGameConfig,
+    requestDataFromParent
   };
 
-})();
+  if (windowRef) {
+    windowRef.addEventListener('message', handleMessage);
+    windowRef.AceZeroDataLoader = api;
+
+    // 页面加载后主动请求一次
+    if (documentRef && documentRef.readyState === 'complete') {
+      requestDataFromParent();
+    } else {
+      windowRef.addEventListener('load', requestDataFromParent);
+    }
+  }
+
+  return api;
+}
+
+const defaultDataLoader = typeof window !== 'undefined'
+  ? createAceZeroDataLoader()
+  : null;
+
+export default defaultDataLoader;

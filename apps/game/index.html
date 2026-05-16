@@ -235,35 +235,32 @@
     </div>
   </div>
 
-  <!-- 通用数据加载器 -->
-  <script src="./runtime/data-loader.js"></script>
   <script src="../../assets/logo/acezero-logo.js"></script>
 
-  <script>
+  <script type="module">
+    import aceZeroDataLoader from './runtime/data-loader.js';
+    import {
+      isGameReadyMessage,
+      isGameRequestMessage,
+      isOpenTutorialPickerMessage,
+      postGameDataToFrame
+    } from './runtime/game-protocol.js';
+    import { createGameRegistryLoader } from './runtime/registry-loader.js';
+    import {
+      fetchFirstJson,
+      safeLocalStorageGet,
+      safeLocalStorageSet,
+      tutorialPathCandidates,
+      withCacheBust
+    } from './runtime/shared-utils.js';
+
     (function () {
       'use strict';
 
-      // ============================================
-      // 游戏路由表 - gameId → 游戏入口路径
-      // 新增游戏优先添加到 registry/games.json；这里仅作为静态兜底。
-      // ============================================
-      const GAME_ROUTES = {
-        'texas-holdem': './modules/texas-holdem/index.html',
-        'blackjack': './modules/blackjack/index.html',
-        'dice': './modules/dice/index.html',
-        'dragon-tiger': './modules/dragon-tiger/index.html',
-        'mahjong': './modules/mahjong/index.html',
-        'majiang': './modules/mahjong/index.html',
-        'mahjong-analysis': './modules/mahjong-analysis/index.html',
-        'majiang-analysis': './modules/mahjong-analysis/index.html',
-        'sanma': './modules/mahjong-sanma/index.html',
-        'majiang-sanma': './modules/mahjong-sanma/index.html'
-      };
-
       const DEFAULT_GAME_CONFIG_PATH = '../../content/game-config.json';
       const DEFAULT_TUTORIAL_INDEX_PATH = '../../content/tutorials/texas-holdem/tutorial-index.json';
-      let _routeRegistry = null;
-      let DEFAULT_GAME = 'texas-holdem';
+      const dataLoader = aceZeroDataLoader || window.AceZeroDataLoader;
+      const routeLoader = createGameRegistryLoader({ baseUrl: window.location.href });
       const URL_PARAMS = new URLSearchParams(window.location.search || '');
 
       // ============================================
@@ -306,50 +303,11 @@
         _loadingFallbackTimer = setTimeout(hideLoadingOverlay, 6000);
       }
 
-      function tutorialPathCandidates(path) {
-        const raw = String(path || '').trim();
-        if (!raw) return [];
-        if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith('/') || raw.startsWith('./') || raw.startsWith('../')) {
-          return [raw];
-        }
-        return [raw, '../../' + raw];
-      }
-
-      async function loadGameRoutes() {
-        if (_routeRegistry) return _routeRegistry;
-        try {
-          const resp = await fetch('../../registry/games.json', { cache: 'no-cache' });
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          const registry = await resp.json();
-          if (!registry || typeof registry !== 'object' || !registry.routes) {
-            throw new Error('Invalid game route registry');
-          }
-          _routeRegistry = registry;
-          DEFAULT_GAME = registry.defaultGame || DEFAULT_GAME;
-          console.log('[ENGINE] routes loaded:', Object.keys(registry.routes));
-          return _routeRegistry;
-        } catch (err) {
-          console.warn('[ENGINE] registry/games.json 加载失败，使用内置路由:', err);
-          _routeRegistry = {
-            defaultGame: DEFAULT_GAME,
-            routes: Object.fromEntries(Object.entries(GAME_ROUTES).map(([id, entry]) => [id, { id, entry, aliases: [] }]))
-          };
-          return _routeRegistry;
-        }
-      }
-
       async function fetchTutorialJson(path) {
-        const candidates = tutorialPathCandidates(path);
-        for (const candidate of candidates) {
-          try {
-            const resp = await fetch(candidate);
-            if (!resp.ok) continue;
-            return await resp.json();
-          } catch (err) {
-            console.warn('[ENGINE] 教程配置读取失败:', candidate, err);
-          }
-        }
-        return null;
+        return fetchFirstJson(tutorialPathCandidates(path), {
+          logger: console,
+          warningPrefix: '[ENGINE] 教程配置读取失败:'
+        });
       }
 
       function getUrlConfig() {
@@ -380,37 +338,27 @@
       }
 
       function getRememberedTutorialProfile() {
-        try {
-          return localStorage.getItem('acezero:tutorial-profile:texas-holdem') || null;
-        } catch (err) {
-          return null;
-        }
+        return safeLocalStorageGet('acezero:tutorial-profile:texas-holdem', null);
       }
 
       function setRememberedTutorialProfile(profileId) {
-        try {
-          localStorage.setItem('acezero:tutorial-profile:texas-holdem', profileId || '');
-        } catch (err) {
-          console.warn('[ENGINE] 无法保存教程入口选择:', err);
-        }
+        safeLocalStorageSet('acezero:tutorial-profile:texas-holdem', profileId || '', {
+          logger: console,
+          warningPrefix: '[ENGINE] 无法保存教程入口选择:'
+        });
       }
 
       function getRememberedTutorialCourse(profileId) {
         if (!profileId) return null;
-        try {
-          return localStorage.getItem('acezero:tutorial-course:texas-holdem:' + profileId) || null;
-        } catch (err) {
-          return null;
-        }
+        return safeLocalStorageGet('acezero:tutorial-course:texas-holdem:' + profileId, null);
       }
 
       function setRememberedTutorialCourse(profileId, courseId) {
         if (!profileId) return;
-        try {
-          localStorage.setItem('acezero:tutorial-course:texas-holdem:' + profileId, courseId || '');
-        } catch (err) {
-          console.warn('[ENGINE] 无法保存教程阶段选择:', err);
-        }
+        safeLocalStorageSet('acezero:tutorial-course:texas-holdem:' + profileId, courseId || '', {
+          logger: console,
+          warningPrefix: '[ENGINE] 无法保存教程阶段选择:'
+        });
       }
 
       function findTutorialProfile(indexConfig, preferredId) {
@@ -588,7 +536,7 @@
         if (_currentConfig) return _currentConfig;
 
         // 优先：外部注入（来自 STver.html postMessage），格式等同 content/game-config.json。
-        let injected = window.AceZeroDataLoader.getInjectedConfig();
+        let injected = dataLoader.getInjectedConfig();
         if (injected) {
           console.log('[ENGINE] 使用外部注入配置');
           _currentConfig = await maybeResolveTutorialConfig(injected);
@@ -606,11 +554,11 @@
 
         // 如果没有注入配置，主动请求并等待 100ms
         console.log('[ENGINE] 未检测到注入配置，主动请求...');
-        window.AceZeroDataLoader.requestDataFromParent();
+        dataLoader.requestDataFromParent();
         await new Promise(resolve => setTimeout(resolve, 100));
 
         // 再次检查注入配置
-        injected = window.AceZeroDataLoader.getInjectedConfig();
+        injected = dataLoader.getInjectedConfig();
         if (injected) {
           console.log('[ENGINE] 请求后收到注入配置');
           _currentConfig = await maybeResolveTutorialConfig(injected);
@@ -644,33 +592,12 @@
         }
 
         // 最终回退：默认 gameId
-        _currentConfig = { gameId: DEFAULT_GAME };
+        _currentConfig = { gameId: routeLoader.getDefaultGame() };
         _configSource = 'static';
         return _currentConfig;
       }
 
-      // 2. 根据 gameId 路由到对应游戏
-      function resolveGameUrl(gameId) {
-        const registryRoutes = _routeRegistry && _routeRegistry.routes;
-        const registryEntry = registryRoutes && (registryRoutes[gameId] || registryRoutes[DEFAULT_GAME]);
-        const route = (registryEntry && registryEntry.entry) || GAME_ROUTES[gameId] || GAME_ROUTES[DEFAULT_GAME];
-        return new URL(route, window.location.href).href;
-      }
-
-      function resolveGameKey(config) {
-        const raw = (config && (config.gameMode || config.gameId)) || DEFAULT_GAME;
-        const norm = String(raw).toLowerCase();
-        const registryRoutes = _routeRegistry && _routeRegistry.routes ? _routeRegistry.routes : {};
-        if (registryRoutes[norm] || GAME_ROUTES[norm]) return norm;
-        const matched = Object.values(registryRoutes).find((entry) => {
-          const aliases = Array.isArray(entry && entry.aliases) ? entry.aliases : [];
-          return aliases.map((alias) => String(alias).toLowerCase()).includes(norm);
-        });
-        if (matched && matched.id) return matched.id;
-        return DEFAULT_GAME;
-      }
-
-      // 3. 向游戏 iframe 发送统一 game-config（附带来源标记，仅首次生效）
+      // 2. 向游戏 iframe 发送统一 game-config（附带来源标记，仅首次生效）
       function sendConfigToGame(config, source) {
         if (!frame || !frame.contentWindow) return;
         // iframe 尚未 load → 不发送（脚本还没注册监听）
@@ -679,12 +606,9 @@
           console.log('[ENGINE] 配置已发送，忽略重复');
           return;
         }
-        _configSentToGame = true;
-        frame.contentWindow.postMessage({
-          type: 'acezero-game-data',
-          payload: config,
-          source: source || _configSource || 'static'
-        }, '*');
+        if (postGameDataToFrame(frame, config, source || _configSource || 'static')) {
+          _configSentToGame = true;
+        }
       }
 
       async function reopenTutorialPicker(payload) {
@@ -701,15 +625,12 @@
         _configSentToGame = false;
         _frameReady = false;
 
-        const gameId = resolveGameKey(config);
+        const gameId = routeLoader.resolveGameKey(config);
         loadingStatus.style.display = '';
         loadingStatus.textContent = 'LOADING ' + gameId.toUpperCase() + '...';
         overlay.classList.remove('hidden');
 
-        let gameSrc = resolveGameUrl(gameId);
-        const sep = gameSrc.includes('?') ? '&' : '?';
-        gameSrc += sep + 'v=' + Date.now();
-        frame.src = gameSrc;
+        frame.src = withCacheBust(routeLoader.resolveGameUrl(gameId));
 
         frame.addEventListener('load', function onReload() {
           _frameReady = true;
@@ -719,20 +640,17 @@
         });
       }
 
-      // 4. 启动
+      // 3. 启动
       async function boot() {
-        await loadGameRoutes();
+        await routeLoader.loadGameRoutes();
         const config = await resolveConfig();
-        const gameId = resolveGameKey(config);
+        const gameId = routeLoader.resolveGameKey(config);
 
         console.log('[ENGINE] gameId:', gameId);
         loadingStatus.textContent = 'LOADING ' + gameId.toUpperCase() + '...';
 
         // 设置 iframe src
-        let gameSrc = resolveGameUrl(gameId);
-        const sep = gameSrc.includes('?') ? '&' : '?';
-        gameSrc += sep + 'v=' + Date.now();
-        frame.src = gameSrc;
+        frame.src = withCacheBust(routeLoader.resolveGameUrl(gameId));
 
         // iframe 加载完成后：传递最新配置 + 隐藏 loading
         frame.addEventListener('load', function onLoad() {
@@ -744,34 +662,29 @@
         });
       }
 
-      // 5. 监听游戏主动请求配置（德州和小游戏都走 acezero-game-data）
+      // 4. 监听游戏主动请求配置（德州和小游戏都走 acezero-game-data）
       window.addEventListener('message', async (event) => {
         const msg = event?.data;
         if (!msg) return;
 
-        if (msg.type === 'acezero-game-ready') {
+        if (isGameReadyMessage(msg)) {
           hideLoadingOverlay();
           return;
         }
 
-        if (msg.type === 'acezero-data-request') {
+        if (isGameRequestMessage(msg)) {
           const config = await resolveConfig();
-          if (!frame || !frame.contentWindow) return;
-          frame.contentWindow.postMessage({
-            type: 'acezero-game-data',
-            payload: config,
-            source: _configSource || 'static'
-          }, '*');
+          postGameDataToFrame(frame, config, _configSource || 'static');
           return;
         }
 
-        if (msg.type === 'acezero-open-tutorial-picker') {
+        if (isOpenTutorialPickerMessage(msg)) {
           await reopenTutorialPicker(msg.payload || {});
         }
       });
 
-      // 6. 处理外部注入延迟到达（STver → index → game）
-      window.AceZeroDataLoader.onConfigLoaded(function (config) {
+      // 5. 处理外部注入延迟到达（STver → index → game）
+      dataLoader.onConfigLoaded(function (config) {
         console.log('[ENGINE] 外部配置延迟到达');
         _currentConfig = config;
         _configSource = 'injected';

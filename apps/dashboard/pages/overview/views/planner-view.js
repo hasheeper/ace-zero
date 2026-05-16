@@ -1,9 +1,49 @@
 (function initAce0OverviewPlannerView(global) {
-    // Intentionally not strict: this view keeps migrated planner markup helpers in a
-    // ctx-backed with scope while overview remains a static-script page.
-
     function create(ctx = {}) {
-        with (ctx) {
+        const {
+            PHASE_SLOT_IDS,
+            PLANNER_PAGE_KEYS,
+            PLANNER_PAGE_META,
+            RESOURCE_KEYS,
+            RESOURCE_LABEL_MAP,
+            RESOURCE_TYPE_MAP,
+            REST_CONTROL_TINT_KEYS,
+            appData,
+            appState,
+            buildCombatSettlementRowsMarkup,
+            buildCurrentActStateSnapshot,
+            buildEncounterFixedGlyphMarkup,
+            buildVisionPanelMarkup,
+            canEditPhaseSlot,
+            canOpenPlannerDrawer,
+            canUseInteractivePlannerControls,
+            escapePartyHtml,
+            getAssetDeckModuleApi,
+            getCampaignTotalNodes,
+            getCurrentAssetDeckSummary,
+            getCurrentNodeData,
+            getCurrentVisionFixedPhasePrompt,
+            getDisplayTokenForPhase,
+            getEncounterMarkerForPhase,
+            getFixedPhaseKind,
+            getFixedPhaseMarker,
+            getPhaseRomanLabel,
+            getPreferredSourceForKey,
+            getReadyVisionReplacementForPhase,
+            getRestTintLabel,
+            getRouteOptionLabel,
+            getTotalInventoryCount,
+            getVisionStateForDashboard,
+            isPhasePlanConfirmedForCurrentNode,
+            isPlanningPhase,
+            isRouteSelectionActive,
+            normalizeResourceKey,
+            normalizeRestTintKey,
+            selectInventoryToken,
+            selectionState,
+            syncState
+        } = ctx;
+
     const PLAN_LAYOUT_WIDE_WIDTH = 1080;
     const PLAN_LAYOUT_NARROW_WIDTH = 760;
     const PLAN_LAYOUT_MIN_HEIGHT = 260;
@@ -1101,7 +1141,6 @@ ${phaseSegments}
         syncRestControlPanelDOM,
         syncPhaseBarDOM
     });
-        }
     }
 
     global.ACE0OverviewPlannerView = Object.freeze({ create });

@@ -2532,6 +2532,7 @@ function createExecutionRuntimeContext() {
             RESOURCE_KEYS,
             RESOURCE_TYPE_MAP,
             RESOURCE_LABEL_MAP,
+            PLANNER_PAGE_KEYS,
             PLANNER_PAGE_META,
             REST_CONTROL_TINT_KEYS,
             PHASE_SLOT_IDS,
@@ -2539,6 +2540,8 @@ function createExecutionRuntimeContext() {
             getCurrentAssetDeckSummary,
             getTotalInventoryCount,
             buildCombatSettlementRowsMarkup,
+            buildCurrentActStateSnapshot,
+            normalizeResourceKey,
             normalizeRestTintKey,
             getRestTintLabel,
             canUseInteractivePlannerControls,
@@ -2560,7 +2563,9 @@ function createExecutionRuntimeContext() {
             isRouteSelectionActive,
             getRouteOptionLabel,
             getVisionStateForDashboard,
-            buildVisionPanelMarkup
+            buildVisionPanelMarkup,
+            getPreferredSourceForKey,
+            selectInventoryToken
         });
     }
 
