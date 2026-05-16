@@ -1,7 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-
 const createMatchStateHelpers = require('../shared/match/match-state');
 const createRoundTransitionHelpers = require('../shared/match/round-transition');
 const { SingleRoundRuntime } = require('../engine/runtime/single-round-runtime');
@@ -74,7 +72,30 @@ function validateRoundAdvance() {
 }
 
 function validateSeatWindMap() {
-  const config = JSON.parse(fs.readFileSync('/Users/liuhang/Documents/acezero/majiang/game-config.json', 'utf8'));
+  const config = {
+    mode: 'single-round',
+    tableSize: 2,
+    ruleset: 'riichi-2p-pinzu-honor',
+    players: [
+      { seat: 'bottom', name: 'bottom' },
+      { seat: 'top', name: 'top' }
+    ],
+    round: {
+      zhuangfeng: 0,
+      jushu: 0,
+      changbang: 0,
+      lizhibang: 0,
+      ruleset: 'riichi-2p-pinzu-honor'
+    },
+    ruleOverrides: {
+      '場数': 2
+    },
+    engine: {
+      wall: {
+        preset: false
+      }
+    }
+  };
   const runtime = new SingleRoundRuntime(config);
   runtime.start();
 

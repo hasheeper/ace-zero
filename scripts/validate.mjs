@@ -20,7 +20,7 @@ class ValidationError extends Error {
 }
 
 function printUsage() {
-  console.log('Usage: node scripts/validate.mjs [quick|ci|full|cdp|list]');
+  console.log('Usage: node scripts/validate.mjs [suite|list]');
   console.log('');
   Object.entries(suiteDefinitions).forEach(([name, suite]) => {
     console.log(`  ${name.padEnd(5)} ${suite.description}`);
@@ -134,6 +134,55 @@ async function runCdpPreflightTask() {
   console.log(`[ok] CDP endpoint available at ${cdpBase}`);
 }
 
+async function runMortalPreflightTask() {
+  const mortalRoot = process.env.MORTAL_ROOT || '/Users/liuhang/Documents/acezero/third_party/Mortal';
+  const configPath = process.env.MORTAL_CFG_PATH || path.join(mortalRoot, 'mortal', 'config.smoke.toml');
+  const condaEnvPath = process.env.MORTAL_CONDA_ENV_PATH || path.join(mortalRoot, '.conda/envs/mortal');
+  const requiredFiles = [
+    path.join(mortalRoot, 'mortal', 'mortal.py'),
+    configPath
+  ];
+  const requiredDirs = [
+    mortalRoot,
+    condaEnvPath
+  ];
+
+  const missing = [];
+  for (const file of requiredFiles) {
+    try {
+      const stats = await fs.stat(file);
+      if (!stats.isFile()) missing.push(file);
+    } catch (_) {
+      missing.push(file);
+    }
+  }
+  for (const dir of requiredDirs) {
+    try {
+      const stats = await fs.stat(dir);
+      if (!stats.isDirectory()) missing.push(dir);
+    } catch (_) {
+      missing.push(dir);
+    }
+  }
+
+  if (missing.length) {
+    throw new ValidationError(
+      [
+        'Mahjong Mortal validation requires a local Mortal model environment.',
+        `MORTAL_ROOT: ${mortalRoot}`,
+        `MORTAL_CFG_PATH: ${configPath}`,
+        `MORTAL_CONDA_ENV_PATH: ${condaEnvPath}`,
+        `Missing paths: ${missing.join(', ')}`,
+        'Install or point these environment variables at a working Mortal checkout before rerunning this suite.'
+      ].join('\n'),
+      2
+    );
+  }
+
+  await runCommand('conda', ['--version']);
+  console.log(`[ok] Mortal environment available at ${mortalRoot}`);
+}
+
 async function runTask(task, index, total) {
   console.log(`\n[${index + 1}/${total}] ${task.name}`);
   if (task.type === 'json') return runJsonTask(task);
@@ -141,6 +190,7 @@ async function runTask(task, index, total) {
   if (task.type === 'esm-import') return runEsmImportTask(task);
   if (task.type === 'node') return runNodeTask(task);
   if (task.type === 'cdp-preflight') return runCdpPreflightTask(task);
+  if (task.type === 'mortal-preflight') return runMortalPreflightTask(task);
   throw new ValidationError(`Unknown validation task type: ${task.type}`);
 }
 

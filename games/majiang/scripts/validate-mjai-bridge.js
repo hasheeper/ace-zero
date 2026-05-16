@@ -10,7 +10,21 @@ const { createMortalCoachAdapter } = require('../engine/coach/mortal/mortal-adap
 const { createCoachController } = require('../engine/coach/review/coach-controller');
 const { buildCoachSuggestion } = require('../engine/coach/review/suggestion-format');
 
-const SMOKE_CONFIG_PATH = path.join(__dirname, '..', '..', 'third_party', 'Mortal', 'mortal', 'config.smoke.toml');
+const DEFAULT_MORTAL_ROOT = '/Users/liuhang/Documents/acezero/third_party/Mortal';
+const MORTAL_ROOT = process.env.MORTAL_ROOT || DEFAULT_MORTAL_ROOT;
+const SMOKE_CONFIG_PATH = process.env.MORTAL_CFG_PATH
+  || path.join(MORTAL_ROOT, 'mortal', 'config.smoke.toml');
+const MORTAL_CONDA_ENV_PATH = process.env.MORTAL_CONDA_ENV_PATH
+  || path.join(MORTAL_ROOT, '.conda/envs/mortal');
+
+function createMortalOptions(options = {}) {
+  return {
+    mortalRoot: MORTAL_ROOT,
+    condaEnvPath: MORTAL_CONDA_ENV_PATH,
+    configPath: SMOKE_CONFIG_PATH,
+    ...options
+  };
+}
 
 function assert(condition, message) {
   if (!condition) {
@@ -62,10 +76,9 @@ function runEncodingSmoke(cwd) {
   const configPath = path.join(cwd, 'test', 'game-config.ai-easy-call-smoke.json');
   const config = loadJson(configPath);
   const runtime = createRuntimeFromConfig(config);
-  const adapter = createMortalCoachAdapter(runtime, {
-    perspectiveSeatKey: 'right',
-    configPath: SMOKE_CONFIG_PATH
-  });
+  const adapter = createMortalCoachAdapter(runtime, createMortalOptions({
+    perspectiveSeatKey: 'right'
+  }));
   const aiController = createAiController(runtime, config);
 
   runtime.start();
@@ -131,10 +144,9 @@ function runInferenceSmoke(cwd) {
   const configPath = path.join(cwd, 'test', 'game-config.ai-easy-call-smoke.json');
   const config = loadJson(configPath);
   const runtime = createRuntimeFromConfig(config);
-  const adapter = createMortalCoachAdapter(runtime, {
-    perspectiveSeatKey: 'right',
-    configPath: SMOKE_CONFIG_PATH
-  });
+  const adapter = createMortalCoachAdapter(runtime, createMortalOptions({
+    perspectiveSeatKey: 'right'
+  }));
   const aiController = createAiController(runtime, config);
 
   runtime.start();
@@ -184,10 +196,9 @@ function runPonEncodingSmoke(cwd) {
   const configPath = path.join(cwd, 'test', 'game-config.ai-easy-yakuhai-call-smoke.json');
   const config = loadJson(configPath);
   const runtime = createRuntimeFromConfig(config);
-  const adapter = createMortalCoachAdapter(runtime, {
-    perspectiveSeatKey: 'right',
-    configPath: SMOKE_CONFIG_PATH
-  });
+  const adapter = createMortalCoachAdapter(runtime, createMortalOptions({
+    perspectiveSeatKey: 'right'
+  }));
   const aiController = createAiController(runtime, config);
 
   runtime.start();
@@ -231,10 +242,9 @@ function runDecoderProtocolSmoke(cwd) {
   const configPath = path.join(cwd, 'test', 'game-config.ai-easy-call-smoke.json');
   const config = loadJson(configPath);
   const runtime = createRuntimeFromConfig(config);
-  const adapter = createMortalCoachAdapter(runtime, {
-    perspectiveSeatKey: 'right',
-    configPath: SMOKE_CONFIG_PATH
-  });
+  const adapter = createMortalCoachAdapter(runtime, createMortalOptions({
+    perspectiveSeatKey: 'right'
+  }));
 
   runtime.start();
   adapter.buildBootstrapEvents();
@@ -387,10 +397,9 @@ function runTerminalEncodingSmoke(cwd) {
   const configPath = path.join(cwd, 'test', 'game-config.ai-easy-call-smoke.json');
   const config = loadJson(configPath);
   const runtime = createRuntimeFromConfig(config);
-  const adapter = createMortalCoachAdapter(runtime, {
-    perspectiveSeatKey: 'right',
-    configPath: SMOKE_CONFIG_PATH
-  });
+  const adapter = createMortalCoachAdapter(runtime, createMortalOptions({
+    perspectiveSeatKey: 'right'
+  }));
 
   runtime.start();
   adapter.buildBootstrapEvents();
@@ -519,10 +528,9 @@ function runCoachControllerSmoke(cwd) {
   const configPath = path.join(cwd, 'test', 'game-config.ai-easy-call-smoke.json');
   const config = loadJson(configPath);
   const runtime = createRuntimeFromConfig(config);
-  const controller = createCoachController(runtime, {
-    perspectiveSeatKey: 'right',
-    configPath: SMOKE_CONFIG_PATH
-  });
+  const controller = createCoachController(runtime, createMortalOptions({
+    perspectiveSeatKey: 'right'
+  }));
 
   runtime.start();
   controller.ensureBootstrap();

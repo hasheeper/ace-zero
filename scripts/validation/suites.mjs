@@ -57,6 +57,7 @@ const mahjongScenarioSmokes = [
   'games/majiang/scripts/validate-friendly-json-rules.js',
   'games/majiang/scripts/validate-furiten-scenarios.js',
   'games/majiang/scripts/validate-match-session-regression.js',
+  'games/majiang/scripts/validate-p2-east-south.js',
   'games/majiang/scripts/validate-p2-heads-up-scoring.js',
   'games/majiang/scripts/validate-p2-scenarios.js',
   'games/majiang/scripts/validate-p2-wall.js',
@@ -95,6 +96,10 @@ const texasCdpSmokes = [
   'games/texasholdem/texas-holdem/scripts/asset-real-regression.mjs',
   'games/texasholdem/texas-holdem/scripts/asset-balance-regression.mjs',
   'games/texasholdem/texas-holdem/scripts/skill-real-regression.mjs'
+];
+
+const mahjongMortalSmokes = [
+  'games/majiang/scripts/validate-mjai-bridge.js'
 ];
 
 function nodeTasks(files, prefix) {
@@ -141,6 +146,13 @@ export const suiteDefinitions = Object.freeze({
     tasks: [
       { type: 'cdp-preflight', name: 'Check Texas CDP environment' },
       ...nodeTasks(texasCdpSmokes, 'Texas CDP regression')
+    ]
+  }),
+  mortal: Object.freeze({
+    description: 'Mahjong Mortal/conda coach regressions. Requires local Mortal model environment.',
+    tasks: [
+      { type: 'mortal-preflight', name: 'Check Mahjong Mortal environment' },
+      ...nodeTasks(mahjongMortalSmokes, 'Mahjong Mortal regression')
     ]
   })
 });
