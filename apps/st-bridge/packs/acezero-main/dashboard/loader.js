@@ -115,17 +115,6 @@
     return '';
   }
 
-  function getAce0ReplayBridge() {
-    const hostRoot = getAce0HostRoot();
-    const candidates = [ROOT?.ACE0Plugin, hostRoot?.ACE0Plugin];
-    for (const candidate of candidates) {
-      if (candidate && typeof candidate.commitReplayPatch === 'function') {
-        return candidate.commitReplayPatch.bind(candidate);
-      }
-    }
-    return null;
-  }
-
   function buildDashboardReplacePatch(path, value) {
     return {
       op: 'replace',
@@ -135,11 +124,13 @@
   }
 
   async function commitDashboardReplayPatch({ floorKey, operationId, patches }) {
-    const bridge = getAce0ReplayBridge();
-    if (!bridge) {
-      return { ok: false, reason: 'mvu_replay_unavailable' };
+    const hostRoot = getAce0HostRoot();
+    for (const candidate of [ROOT?.ACE0Plugin, hostRoot?.ACE0Plugin]) {
+      if (candidate && typeof candidate.commitReplayPatch === 'function') {
+        return await candidate.commitReplayPatch({ floorKey, operationId, patches });
+      }
     }
-    return await bridge({ floorKey, operationId, patches });
+    return { ok: false, reason: 'mvu_replay_unavailable' };
   }
 
   function normalizeDashboardString(value, fallback = '') {

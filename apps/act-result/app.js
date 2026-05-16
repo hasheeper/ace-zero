@@ -481,19 +481,11 @@
         return String((data && (data.floorKey || data.__ace0FloorKey || data.messageId || data.floorId)) || '');
       }
 
-      function rememberAssetOfferCleared(offerOrClearKey, floorKey) {
-        return;
-      }
-
       function syncAssetOfferButtonClearKey(clearKey) {
         if (!clearKey) return;
         document.querySelectorAll('.asset-card-btn').forEach(function (btn) {
           btn.setAttribute('data-clear-key', clearKey);
         });
-      }
-
-      function isAssetOfferClearedLocally(offer, floorKey) {
-        return false;
       }
 
       function isAssetOfferCleared(act, offer) {
@@ -602,7 +594,6 @@
         var panel = document.getElementById('ui-asset-panel');
         var offer = data && data.assetOffer && typeof data.assetOffer === 'object' ? data.assetOffer : null;
         var choices = Array.isArray(offer && offer.choices) ? offer.choices : [];
-        var floorKey = getAssetOfferFloorKey(data);
         if (!panel) return;
         if (!offer || !choices.length) { panel.style.display = 'none'; return; }
 
@@ -680,7 +671,6 @@
       async function syncAssetPanelStateToMvu(data) {
         var api = resolveAce0Api();
         var offer = data && data.assetOffer && typeof data.assetOffer === 'object' ? data.assetOffer : null;
-        var floorKey = getAssetOfferFloorKey(data);
         if (!offer) return;
         try {
           var v = api && typeof api.getEraVars === 'function'
@@ -702,12 +692,10 @@
             return;
           }
           if (isAssetOfferCleared(act, offer)) {
-            rememberAssetOfferCleared(offer, floorKey);
             lockAssetPanel('', assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
             return;
           }
           if (!liveOffer) {
-            if (isAssetOfferClearedLocally(offer, floorKey)) rememberAssetOfferCleared(offer, floorKey);
             lockAssetPanel('', assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
           }
         } catch (e) {}
@@ -746,7 +734,6 @@
           if (result && result.ok) {
             var topStatus = document.getElementById('ui-top-status');
             if (topStatus) topStatus.textContent = result.pendingReplace ? '等待替换' : '契约入库';
-            rememberAssetOfferCleared(result.clearKey || result.offerId || clearKey, floorKey);
             lockAssetPanel(result.selectedCardId || btn.getAttribute('data-card-id') || '', result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
             if (hint) {
               hint.textContent = result.pendingReplace || result.code === 'pending_replace'
@@ -757,7 +744,6 @@
           } else {
             var reason = String((result && (result.reason || result.error || result.code)) || 'Error');
             if (reason === 'no_pending_offer' || reason === 'stale_asset_offer') {
-              rememberAssetOfferCleared(clearKey, floorKey);
               lockAssetPanel('', '契约已结算');
               return;
             }

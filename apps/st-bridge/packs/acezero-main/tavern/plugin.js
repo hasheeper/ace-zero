@@ -185,10 +185,6 @@
   //  工具函数
   // ==========================================================
 
-  function wait(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
   function _normalizeTrimmedString(value, fallback = '') {
     return typeof value === 'string' ? value.trim() : fallback;
   }
@@ -367,10 +363,6 @@
     return current;
   }
 
-  function areJsonValuesEqual(a, b) {
-    return JSON.stringify(a) === JSON.stringify(b);
-  }
-
   function buildReplayPatchesFromEraVars(beforeVars, afterVars, paths = null) {
     const patchPaths = Array.isArray(paths) && paths.length
       ? paths
@@ -391,7 +383,7 @@
       const nextValue = readJsonPointer(afterVars, path);
       if (nextValue === undefined) return;
       const prevValue = readJsonPointer(beforeVars, path);
-      if (areJsonValuesEqual(prevValue, nextValue)) return;
+      if (JSON.stringify(prevValue) === JSON.stringify(nextValue)) return;
       patches.push(buildReplacePatch(path, nextValue));
     });
     return patches;
@@ -1036,18 +1028,10 @@
 
   function normalizeWorldClock(raw) { return ACT_RUNTIME.normalizeWorldClock(raw); }
   function getWorldClock(eraVars) { return ACT_RUNTIME.getWorldClock(eraVars); }
-  function advanceWorldClockState(clock, steps) { return ACT_RUNTIME.advanceWorldClockState(clock, steps); }
-  function getWorldClockAbsoluteIndex(clock) { return ACT_RUNTIME.getWorldClockAbsoluteIndex(clock); }
-  function getForwardWorldClockPhaseSteps(fromClock, toClock) { return ACT_RUNTIME.getForwardWorldClockPhaseSteps(fromClock, toClock); }
-  function applyDebtInterest(principalAmount, phaseSteps, ratePerPhase) { return ACT_RUNTIME.applyDebtInterest(principalAmount, phaseSteps, ratePerPhase); }
-  function normalizeActStage(value) { return ACT_RUNTIME.normalizeActStage(value); }
   function getActModuleApi() { return ACT_RUNTIME.getActModuleApi(); }
   function installActModuleHostBridge() { return ACT_RUNTIME.installActModuleHostBridge(); }
   function getActDefaultStateFromModule(actId) { return ACT_RUNTIME.getActDefaultStateFromModule(actId); }
-  function getActChapterConfigFromModule(actId) { return ACT_RUNTIME.getActChapterConfigFromModule(actId); }
   function runActModuleMethod(methodName, ...args) { return ACT_RUNTIME.runActModuleMethod(methodName, ...args); }
-  function normalizeActResourceCounts(raw) { return ACT_RUNTIME.normalizeActResourceCounts(raw); }
-  function normalizeActIncomeRateCounts(raw) { return ACT_RUNTIME.normalizeActIncomeRateCounts(raw); }
   function normalizeActVisionState(raw) { return ACT_RUNTIME.normalizeActVisionState(raw); }
   function getWorldActState(eraVars) { return ACT_RUNTIME.getWorldActState(eraVars); }
   function getActRuntimeConfig(actId) { return ACT_RUNTIME.getActRuntimeConfig(actId); }
@@ -1056,8 +1040,6 @@
   function createEmptyActCounts(defaultValue = 0) { return ACT_RUNTIME.createEmptyActCounts(defaultValue); }
   function createActRewardsForNode(nodeRuntime) { return ACT_RUNTIME.createActRewardsForNode(nodeRuntime); }
   function normalizeActEffectList(list) { return ACT_RUNTIME.normalizeActEffectList(list); }
-  function getNormalizedActNodeEffects(config, nodeId) { return ACT_RUNTIME.getNormalizedActNodeEffects(config, nodeId); }
-  function getNormalizedActPhaseEffects(config, nodeId, phaseIndex) { return ACT_RUNTIME.getNormalizedActPhaseEffects(config, nodeId, phaseIndex); }
   function deriveActCharacterStates(eraVars) { return ACT_RUNTIME.deriveActCharacterStates(eraVars); }
   async function synchronizeActCharacterState(eraVars, options = {}) { return await ACT_RUNTIME.synchronizeActCharacterState(eraVars, options); }
   function buildActStateSummary(eraVars, derivedActState = null) { return ACT_RUNTIME.buildActStateSummary(eraVars, derivedActState); }
@@ -1074,13 +1056,7 @@
   function getHeroCastStateSnapshot(eraVars, managedCharacters, states) { return ACT_RUNTIME.getHeroCastStateSnapshot(eraVars, managedCharacters, states); }
   function createActRuntimeSnapshot(eraVars, derivedActState = null) { return ACT_RUNTIME.createActRuntimeSnapshot(eraVars, derivedActState); }
   function getAssetDeckModuleApi() { return ACT_RUNTIME.getAssetDeckModuleApi(); }
-  function applyReserveGrowthToAct(actState, config, nodeIndex) { return ACT_RUNTIME.applyReserveGrowthToAct(actState, config, nodeIndex); }
-  function clearLimitedActTokens(actState) { return ACT_RUNTIME.clearLimitedActTokens(actState); }
-  function resetActPhaseSlots(actState, phaseIndex = 0) { return ACT_RUNTIME.resetActPhaseSlots(actState, phaseIndex); }
-  function applyNodeRewardsToAct(actState, config, nodeId) { return ACT_RUNTIME.applyNodeRewardsToAct(actState, config, nodeId); }
   function advanceActToNextNode(actState, config, heroState = {}, contextInput = {}) { return ACT_RUNTIME.advanceActToNextNode(actState, config, heroState, contextInput); }
-  function resolveActNodeTransition(actState, config, heroState = {}, contextInput = {}) { return ACT_RUNTIME.resolveActNodeTransition(actState, config, heroState, contextInput); }
-  function consumeSingleActPhase(actState, heroState, config, contextInput = {}) { return ACT_RUNTIME.consumeSingleActPhase(actState, heroState, config, contextInput); }
   function adjustNarrativeTensionInternal(delta) { return ACT_RUNTIME.adjustNarrativeTensionInternal(delta); }
   function setNarrativeTensionInternal(value) { return ACT_RUNTIME.setNarrativeTensionInternal(value); }
   function resetNarrativeTensionInternal() { return ACT_RUNTIME.resetNarrativeTensionInternal(); }
@@ -1090,7 +1066,6 @@
   function adjustClockPressureInternal(delta) { return ACT_RUNTIME.adjustClockPressureInternal(delta); }
   function setClockPressureInternal(value) { return ACT_RUNTIME.setClockPressureInternal(value); }
   function resetClockPressureInternal() { return ACT_RUNTIME.resetClockPressureInternal(); }
-  function deriveWorldTimeFromAct(actState) { return ACT_RUNTIME.deriveWorldTimeFromAct(actState); }
   function buildEncounterContextFromEraVars(eraVars) { return ACT_RUNTIME.buildEncounterContextFromEraVars(eraVars); }
   async function resolvePendingActAdvance(eraVars, options = {}) { return await ACT_RUNTIME.resolvePendingActAdvance(eraVars, options); }
   async function applyFloorProgressDelta(messageId, message, options = {}) { return await ACT_RUNTIME.applyFloorProgressDelta(messageId, message, options); }
@@ -1173,10 +1148,6 @@
     return parseUpdateVariableJsonPatch(content).filter(patch => !isRelationshipPatchPath(patch.path));
   }
 
-  function hasNonRelationshipVariableUpdate(content) {
-    return getNonRelationshipPatchesFromContent(content).length > 0;
-  }
-
   const RESULT_RUNTIME = (typeof window !== 'undefined' ? window : globalThis).ACE0TavernResultRuntime?.create({
     pluginName: PLUGIN_NAME,
     tags: { BATTLE_TAG, FRONTEND_TAG, ACT_RESULT_TAG },
@@ -1203,32 +1174,8 @@
     }
   }) || {};
 
-  function buildStateUpdateSummary(before, after, changedPaths = []) {
-    return RESULT_RUNTIME.buildStateUpdateSummary(before, after, changedPaths);
-  }
-
-  function buildActResultSummary(resultType, before, after, changedPaths = []) {
-    return RESULT_RUNTIME.buildActResultSummary(resultType, before, after, changedPaths);
-  }
-
-  function buildActResultPayload(before, after, options = {}) {
-    return RESULT_RUNTIME.buildActResultPayload(before, after, options);
-  }
-
-  function buildActResultTag(resultPayload) {
-    return RESULT_RUNTIME.buildActResultTag(resultPayload);
-  }
-
-  async function buildPendingActResult(content = '', eraVars = null) {
-    return await RESULT_RUNTIME.buildPendingActResult(content, eraVars);
-  }
-
   async function appendActResultIfNeeded(content, options = {}) {
     return await RESULT_RUNTIME.appendActResultIfNeeded(content, options);
-  }
-
-  function parseAiBattleOutput(content) {
-    return RESULT_RUNTIME.parseAiBattleOutput(content);
   }
 
   async function processBattleContent(content) {
@@ -1617,7 +1564,6 @@
   hostRoot.ACE0Plugin = {
     getEraVars,
     commitReplayPatch: commitAce0ReplayPatch,
-    buildReplacePatch,
 
     getDefaultActState(actId) {
       return getActDefaultStateFromModule(actId);
