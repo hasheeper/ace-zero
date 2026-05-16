@@ -73,6 +73,54 @@
   const DEFAULT_WORLD_CLOCK_PRESSURE = 0;
   const DEBT_INTEREST_RATE_PER_PHASE = 0.005;
   const MAJOR_DEBT_INTEREST_RATE_PER_PHASE = 0.01;
+  const ACE0_RENDER_STATE_REPLAY_PATHS = [
+    '/hero/funds',
+    '/hero/roster',
+    '/world/clockPressure',
+    '/world/assetDeck',
+    '/world/act/nodeIndex',
+    '/world/act/route_history',
+    '/world/act/limited',
+    '/world/act/reserve',
+    '/world/act/reserve_progress',
+    '/world/act/income_progress',
+    '/world/act/phase_slots',
+    '/world/act/phase_index',
+    '/world/act/phase_advance',
+    '/world/act/stage',
+    '/world/act/phasePlanLock',
+    '/world/act/vision',
+    '/world/act/resourceSpent',
+    '/world/act/pendingResolutions',
+    '/world/act/pendingAssetDeckCommands',
+    '/world/act/resolutionHistory',
+    '/world/act/narrativeTension'
+  ];
+  const ACE0_ROUTE_REPLAY_PATHS = [
+    '/world/clockPressure',
+    '/world/act/nodeIndex',
+    '/world/act/route_history',
+    '/world/act/limited',
+    '/world/act/reserve',
+    '/world/act/reserve_progress',
+    '/world/act/income_progress',
+    '/world/act/phase_slots',
+    '/world/act/phase_index',
+    '/world/act/phase_advance',
+    '/world/act/stage',
+    '/world/act/phasePlanLock',
+    '/world/act/vision',
+    '/world/act/resourceSpent',
+    '/world/act/pendingResolutions',
+    '/world/act/pendingAssetDeckCommands',
+    '/world/act/resolutionHistory',
+    '/world/act/narrativeTension'
+  ];
+  const ACE0_ASSET_CHOICE_REPLAY_PATHS = [
+    '/world/assetDeck',
+    '/world/act/reserve',
+    '/world/act/resolutionHistory'
+  ];
 
   const DEFAULT_WORLD_ACT = {
     id: 'chapter0_exchange',
@@ -200,6 +248,38 @@
     } catch (_) {
       return fallback;
     }
+  }
+
+  function isZeroActResourceMap(value) {
+    return isPlainObject(value) && ACT_RESOURCE_KEYS.every((key) => {
+      return Math.max(0, Number(value[key]) || 0) === 0;
+    });
+  }
+
+  function isDefaultReplayAddition(path, value) {
+    if (Array.isArray(value) && value.length === 0) return true;
+    if (isPlainObject(value) && Object.keys(value).length === 0) return true;
+    if (['/world/act/limited', '/world/act/reserve', '/world/act/reserve_progress', '/world/act/income_progress', '/world/act/resourceSpent'].includes(path)) {
+      return isZeroActResourceMap(value);
+    }
+    if (path === '/world/act/phase_slots') {
+      return Array.isArray(value) && value.every(item => item == null);
+    }
+    if (path === '/world/act/phasePlanLock') {
+      return isPlainObject(value)
+        && !value.locked
+        && !String(value.nodeId || '').trim()
+        && Math.round(Number(value.nodeIndex) || 0) === 0
+        && !String(value.floorKey || '').trim();
+    }
+    if (path === '/world/act/vision') {
+      return isPlainObject(value)
+        && Math.max(0, Math.round(Number(value.baseSight) || 1)) === 1
+        && Math.max(0, Math.round(Number(value.bonusSight) || 0)) === 0
+        && value.jumpReady !== true
+        && value.pendingReplace == null;
+    }
+    return false;
   }
 
   function mergeMvuPatch(base, patch) {
@@ -486,6 +566,7 @@
       return;
     }
     if (prevValue === undefined) {
+      if (isDefaultReplayAddition(path, nextValue)) return;
       patches.push(buildAddPatch(path, nextValue));
       return;
     }
@@ -1634,7 +1715,11 @@
           console.log(`${PLUGIN_NAME} [rendered_fallback] ACT 结算回执已注入到消息 #${messageId}`);
         }
         if (actResult.stateChanged && actResult.eraVars && !hasExistingRenderReplay) {
-          const patches = buildReplayPatchesFromEraVars(workingEraVars, actResult.eraVars);
+          const patches = buildReplayPatchesFromEraVars(
+            workingEraVars,
+            actResult.eraVars,
+            ACE0_RENDER_STATE_REPLAY_PATHS
+          );
           queueReplayPatches(patches);
           workingEraVars = actResult.eraVars;
         }
@@ -1865,7 +1950,7 @@
           act: actState
         }
       };
-      const patches = buildReplayPatchesFromEraVars(eraVars, nextEraVars, ['/world/act']);
+      const patches = buildReplayPatchesFromEraVars(eraVars, nextEraVars, ACE0_ROUTE_REPLAY_PATHS);
       const replayResult = await commitAce0ReplayPatch({
         messageId,
         floorKey,
@@ -1982,10 +2067,7 @@
           ...(nextWorld.act ? { act: nextWorld.act } : {})
         }
       };
-      const patches = buildReplayPatchesFromEraVars(eraVars, nextEraVars, [
-        '/world/assetDeck',
-        '/world/act'
-      ]);
+      const patches = buildReplayPatchesFromEraVars(eraVars, nextEraVars, ACE0_ASSET_CHOICE_REPLAY_PATHS);
       const replayResult = await commitAce0ReplayPatch({
         messageId,
         floorKey,

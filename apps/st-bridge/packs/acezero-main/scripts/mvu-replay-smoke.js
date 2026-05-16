@@ -217,6 +217,7 @@ async function testPhaseAdvanceWritesReplayAndReplaysActAdvance() {
   assert(message.indexOf('ACE0_REPLAY:render:50:state') < message.indexOf('<StatusPlaceHolderImpl/>'), 'replay should be inserted before status placeholder');
   assert(!message.includes('"path": "/world/act",'), 'act-result replay should not replace the whole ACT subtree');
   assert(message.includes('"path": "/world/act/phase_advance"'), 'act-result replay should include the consumed phase_advance leaf');
+  assert(!message.includes('/world/act/characterEncounter'), 'act-result replay should not persist default characterEncounter payloads');
 
   const replayedAct = sandbox.__messageVars[50].stat_data.world.act;
   assertEqual(replayedAct.phase_advance, 0, 'replayed ACT should consume phase_advance');
@@ -266,6 +267,7 @@ async function testFloorProgressWritesOnlyLeafPatches() {
   assert(!message.includes('"path": "/world/act",'), 'floor progress should not replace the whole ACT subtree');
   assert(message.includes('"path": "/world/act/narrativeTension"'), 'floor progress should write only narrative tension leaf');
   assert(message.includes('"path": "/world/clockPressure"'), 'floor progress should write clock pressure leaf');
+  assert(!message.includes('/world/act/characterEncounter'), 'floor progress replay should not persist characterEncounter defaults');
   assertEqual(sandbox.__messageVars[12].stat_data.world.act.narrativeTension, 10, 'floor progress should replay narrative tension');
   assertEqual(sandbox.__messageVars[12].stat_data.world.clockPressure, 10, 'floor progress should replay clock pressure');
 }
@@ -376,7 +378,11 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
     phase_index: 0,
     phase_advance: 0,
     phase_slots: [null, null, null, null],
-    reserve: { combat: 1, rest: 1, asset: 1, vision: 1 }
+    reserve: { combat: 1, rest: 1, asset: 1, vision: 1 },
+    narrativeTension: 20,
+    pendingTransitionTarget: 'chapter-debug',
+    transitionRequestTarget: 'chapter-debug',
+    pendingTransitionPrompt: 'debug prompt'
   });
   const baseWorld = {
     current_time: { day: 1, phase: 'MORNING' },
@@ -444,8 +450,19 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
       locked: true,
       confirmedPhaseIndex: 0,
       floorKey: 'message:13'
+    },
+    characterEncounter: {
+      meta: { version: 1, lastFirstMeetNodeIndex: 0, lastSignalNodeIndex: 0 },
+      queue: [],
+      characters: {
+        COTA: { status: 'locked', firstMeetDone: false, lastEvaluatedNodeIndex: 0 }
+      }
     }
   };
+  delete commitWorld.act.narrativeTension;
+  delete commitWorld.act.pendingTransitionTarget;
+  delete commitWorld.act.transitionRequestTarget;
+  delete commitWorld.act.pendingTransitionPrompt;
 
   const didPersist = await sandbox.ACE0DashboardLoaderTestHooks.persistDashboardActState({
     requestId: 'dashboard-compact-smoke',
@@ -464,7 +481,13 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   assert(!message.includes('"path": "/world/clockPressure"'), 'dashboard ACT commit should not write clock pressure from full payload');
   assert(!message.includes('"path": "/world/location"'), 'dashboard ACT commit should not write location from full payload');
   assert(!message.includes('"path": "/world/assetDeck"'), 'dashboard ACT commit should not write unchanged assetDeck');
+  assert(!message.includes('/world/act/characterEncounter'), 'dashboard ACT commit should not write characterEncounter normalization payloads');
+  assert(!message.includes('/world/act/narrativeTension'), 'dashboard ACT commit should not remove narrativeTension');
+  assert(!message.includes('/world/act/pendingTransitionTarget'), 'dashboard ACT commit should not remove transition scratch fields');
+  assert(!message.includes('/world/act/transitionRequestTarget'), 'dashboard ACT commit should not remove transition scratch fields');
+  assert(!message.includes('/world/act/pendingTransitionPrompt'), 'dashboard ACT commit should not remove transition scratch fields');
   assertEqual(sandbox.__messageVars[13].stat_data.world.act.reserve.combat, 0, 'dashboard replay should apply ACT reserve leaf');
+  assertEqual(sandbox.__messageVars[13].stat_data.world.act.pendingTransitionTarget, 'chapter-debug', 'dashboard replay should preserve transition scratch fields');
   assertEqual(sandbox.__messageVars[13].stat_data.world.current_time.day, 1, 'dashboard replay should not apply full world time payload');
   assertEqual(sandbox.__messageVars[13].stat_data.world.clockPressure, 5, 'dashboard replay should not apply full world clock payload');
 }

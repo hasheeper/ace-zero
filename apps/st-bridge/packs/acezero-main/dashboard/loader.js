@@ -150,6 +150,71 @@
     return `${basePath || ''}/${escapeDashboardJsonPointerPart(key)}`;
   }
 
+  const DASHBOARD_ACT_REPLAY_PATHS = [
+    '/world/act/nodeIndex',
+    '/world/act/route_history',
+    '/world/act/limited',
+    '/world/act/reserve',
+    '/world/act/reserve_progress',
+    '/world/act/income_progress',
+    '/world/act/phase_slots',
+    '/world/act/phase_index',
+    '/world/act/stage',
+    '/world/act/phasePlanLock',
+    '/world/act/vision',
+    '/world/act/resourceSpent',
+    '/world/act/pendingAssetDeckCommands',
+    '/world/act/resolutionHistory'
+  ];
+
+  const DASHBOARD_ASSET_COMMAND_REPLAY_PATHS = [
+    '/world/assetDeck',
+    '/world/act/reserve'
+  ];
+
+  function readDashboardJsonPointer(rootValue, pointer) {
+    if (!pointer || pointer === '/') return rootValue;
+    const parts = String(pointer).split('/').slice(1).map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
+    let current = rootValue;
+    for (const part of parts) {
+      if (current == null || typeof current !== 'object') return undefined;
+      current = current[part];
+    }
+    return current;
+  }
+
+  function isDashboardZeroResourceMap(value) {
+    return isDashboardPlainObject(value) && ['combat', 'rest', 'asset', 'vision'].every((key) => {
+      return Math.max(0, Number(value[key]) || 0) === 0;
+    });
+  }
+
+  function isDashboardDefaultReplayAddition(path, value) {
+    if (Array.isArray(value) && value.length === 0) return true;
+    if (isDashboardPlainObject(value) && Object.keys(value).length === 0) return true;
+    if (['/world/act/limited', '/world/act/reserve', '/world/act/reserve_progress', '/world/act/income_progress', '/world/act/resourceSpent'].includes(path)) {
+      return isDashboardZeroResourceMap(value);
+    }
+    if (path === '/world/act/phase_slots') {
+      return Array.isArray(value) && value.every(item => item == null);
+    }
+    if (path === '/world/act/phasePlanLock') {
+      return isDashboardPlainObject(value)
+        && !value.locked
+        && !String(value.nodeId || '').trim()
+        && Math.round(Number(value.nodeIndex) || 0) === 0
+        && !String(value.floorKey || '').trim();
+    }
+    if (path === '/world/act/vision') {
+      return isDashboardPlainObject(value)
+        && Math.max(0, Math.round(Number(value.baseSight) || 1)) === 1
+        && Math.max(0, Math.round(Number(value.bonusSight) || 0)) === 0
+        && value.jumpReady !== true
+        && value.pendingReplace == null;
+    }
+    return false;
+  }
+
   function areDashboardJsonValuesEqual(left, right) {
     if (left === right) return true;
     try {
@@ -167,6 +232,7 @@
       return;
     }
     if (prevValue === undefined) {
+      if (isDashboardDefaultReplayAddition(path, nextValue)) return;
       patches.push(buildDashboardAddPatch(path, nextValue));
       return;
     }
@@ -190,9 +256,18 @@
     patches.push(buildDashboardReplacePatch(path, nextValue));
   }
 
-  function buildDashboardReplayDiffPatches(prevValue, nextValue, path) {
+  function buildDashboardReplayDiffPatchesForPaths(prevRoot, nextRoot, paths) {
     const patches = [];
-    collectDashboardReplayDiffPatches(prevValue, nextValue, path, patches);
+    (Array.isArray(paths) ? paths : []).forEach((path) => {
+      const nextValue = readDashboardJsonPointer(nextRoot, path);
+      if (nextValue === undefined) return;
+      collectDashboardReplayDiffPatches(
+        readDashboardJsonPointer(prevRoot, path),
+        nextValue,
+        path,
+        patches
+      );
+    });
     return patches;
   }
 
@@ -891,10 +966,10 @@
 
     nextActState = applyPendingActAssetDeckCommands(nextState, nextActState);
     nextState.world.act = nextActState;
-    const patches = [
-      ...buildDashboardReplayDiffPatches(eraVars.world.act, nextState.world.act, '/world/act'),
-      ...buildDashboardReplayDiffPatches(eraVars.world.assetDeck, nextState.world.assetDeck, '/world/assetDeck')
-    ];
+    const patches = buildDashboardReplayDiffPatchesForPaths(eraVars, nextState, [
+      ...DASHBOARD_ACT_REPLAY_PATHS,
+      '/world/assetDeck'
+    ]);
     if (!patches.length) return true;
     const replayResult = await commitDashboardReplayPatch({
       floorKey: currentFloorKey,
@@ -1019,10 +1094,11 @@
         assetDeck: cloneJsonData(commandResult.assetDeck, null)
       };
     }
-    const patches = [
-      ...buildDashboardReplayDiffPatches(eraVars.world.assetDeck, nextState.world.assetDeck, '/world/assetDeck'),
-      ...buildDashboardReplayDiffPatches(eraVars.world.act, nextState.world.act, '/world/act')
-    ];
+    const patches = buildDashboardReplayDiffPatchesForPaths(
+      eraVars,
+      nextState,
+      DASHBOARD_ASSET_COMMAND_REPLAY_PATHS
+    );
     if (!patches.length) {
       return {
         ok: true,
@@ -1093,7 +1169,6 @@
   if (ROOT.__ACE0_DASHBOARD_LOADER_TEST_HOOKS__ === true) {
     ROOT.ACE0DashboardLoaderTestHooks = {
       applyPendingActAssetDeckCommands,
-      buildDashboardReplayDiffPatches,
       commitDashboardActState,
       normalizePendingActAssetDeckCommands,
       persistDashboardActState,
