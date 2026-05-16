@@ -370,6 +370,74 @@
     return candidates[0] || null;
   }
 
+  function resolveMvuApi() {
+    const root = getAce0HostRoot();
+    const candidates = [];
+    const pushOwner = (owner) => {
+      try {
+        if (owner && !candidates.includes(owner)) candidates.push(owner);
+      } catch (_) {}
+    };
+    try { pushOwner(window); } catch (_) {}
+    try { pushOwner(window?.parent); } catch (_) {}
+    try { pushOwner(window?.parent?.parent); } catch (_) {}
+    try { pushOwner(window?.top); } catch (_) {}
+    try { pushOwner(root); } catch (_) {}
+    try { pushOwner(root?.parent); } catch (_) {}
+    try { pushOwner(root?.parent?.parent); } catch (_) {}
+    try { pushOwner(root?.top); } catch (_) {}
+    try { pushOwner(typeof unsafeWindow === 'object' ? unsafeWindow : null); } catch (_) {}
+    try { pushOwner(typeof unsafeWindow === 'object' ? unsafeWindow?.parent : null); } catch (_) {}
+    try { pushOwner(typeof unsafeWindow === 'object' ? unsafeWindow?.top : null); } catch (_) {}
+
+    for (const owner of candidates) {
+      const api = owner?.Mvu;
+      if (
+        api &&
+        typeof api.parseMessage === 'function' &&
+        typeof api.replaceMvuData === 'function'
+      ) {
+        return api;
+      }
+    }
+    return null;
+  }
+
+  async function getMvuReplayBaseVariables(messageId) {
+    const id = Math.round(Number(messageId) || 0);
+    const previousId = id > 0 ? id - 1 : 0;
+    const previousVars = await getMessageVariableBundle(previousId);
+    if (hasCompleteMvuVariableBundle(previousVars)) return cloneJsonData(previousVars, previousVars);
+    if (id === 0) {
+      const currentVars = await getMessageVariableBundle(0);
+      if (hasCompleteMvuVariableBundle(currentVars)) return cloneJsonData(currentVars, currentVars);
+    }
+    return null;
+  }
+
+  async function replayMessageThroughMvu(messageId) {
+    const replayHandler = resolveMvuReplayHandler();
+    if (typeof replayHandler === 'function') {
+      await replayHandler(messageId);
+      return { ok: true, method: 'handleVariablesInMessage' };
+    }
+
+    const mvuApi = resolveMvuApi();
+    if (!mvuApi) return { ok: false, reason: 'mvu_replay_unavailable' };
+
+    const id = Math.round(Number(messageId) || 0);
+    const msg = typeof getChatMessages === 'function' ? getChatMessages(id)?.[0] : null;
+    if (!msg || typeof msg.message !== 'string') return { ok: false, reason: 'message_not_found' };
+
+    const baseVars = await getMvuReplayBaseVariables(id);
+    if (!hasCompleteMvuVariableBundle(baseVars)) return { ok: false, reason: 'mvu_replay_missing_base' };
+
+    const nextVars = await mvuApi.parseMessage(msg.message, baseVars);
+    if (!hasCompleteMvuVariableBundle(nextVars)) return { ok: false, reason: 'mvu_replay_parse_failed' };
+    await mvuApi.replaceMvuData(nextVars, { type: 'message', message_id: id });
+    return { ok: true, method: 'Mvu.parseMessage' };
+  }
+
   function buildReplacePatch(path, value) {
     return {
       op: 'replace',
@@ -522,8 +590,9 @@
       return { ok: false, reason: 'message_not_found', messageId: normalizedMessageId, floorKey: actualFloorKey };
     }
 
-    const replayHandler = resolveMvuReplayHandler();
-    if (typeof replayHandler !== 'function') {
+    const hasReplayHandler = typeof resolveMvuReplayHandler() === 'function';
+    const hasMvuApi = Boolean(resolveMvuApi());
+    if (!hasReplayHandler && !hasMvuApi) {
       return { ok: false, reason: 'mvu_replay_unavailable', messageId: normalizedMessageId, floorKey: actualFloorKey };
     }
 
@@ -545,13 +614,23 @@
       message: nextMessage
     }], { refresh: options.refresh || 'affected' });
 
-    await replayHandler(normalizedMessageId);
+    const replayResult = await replayMessageThroughMvu(normalizedMessageId);
+    if (!replayResult.ok) {
+      return {
+        ok: false,
+        reason: replayResult.reason || 'mvu_replay_failed',
+        messageId: normalizedMessageId,
+        floorKey: actualFloorKey,
+        operationId
+      };
+    }
     return {
       ok: true,
       messageId: normalizedMessageId,
       floorKey: actualFloorKey,
       operationId,
-      patchCount: patches.length
+      patchCount: patches.length,
+      replayMethod: replayResult.method || ''
     };
   }
 

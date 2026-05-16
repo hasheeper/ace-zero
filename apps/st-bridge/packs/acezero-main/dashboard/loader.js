@@ -304,6 +304,87 @@
     return candidates[0] || null;
   }
 
+  function resolveDashboardMvuApi() {
+    const hostRoot = getAce0HostRoot();
+    const candidates = [];
+    const pushOwner = (owner) => {
+      try {
+        if (owner && !candidates.includes(owner)) candidates.push(owner);
+      } catch (_) {}
+    };
+    try { pushOwner(window); } catch (_) {}
+    try { pushOwner(window?.parent); } catch (_) {}
+    try { pushOwner(window?.parent?.parent); } catch (_) {}
+    try { pushOwner(window?.top); } catch (_) {}
+    try { pushOwner(ROOT); } catch (_) {}
+    try { pushOwner(ROOT?.parent); } catch (_) {}
+    try { pushOwner(ROOT?.top); } catch (_) {}
+    try { pushOwner(hostRoot); } catch (_) {}
+    try { pushOwner(hostRoot?.parent); } catch (_) {}
+    try { pushOwner(hostRoot?.top); } catch (_) {}
+    try { pushOwner(typeof unsafeWindow === 'object' ? unsafeWindow : null); } catch (_) {}
+    try { pushOwner(typeof unsafeWindow === 'object' ? unsafeWindow?.parent : null); } catch (_) {}
+    try { pushOwner(typeof unsafeWindow === 'object' ? unsafeWindow?.top : null); } catch (_) {}
+
+    for (const owner of candidates) {
+      const api = owner?.Mvu;
+      if (
+        api &&
+        typeof api.parseMessage === 'function' &&
+        typeof api.replaceMvuData === 'function'
+      ) {
+        return api;
+      }
+    }
+    return null;
+  }
+
+  function hasDashboardMvuReplayBase(vars) {
+    return Boolean(
+      vars && typeof vars === 'object' &&
+      vars.stat_data && typeof vars.stat_data === 'object' &&
+      vars.stat_data.world && typeof vars.stat_data.world === 'object' &&
+      vars.stat_data.world.act && typeof vars.stat_data.world.act === 'object' &&
+      Object.prototype.hasOwnProperty.call(vars, 'schema')
+    );
+  }
+
+  async function getDashboardMvuReplayBaseVariables(messageId) {
+    if (typeof getVariables !== 'function') return null;
+    const id = Math.round(Number(messageId) || 0);
+    const previousId = id > 0 ? id - 1 : 0;
+    const previousVars = await getVariables({ type: 'message', message_id: previousId });
+    if (hasDashboardMvuReplayBase(previousVars)) return cloneJsonData(previousVars, previousVars);
+    if (id === 0) {
+      const currentVars = await getVariables({ type: 'message', message_id: 0 });
+      if (hasDashboardMvuReplayBase(currentVars)) return cloneJsonData(currentVars, currentVars);
+    }
+    return null;
+  }
+
+  async function replayDashboardMessageThroughMvu(messageId) {
+    const replayHandler = resolveDashboardMvuReplayHandler();
+    if (typeof replayHandler === 'function') {
+      await replayHandler(messageId);
+      return { ok: true, method: 'handleVariablesInMessage' };
+    }
+
+    const mvuApi = resolveDashboardMvuApi();
+    if (!mvuApi) return { ok: false, reason: 'mvu_replay_unavailable' };
+
+    const id = Math.round(Number(messageId) || 0);
+    const msg = typeof getChatMessages === 'function' ? getChatMessages(id)?.[0] : null;
+    if (!msg || typeof msg.message !== 'string') return { ok: false, reason: 'message_not_found' };
+
+    const baseVars = await getDashboardMvuReplayBaseVariables(id);
+    if (!hasDashboardMvuReplayBase(baseVars)) return { ok: false, reason: 'mvu_replay_missing_base' };
+
+    const nextVars = await mvuApi.parseMessage(msg.message, baseVars);
+    if (!hasDashboardMvuReplayBase(nextVars)) return { ok: false, reason: 'mvu_replay_parse_failed' };
+    await mvuApi.replaceMvuData(nextVars, { type: 'message', message_id: id });
+    return { ok: true, method: 'Mvu.parseMessage' };
+  }
+
   async function commitDashboardReplayPatchLocally({ floorKey, operationId, patches }) {
     const patchList = Array.isArray(patches) ? patches.filter(item => item && typeof item === 'object') : [];
     if (!patchList.length) return { ok: false, reason: 'empty_replay_patch' };
@@ -342,8 +423,9 @@
       return { ok: false, reason: 'message_not_found', floorKey: actualFloorKey };
     }
 
-    const replayHandler = resolveDashboardMvuReplayHandler();
-    if (typeof replayHandler !== 'function') {
+    const hasReplayHandler = typeof resolveDashboardMvuReplayHandler() === 'function';
+    const hasMvuApi = Boolean(resolveDashboardMvuApi());
+    if (!hasReplayHandler && !hasMvuApi) {
       return { ok: false, reason: 'mvu_replay_unavailable', floorKey: actualFloorKey };
     }
 
@@ -356,13 +438,22 @@
       message_id: normalizedMessageId,
       message: nextMessage
     }], { refresh: 'affected' });
-    await replayHandler(normalizedMessageId);
+    const replayResult = await replayDashboardMessageThroughMvu(normalizedMessageId);
+    if (!replayResult.ok) {
+      return {
+        ok: false,
+        reason: replayResult.reason || 'mvu_replay_failed',
+        floorKey: actualFloorKey,
+        operationId: opId
+      };
+    }
     return {
       ok: true,
       messageId: normalizedMessageId,
       floorKey: actualFloorKey,
       operationId: opId,
-      patchCount: patchList.length
+      patchCount: patchList.length,
+      replayMethod: replayResult.method || ''
     };
   }
 
