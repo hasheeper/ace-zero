@@ -123,6 +123,79 @@
     };
   }
 
+  function buildDashboardAddPatch(path, value) {
+    return {
+      op: 'add',
+      path,
+      value: cloneJsonData(value, value)
+    };
+  }
+
+  function buildDashboardRemovePatch(path) {
+    return {
+      op: 'remove',
+      path
+    };
+  }
+
+  function isDashboardPlainObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function escapeDashboardJsonPointerPart(part) {
+    return String(part).replace(/~/g, '~0').replace(/\//g, '~1');
+  }
+
+  function appendDashboardJsonPointerPath(basePath, key) {
+    return `${basePath || ''}/${escapeDashboardJsonPointerPart(key)}`;
+  }
+
+  function areDashboardJsonValuesEqual(left, right) {
+    if (left === right) return true;
+    try {
+      return JSON.stringify(left) === JSON.stringify(right);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function collectDashboardReplayDiffPatches(prevValue, nextValue, path, patches) {
+    if (!path || areDashboardJsonValuesEqual(prevValue, nextValue)) return;
+
+    if (nextValue === undefined) {
+      patches.push(buildDashboardRemovePatch(path));
+      return;
+    }
+    if (prevValue === undefined) {
+      patches.push(buildDashboardAddPatch(path, nextValue));
+      return;
+    }
+
+    if (isDashboardPlainObject(prevValue) && isDashboardPlainObject(nextValue)) {
+      const keys = new Set([
+        ...Object.keys(prevValue),
+        ...Object.keys(nextValue)
+      ]);
+      keys.forEach((key) => {
+        collectDashboardReplayDiffPatches(
+          prevValue[key],
+          nextValue[key],
+          appendDashboardJsonPointerPath(path, key),
+          patches
+        );
+      });
+      return;
+    }
+
+    patches.push(buildDashboardReplacePatch(path, nextValue));
+  }
+
+  function buildDashboardReplayDiffPatches(prevValue, nextValue, path) {
+    const patches = [];
+    collectDashboardReplayDiffPatches(prevValue, nextValue, path, patches);
+    return patches;
+  }
+
   async function commitDashboardReplayPatch({ floorKey, operationId, patches }) {
     const hostRoot = getAce0HostRoot();
     for (const candidate of [ROOT?.ACE0Plugin, hostRoot?.ACE0Plugin]) {
@@ -533,7 +606,7 @@
     if (!commitPayload || typeof commitPayload !== 'object') return false;
 
     const eraVars = getCurrentEraVars();
-    if (!eraVars || typeof eraVars !== 'object') return false;
+    if (!eraVars || typeof eraVars !== 'object' || !eraVars.world || typeof eraVars.world !== 'object') return false;
     const currentFloorKey = getCurrentDashboardFloorKey();
     const commitFloorKey = normalizeDashboardString(commitPayload?.meta?.floorKey, '');
     if (currentFloorKey && commitFloorKey !== currentFloorKey) {
@@ -546,26 +619,17 @@
     const worldPatch = commitPayload.world && typeof commitPayload.world === 'object'
       ? cloneJsonData(commitPayload.world, {})
       : {};
-    Object.entries(worldPatch).forEach(([key, value]) => {
-      if (key === 'act') return;
-      nextState.world[key] = value;
-    });
 
     let nextActState = cloneJsonData(worldPatch.act || commitPayload.act, null);
     if (!nextActState || typeof nextActState !== 'object') return false;
 
     nextActState = applyPendingActAssetDeckCommands(nextState, nextActState);
     nextState.world.act = nextActState;
-    const patchedWorldKeys = new Set(Object.keys(worldPatch).filter((key) => key !== 'act'));
-    if (
-      !patchedWorldKeys.has('assetDeck') &&
-      JSON.stringify(nextState.world.assetDeck) !== JSON.stringify(eraVars?.world?.assetDeck)
-    ) {
-      patchedWorldKeys.add('assetDeck');
-    }
-    const patches = Array.from(patchedWorldKeys)
-      .map((key) => buildDashboardReplacePatch(`/world/${key}`, nextState.world[key]));
-    patches.push(buildDashboardReplacePatch('/world/act', nextState.world.act));
+    const patches = [
+      ...buildDashboardReplayDiffPatches(eraVars.world.act, nextState.world.act, '/world/act'),
+      ...buildDashboardReplayDiffPatches(eraVars.world.assetDeck, nextState.world.assetDeck, '/world/assetDeck')
+    ];
+    if (!patches.length) return true;
     const replayResult = await commitDashboardReplayPatch({
       floorKey: currentFloorKey,
       operationId: `dashboard-act:${currentFloorKey || 'current'}`,
@@ -615,7 +679,7 @@
       ? commandPayload.command
       : (commandPayload && typeof commandPayload === 'object' ? commandPayload : {});
     const eraVars = getCurrentEraVars();
-    if (!eraVars || typeof eraVars !== 'object') {
+    if (!eraVars || typeof eraVars !== 'object' || !eraVars.world || typeof eraVars.world !== 'object') {
       return {
         ok: false,
         requestId,
@@ -689,13 +753,22 @@
         assetDeck: cloneJsonData(commandResult.assetDeck, null)
       };
     }
+    const patches = [
+      ...buildDashboardReplayDiffPatches(eraVars.world.assetDeck, nextState.world.assetDeck, '/world/assetDeck'),
+      ...buildDashboardReplayDiffPatches(eraVars.world.act, nextState.world.act, '/world/act')
+    ];
+    if (!patches.length) {
+      return {
+        ok: true,
+        requestId,
+        code: commandResult.code || 'asset_command_applied',
+        assetDeck: cloneJsonData(commandResult.assetDeck, null)
+      };
+    }
     const replayResult = await commitDashboardReplayPatch({
       floorKey: commandFloorKey || currentFloorKey,
       operationId: `dashboard-asset:${commandFloorKey || currentFloorKey || 'current'}`,
-      patches: [
-        buildDashboardReplacePatch('/world/assetDeck', nextState.world.assetDeck),
-        buildDashboardReplacePatch('/world/act', nextState.world.act)
-      ]
+      patches
     });
 
     if (!replayResult?.ok) {
@@ -754,7 +827,11 @@
   if (ROOT.__ACE0_DASHBOARD_LOADER_TEST_HOOKS__ === true) {
     ROOT.ACE0DashboardLoaderTestHooks = {
       applyPendingActAssetDeckCommands,
-      normalizePendingActAssetDeckCommands
+      buildDashboardReplayDiffPatches,
+      commitDashboardActState,
+      normalizePendingActAssetDeckCommands,
+      persistDashboardActState,
+      persistDashboardAssetDeckCommand
     };
     return;
   }

@@ -337,10 +337,29 @@
   function resolveMvuReplayHandler() {
     const root = getAce0HostRoot();
     const candidates = [];
-    try { if (typeof handleVariablesInMessage === 'function') candidates.push(handleVariablesInMessage); } catch (_) {}
-    try { if (window && typeof window.handleVariablesInMessage === 'function') candidates.push(window.handleVariablesInMessage); } catch (_) {}
-    try { if (root && typeof root.handleVariablesInMessage === 'function') candidates.push(root.handleVariablesInMessage); } catch (_) {}
-    try { if (root?.STBridge?.mvu && typeof root.STBridge.mvu.handleVariablesInMessage === 'function') candidates.push(root.STBridge.mvu.handleVariablesInMessage.bind(root.STBridge.mvu)); } catch (_) {}
+    const seen = [];
+    const pushHandler = (owner, key = 'handleVariablesInMessage') => {
+      try {
+        const fn = owner && owner[key];
+        if (typeof fn !== 'function' || seen.includes(fn)) return;
+        seen.push(fn);
+        candidates.push(fn.bind(owner));
+      } catch (_) {}
+    };
+    try {
+      if (typeof handleVariablesInMessage === 'function' && !seen.includes(handleVariablesInMessage)) {
+        seen.push(handleVariablesInMessage);
+        candidates.push(handleVariablesInMessage);
+      }
+    } catch (_) {}
+    try { pushHandler(window); } catch (_) {}
+    try { pushHandler(window?.parent); } catch (_) {}
+    try { pushHandler(window?.top); } catch (_) {}
+    try { pushHandler(root); } catch (_) {}
+    try { pushHandler(root?.parent); } catch (_) {}
+    try { pushHandler(root?.top); } catch (_) {}
+    try { pushHandler(window?.STBridge?.mvu); } catch (_) {}
+    try { pushHandler(root?.STBridge?.mvu); } catch (_) {}
     return candidates[0] || null;
   }
 
@@ -350,6 +369,69 @@
       path,
       value: cloneJsonData(value, value)
     };
+  }
+
+  function buildAddPatch(path, value) {
+    return {
+      op: 'add',
+      path,
+      value: cloneJsonData(value, value)
+    };
+  }
+
+  function buildRemovePatch(path) {
+    return {
+      op: 'remove',
+      path
+    };
+  }
+
+  function escapeJsonPointerPart(part) {
+    return String(part).replace(/~/g, '~0').replace(/\//g, '~1');
+  }
+
+  function appendJsonPointerPath(basePath, key) {
+    return `${basePath || ''}/${escapeJsonPointerPart(key)}`;
+  }
+
+  function areJsonValuesEqual(left, right) {
+    if (left === right) return true;
+    try {
+      return JSON.stringify(left) === JSON.stringify(right);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function collectReplayDiffPatches(prevValue, nextValue, path, patches) {
+    if (!path || areJsonValuesEqual(prevValue, nextValue)) return;
+
+    if (nextValue === undefined) {
+      patches.push(buildRemovePatch(path));
+      return;
+    }
+    if (prevValue === undefined) {
+      patches.push(buildAddPatch(path, nextValue));
+      return;
+    }
+
+    if (isPlainObject(prevValue) && isPlainObject(nextValue)) {
+      const keys = new Set([
+        ...Object.keys(prevValue),
+        ...Object.keys(nextValue)
+      ]);
+      keys.forEach((key) => {
+        collectReplayDiffPatches(
+          prevValue[key],
+          nextValue[key],
+          appendJsonPointerPath(path, key),
+          patches
+        );
+      });
+      return;
+    }
+
+    patches.push(buildReplacePatch(path, nextValue));
   }
 
   function readJsonPointer(rootValue, pointer) {
@@ -383,8 +465,7 @@
       const nextValue = readJsonPointer(afterVars, path);
       if (nextValue === undefined) return;
       const prevValue = readJsonPointer(beforeVars, path);
-      if (JSON.stringify(prevValue) === JSON.stringify(nextValue)) return;
-      patches.push(buildReplacePatch(path, nextValue));
+      collectReplayDiffPatches(prevValue, nextValue, path, patches);
     });
     return patches;
   }
@@ -420,6 +501,11 @@
       return { ok: false, reason: 'message_not_found', messageId: normalizedMessageId, floorKey: actualFloorKey };
     }
 
+    const replayHandler = resolveMvuReplayHandler();
+    if (typeof replayHandler !== 'function') {
+      return { ok: false, reason: 'mvu_replay_unavailable', messageId: normalizedMessageId, floorKey: actualFloorKey };
+    }
+
     const operationId = sanitizeReplayOperationId(options.operationId || `message:${normalizedMessageId}:ace0`);
     const stripped = stripAce0ReplayBlock(msg.message || '', operationId);
     const block = buildAce0ReplayBlock(operationId, patches);
@@ -428,11 +514,6 @@
       message_id: normalizedMessageId,
       message: nextMessage
     }], { refresh: options.refresh || 'affected' });
-
-    const replayHandler = resolveMvuReplayHandler();
-    if (typeof replayHandler !== 'function') {
-      return { ok: false, reason: 'mvu_replay_unavailable', messageId: normalizedMessageId, floorKey: actualFloorKey };
-    }
 
     await replayHandler(normalizedMessageId);
     return {
@@ -1371,14 +1452,17 @@
 
       if (hasReplayBase && options.applyFloorProgress === true) {
         const operationId = `render:${messageId}:floor-progress`;
-        if (!hasAce0ReplayBlock(nextContent, operationId)) {
+        const rawAct = workingEraVars?.world?.act;
+        const hasPendingPhaseAdvance = isPlainObject(rawAct)
+          && Math.max(0, Math.round(Number(rawAct.phase_advance) || 0)) > 0;
+        if (!hasPendingPhaseAdvance && !hasAce0ReplayBlock(nextContent, operationId)) {
           const progressResult = await applyFloorProgressDelta(messageId, msg, {
             eraVars: workingEraVars,
             persist: false
           });
           if (progressResult?.changed && progressResult.eraVars) {
             const patches = buildReplayPatchesFromEraVars(workingEraVars, progressResult.eraVars, [
-              '/world/act',
+              '/world/act/narrativeTension',
               '/world/clockPressure'
             ]);
             if (patches.length) replayOps.push({ operationId, patches });
@@ -1413,7 +1497,7 @@
                 }
               }
             };
-            const patches = buildReplayPatchesFromEraVars(workingEraVars, nextEraVars, ['/world/act']);
+            const patches = buildReplayPatchesFromEraVars(workingEraVars, nextEraVars, ['/world/act/narrativeTension']);
             if (patches.length) replayOps.push({ operationId, patches });
             workingEraVars = nextEraVars;
           }
