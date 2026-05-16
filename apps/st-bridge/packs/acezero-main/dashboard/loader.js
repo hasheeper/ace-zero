@@ -267,23 +267,24 @@
     return null;
   }
 
-  function resolveDashboardMvuReplayHandler() {
+  function collectDashboardMvuReplayHandlers() {
     const hostRoot = getAce0HostRoot();
     const candidates = [];
     const seen = [];
+    const pushCandidate = (name, fn) => {
+      if (typeof fn !== 'function' || seen.includes(fn)) return;
+      seen.push(fn);
+      candidates.push({ name, run: fn });
+    };
+    collectDashboardMvuApiReplayHandlers().forEach((candidate) => pushCandidate(candidate.name, candidate.run));
     const pushHandler = (owner, key = 'handleVariablesInMessage') => {
       try {
         const fn = owner && owner[key];
-        if (typeof fn !== 'function' || seen.includes(fn)) return;
-        seen.push(fn);
-        candidates.push(fn.bind(owner));
+        pushCandidate(key, fn && fn.bind(owner));
       } catch (_) {}
     };
     try {
-      if (typeof handleVariablesInMessage === 'function' && !seen.includes(handleVariablesInMessage)) {
-        seen.push(handleVariablesInMessage);
-        candidates.push(handleVariablesInMessage);
-      }
+      pushCandidate('handleVariablesInMessage', typeof handleVariablesInMessage === 'function' ? handleVariablesInMessage : null);
     } catch (_) {}
     try { pushHandler(window); } catch (_) {}
     try { pushHandler(window?.parent); } catch (_) {}
@@ -298,7 +299,145 @@
     try { pushHandler(window?.STBridge?.mvu); } catch (_) {}
     try { pushHandler(ROOT?.STBridge?.mvu); } catch (_) {}
     try { pushHandler(hostRoot?.STBridge?.mvu); } catch (_) {}
-    return candidates[0] || null;
+    return candidates;
+  }
+
+  function collectDashboardMvuApiReplayHandlers() {
+    const hostRoot = getAce0HostRoot();
+    const owners = [];
+    const candidates = [];
+    const seenApis = [];
+    const pushOwner = (owner) => {
+      try {
+        if (owner && !owners.includes(owner)) owners.push(owner);
+      } catch (_) {}
+    };
+    try { pushOwner(window); } catch (_) {}
+    try { pushOwner(window?.parent); } catch (_) {}
+    try { pushOwner(window?.parent?.parent); } catch (_) {}
+    try { pushOwner(window?.top); } catch (_) {}
+    try { pushOwner(ROOT); } catch (_) {}
+    try { pushOwner(ROOT?.parent); } catch (_) {}
+    try { pushOwner(ROOT?.top); } catch (_) {}
+    try { pushOwner(hostRoot); } catch (_) {}
+    try { pushOwner(hostRoot?.parent); } catch (_) {}
+    try { pushOwner(hostRoot?.top); } catch (_) {}
+
+    for (const owner of owners) {
+      const api = owner?.Mvu;
+      if (
+        api &&
+        typeof api.parseMessage === 'function' &&
+        typeof api.replaceMvuData === 'function' &&
+        !seenApis.includes(api)
+      ) {
+        seenApis.push(api);
+        candidates.push({
+          name: 'Mvu.parseMessage',
+          run: async (messageId) => replayDashboardMessageThroughMvuApi(api, messageId)
+        });
+      }
+    }
+    return candidates;
+  }
+
+  function hasDashboardCompleteMvuBundle(vars) {
+    return Boolean(
+      vars && typeof vars === 'object' &&
+      vars.stat_data && typeof vars.stat_data === 'object' &&
+      vars.stat_data.world && typeof vars.stat_data.world === 'object' &&
+      vars.stat_data.world.act && typeof vars.stat_data.world.act === 'object' &&
+      Object.prototype.hasOwnProperty.call(vars, 'schema')
+    );
+  }
+
+  async function readDashboardMvuApiBaseVariables(messageId) {
+    const id = Math.round(Number(messageId) || 0);
+    try {
+      const chat = window?.SillyTavern?.chat || getAce0HostRoot()?.SillyTavern?.chat;
+      if (Array.isArray(chat)) {
+        for (let index = Math.min(id - 1, chat.length - 1); index >= 0; index -= 1) {
+          const item = chat[index];
+          const swipeId = Math.max(0, Math.round(Number(item?.swipe_id) || 0));
+          const vars = item?.variables?.[swipeId];
+          if (hasDashboardCompleteMvuBundle(vars)) return cloneJsonData(vars, vars);
+        }
+      }
+    } catch (_) {}
+    try {
+      if (typeof getVariables === 'function') {
+        const targetId = id > 0 ? id - 1 : id;
+        const vars = await getVariables({ type: 'message', message_id: targetId });
+        if (hasDashboardCompleteMvuBundle(vars)) return cloneJsonData(vars, vars);
+      }
+    } catch (_) {}
+    try {
+      if (typeof getVariables === 'function') {
+        const vars = await getVariables({ type: 'message', message_id: id });
+        if (hasDashboardCompleteMvuBundle(vars)) return cloneJsonData(vars, vars);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function replayDashboardMessageThroughMvuApi(mvuApi, messageId) {
+    const id = Math.round(Number(messageId) || 0);
+    const messages = typeof getChatMessages === 'function' ? getChatMessages(id) : [];
+    const msg = Array.isArray(messages) ? messages[0] : null;
+    if (!msg || typeof msg.message !== 'string') return false;
+    const baseVars = await readDashboardMvuApiBaseVariables(id);
+    if (!hasDashboardCompleteMvuBundle(baseVars)) return false;
+    const nextVars = await mvuApi.parseMessage(msg.message, baseVars);
+    if (!hasDashboardCompleteMvuBundle(nextVars)) return false;
+    await mvuApi.replaceMvuData(nextVars, { type: 'message', message_id: id });
+    return true;
+  }
+
+  function readDashboardJsonPointer(rootValue, pointer) {
+    if (!pointer || pointer === '/') return rootValue;
+    const parts = String(pointer).split('/').slice(1).map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
+    let current = rootValue;
+    for (const part of parts) {
+      if (current == null || typeof current !== 'object') return undefined;
+      current = current[part];
+    }
+    return current;
+  }
+
+  function doesDashboardVariableBundleMatchReplayPatches(vars, patches) {
+    const statData = vars?.stat_data;
+    if (!statData || typeof statData !== 'object') return false;
+    return (Array.isArray(patches) ? patches : []).every((patch) => {
+      if (!patch || typeof patch !== 'object') return true;
+      const pointer = typeof patch.path === 'string' ? patch.path.trim() : '';
+      if (!pointer) return true;
+      const actual = readDashboardJsonPointer(statData, pointer);
+      if (patch.op === 'remove') return actual === undefined;
+      if (patch.op === 'replace' || patch.op === 'add') return areDashboardJsonValuesEqual(actual, patch.value);
+      return false;
+    });
+  }
+
+  async function runDashboardMvuReplayHandlers(messageId, patches, replayHandlers = null) {
+    const handlers = Array.isArray(replayHandlers) ? replayHandlers : collectDashboardMvuReplayHandlers();
+    if (!handlers.length) return { ok: false, reason: 'mvu_replay_unavailable' };
+
+    let lastReason = 'mvu_replay_not_applied';
+    for (const handler of handlers) {
+      if (!handler || typeof handler.run !== 'function') continue;
+      try {
+        await handler.run(messageId);
+        const vars = typeof getVariables === 'function'
+          ? await getVariables({ type: 'message', message_id: messageId })
+          : null;
+        if (doesDashboardVariableBundleMatchReplayPatches(vars, patches)) {
+          return { ok: true, handler: handler.name || 'unknown' };
+        }
+      } catch (error) {
+        lastReason = error?.message || 'mvu_replay_failed';
+      }
+    }
+    return { ok: false, reason: lastReason };
   }
 
   async function commitDashboardReplayPatchLocally({ floorKey, operationId, patches }) {
@@ -339,26 +478,40 @@
       return { ok: false, reason: 'message_not_found', floorKey: actualFloorKey };
     }
 
-    const replayHandler = resolveDashboardMvuReplayHandler();
-    if (typeof replayHandler !== 'function') {
+    const replayHandlers = collectDashboardMvuReplayHandlers();
+    if (!replayHandlers.length) {
       return { ok: false, reason: 'mvu_replay_unavailable', floorKey: actualFloorKey };
     }
 
     const opId = sanitizeDashboardReplayOperationId(operationId || `dashboard:${actualFloorKey}`);
-    const stripped = stripDashboardReplayBlock(msg.message || '', opId);
+    const originalMessage = msg.message || '';
+    const stripped = stripDashboardReplayBlock(originalMessage, opId);
     const block = buildDashboardReplayBlock(opId, patchList);
     const nextMessage = insertDashboardReplayBlock(stripped, block);
     await setChatMessages([{
       message_id: normalizedMessageId,
       message: nextMessage
     }], { refresh: 'affected' });
-    await replayHandler(normalizedMessageId);
+    const replayResult = await runDashboardMvuReplayHandlers(normalizedMessageId, patchList, replayHandlers);
+    if (!replayResult.ok) {
+      await setChatMessages([{
+        message_id: normalizedMessageId,
+        message: originalMessage
+      }], { refresh: 'affected' });
+      return {
+        ok: false,
+        reason: replayResult.reason || 'mvu_replay_not_applied',
+        floorKey: actualFloorKey,
+        operationId: opId
+      };
+    }
     return {
       ok: true,
       messageId: normalizedMessageId,
       floorKey: actualFloorKey,
       operationId: opId,
-      patchCount: patchList.length
+      patchCount: patchList.length,
+      replayHandler: replayResult.handler || ''
     };
   }
 

@@ -211,9 +211,10 @@ async function testPhaseAdvanceWritesReplayAndReplaysActAdvance() {
   await sandbox.__handlers.character_message_rendered(50);
 
   const message = sandbox.__messages[50].message;
-  assert(message.includes('ACE0_REPLAY:render:50:act-result'), 'phase advance should append deterministic act-result replay block');
+  assert(message.includes('ACE0_REPLAY:render:50:state'), 'phase advance should append one deterministic render replay block');
+  assert(!message.includes('ACE0_REPLAY:render:50:act-result'), 'phase advance should not append legacy act-result replay block');
   assert(!message.includes('ACE0_REPLAY:render:50:floor-progress'), 'phase advance floors should not also append floor-progress replay');
-  assert(message.indexOf('ACE0_REPLAY:render:50:act-result') < message.indexOf('<StatusPlaceHolderImpl/>'), 'replay should be inserted before status placeholder');
+  assert(message.indexOf('ACE0_REPLAY:render:50:state') < message.indexOf('<StatusPlaceHolderImpl/>'), 'replay should be inserted before status placeholder');
   assert(!message.includes('"path": "/world/act",'), 'act-result replay should not replace the whole ACT subtree');
   assert(message.includes('"path": "/world/act/phase_advance"'), 'act-result replay should include the consumed phase_advance leaf');
 
@@ -260,7 +261,8 @@ async function testFloorProgressWritesOnlyLeafPatches() {
   await sandbox.__handlers.character_message_rendered(12);
 
   const message = sandbox.__messages[12].message;
-  assert(message.includes('ACE0_REPLAY:render:12:floor-progress'), 'floor progress should append replay block');
+  assert(message.includes('ACE0_REPLAY:render:12:state'), 'floor progress should append one render replay block');
+  assert(!message.includes('ACE0_REPLAY:render:12:floor-progress'), 'floor progress should not append legacy floor-progress replay block');
   assert(!message.includes('"path": "/world/act",'), 'floor progress should not replace the whole ACT subtree');
   assert(message.includes('"path": "/world/act/narrativeTension"'), 'floor progress should write only narrative tension leaf');
   assert(message.includes('"path": "/world/clockPressure"'), 'floor progress should write clock pressure leaf');
@@ -324,6 +326,43 @@ async function testParentMvuReplayHandlerIsUsed() {
   assertEqual(sandbox.__messageVars[9].stat_data.world.clockPressure, 45, 'parent MVU handler should replay variables');
 }
 
+async function testParentMvuApiReplayFallbackIsUsed() {
+  const sandbox = makePluginSandbox();
+  sandbox.__currentMessageId = 10;
+  sandbox.__messages[10] = { message_id: 10, role: 'assistant', message: 'parent Mvu API smoke' };
+  sandbox.__messageVars[10] = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero(),
+      world: { act: sandbox.ACE0Modules.act.getDefaultActState(), clockPressure: 0 }
+    },
+    schema: 'smoke'
+  };
+  sandbox.handleVariablesInMessage = undefined;
+  sandbox.parent = {
+    Mvu: {
+      parseMessage: async (message, oldVars) => {
+        const nextVars = clone(oldVars);
+        applyReplayBlocksToVars(message, nextVars);
+        return nextVars;
+      },
+      replaceMvuData: async (vars, options = {}) => {
+        const id = Number.isFinite(Number(options.message_id)) ? Math.round(Number(options.message_id)) : sandbox.__currentMessageId;
+        sandbox.__messageVars[id] = clone(vars);
+      }
+    }
+  };
+
+  const result = await sandbox.ACE0Plugin.commitReplayPatch({
+    floorKey: 'message:10',
+    messageId: 10,
+    operationId: 'parent-mvu-api-smoke',
+    patches: [{ op: 'replace', path: '/world/clockPressure', value: 55 }]
+  });
+  assertEqual(result.ok, true, 'replay should use parent Mvu API fallback');
+  assertEqual(sandbox.__messageVars[10].stat_data.world.clockPressure, 55, 'parent Mvu API should replay variables');
+}
+
 async function testDashboardActCommitWritesOnlyChangedActPointers() {
   const sandbox = makePluginSandbox();
   const act = sandbox.ACE0Modules.act;
@@ -367,12 +406,16 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   };
   sandbox.ACE0Plugin = undefined;
   sandbox.parent = {
-    handleVariablesInMessage: async (messageId) => {
-      const vars = sandbox.__messageVars[messageId];
-      const msg = sandbox.__messages[messageId];
-      if (!vars || !vars.stat_data || !msg) return false;
-      applyReplayBlocksToVars(msg.message, vars);
-      return true;
+    Mvu: {
+      parseMessage: async (message, oldVars) => {
+        const nextVars = clone(oldVars);
+        applyReplayBlocksToVars(message, nextVars);
+        return nextVars;
+      },
+      replaceMvuData: async (vars, options = {}) => {
+        const id = Number.isFinite(Number(options.message_id)) ? Math.round(Number(options.message_id)) : sandbox.__currentMessageId;
+        sandbox.__messageVars[id] = clone(vars);
+      }
     }
   };
   sandbox.__ACE0_DASHBOARD_LOADER_TEST_HOOKS__ = true;
@@ -454,6 +497,7 @@ async function main() {
   await testPhaseAdvanceWritesReplayAndReplaysActAdvance();
   await testFloorKeyMismatchRejected();
   await testParentMvuReplayHandlerIsUsed();
+  await testParentMvuApiReplayFallbackIsUsed();
   await testDashboardActCommitWritesOnlyChangedActPointers();
   console.log('[mvu-replay-smoke] all checks passed');
 }

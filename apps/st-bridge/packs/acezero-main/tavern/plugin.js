@@ -336,23 +336,24 @@
     return trimmed ? `${trimmed}\n\n${block}` : block;
   }
 
-  function resolveMvuReplayHandler() {
+  function collectMvuReplayHandlers() {
     const root = getAce0HostRoot();
     const candidates = [];
     const seen = [];
+    const pushCandidate = (name, fn) => {
+      if (typeof fn !== 'function' || seen.includes(fn)) return;
+      seen.push(fn);
+      candidates.push({ name, run: fn });
+    };
+    collectMvuApiReplayHandlers().forEach((candidate) => pushCandidate(candidate.name, candidate.run));
     const pushHandler = (owner, key = 'handleVariablesInMessage') => {
       try {
         const fn = owner && owner[key];
-        if (typeof fn !== 'function' || seen.includes(fn)) return;
-        seen.push(fn);
-        candidates.push(fn.bind(owner));
+        pushCandidate(key, fn && fn.bind(owner));
       } catch (_) {}
     };
     try {
-      if (typeof handleVariablesInMessage === 'function' && !seen.includes(handleVariablesInMessage)) {
-        seen.push(handleVariablesInMessage);
-        candidates.push(handleVariablesInMessage);
-      }
+      pushCandidate('handleVariablesInMessage', typeof handleVariablesInMessage === 'function' ? handleVariablesInMessage : null);
     } catch (_) {}
     try { pushHandler(window); } catch (_) {}
     try { pushHandler(window?.parent); } catch (_) {}
@@ -362,7 +363,84 @@
     try { pushHandler(root?.top); } catch (_) {}
     try { pushHandler(window?.STBridge?.mvu); } catch (_) {}
     try { pushHandler(root?.STBridge?.mvu); } catch (_) {}
-    return candidates[0] || null;
+    return candidates;
+  }
+
+  function collectMvuApiReplayHandlers() {
+    const root = getAce0HostRoot();
+    const owners = [];
+    const candidates = [];
+    const seenApis = [];
+    const pushOwner = (owner) => {
+      try {
+        if (owner && !owners.includes(owner)) owners.push(owner);
+      } catch (_) {}
+    };
+    try { pushOwner(window); } catch (_) {}
+    try { pushOwner(window?.parent); } catch (_) {}
+    try { pushOwner(window?.top); } catch (_) {}
+    try { pushOwner(root); } catch (_) {}
+    try { pushOwner(root?.parent); } catch (_) {}
+    try { pushOwner(root?.top); } catch (_) {}
+
+    for (const owner of owners) {
+      const api = owner?.Mvu;
+      if (
+        api &&
+        typeof api.parseMessage === 'function' &&
+        typeof api.replaceMvuData === 'function' &&
+        !seenApis.includes(api)
+      ) {
+        seenApis.push(api);
+        candidates.push({
+          name: 'Mvu.parseMessage',
+          run: async (messageId) => replayMessageThroughMvuApi(api, messageId)
+        });
+      }
+    }
+    return candidates;
+  }
+
+  async function readMvuApiBaseVariables(messageId) {
+    const id = Math.round(Number(messageId) || 0);
+    try {
+      const chat = window?.SillyTavern?.chat || getAce0HostRoot()?.SillyTavern?.chat;
+      if (Array.isArray(chat)) {
+        for (let index = Math.min(id - 1, chat.length - 1); index >= 0; index -= 1) {
+          const item = chat[index];
+          const swipeId = Math.max(0, Math.round(Number(item?.swipe_id) || 0));
+          const vars = item?.variables?.[swipeId];
+          if (hasCompleteMvuVariableBundle(vars)) return cloneJsonData(vars, vars);
+        }
+      }
+    } catch (_) {}
+    try {
+      if (typeof getVariables === 'function') {
+        const targetId = id > 0 ? id - 1 : id;
+        const vars = await getVariables({ type: 'message', message_id: targetId });
+        if (hasCompleteMvuVariableBundle(vars)) return cloneJsonData(vars, vars);
+      }
+    } catch (_) {}
+    try {
+      if (typeof getVariables === 'function') {
+        const vars = await getVariables({ type: 'message', message_id: id });
+        if (hasCompleteMvuVariableBundle(vars)) return cloneJsonData(vars, vars);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function replayMessageThroughMvuApi(mvuApi, messageId) {
+    const id = Math.round(Number(messageId) || 0);
+    const messages = typeof getChatMessages === 'function' ? getChatMessages(id) : [];
+    const msg = Array.isArray(messages) ? messages[0] : null;
+    if (!msg || typeof msg.message !== 'string') return false;
+    const baseVars = await readMvuApiBaseVariables(id);
+    if (!hasCompleteMvuVariableBundle(baseVars)) return false;
+    const nextVars = await mvuApi.parseMessage(msg.message, baseVars);
+    if (!hasCompleteMvuVariableBundle(nextVars)) return false;
+    await mvuApi.replaceMvuData(nextVars, { type: 'message', message_id: id });
+    return true;
   }
 
   function buildReplacePatch(path, value) {
@@ -472,6 +550,54 @@
     return patches;
   }
 
+  function normalizeReplayPatches(patches) {
+    const byPath = new Map();
+    (Array.isArray(patches) ? patches : []).forEach((patch) => {
+      if (!patch || typeof patch !== 'object') return;
+      const path = typeof patch.path === 'string' ? patch.path.trim() : '';
+      if (!path) return;
+      byPath.set(path, {
+        ...patch,
+        path
+      });
+    });
+    return Array.from(byPath.values());
+  }
+
+  function doesVariableBundleMatchReplayPatches(vars, patches) {
+    const statData = vars?.stat_data;
+    if (!statData || typeof statData !== 'object') return false;
+    return (Array.isArray(patches) ? patches : []).every((patch) => {
+      if (!patch || typeof patch !== 'object') return true;
+      const path = typeof patch.path === 'string' ? patch.path.trim() : '';
+      if (!path) return true;
+      const actual = readJsonPointer(statData, path);
+      if (patch.op === 'remove') return actual === undefined;
+      if (patch.op === 'replace' || patch.op === 'add') return areJsonValuesEqual(actual, patch.value);
+      return false;
+    });
+  }
+
+  async function runMvuReplayHandlers(messageId, patches, replayHandlers = null) {
+    const handlers = Array.isArray(replayHandlers) ? replayHandlers : collectMvuReplayHandlers();
+    if (!handlers.length) return { ok: false, reason: 'mvu_replay_unavailable' };
+
+    let lastReason = 'mvu_replay_not_applied';
+    for (const handler of handlers) {
+      if (!handler || typeof handler.run !== 'function') continue;
+      try {
+        await handler.run(messageId);
+        const nextVars = await getMessageVariableBundle(messageId);
+        if (doesVariableBundleMatchReplayPatches(nextVars, patches)) {
+          return { ok: true, handler: handler.name || 'unknown' };
+        }
+      } catch (error) {
+        lastReason = error?.message || 'mvu_replay_failed';
+      }
+    }
+    return { ok: false, reason: lastReason };
+  }
+
   async function commitAce0ReplayPatch(options = {}) {
     const patches = Array.isArray(options.patches) ? options.patches.filter(item => item && typeof item === 'object') : [];
     if (!patches.length) return { ok: false, reason: 'empty_replay_patch' };
@@ -503,13 +629,22 @@
       return { ok: false, reason: 'message_not_found', messageId: normalizedMessageId, floorKey: actualFloorKey };
     }
 
-    const replayHandler = resolveMvuReplayHandler();
-    if (typeof replayHandler !== 'function') {
+    const replayHandlers = collectMvuReplayHandlers();
+    if (!replayHandlers.length) {
       return { ok: false, reason: 'mvu_replay_unavailable', messageId: normalizedMessageId, floorKey: actualFloorKey };
     }
 
     const operationId = sanitizeReplayOperationId(options.operationId || `message:${normalizedMessageId}:ace0`);
-    const stripped = stripAce0ReplayBlock(msg.message || '', operationId);
+    const stripIds = [
+      operationId,
+      ...(Array.isArray(options.replaceOperationIds) ? options.replaceOperationIds : [])
+    ].map(sanitizeReplayOperationId).filter(Boolean);
+    const uniqueStripIds = Array.from(new Set(stripIds));
+    const originalMessage = msg.message || '';
+    const stripped = uniqueStripIds.reduce(
+      (content, stripId) => stripAce0ReplayBlock(content, stripId),
+      originalMessage
+    );
     const block = buildAce0ReplayBlock(operationId, patches);
     const nextMessage = insertAce0ReplayBlock(stripped, block);
     await setChatMessages([{
@@ -517,13 +652,27 @@
       message: nextMessage
     }], { refresh: options.refresh || 'affected' });
 
-    await replayHandler(normalizedMessageId);
+    const replayResult = await runMvuReplayHandlers(normalizedMessageId, patches, replayHandlers);
+    if (!replayResult.ok) {
+      await setChatMessages([{
+        message_id: normalizedMessageId,
+        message: originalMessage
+      }], { refresh: options.refresh || 'affected' });
+      return {
+        ok: false,
+        reason: replayResult.reason || 'mvu_replay_not_applied',
+        messageId: normalizedMessageId,
+        floorKey: actualFloorKey,
+        operationId
+      };
+    }
     return {
       ok: true,
       messageId: normalizedMessageId,
       floorKey: actualFloorKey,
       operationId,
-      patchCount: patches.length
+      patchCount: patches.length,
+      replayHandler: replayResult.handler || ''
     };
   }
 
@@ -1448,16 +1597,26 @@
       const floorKey = makeMessageFloorKey(messageId);
       let workingEraVars = await getMessageEraVars(messageId);
       const hasReplayBase = isPlainObject(workingEraVars);
-      const replayOps = [];
+      const renderOperationId = `render:${messageId}:state`;
+      const legacyRenderOperationIds = [
+        `render:${messageId}:floor-progress`,
+        `render:${messageId}:battle-result`,
+        `render:${messageId}:act-result`
+      ];
+      const hasExistingRenderReplay = hasAce0ReplayBlock(nextContent, renderOperationId)
+        || legacyRenderOperationIds.some(operationId => hasAce0ReplayBlock(nextContent, operationId));
+      const replayPatches = [];
+      const queueReplayPatches = (patches) => {
+        if (Array.isArray(patches) && patches.length) replayPatches.push(...patches);
+      };
 
       isProcessing = true;
 
       if (hasReplayBase && options.applyFloorProgress === true) {
-        const operationId = `render:${messageId}:floor-progress`;
         const rawAct = workingEraVars?.world?.act;
         const hasPendingPhaseAdvance = isPlainObject(rawAct)
           && Math.max(0, Math.round(Number(rawAct.phase_advance) || 0)) > 0;
-        if (!hasPendingPhaseAdvance && !hasAce0ReplayBlock(nextContent, operationId)) {
+        if (!hasPendingPhaseAdvance && !hasExistingRenderReplay) {
           const progressResult = await applyFloorProgressDelta(messageId, msg, {
             eraVars: workingEraVars,
             persist: false
@@ -1467,7 +1626,7 @@
               '/world/act/narrativeTension',
               '/world/clockPressure'
             ]);
-            if (patches.length) replayOps.push({ operationId, patches });
+            queueReplayPatches(patches);
             workingEraVars = progressResult.eraVars;
           }
         }
@@ -1483,8 +1642,7 @@
       }
 
       if (hasReplayBase && hasCompleteBattleTag(nextContent)) {
-        const operationId = `render:${messageId}:battle-result`;
-        if (!hasAce0ReplayBlock(nextContent, operationId)) {
+        if (!hasExistingRenderReplay) {
           const act = getWorldActState(workingEraVars);
           const currentTension = Math.max(0, Math.min(100, Math.round(Number(act.narrativeTension) || 0)));
           const nextTension = Math.max(0, Math.min(100, currentTension + Math.round(Number(TENSION_DELTA.BATTLE_RESULT) || 0)));
@@ -1500,14 +1658,13 @@
               }
             };
             const patches = buildReplayPatchesFromEraVars(workingEraVars, nextEraVars, ['/world/act/narrativeTension']);
-            if (patches.length) replayOps.push({ operationId, patches });
+            queueReplayPatches(patches);
             workingEraVars = nextEraVars;
           }
         }
       }
 
       if (hasReplayBase) {
-        const operationId = `render:${messageId}:act-result`;
         const actResult = await appendActResultIfNeeded(nextContent, {
           eraVars: workingEraVars,
           persist: false,
@@ -1518,9 +1675,9 @@
           changed = true;
           console.log(`${PLUGIN_NAME} [rendered_fallback] ACT 结算回执已注入到消息 #${messageId}`);
         }
-        if (actResult.stateChanged && actResult.eraVars && !hasAce0ReplayBlock(nextContent, operationId)) {
+        if (actResult.stateChanged && actResult.eraVars && !hasExistingRenderReplay) {
           const patches = buildReplayPatchesFromEraVars(workingEraVars, actResult.eraVars);
-          if (patches.length) replayOps.push({ operationId, patches });
+          queueReplayPatches(patches);
           workingEraVars = actResult.eraVars;
         }
       } else {
@@ -1534,15 +1691,17 @@
         }], { refresh: 'affected' });
       }
 
-      for (const op of replayOps) {
+      const normalizedReplayPatches = normalizeReplayPatches(replayPatches);
+      if (normalizedReplayPatches.length) {
         const result = await commitAce0ReplayPatch({
           messageId,
           floorKey,
-          operationId: op.operationId,
-          patches: op.patches
+          operationId: renderOperationId,
+          replaceOperationIds: legacyRenderOperationIds,
+          patches: normalizedReplayPatches
         });
         if (!result.ok) {
-          console.warn(`${PLUGIN_NAME} ACE0_REPLAY ${op.operationId} 写入失败: ${result.reason || 'unknown'}`);
+          console.warn(`${PLUGIN_NAME} ACE0_REPLAY ${renderOperationId} 写入失败: ${result.reason || 'unknown'}`);
         }
       }
 
@@ -1741,11 +1900,19 @@
         actState.vision.jumpReady = false;
         actState.vision.pendingReplace = null;
       }
+      const nextEraVars = {
+        ...(eraVars || {}),
+        world: {
+          ...(eraVars?.world || {}),
+          act: actState
+        }
+      };
+      const patches = buildReplayPatchesFromEraVars(eraVars, nextEraVars, ['/world/act']);
       const replayResult = await commitAce0ReplayPatch({
         messageId,
         floorKey,
         operationId: `act-route:${messageId}:${targetNodeId}`,
-        patches: [buildReplacePatch('/world/act', actState)]
+        patches
       });
       if (!replayResult.ok) {
         return { ok: false, reason: replayResult.reason || 'mvu_replay_failed', floorKey };
@@ -1849,8 +2016,18 @@
         }
       }
 
-      const patches = [buildReplacePatch('/world/assetDeck', nextWorld.assetDeck)];
-      if (nextWorld.act) patches.push(buildReplacePatch('/world/act', nextWorld.act));
+      const nextEraVars = {
+        ...(eraVars || {}),
+        world: {
+          ...(eraVars?.world || {}),
+          assetDeck: nextWorld.assetDeck,
+          ...(nextWorld.act ? { act: nextWorld.act } : {})
+        }
+      };
+      const patches = buildReplayPatchesFromEraVars(eraVars, nextEraVars, [
+        '/world/assetDeck',
+        '/world/act'
+      ]);
       const replayResult = await commitAce0ReplayPatch({
         messageId,
         floorKey,
