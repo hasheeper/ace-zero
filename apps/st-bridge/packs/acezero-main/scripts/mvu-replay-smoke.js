@@ -424,7 +424,7 @@ async function testEncounterReplayPersistsCompactState() {
     messageId: 17,
     operationId: 'runtime:auto-encounters',
     afterVars,
-    paths: ['/world/act/characterEncounter']
+    paths: ['/world/act']
   });
 
   const message = sandbox.__messages[17].message;
@@ -437,6 +437,70 @@ async function testEncounterReplayPersistsCompactState() {
   assert(!message.includes('"path": "/world/act",'), 'encounter replay should not replace the whole ACT subtree');
   assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.queue[0].charKey, 'COTA', 'encounter queue should replay COTA');
   assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.characters.COTA.status, 'queued', 'encounter character state should replay COTA status');
+}
+
+async function testPhaseAdvancePersistsActRateAndControlState() {
+  const sandbox = makePluginSandbox();
+  const act = sandbox.ACE0Modules.act;
+  const assetDeck = sandbox.ACE0Modules.assetDeck;
+  sandbox.__currentMessageId = 18;
+  const initialAct = createActStateAt(act, 1, ['node1-entry'], {
+    stage: 'executing',
+    phase_index: 0,
+    phase_advance: 1,
+    phasePlanLock: {
+      nodeId: 'node1-entry',
+      nodeIndex: 1,
+      locked: true,
+      confirmedPhaseIndex: 0,
+      floorKey: 'message:18'
+    },
+    phase_slots: [
+      { key: 'rest', source: 'limited', amount: 1, sources: ['limited'], tint: 'asset' },
+      null,
+      null,
+      null
+    ],
+    limited: { combat: 0, rest: 1, asset: 0, vision: 0 },
+    pendingResolutions: []
+  });
+  sandbox.__messages[18] = {
+    message_id: 18,
+    role: 'assistant',
+    message: 'rate replay smoke\n<StatusPlaceHolderImpl/>'
+  };
+  sandbox.__messageVars[18] = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero({
+        roster: {
+          KAZU: { level: 3, mana: 0, maxMana: 0 }
+        }
+      }),
+      world: {
+        current_time: { day: 1, phase: 'MORNING' },
+        clockPressure: 0,
+        location: { layer: 'THE_EXCHANGE', site: 'smoke' },
+        tags: [],
+        flags: [],
+        storyFlags: {},
+        expansion_state: { activeMajor: '', activeLight: [] },
+        assetDeck: assetDeck.makeDefaultAssetDeckState(),
+        act: initialAct
+      }
+    },
+    schema: 'smoke'
+  };
+
+  await sandbox.__handlers.character_message_rendered(18);
+
+  const message = sandbox.__messages[18].message;
+  assert(message.includes('ACE0_REPLAY:render:18:state'), 'rate/control phase advance should append render replay');
+  assert(message.includes('"path": "/world/act/income_rate/asset"'), 'phase advance replay should persist changed income rate');
+  assert(message.includes('"path": "/world/act/controlledNodes/node1-entry"'), 'phase advance replay should persist controlled node state');
+  assert(!message.includes('"path": "/world/act",'), 'rate/control replay should not replace whole ACT');
+  assert(Math.abs(sandbox.__messageVars[18].stat_data.world.act.income_rate.asset - 0.3) < 1e-9, 'replayed ACT should keep rest tint income rate');
+  assertEqual(sandbox.__messageVars[18].stat_data.world.act.controlledNodes['node1-entry'].type, 'asset', 'replayed ACT should keep controlled node tint');
 }
 
 async function testReplayBlockRemovedWhenOperationReturnsToBaseline() {
@@ -757,6 +821,7 @@ async function main() {
   await testFloorProgressWritesOnlyLeafPatches();
   await testPublicApisPersistThroughReplayOnly();
   await testEncounterReplayPersistsCompactState();
+  await testPhaseAdvancePersistsActRateAndControlState();
   await testReplayBlockRemovedWhenOperationReturnsToBaseline();
   await testPhaseAdvanceWritesReplayAndReplaysActAdvance();
   await testFloorKeyMismatchRejected();

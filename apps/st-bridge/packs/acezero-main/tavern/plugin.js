@@ -73,50 +73,44 @@
   const DEFAULT_WORLD_CLOCK_PRESSURE = 0;
   const DEBT_INTEREST_RATE_PER_PHASE = 0.005;
   const MAJOR_DEBT_INTEREST_RATE_PER_PHASE = 0.01;
+  const ACE0_ACT_STATE_REPLAY_PATHS = [
+    '/world/act/id',
+    '/world/act/seed',
+    '/world/act/nodeIndex',
+    '/world/act/route_history',
+    '/world/act/limited',
+    '/world/act/reserve',
+    '/world/act/reserve_progress',
+    '/world/act/income_rate',
+    '/world/act/income_progress',
+    '/world/act/phasePlanLock',
+    '/world/act/phase_slots',
+    '/world/act/phase_index',
+    '/world/act/phase_advance',
+    '/world/act/stage',
+    '/world/act/eventTree',
+    '/world/act/controlledNodes',
+    '/world/act/vision',
+    '/world/act/resourceSpent',
+    '/world/act/characterEncounter',
+    '/world/act/pendingResolutions',
+    '/world/act/pendingAssetDeckCommands',
+    '/world/act/resolutionHistory',
+    '/world/act/narrativeTension',
+    '/world/act/pendingTransitionTarget',
+    '/world/act/transitionRequestTarget',
+    '/world/act/pendingTransitionPrompt'
+  ];
   const ACE0_RENDER_STATE_REPLAY_PATHS = [
     '/hero/funds',
     '/hero/roster',
     '/world/clockPressure',
     '/world/assetDeck',
-    '/world/act/nodeIndex',
-    '/world/act/route_history',
-    '/world/act/limited',
-    '/world/act/reserve',
-    '/world/act/reserve_progress',
-    '/world/act/income_progress',
-    '/world/act/phasePlanLock',
-    '/world/act/phase_slots',
-    '/world/act/phase_index',
-    '/world/act/phase_advance',
-    '/world/act/stage',
-    '/world/act/vision',
-    '/world/act/resourceSpent',
-    '/world/act/characterEncounter',
-    '/world/act/pendingResolutions',
-    '/world/act/pendingAssetDeckCommands',
-    '/world/act/resolutionHistory',
-    '/world/act/narrativeTension'
+    ...ACE0_ACT_STATE_REPLAY_PATHS
   ];
   const ACE0_ROUTE_REPLAY_PATHS = [
     '/world/clockPressure',
-    '/world/act/nodeIndex',
-    '/world/act/route_history',
-    '/world/act/limited',
-    '/world/act/reserve',
-    '/world/act/reserve_progress',
-    '/world/act/income_progress',
-    '/world/act/phasePlanLock',
-    '/world/act/phase_slots',
-    '/world/act/phase_index',
-    '/world/act/phase_advance',
-    '/world/act/stage',
-    '/world/act/vision',
-    '/world/act/resourceSpent',
-    '/world/act/characterEncounter',
-    '/world/act/pendingResolutions',
-    '/world/act/pendingAssetDeckCommands',
-    '/world/act/resolutionHistory',
-    '/world/act/narrativeTension'
+    ...ACE0_ACT_STATE_REPLAY_PATHS
   ];
   const ACE0_ASSET_CHOICE_REPLAY_PATHS = [
     '/world/assetDeck',
@@ -253,11 +247,38 @@
     });
   }
 
+  function isDefaultActIncomeRateMap(value) {
+    return isPlainObject(value) && ACT_RESOURCE_KEYS.every((key) => {
+      return Math.abs((Number(value[key]) || 0) - 0.2) < 1e-9;
+    });
+  }
+
+  function isDefaultActEventTree(value) {
+    if (!isPlainObject(value)) return false;
+    const goals = isPlainObject(value.nodeGoals) ? value.nodeGoals : {};
+    const current = isPlainObject(goals.current) ? goals.current : {};
+    const next = isPlainObject(goals.next) ? goals.next : {};
+    const phaseWindow = isPlainObject(value.phaseWindow) ? value.phaseWindow : {};
+    return !_normalizeTrimmedString(current.goal, '')
+      && !_normalizeTrimmedString(current.tendency, '')
+      && !_normalizeTrimmedString(next.goal, '')
+      && !_normalizeTrimmedString(next.tendency, '')
+      && !_normalizeTrimmedString(phaseWindow.nodeId, '')
+      && (!Array.isArray(phaseWindow.phases) || phaseWindow.phases.length === 0);
+  }
+
   function isDefaultReplayAddition(path, value) {
     if (Array.isArray(value) && value.length === 0) return true;
     if (isPlainObject(value) && Object.keys(value).length === 0) return true;
     if (['/world/act/limited', '/world/act/reserve', '/world/act/reserve_progress', '/world/act/income_progress', '/world/act/resourceSpent'].includes(path)) {
       return isZeroActResourceMap(value);
+    }
+    if (path === '/world/act/income_rate') return isDefaultActIncomeRateMap(value);
+    if (path === '/world/act/eventTree') return isDefaultActEventTree(value);
+    if (path === '/world/act/narrativeTension') return Math.round(Number(value) || 0) === 0;
+    if (path === '/world/act/phase_index' || path === '/world/act/phase_advance') return Math.round(Number(value) || 0) === 0;
+    if (['/world/act/pendingTransitionTarget', '/world/act/transitionRequestTarget', '/world/act/pendingTransitionPrompt'].includes(path)) {
+      return !_normalizeTrimmedString(value, '');
     }
     if (path === '/world/act/phase_slots') {
       return Array.isArray(value) && value.every(item => item == null);
@@ -388,6 +409,22 @@
       return compactCharacterEncounterForReplay(value);
     }
     return value;
+  }
+
+  function expandReplayPath(path) {
+    if (path === '/world/act') return ACE0_ACT_STATE_REPLAY_PATHS;
+    return [path];
+  }
+
+  function normalizeReplayPaths(paths) {
+    const normalized = [];
+    (Array.isArray(paths) ? paths : []).forEach((path) => {
+      if (typeof path !== 'string' || !path.trim()) return;
+      expandReplayPath(path.trim()).forEach((expandedPath) => {
+        if (expandedPath && !normalized.includes(expandedPath)) normalized.push(expandedPath);
+      });
+    });
+    return normalized;
   }
 
   function mergeMvuPatch(base, patch) {
@@ -711,10 +748,9 @@
 
   function buildReplayPatchesFromEraVars(beforeVars, afterVars, paths = null) {
     const patchPaths = Array.isArray(paths) && paths.length
-      ? paths
+      ? normalizeReplayPaths(paths)
       : [
           '/hero',
-          '/world/act',
           '/world/assetDeck',
           '/world/clockPressure',
           '/world/current_time',
@@ -722,7 +758,8 @@
           '/world/tags',
           '/world/flags',
           '/world/storyFlags',
-          '/world/expansion_state'
+          '/world/expansion_state',
+          ...ACE0_ACT_STATE_REPLAY_PATHS
         ];
     const patches = [];
     patchPaths.forEach((path) => {
@@ -735,7 +772,7 @@
   }
 
   function buildReplayValuePatchesFromEraVars(afterVars, paths = null) {
-    const patchPaths = Array.isArray(paths) && paths.length ? paths : [];
+    const patchPaths = Array.isArray(paths) && paths.length ? normalizeReplayPaths(paths) : [];
     const patches = [];
     patchPaths.forEach((path) => {
       const nextValue = normalizeReplayValueForPath(path, readJsonPointer(afterVars, path));
@@ -765,8 +802,11 @@
     const worldPatch = isPlainObject(patch?.world) ? patch.world : null;
     if (worldPatch) {
       Object.keys(worldPatch).forEach((key) => {
-        if (key === 'act') push('/world/act');
-        else push(`/world/${escapeJsonPointerPart(key)}`);
+        if (key === 'act') {
+          ACE0_ACT_STATE_REPLAY_PATHS.forEach(push);
+        } else {
+          push(`/world/${escapeJsonPointerPart(key)}`);
+        }
       });
     }
 

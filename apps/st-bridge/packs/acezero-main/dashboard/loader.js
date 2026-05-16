@@ -156,6 +156,7 @@
     '/world/act/limited',
     '/world/act/reserve',
     '/world/act/reserve_progress',
+    '/world/act/income_rate',
     '/world/act/income_progress',
     '/world/act/phasePlanLock',
     '/world/act/phase_slots',
@@ -189,12 +190,19 @@
     });
   }
 
+  function isDashboardDefaultIncomeRateMap(value) {
+    return isDashboardPlainObject(value) && ['combat', 'rest', 'asset', 'vision'].every((key) => {
+      return Math.abs((Number(value[key]) || 0) - 0.2) < 1e-9;
+    });
+  }
+
   function isDashboardDefaultReplayAddition(path, value) {
     if (Array.isArray(value) && value.length === 0) return true;
     if (isDashboardPlainObject(value) && Object.keys(value).length === 0) return true;
     if (['/world/act/limited', '/world/act/reserve', '/world/act/reserve_progress', '/world/act/income_progress', '/world/act/resourceSpent'].includes(path)) {
       return isDashboardZeroResourceMap(value);
     }
+    if (path === '/world/act/income_rate') return isDashboardDefaultIncomeRateMap(value);
     if (path === '/world/act/phase_slots') {
       return Array.isArray(value) && value.every(item => item == null);
     }
