@@ -196,14 +196,185 @@
     return patches;
   }
 
+  function sanitizeDashboardReplayOperationId(value) {
+    return String(value || 'ace0')
+      .trim()
+      .replace(/[^\w:.-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 96) || 'ace0';
+  }
+
+  function escapeDashboardRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function buildDashboardReplayBlock(operationId, patches) {
+    const id = sanitizeDashboardReplayOperationId(operationId);
+    return [
+      '<UpdateVariable>',
+      `<Analyze>ACE0_REPLAY:${id}</Analyze>`,
+      '<JSONPatch>',
+      JSON.stringify(patches, null, 2),
+      '</JSONPatch>',
+      '</UpdateVariable>'
+    ].join('\n');
+  }
+
+  function stripDashboardReplayBlock(content, operationId) {
+    const id = sanitizeDashboardReplayOperationId(operationId);
+    const text = typeof content === 'string' ? content : '';
+    const pattern = new RegExp(
+      `\\n*<UpdateVariable>\\s*<Analyze>\\s*ACE0_REPLAY:${escapeDashboardRegExp(id)}\\s*<\\/Analyze>\\s*<JSONPatch>[\\s\\S]*?<\\/JSONPatch>\\s*<\\/UpdateVariable>\\s*`,
+      'gi'
+    );
+    return text.replace(pattern, '\n\n').replace(/\n{4,}/g, '\n\n\n').trimEnd();
+  }
+
+  function insertDashboardReplayBlock(content, block) {
+    const text = typeof content === 'string' ? content : '';
+    const placeholder = '<StatusPlaceHolderImpl/>';
+    const index = text.indexOf(placeholder);
+    if (index >= 0) {
+      const before = text.slice(0, index).trimEnd();
+      const after = text.slice(index);
+      return `${before}\n\n${block}\n\n${after.trimStart()}`;
+    }
+    const trimmed = text.trimEnd();
+    return trimmed ? `${trimmed}\n\n${block}` : block;
+  }
+
+  function parseDashboardMessageIdFromFloorKey(floorKey) {
+    const match = String(floorKey || '').trim().match(/^message:(\d+)$/i);
+    return match ? Math.round(Number(match[1])) : null;
+  }
+
+  function resolveDashboardReplayMessageId(floorKey) {
+    const floorId = parseDashboardMessageIdFromFloorKey(floorKey);
+    if (floorId !== null) return floorId;
+    try {
+      if (typeof getCurrentMessageId === 'function') {
+        const id = Number(getCurrentMessageId());
+        if (Number.isFinite(id) && id >= 0) return Math.round(id);
+      }
+    } catch (_) {}
+    try {
+      if (typeof getChatMessages === 'function') {
+        const latest = getChatMessages(-1)?.[0];
+        const id = Number(latest?.message_id);
+        if (Number.isFinite(id) && id >= 0) return Math.round(id);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function resolveDashboardMvuReplayHandler() {
+    const hostRoot = getAce0HostRoot();
+    const candidates = [];
+    const seen = [];
+    const pushHandler = (owner, key = 'handleVariablesInMessage') => {
+      try {
+        const fn = owner && owner[key];
+        if (typeof fn !== 'function' || seen.includes(fn)) return;
+        seen.push(fn);
+        candidates.push(fn.bind(owner));
+      } catch (_) {}
+    };
+    try {
+      if (typeof handleVariablesInMessage === 'function' && !seen.includes(handleVariablesInMessage)) {
+        seen.push(handleVariablesInMessage);
+        candidates.push(handleVariablesInMessage);
+      }
+    } catch (_) {}
+    try { pushHandler(window); } catch (_) {}
+    try { pushHandler(window?.parent); } catch (_) {}
+    try { pushHandler(window?.parent?.parent); } catch (_) {}
+    try { pushHandler(window?.top); } catch (_) {}
+    try { pushHandler(ROOT); } catch (_) {}
+    try { pushHandler(ROOT?.parent); } catch (_) {}
+    try { pushHandler(ROOT?.top); } catch (_) {}
+    try { pushHandler(hostRoot); } catch (_) {}
+    try { pushHandler(hostRoot?.parent); } catch (_) {}
+    try { pushHandler(hostRoot?.top); } catch (_) {}
+    try { pushHandler(window?.STBridge?.mvu); } catch (_) {}
+    try { pushHandler(ROOT?.STBridge?.mvu); } catch (_) {}
+    try { pushHandler(hostRoot?.STBridge?.mvu); } catch (_) {}
+    return candidates[0] || null;
+  }
+
+  async function commitDashboardReplayPatchLocally({ floorKey, operationId, patches }) {
+    const patchList = Array.isArray(patches) ? patches.filter(item => item && typeof item === 'object') : [];
+    if (!patchList.length) return { ok: false, reason: 'empty_replay_patch' };
+
+    const messageId = resolveDashboardReplayMessageId(floorKey);
+    if (!Number.isFinite(Number(messageId)) || Number(messageId) < 0) {
+      return { ok: false, reason: 'missing_message_id' };
+    }
+    const normalizedMessageId = Math.round(Number(messageId));
+    const actualFloorKey = `message:${normalizedMessageId}`;
+    const expectedFloorKey = normalizeDashboardString(floorKey, '');
+    if (expectedFloorKey && expectedFloorKey !== actualFloorKey) {
+      return { ok: false, reason: 'floor_key_mismatch', floorKey: actualFloorKey, expectedFloorKey };
+    }
+
+    if (typeof getVariables !== 'function') {
+      return { ok: false, reason: 'mvu_variables_unavailable', floorKey: actualFloorKey };
+    }
+    const vars = await getVariables({ type: 'message', message_id: normalizedMessageId });
+    if (
+      !vars || typeof vars !== 'object' ||
+      !vars.stat_data || typeof vars.stat_data !== 'object' ||
+      !vars.stat_data.world || typeof vars.stat_data.world !== 'object' ||
+      !vars.stat_data.world.act || typeof vars.stat_data.world.act !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(vars, 'schema')
+    ) {
+      return { ok: false, reason: 'mvu_replay_missing_base', floorKey: actualFloorKey };
+    }
+
+    if (typeof getChatMessages !== 'function' || typeof setChatMessages !== 'function') {
+      return { ok: false, reason: 'chat_message_api_unavailable', floorKey: actualFloorKey };
+    }
+    const messages = getChatMessages(normalizedMessageId);
+    const msg = Array.isArray(messages) ? messages[0] : null;
+    if (!msg || typeof msg !== 'object') {
+      return { ok: false, reason: 'message_not_found', floorKey: actualFloorKey };
+    }
+
+    const replayHandler = resolveDashboardMvuReplayHandler();
+    if (typeof replayHandler !== 'function') {
+      return { ok: false, reason: 'mvu_replay_unavailable', floorKey: actualFloorKey };
+    }
+
+    const opId = sanitizeDashboardReplayOperationId(operationId || `dashboard:${actualFloorKey}`);
+    const stripped = stripDashboardReplayBlock(msg.message || '', opId);
+    const block = buildDashboardReplayBlock(opId, patchList);
+    const nextMessage = insertDashboardReplayBlock(stripped, block);
+    await setChatMessages([{
+      message_id: normalizedMessageId,
+      message: nextMessage
+    }], { refresh: 'affected' });
+    await replayHandler(normalizedMessageId);
+    return {
+      ok: true,
+      messageId: normalizedMessageId,
+      floorKey: actualFloorKey,
+      operationId: opId,
+      patchCount: patchList.length
+    };
+  }
+
   async function commitDashboardReplayPatch({ floorKey, operationId, patches }) {
     const hostRoot = getAce0HostRoot();
+    let unavailableResult = null;
     for (const candidate of [ROOT?.ACE0Plugin, hostRoot?.ACE0Plugin]) {
       if (candidate && typeof candidate.commitReplayPatch === 'function') {
-        return await candidate.commitReplayPatch({ floorKey, operationId, patches });
+        const result = await candidate.commitReplayPatch({ floorKey, operationId, patches });
+        if (result?.ok) return result;
+        if (result && result.reason !== 'mvu_replay_unavailable') return result;
+        if (result) unavailableResult = result;
       }
     }
-    return { ok: false, reason: 'mvu_replay_unavailable' };
+    const localResult = await commitDashboardReplayPatchLocally({ floorKey, operationId, patches });
+    return localResult?.ok ? localResult : (unavailableResult || localResult);
   }
 
   function normalizeDashboardString(value, fallback = '') {

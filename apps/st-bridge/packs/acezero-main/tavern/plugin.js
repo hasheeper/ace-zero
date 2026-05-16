@@ -266,6 +266,8 @@
   function hasCompleteMvuVariableBundle(vars) {
     return isPlainObject(vars)
       && isPlainObject(vars.stat_data)
+      && isPlainObject(vars.stat_data.world)
+      && isPlainObject(vars.stat_data.world.act)
       && Object.prototype.hasOwnProperty.call(vars, 'schema');
   }
 

@@ -365,6 +365,16 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
     const id = Number.isFinite(Number(options.message_id)) ? Math.round(Number(options.message_id)) : sandbox.__currentMessageId;
     return sandbox.__messageVars[id];
   };
+  sandbox.ACE0Plugin = undefined;
+  sandbox.parent = {
+    handleVariablesInMessage: async (messageId) => {
+      const vars = sandbox.__messageVars[messageId];
+      const msg = sandbox.__messages[messageId];
+      if (!vars || !vars.stat_data || !msg) return false;
+      applyReplayBlocksToVars(msg.message, vars);
+      return true;
+    }
+  };
   sandbox.__ACE0_DASHBOARD_LOADER_TEST_HOOKS__ = true;
   runPackFile(sandbox, 'dashboard/loader.js');
 
@@ -412,8 +422,34 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   assertEqual(sandbox.__messageVars[13].stat_data.world.clockPressure, 5, 'dashboard replay should not apply full world clock payload');
 }
 
+async function testActResultMissingActBaseDoesNotCreateActReplay() {
+  const sandbox = makePluginSandbox();
+  sandbox.__currentMessageId = 14;
+  sandbox.__messages[14] = {
+    message_id: 14,
+    role: 'assistant',
+    message: 'missing act base\n<StatusPlaceHolderImpl/>'
+  };
+  sandbox.__messageVars[14] = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero(),
+      world: {
+        clockPressure: 5
+      }
+    },
+    schema: 'smoke'
+  };
+
+  await sandbox.__handlers.character_message_rendered(14);
+
+  assert(!sandbox.__messages[14].message.includes('ACE0_REPLAY'), 'missing /world/act base should not append ACE0_REPLAY');
+  assert(!sandbox.__messageVars[14].stat_data.world.act, 'missing /world/act base should not synthesize default ACT');
+}
+
 async function main() {
   await testMissingBaseDoesNotCreateDefaultAct();
+  await testActResultMissingActBaseDoesNotCreateActReplay();
   await testFloorProgressWritesOnlyLeafPatches();
   await testPhaseAdvanceWritesReplayAndReplaysActAdvance();
   await testFloorKeyMismatchRejected();
