@@ -58,15 +58,16 @@ function testFinalNodeCannotReceiveEncounter() {
   route[22] = node23.id;
   const state = createActStateAt(act, 23, route, {
     characterEncounter: {
-      queue: [{
-        id: 'enc:test:SIA:finale',
-        charKey: 'SIA',
-        type: 'first_meet',
-        status: 'queued',
-        createdNodeIndex: 23,
-        priority: 999,
-        spentScore: 999
-      }]
+      v: 2,
+      active: {
+        SIA: {
+          kind: 'meet',
+          state: 'queued',
+          from: 23,
+          priority: 999,
+          score: 999
+        }
+      }
     }
   });
 
@@ -162,9 +163,10 @@ function testQueuePlaceConsumeFirstMeet() {
   });
   assert(consumedResult.consumed, 'Encounter should consume on the target phase');
   assertEqual(consumedResult.consumed.charKey, 'COTA', 'Consumed encounter should be COTA');
-  assertEqual(consumedResult.actState.characterEncounter.characters.COTA.firstMeetDone, true, 'COTA should be marked firstMeetDone');
-  assertEqual(consumedResult.actState.characterEncounter.characters.COTA.status, 'introduced', 'COTA should become introduced');
-  assertEqual(consumedResult.actState.characterEncounter.characters.COTA.introducedPhaseIndex, placed.targetPhaseIndex, 'First-meet should record the phase it was introduced on');
+  assert(!consumedResult.actState.characterEncounter.queue, 'Canonical encounter state should not persist queue');
+  assert(!consumedResult.actState.characterEncounter.characters, 'Canonical encounter state should not persist character mirrors');
+  assert(consumedResult.actState.characterEncounter.met.COTA, 'COTA should be recorded in compact met ledger');
+  assertEqual(consumedResult.actState.characterEncounter.met.COTA.phase, placed.targetPhaseIndex, 'First-meet should record the phase it was introduced on');
 
   const afterIntroduced = act.evaluateCharacterEncounterEligibility(consumedResult.actState, hero, context);
   assert(!afterIntroduced.eligible.some((item) => item.charKey === 'COTA'), 'Introduced COTA should not become eligible again');
@@ -186,7 +188,7 @@ function testForceSpecificCharacterAndQueuedSequence() {
   assert(forcedSia.placed, 'Debug FORCE should place SIA when the next node is open');
   assertEqual(forcedSia.placed.charKey, 'SIA', 'FORCE should place the clicked character, not an older queued character');
   assertEqual(forcedSia.placed.targetPhaseIndex, 1, 'Debug FORCE first-meet should always target phase 2');
-  const cotaQueue = forcedSia.actState.characterEncounter.queue.find((item) => item.charKey === 'COTA');
+  const cotaQueue = firstActiveQueueItem(forcedSia.actState, (item) => item.charKey === 'COTA');
   assertEqual(cotaQueue.status, 'queued', 'Older queued COTA should remain queued');
 
   const forcedCota = act.debugForceCharacterEncounter(forcedSia.actState, 'COTA', config, { context });
@@ -218,7 +220,7 @@ function testFirstMeetPacing() {
     place: true
   });
   assertEqual(blockedRuleAddSia.placed, null, 'Scheduler should not place a new first-meet immediately after one is consumed');
-  const queuedNext = blockedRuleAddSia.actState.characterEncounter.queue.find((item) => item.status === 'queued');
+  const queuedNext = firstActiveQueueItem(blockedRuleAddSia.actState, (item) => item.status === 'queued');
   assert(queuedNext, 'The next eligible request should remain queued through the cooldown node');
 
   const afterCooldown = {
@@ -266,12 +268,12 @@ function testPreSignalThenFirstMeet() {
   const state = createActStateAt(act, 9, longRoute, {
     resourceSpent: { combat: 20, rest: 20, asset: 20, vision: 20 },
     characterEncounter: {
-      characters: {
-        SIA: { status: 'introduced', firstMeetDone: true },
-        TRIXIE: { status: 'introduced', firstMeetDone: true },
-        COTA: { status: 'introduced', firstMeetDone: true }
-      },
-      queue: []
+      v: 2,
+      met: {
+        SIA: {},
+        TRIXIE: {},
+        COTA: {}
+      }
     }
   });
 
@@ -281,7 +283,7 @@ function testPreSignalThenFirstMeet() {
     limit: 8,
     place: false
   });
-  const vvPreSignal = queuedResult.actState.characterEncounter.queue.find((item) => item.charKey === 'VV');
+  const vvPreSignal = firstActiveQueueItem(queuedResult.actState, (item) => item.charKey === 'VV');
   assert(vvPreSignal, 'VV should queue when hybrid requirements are met');
   assertEqual(vvPreSignal.type, 'pre_signal', 'VV should pre-signal before first meet');
 
@@ -300,10 +302,10 @@ function testPreSignalThenFirstMeet() {
   });
   assert(consumedResult.consumed, 'VV pre-signal should consume');
   assertEqual(consumedResult.consumed.type, 'pre_signal', 'Consumed VV event should be pre_signal');
-  assertEqual(consumedResult.actState.characterEncounter.characters.VV.preSignalDone, true, 'VV should remember preSignalDone');
-  assertEqual(consumedResult.actState.characterEncounter.characters.VV.firstMeetDone, false, 'pre_signal should not unlock firstMeetDone');
-  assertEqual(consumedResult.actState.characterEncounter.characters.VV.preSignalNodeId, placedResult.placed.targetNodeId, 'pre_signal should record its source node');
-  assertEqual(consumedResult.actState.characterEncounter.characters.VV.preSignalPhaseIndex, placedResult.placed.targetPhaseIndex, 'pre_signal should record its source phase');
+  assert(consumedResult.actState.characterEncounter.signaled.VV, 'VV should remember preSignalDone in compact signaled ledger');
+  assert(!consumedResult.actState.characterEncounter.met?.VV, 'pre_signal should not unlock firstMeetDone');
+  assertEqual(consumedResult.actState.characterEncounter.signaled.VV.node, placedResult.placed.targetNodeId, 'pre_signal should record its source node');
+  assertEqual(consumedResult.actState.characterEncounter.signaled.VV.phase, placedResult.placed.targetPhaseIndex, 'pre_signal should record its source phase');
   assert(consumedResult.placed, 'pre_signal should immediately place the first_meet follow-up');
   assertEqual(consumedResult.placed.type, 'first_meet', 'VV follow-up request should be first_meet');
   assertEqual(consumedResult.placed.targetNodeIndex, placedResult.placed.targetNodeIndex + 1, 'first_meet follow-up should target the next node after pre_signal');

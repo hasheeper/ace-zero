@@ -155,10 +155,23 @@ function currentRouteToNode5A() {
 }
 
 function firstActiveQueueItem(actState, predicate = () => true) {
-  const queue = actState.characterEncounter && Array.isArray(actState.characterEncounter.queue)
-    ? actState.characterEncounter.queue
-    : [];
-  return queue.find((item) => !['triggered', 'expired', 'cancelled'].includes(item.status) && predicate(item));
+  const active = actState.characterEncounter && actState.characterEncounter.active && typeof actState.characterEncounter.active === 'object'
+    ? actState.characterEncounter.active
+    : {};
+  return Object.entries(active)
+    .map(([charKey, entry]) => ({
+      charKey,
+      type: entry?.kind === 'signal' ? 'pre_signal' : 'first_meet',
+      status: entry?.state === 'placed' ? 'placed' : 'queued',
+      targetNodeId: entry?.node || '',
+      targetNodeIndex: Math.max(0, Math.round(Number(entry?.nodeIndex) || 0)),
+      targetPhaseIndex: Number.isFinite(Number(entry?.phase)) ? Math.max(0, Math.min(3, Math.round(Number(entry.phase)))) : (entry?.kind === 'signal' ? 0 : 1),
+      createdNodeIndex: Math.max(0, Math.round(Number(entry?.from) || 0)),
+      expiresNodeIndex: Math.max(0, Math.round(Number(entry?.until) || 0)),
+      priority: Math.round(Number(entry?.priority) || 0),
+      spentScore: Math.max(0, Math.round(Number(entry?.score) || 0))
+    }))
+    .find(predicate);
 }
 
 function createTavernRuntime(tavernFactory, sandbox, hooks = {}) {

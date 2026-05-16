@@ -428,8 +428,7 @@ const WorldExpansionStateSchema = z.object({
 const ACT_RESOURCE_KEYS = ['combat', 'rest', 'asset', 'vision'];
 const ACT_SLOT_SOURCES = ['limited', 'reserve'];
 const ACT_STAGE_VALUES = ['planning', 'executing', 'route', 'complete'];
-const ENCOUNTER_ACTIVE_QUEUE_STATUSES = ['queued', 'placed'];
-const ENCOUNTER_CHARACTER_STATUSES = ['locked', 'queued', 'placed', 'pre_signal', 'first_meet', 'introduced'];
+const ENCOUNTER_CHARACTER_KEYS = ['SIA', 'TRIXIE', 'POPPY', 'COTA', 'VV', 'KUZUHA', 'KAKO', 'EULALIA'];
 
 function makeDefaultActResourceCounts(defaultValue = 0) {
   return {
@@ -445,81 +444,127 @@ function normalizeActResourceKey(value, fallback = 'vision') {
   return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
 }
 
-function normalizeCharacterEncounterState(value) {
-  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const out = {};
-  const metaSource = source.meta && typeof source.meta === 'object' && !Array.isArray(source.meta) ? source.meta : null;
-  const hasEncounterShape = Boolean(metaSource)
-    || Array.isArray(source.queue)
-    || (source.characters && typeof source.characters === 'object' && !Array.isArray(source.characters));
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
-  if (hasEncounterShape) {
-    out.meta = {
-      version: Math.max(1, Math.round(Number(metaSource?.version) || 1)),
-      lastFirstMeetNodeIndex: Math.max(0, Math.round(Number(metaSource?.lastFirstMeetNodeIndex) || 0)),
-      lastSignalNodeIndex: Math.max(0, Math.round(Number(metaSource?.lastSignalNodeIndex) || 0))
-    };
+function normalizeEncounterKind(value) {
+  const normalized = normalizeTrimmedString(value, 'meet').toLowerCase();
+  return normalized === 'pre_signal' || normalized === 'signal' ? 'signal' : 'meet';
+}
+
+function normalizeEncounterPhase(value, fallback = null) {
+  if (!Number.isFinite(Number(value))) return fallback;
+  const phase = Math.round(Number(value));
+  if (phase < 0) return fallback;
+  return Math.max(0, Math.min(3, phase));
+}
+
+function normalizeEncounterFactEntry(value) {
+  const source = value === true ? {} : (isPlainObject(value) ? value : {});
+  const out = {};
+  const node = normalizeTrimmedString(source.node, '');
+  const nodeIndex = Math.max(0, Math.round(Number(source.nodeIndex) || 0));
+  const phase = normalizeEncounterPhase(source.phase, null);
+  if (node) out.node = node;
+  if (nodeIndex > 0) out.nodeIndex = nodeIndex;
+  if (phase !== null) out.phase = phase;
+  return out;
+}
+
+function normalizeEncounterActiveEntry(value, rawCharKey = '') {
+  if (!isPlainObject(value)) return null;
+  const charKey = normalizeTrimmedString(rawCharKey, '').toUpperCase();
+  if (!ENCOUNTER_CHARACTER_KEYS.includes(charKey)) return null;
+  const hasExplicitState = value.state != null;
+  const rawState = normalizeTrimmedString(value.state, 'queued').toLowerCase();
+  if (hasExplicitState && rawState !== 'queued' && rawState !== 'placed') return null;
+  const kind = normalizeEncounterKind(value.kind);
+  let state = rawState === 'placed' ? 'placed' : 'queued';
+  const node = normalizeTrimmedString(value.node, '');
+  if (state === 'placed' && !node) state = 'queued';
+  const phase = normalizeEncounterPhase(value.phase, null);
+  const nodeIndex = Math.max(0, Math.round(Number(value.nodeIndex) || 0));
+  const from = Math.max(0, Math.round(Number(value.from) || 0));
+  const until = Math.max(0, Math.round(Number(value.until) || 0));
+  const priority = Math.round(Number(value.priority) || 0);
+  const score = Math.max(0, Math.round(Number(value.score) || 0));
+  const entry = { kind, state };
+  if (node) entry.node = node;
+  if (nodeIndex > 0) entry.nodeIndex = nodeIndex;
+  if (phase !== null && (kind === 'signal' || phase !== 1)) entry.phase = phase;
+  if (from > 0) entry.from = from;
+  if (until > 0) entry.until = until;
+  if (priority !== 0) entry.priority = priority;
+  if (score > 0) entry.score = score;
+  return { charKey, entry };
+}
+
+function shouldReplaceEncounterActive(current, next) {
+  if (!current) return true;
+  const currentRank = current.state === 'placed' ? 2 : 1;
+  const nextRank = next.state === 'placed' ? 2 : 1;
+  if (currentRank !== nextRank) return nextRank > currentRank;
+  const currentPriority = Math.round(Number(current.priority) || 0);
+  const nextPriority = Math.round(Number(next.priority) || 0);
+  if (currentPriority !== nextPriority) return nextPriority > currentPriority;
+  return Math.max(0, Math.round(Number(next.from) || 0)) < Math.max(0, Math.round(Number(current.from) || 0));
+}
+
+function putEncounterActive(target, charKey, entry) {
+  if (!target.active) target.active = {};
+  if (shouldReplaceEncounterActive(target.active[charKey], entry)) target.active[charKey] = entry;
+}
+
+function putEncounterFact(target, bucket, charKey, fact) {
+  if (!target[bucket]) target[bucket] = {};
+  target[bucket][charKey] = normalizeEncounterFactEntry(fact);
+}
+
+function normalizeCharacterEncounterState(value) {
+  const source = isPlainObject(value) ? value : {};
+  if (source.v !== 2) return {};
+
+  const compact = {};
+  const lastMeet = Math.max(0, Math.round(Number(source.lastMeet) || 0));
+  if (lastMeet > 0) compact.lastMeet = lastMeet;
+
+  if (isPlainObject(source.active)) {
+    Object.entries(source.active).forEach(([rawKey, rawEntry]) => {
+      const normalized = normalizeEncounterActiveEntry(rawEntry, rawKey);
+      if (normalized) putEncounterActive(compact, normalized.charKey, normalized.entry);
+    });
   }
 
-  const queue = (Array.isArray(source.queue) ? source.queue : [])
-    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
-    .map((item, index) => {
-      const charKey = normalizeTrimmedString(item.charKey || item.character || item.key, '').toUpperCase();
-      const type = normalizeTrimmedString(item.type, 'first_meet').toLowerCase();
-      const rawStatus = normalizeTrimmedString(item.status, 'queued').toLowerCase();
-      const status = ENCOUNTER_ACTIVE_QUEUE_STATUSES.includes(rawStatus) ? rawStatus : '';
-      const targetNodeId = normalizeTrimmedString(item.targetNodeId || item.nodeId, '');
-      if (!charKey || !status) return null;
-      const parsedPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
-      return {
-        id: normalizeTrimmedString(item.id, `enc:${charKey}:${type}:${targetNodeId || 'unplaced'}:${index}`),
-        charKey,
-        type,
-        status,
-        targetNodeId,
-        targetNodeIndex: Math.max(0, Math.round(Number(item.targetNodeIndex) || 0)),
-        targetPhaseIndex: type === 'first_meet' ? 1 : parsedPhaseIndex,
-        createdNodeIndex: Math.max(0, Math.round(Number(item.createdNodeIndex) || 0)),
-        expiresNodeIndex: Math.max(0, Math.round(Number(item.expiresNodeIndex) || 0)),
-        priority: Math.round(Number(item.priority) || 0),
-        spentScore: Math.max(0, Math.round(Number(item.spentScore) || 0))
-      };
-    })
-    .filter(Boolean);
-  if (queue.length) out.queue = queue;
+  if (isPlainObject(source.met)) {
+    Object.entries(source.met).forEach(([rawKey, rawValue]) => {
+      const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
+      if (ENCOUNTER_CHARACTER_KEYS.includes(charKey)) putEncounterFact(compact, 'met', charKey, rawValue);
+    });
+  }
 
-  const charactersSource = source.characters && typeof source.characters === 'object' && !Array.isArray(source.characters)
-    ? source.characters
-    : {};
-  const characters = {};
-  Object.entries(charactersSource).forEach(([rawKey, rawValue]) => {
-    const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
-    const stateSource = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : {};
-    if (!charKey) return;
-    const rawStatus = normalizeTrimmedString(stateSource.status, 'locked').toLowerCase();
-    const status = ENCOUNTER_CHARACTER_STATUSES.includes(rawStatus) ? rawStatus : 'locked';
-    characters[charKey] = {
-      status,
-      firstMeetDone: stateSource.firstMeetDone === true,
-      preSignalDone: stateSource.preSignalDone === true,
-      preSignalNodeId: normalizeTrimmedString(stateSource.preSignalNodeId, ''),
-      preSignalAtNodeIndex: Math.max(0, Math.round(Number(stateSource.preSignalAtNodeIndex) || 0)),
-      preSignalPhaseIndex: Number.isFinite(Number(stateSource.preSignalPhaseIndex))
-        ? Math.max(0, Math.min(3, Math.round(Number(stateSource.preSignalPhaseIndex))))
-        : -1,
-      cooldownUntilNodeIndex: Math.max(0, Math.round(Number(stateSource.cooldownUntilNodeIndex) || 0)),
-      queuedRequestId: normalizeTrimmedString(stateSource.queuedRequestId, ''),
-      placedNodeId: normalizeTrimmedString(stateSource.placedNodeId, ''),
-      introducedNodeId: normalizeTrimmedString(stateSource.introducedNodeId, ''),
-      introducedAtNodeIndex: Math.max(0, Math.round(Number(stateSource.introducedAtNodeIndex) || 0)),
-      introducedPhaseIndex: Number.isFinite(Number(stateSource.introducedPhaseIndex))
-        ? Math.max(0, Math.min(3, Math.round(Number(stateSource.introducedPhaseIndex))))
-        : -1,
-      lastEvaluatedNodeIndex: Math.max(0, Math.round(Number(stateSource.lastEvaluatedNodeIndex) || 0))
-    };
-  });
-  if (Object.keys(characters).length) out.characters = characters;
+  if (isPlainObject(source.signaled)) {
+    Object.entries(source.signaled).forEach(([rawKey, rawValue]) => {
+      const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
+      if (ENCOUNTER_CHARACTER_KEYS.includes(charKey)) putEncounterFact(compact, 'signaled', charKey, rawValue);
+    });
+  }
 
+  if (compact.met && compact.active) {
+    Object.keys(compact.met).forEach(charKey => delete compact.active[charKey]);
+    if (!Object.keys(compact.active).length) delete compact.active;
+  }
+
+  const hasData = compact.lastMeet > 0
+    || (compact.active && Object.keys(compact.active).length)
+    || (compact.met && Object.keys(compact.met).length)
+    || (compact.signaled && Object.keys(compact.signaled).length);
+  if (!hasData) return {};
+  const out = { v: 2 };
+  if (compact.active && Object.keys(compact.active).length) out.active = compact.active;
+  if (compact.met && Object.keys(compact.met).length) out.met = compact.met;
+  if (compact.signaled && Object.keys(compact.signaled).length) out.signaled = compact.signaled;
+  if (compact.lastMeet > 0) out.lastMeet = compact.lastMeet;
   return out;
 }
 

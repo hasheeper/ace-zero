@@ -8,7 +8,8 @@ const {
   createActStateAt,
   createContext,
   currentRouteToNode4A,
-  currentRouteToNode5A
+  currentRouteToNode5A,
+  firstActiveQueueItem
 } = require('./smoke-utils');
 
 const { sandbox, act, tavernFactory } = loadTavernSandbox();
@@ -50,15 +51,14 @@ async function testHostAutoAddsEligibleEncounter() {
       clockPressure: 0,
       act: createActStateAt(act, 4, currentRouteToNode4A(), {
         resourceSpent: { combat: 10, rest: 10, asset: 10, vision: 10 },
-        characterEncounter: { queue: [] }
+        characterEncounter: {}
       })
     }
   };
   const { runtime } = makeRuntimeWithEra(eraVars);
 
   const synced = await runtime.synchronizeActCharacterState(eraVars);
-  const queue = synced.eraVars.world.act.characterEncounter.queue || [];
-  const queuedCota = queue.find((item) => item.charKey === 'COTA' && item.status === 'queued');
+  const queuedCota = firstActiveQueueItem(synced.eraVars.world.act, (item) => item.charKey === 'COTA' && item.status === 'queued');
   assert(synced.changed, 'Host sync should persist automatic encounter queueing');
   assert(queuedCota, 'Host sync should queue eligible COTA without manual RULE ADD');
   assertEqual(queuedCota.targetNodeIndex, 0, 'Host auto queueing should not assign a target before the scheduler runs');
@@ -90,15 +90,18 @@ async function testHostAutoQueuesAllEligibleEncounters() {
         'node07-a-route'
       ], {
         resourceSpent: { combat: 12, rest: 0, asset: 0, vision: 0 },
-        characterEncounter: { queue: [] }
+        characterEncounter: {}
       })
     }
   };
   const { runtime } = makeRuntimeWithEra(eraVars);
 
   const synced = await runtime.synchronizeActCharacterState(eraVars);
-  const queue = synced.eraVars.world.act.characterEncounter.queue || [];
-  const active = queue.filter((item) => !['triggered', 'expired', 'cancelled'].includes(item.status));
+  const active = Object.entries(synced.eraVars.world.act.characterEncounter.active || {})
+    .map(([charKey, entry]) => ({
+      charKey,
+      status: entry.state === 'placed' ? 'placed' : 'queued'
+    }));
   assert(synced.changed, 'Host sync should persist queued eligible encounters');
   assert(active.length >= 2, 'Host auto mode should queue every currently eligible encounter, not just one');
   assert(!active.some((item) => item.status === 'placed'), 'Host auto mode should not place encounters outside the ACT scheduler');
@@ -125,15 +128,14 @@ async function testPhaseAdvanceQueuesPoppyImmediatelyWhenConditionBecomesTrue() 
         resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
         phase_index: 0,
         phase_advance: 1,
-        characterEncounter: { queue: [] }
+        characterEncounter: {}
       })
     }
   };
   const { runtime } = makeRuntimeWithEra(eraVars);
 
   const resolved = await runtime.resolvePendingActAdvance(eraVars);
-  const queue = resolved.eraVars.world.act.characterEncounter.queue || [];
-  const poppy = queue.find((item) => item.charKey === 'POPPY');
+  const poppy = firstActiveQueueItem(resolved.eraVars.world.act, (item) => item.charKey === 'POPPY');
   assert(poppy, 'POPPY should enter encounter queue during the same NODE4 phase advance that satisfies conditions');
   assertEqual(poppy.status, 'queued', 'POPPY should be queued immediately, while placement remains scheduler-controlled');
   assertEqual(poppy.targetNodeIndex, 0, 'Queued POPPY should not receive a target until the scheduler runs');
@@ -159,15 +161,14 @@ async function testQueuedPoppySchedulesAtNodeBoundary() {
         resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
         phase_index: 0,
         phase_advance: 4,
-        characterEncounter: { queue: [] }
+        characterEncounter: {}
       })
     }
   };
   const { runtime } = makeRuntimeWithEra(eraVars);
 
   const resolved = await runtime.resolvePendingActAdvance(eraVars);
-  const queue = resolved.eraVars.world.act.characterEncounter.queue || [];
-  const poppy = queue.find((item) => item.charKey === 'POPPY');
+  const poppy = firstActiveQueueItem(resolved.eraVars.world.act, (item) => item.charKey === 'POPPY');
   assert(poppy, 'POPPY should stay in the encounter queue after node-boundary scheduling');
   assertEqual(poppy.status, 'placed', 'POPPY should be placed by the scheduler at the node boundary');
   assert(poppy.targetNodeIndex > 4 && poppy.targetNodeIndex <= 6, 'POPPY should target a near future path node from NODE4, not drift to NODE7');
@@ -306,15 +307,12 @@ async function testIntroducedEncounterPreservesManualPresentAfterFirstMeetPendin
         route_history: [...currentRouteToNode5A(), 'node06-a-route'],
         phase_advance: 0,
         characterEncounter: {
-          queue: [],
-          characters: {
+          v: 2,
+          met: {
             COTA: {
-              status: 'introduced',
-              firstMeetDone: true,
-              introducedNodeId: 'node05-a-route',
-              introducedAtNodeIndex: 5,
-              introducedPhaseIndex: 1,
-              firstMeetHint: 'COTA first meet hint'
+              node: 'node05-a-route',
+              nodeIndex: 5,
+              phase: 1
             }
           }
         }
@@ -344,12 +342,12 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
   const base = createActStateAt(act, 9, route, {
     resourceSpent: { combat: 20, rest: 20, asset: 20, vision: 20 },
     characterEncounter: {
-      characters: {
-        SIA: { status: 'introduced', firstMeetDone: true },
-        TRIXIE: { status: 'introduced', firstMeetDone: true },
-        COTA: { status: 'introduced', firstMeetDone: true }
-      },
-      queue: []
+      v: 2,
+      met: {
+        SIA: {},
+        TRIXIE: {},
+        COTA: {}
+      }
     }
   });
   const queued = act.enqueueEligibleCharacterEncounters(base, {

@@ -9,9 +9,15 @@ const {
 
 const schemaPath = path.join(PACK_ROOT, 'schema/acezero-schema.js');
 const source = fs.readFileSync(schemaPath, 'utf8');
+const contextSource = fs.readFileSync(path.join(PACK_ROOT, 'tavern/context.js'), 'utf8');
+const initSource = fs.readFileSync(path.join(PACK_ROOT, '../../../../st/init/initvar.txt'), 'utf8');
 
 function includes(fragment, message) {
   assert(source.includes(fragment), message);
+}
+
+function includesIn(haystack, fragment, message) {
+  assert(haystack.includes(fragment), message);
 }
 
 function matches(pattern, message) {
@@ -29,7 +35,11 @@ includes('world.storyFlags = normalizeBooleanFlagMap(world.storyFlags);', 'World
 
 includes('pendingAssetDeckCommands: z.array(z.any()).default([])', 'WorldActSchema should preserve pending AssetDeck commands');
 includes('function normalizeCharacterEncounterState', 'Schema should compact characterEncounter');
+includes('if (source.v !== 2) return {};', 'Schema should reject non-v2 characterEncounter state');
 includes('characterEncounter: z.record(z.string(), z.any()).default({}).transform(v => normalizeCharacterEncounterState(v))', 'WorldActSchema should compact characterEncounter object');
+assert(!source.includes('source.queue'), 'Schema should not migrate legacy encounter queue');
+assert(!source.includes('source.characters'), 'Schema should not migrate legacy encounter character mirrors');
+assert(!source.includes('source.meta'), 'Schema should not migrate legacy encounter meta');
 includes('pendingAssetDeckCommands: [],', 'makeDefaultActState should include pending AssetDeck commands default');
 includes('function makeDefaultAssetDeckState', 'Schema should define makeDefaultAssetDeckState');
 includes('const WorldAssetDeckSchema', 'Schema should define WorldAssetDeckSchema');
@@ -49,5 +59,11 @@ matches(/RINO:\s*\{\s*activated:\s*true,\s*introduced:\s*true,\s*present:\s*true
 });
 matches(/function makeDefaultCastNode\(\)\s*\{\s*return\s*\{\s*activated:\s*true,\s*introduced:\s*false,\s*present:\s*false,\s*inParty:\s*false,/m, 'Encounter cast nodes should default activated but not introduced/present/inParty');
 assert(!source.includes('miniKnown'), 'Schema should no longer expose miniKnown');
+includesIn(contextSource, '[NOT INTRODUCED(introduced=false, forbidden_to_appear=true)]', 'Hero context should mark not-introduced characters as forbidden to appear');
+includesIn(contextSource, '禁止在正文中出现、发言、行动、被旁白写成在场', 'Hero context should state the not-introduced appearance ban');
+includesIn(initSource, 'characterEncounter:\n      v: 2', 'Initial variables should use v2 compact encounter ledger');
+assert(!initSource.includes('queuedRequestId'), 'Initial variables should not include legacy encounter request ids');
+assert(!initSource.includes('placedNodeId'), 'Initial variables should not include legacy encounter placement mirrors');
+assert(!initSource.includes('firstMeetDone'), 'Initial variables should not include legacy encounter completion mirrors');
 
 console.log('schema-smoke ok');

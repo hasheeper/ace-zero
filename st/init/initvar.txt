@@ -201,7 +201,8 @@ world:
       rest: 0
       asset: 0
       vision: 0
-    characterEncounter: {}
+    characterEncounter:
+      v: 2
     pendingResolutions: []
     pendingAssetDeckCommands: []
     resolutionHistory: []

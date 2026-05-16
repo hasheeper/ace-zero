@@ -698,20 +698,15 @@
     }
     const act = derived?.act || getWorldActState(eraVars);
     const currentNodeId = normalizeTrimmedString(derived?.currentNodeId, '') || getCurrentActNodeId(act);
-    const currentPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
-    const queue = Array.isArray(act?.characterEncounter?.queue) ? act.characterEncounter.queue : [];
     const hints = {};
-
-    queue.forEach((item) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return;
-      if (item.type !== 'first_meet' || item.status !== 'placed') return;
-      if (normalizeTrimmedString(item.targetNodeId, '') !== currentNodeId) return;
-      const targetPhaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
-      if (targetPhaseIndex !== currentPhaseIndex) return;
-      const charKey = normalizeTrimmedString(item.charKey, '').toUpperCase();
-      const hint = normalizeTrimmedString(item.firstMeetHint || item.hint || item.summary, '');
-      if (charKey && hint) hints[charKey] = hint;
-    });
+    const moduleResult = runActModuleMethod('getCharacterEncounterFirstMeetMap', act, currentNodeId);
+    if (moduleResult.ok && moduleResult.value && typeof moduleResult.value === 'object') {
+      Object.entries(moduleResult.value).forEach(([rawKey, rawHint]) => {
+        const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
+        const hint = normalizeTrimmedString(rawHint, '');
+        if (charKey && hint) hints[charKey] = hint;
+      });
+    }
 
     return hints;
   }

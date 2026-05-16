@@ -172,9 +172,8 @@
   function normalizeEncounterQueueType(value) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterQueueType(value); }
   function createDefaultEncounterCharacterState(charKey) { return ACT_ENCOUNTER_RUNTIME.createDefaultEncounterCharacterState(charKey); }
   function normalizeEncounterReasonCodes(value) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterReasonCodes(value); }
-  function normalizeEncounterCharacterState(rawValue, charKey) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterCharacterState(rawValue, charKey); }
-  function normalizeEncounterQueueItem(rawItem, fallbackIndex = 0) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterQueueItem(rawItem, fallbackIndex); }
   function normalizeCharacterEncounterState(value) { return ACT_ENCOUNTER_RUNTIME.normalizeCharacterEncounterState(value); }
+  function expandCharacterEncounterState(value) { return ACT_ENCOUNTER_RUNTIME.expandCharacterEncounterState(value); }
   function getActiveEncounterCharacterKeys(characterEncounterInput) { return ACT_ENCOUNTER_RUNTIME.getActiveEncounterCharacterKeys(characterEncounterInput); }
   function getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId); }
   function getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId); }
@@ -1560,7 +1559,7 @@
 	      }
 	    }
 
-    const encounterState = normalizeCharacterEncounterState(act.characterEncounter);
+    const encounterState = expandCharacterEncounterState(act.characterEncounter);
     Object.entries(encounterState.characters).forEach(([charKey, encounterChar]) => {
       if (!states[charKey]) return;
       if (encounterChar.status === 'introduced' || encounterChar.status === 'first_meet' || encounterChar.firstMeetDone) {
@@ -1702,6 +1701,7 @@
     getDefaultActState,
     normalizeActState,
     normalizeCharacterEncounterState,
+    expandCharacterEncounterState,
     getCharacterEncounterNodeFirstMeetMap,
     evaluateCharacterEncounterEligibility,
     enqueueEligibleCharacterEncounters,

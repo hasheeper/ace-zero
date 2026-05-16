@@ -150,8 +150,9 @@ ${characterSection}
   主债务: ${_formatFunds(majorDebt)} (${_formatFundsNumber(majorDebt)} majorDebt)
 [PRESENT(present=true)]
 ${presentSection}
-[NOT INTRODUCED(introduced=false)]
+[NOT INTRODUCED(introduced=false, forbidden_to_appear=true)]
 ${notIntroducedSection}
+  规则: 上列角色尚未正式出场，禁止在正文中出现、发言、行动、被旁白写成在场，除非后续变量明确写入 introduced=true 或 present=true。
 [IN PARTY(inParty=true)]
 ${inPartySection}
 </ace0_hero_state>`;

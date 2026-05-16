@@ -369,52 +369,13 @@ async function testEncounterReplayPersistsCompactState() {
 
   const afterVars = clone(baseVars.stat_data);
   afterVars.world.act.characterEncounter = {
-    meta: { version: 1, lastFirstMeetNodeIndex: 0, lastSignalNodeIndex: 0 },
-    queue: [
-      {
-        id: 'enc:chapter0_exchange:COTA:first_meet:1:0',
-        charKey: 'COTA',
-        type: 'first_meet',
-        status: 'queued',
-        targetNodeId: '',
-        targetNodeIndex: 0,
-        targetPhaseIndex: 1,
-        createdNodeIndex: 1,
-        expiresNodeIndex: 0,
-        priority: 188,
-        spentScore: 0
-      }
-    ],
-    characters: {
-      SIA: {
-        status: 'locked',
-        firstMeetDone: false,
-        preSignalDone: false,
-        preSignalNodeId: '',
-        preSignalAtNodeIndex: 0,
-        preSignalPhaseIndex: -1,
-        cooldownUntilNodeIndex: 0,
-        queuedRequestId: '',
-        placedNodeId: '',
-        introducedNodeId: '',
-        introducedAtNodeIndex: 0,
-        introducedPhaseIndex: -1,
-        lastEvaluatedNodeIndex: 0
-      },
+    v: 2,
+    active: {
       COTA: {
-        status: 'queued',
-        firstMeetDone: false,
-        preSignalDone: false,
-        preSignalNodeId: '',
-        preSignalAtNodeIndex: 0,
-        preSignalPhaseIndex: -1,
-        cooldownUntilNodeIndex: 0,
-        queuedRequestId: 'enc:chapter0_exchange:COTA:first_meet:1:0',
-        placedNodeId: '',
-        introducedNodeId: '',
-        introducedAtNodeIndex: 0,
-        introducedPhaseIndex: -1,
-        lastEvaluatedNodeIndex: 1
+        kind: 'meet',
+        state: 'queued',
+        from: 1,
+        priority: 188
       }
     }
   };
@@ -430,13 +391,14 @@ async function testEncounterReplayPersistsCompactState() {
   const message = sandbox.__messages[17].message;
   assertEqual(result.ok, true, 'encounter replay should persist through MVU replay');
   assert(message.includes('ACE0_REPLAY:runtime:auto-encounters'), 'encounter replay should append deterministic replay block');
-  assert(message.includes('"path": "/world/act/characterEncounter/queue"'), 'encounter replay should include queued request');
-  assert(message.includes('"path": "/world/act/characterEncounter/characters"'), 'encounter replay should include active character state map');
+  assert(message.includes('"path": "/world/act/characterEncounter/active"'), 'encounter replay should include compact active ledger');
   assert(message.includes('"COTA"'), 'encounter replay should include active COTA state');
-  assert(!message.includes('/world/act/characterEncounter/characters/SIA'), 'encounter replay should not write default locked characters');
+  assert(!message.includes('/world/act/characterEncounter/queue'), 'encounter replay should not persist legacy queue');
+  assert(!message.includes('/world/act/characterEncounter/characters'), 'encounter replay should not persist character mirrors');
+  assert(!message.includes('queuedRequestId'), 'encounter replay should not persist derived request ids');
   assert(!message.includes('"path": "/world/act",'), 'encounter replay should not replace the whole ACT subtree');
-  assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.queue[0].charKey, 'COTA', 'encounter queue should replay COTA');
-  assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.characters.COTA.status, 'queued', 'encounter character state should replay COTA status');
+  assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.v, 2, 'encounter replay should store v2 compact state');
+  assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.active.COTA.state, 'queued', 'encounter active ledger should replay COTA status');
 }
 
 async function testPhaseAdvancePersistsActRateAndControlState() {
@@ -654,6 +616,17 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
     phase_advance: 0,
     phase_slots: [null, null, null, null],
     reserve: { combat: 1, rest: 1, asset: 1, vision: 1 },
+    characterEncounter: {
+      v: 2,
+      active: {
+        COTA: {
+          kind: 'meet',
+          state: 'queued',
+          from: 1,
+          priority: 188
+        }
+      }
+    },
     narrativeTension: 20,
     pendingTransitionTarget: 'chapter-debug',
     transitionRequestTarget: 'chapter-debug',
@@ -727,10 +700,10 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
       floorKey: 'message:13'
     },
     characterEncounter: {
-      meta: { version: 1, lastFirstMeetNodeIndex: 0, lastSignalNodeIndex: 0 },
+      meta: { version: 2, lastFirstMeetNodeIndex: 0, lastSignalNodeIndex: 0 },
       queue: [],
       characters: {
-        COTA: { status: 'locked', firstMeetDone: false, lastEvaluatedNodeIndex: 0 }
+        COTA: { status: 'queued', queuedRequestId: 'debug-only', placedNodeId: '' }
       }
     }
   };
@@ -757,12 +730,13 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   assert(!message.includes('"path": "/world/clockPressure"'), 'dashboard ACT commit should not write clock pressure from full payload');
   assert(!message.includes('"path": "/world/location"'), 'dashboard ACT commit should not write location from full payload');
   assert(!message.includes('"path": "/world/assetDeck"'), 'dashboard ACT commit should not write unchanged assetDeck');
-  assert(!message.includes('/world/act/characterEncounter'), 'dashboard ACT commit should not write characterEncounter normalization payloads');
+  assert(!message.includes('/world/act/characterEncounter'), 'dashboard ACT commit should not write characterEncounter UI expansion payloads');
   assert(!message.includes('/world/act/narrativeTension'), 'dashboard ACT commit should not remove narrativeTension');
   assert(!message.includes('/world/act/pendingTransitionTarget'), 'dashboard ACT commit should not remove transition scratch fields');
   assert(!message.includes('/world/act/transitionRequestTarget'), 'dashboard ACT commit should not remove transition scratch fields');
   assert(!message.includes('/world/act/pendingTransitionPrompt'), 'dashboard ACT commit should not remove transition scratch fields');
   assertEqual(sandbox.__messageVars[13].stat_data.world.act.reserve.combat, 0, 'dashboard replay should apply ACT reserve leaf');
+  assertEqual(sandbox.__messageVars[13].stat_data.world.act.characterEncounter.active.COTA.state, 'queued', 'dashboard replay should preserve existing compact encounter ledger');
   assertEqual(sandbox.__messageVars[13].stat_data.world.act.pendingTransitionTarget, 'chapter-debug', 'dashboard replay should preserve transition scratch fields');
   assertEqual(sandbox.__messageVars[13].stat_data.world.current_time.day, 1, 'dashboard replay should not apply full world time payload');
   assertEqual(sandbox.__messageVars[13].stat_data.world.clockPressure, 5, 'dashboard replay should not apply full world clock payload');
