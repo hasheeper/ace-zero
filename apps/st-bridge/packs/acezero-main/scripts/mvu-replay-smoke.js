@@ -341,6 +341,104 @@ async function testPublicApisPersistThroughReplayOnly() {
   assertEqual(sandbox.__messageVars[15].stat_data.world.act.narrativeTension, 44, 'narrative tension replay should apply');
 }
 
+async function testEncounterReplayPersistsCompactState() {
+  const sandbox = makePluginSandbox();
+  const act = sandbox.ACE0Modules.act;
+  sandbox.__currentMessageId = 17;
+  const baseVars = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero(),
+      world: {
+        current_time: { day: 1, phase: 'MORNING' },
+        clockPressure: 0,
+        act: createActStateAt(act, 1, ['node1-entry'], {
+          characterEncounter: {}
+        })
+      }
+    },
+    schema: 'smoke'
+  };
+  sandbox.__messages[17] = {
+    message_id: 17,
+    role: 'assistant',
+    message: 'encounter replay smoke\n<StatusPlaceHolderImpl/>'
+  };
+  sandbox.__messageVars[16] = clone(baseVars);
+  sandbox.__messageVars[17] = clone(baseVars);
+
+  const afterVars = clone(baseVars.stat_data);
+  afterVars.world.act.characterEncounter = {
+    meta: { version: 1, lastFirstMeetNodeIndex: 0, lastSignalNodeIndex: 0 },
+    queue: [
+      {
+        id: 'enc:chapter0_exchange:COTA:first_meet:1:0',
+        charKey: 'COTA',
+        type: 'first_meet',
+        status: 'queued',
+        targetNodeId: '',
+        targetNodeIndex: 0,
+        targetPhaseIndex: 1,
+        createdNodeIndex: 1,
+        expiresNodeIndex: 0,
+        priority: 188,
+        spentScore: 0
+      }
+    ],
+    characters: {
+      SIA: {
+        status: 'locked',
+        firstMeetDone: false,
+        preSignalDone: false,
+        preSignalNodeId: '',
+        preSignalAtNodeIndex: 0,
+        preSignalPhaseIndex: -1,
+        cooldownUntilNodeIndex: 0,
+        queuedRequestId: '',
+        placedNodeId: '',
+        introducedNodeId: '',
+        introducedAtNodeIndex: 0,
+        introducedPhaseIndex: -1,
+        lastEvaluatedNodeIndex: 0
+      },
+      COTA: {
+        status: 'queued',
+        firstMeetDone: false,
+        preSignalDone: false,
+        preSignalNodeId: '',
+        preSignalAtNodeIndex: 0,
+        preSignalPhaseIndex: -1,
+        cooldownUntilNodeIndex: 0,
+        queuedRequestId: 'enc:chapter0_exchange:COTA:first_meet:1:0',
+        placedNodeId: '',
+        introducedNodeId: '',
+        introducedAtNodeIndex: 0,
+        introducedPhaseIndex: -1,
+        lastEvaluatedNodeIndex: 1
+      }
+    }
+  };
+
+  const result = await sandbox.ACE0Plugin.commitReplayPatch({
+    floorKey: 'message:17',
+    messageId: 17,
+    operationId: 'runtime:auto-encounters',
+    afterVars,
+    paths: ['/world/act/characterEncounter']
+  });
+
+  const message = sandbox.__messages[17].message;
+  assertEqual(result.ok, true, 'encounter replay should persist through MVU replay');
+  assert(message.includes('ACE0_REPLAY:runtime:auto-encounters'), 'encounter replay should append deterministic replay block');
+  assert(message.includes('"path": "/world/act/characterEncounter/queue"'), 'encounter replay should include queued request');
+  assert(message.includes('"path": "/world/act/characterEncounter/characters"'), 'encounter replay should include active character state map');
+  assert(message.includes('"COTA"'), 'encounter replay should include active COTA state');
+  assert(!message.includes('/world/act/characterEncounter/characters/SIA'), 'encounter replay should not write default locked characters');
+  assert(!message.includes('"path": "/world/act",'), 'encounter replay should not replace the whole ACT subtree');
+  assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.queue[0].charKey, 'COTA', 'encounter queue should replay COTA');
+  assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.characters.COTA.status, 'queued', 'encounter character state should replay COTA status');
+}
+
 async function testReplayBlockRemovedWhenOperationReturnsToBaseline() {
   const sandbox = makePluginSandbox();
   const act = sandbox.ACE0Modules.act;
@@ -589,6 +687,7 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   assert(message.includes('"path": "/world/act/reserve/combat"'), 'dashboard ACT commit should include changed reserve leaf');
   assert(message.includes('"path": "/world/act/phase_slots"'), 'dashboard ACT commit should include changed phase slots array');
   assert(message.includes('"path": "/world/act/phasePlanLock/nodeId"'), 'dashboard ACT commit should include changed lock leaf');
+  assert(message.indexOf('"path": "/world/act/phasePlanLock/nodeId"') < message.indexOf('"path": "/world/act/phase_slots"'), 'dashboard ACT commit should write phase lock before phase slots');
   assert(!message.includes('"path": "/world/act",'), 'dashboard ACT commit should not replace the whole ACT subtree');
   assert(!message.includes('"path": "/world/current_time"'), 'dashboard ACT commit should ignore unchanged full world payload fields');
   assert(!message.includes('"path": "/world/clockPressure"'), 'dashboard ACT commit should not write clock pressure from full payload');
@@ -657,6 +756,7 @@ async function main() {
   await testActResultMissingActBaseDoesNotCreateActReplay();
   await testFloorProgressWritesOnlyLeafPatches();
   await testPublicApisPersistThroughReplayOnly();
+  await testEncounterReplayPersistsCompactState();
   await testReplayBlockRemovedWhenOperationReturnsToBaseline();
   await testPhaseAdvanceWritesReplayAndReplaysActAdvance();
   await testFloorKeyMismatchRejected();

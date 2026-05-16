@@ -84,13 +84,14 @@
     '/world/act/reserve',
     '/world/act/reserve_progress',
     '/world/act/income_progress',
+    '/world/act/phasePlanLock',
     '/world/act/phase_slots',
     '/world/act/phase_index',
     '/world/act/phase_advance',
     '/world/act/stage',
-    '/world/act/phasePlanLock',
     '/world/act/vision',
     '/world/act/resourceSpent',
+    '/world/act/characterEncounter',
     '/world/act/pendingResolutions',
     '/world/act/pendingAssetDeckCommands',
     '/world/act/resolutionHistory',
@@ -104,13 +105,14 @@
     '/world/act/reserve',
     '/world/act/reserve_progress',
     '/world/act/income_progress',
+    '/world/act/phasePlanLock',
     '/world/act/phase_slots',
     '/world/act/phase_index',
     '/world/act/phase_advance',
     '/world/act/stage',
-    '/world/act/phasePlanLock',
     '/world/act/vision',
     '/world/act/resourceSpent',
+    '/world/act/characterEncounter',
     '/world/act/pendingResolutions',
     '/world/act/pendingAssetDeckCommands',
     '/world/act/resolutionHistory',
@@ -275,6 +277,117 @@
         && value.pendingReplace == null;
     }
     return false;
+  }
+
+  function normalizeEncounterReplayStatus(value, fallback, allowed) {
+    const normalized = _normalizeTrimmedString(value, fallback).toLowerCase();
+    return allowed.includes(normalized) ? normalized : fallback;
+  }
+
+  function normalizeEncounterReplayQueueItem(item, fallbackIndex = 0) {
+    if (!isPlainObject(item)) return null;
+    const charKey = _normalizeTrimmedString(item.charKey || item.character || item.key, '').toUpperCase();
+    if (!charKey) return null;
+    const type = normalizeEncounterReplayStatus(item.type, 'first_meet', ['first_meet', 'pre_signal']);
+    const status = normalizeEncounterReplayStatus(item.status, 'queued', ['queued', 'placed']);
+    const targetNodeId = _normalizeTrimmedString(item.targetNodeId || item.nodeId, '');
+    return {
+      id: _normalizeTrimmedString(item.id, `enc:${charKey}:${type}:${targetNodeId || 'unplaced'}:${fallbackIndex}`),
+      charKey,
+      type,
+      status,
+      targetNodeId,
+      targetNodeIndex: Math.max(0, Math.round(Number(item.targetNodeIndex ?? item.nodeIndex) || 0)),
+      targetPhaseIndex: type === 'first_meet'
+        ? 1
+        : Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex ?? item.phaseIndex) || 0))),
+      createdNodeIndex: Math.max(0, Math.round(Number(item.createdNodeIndex) || 0)),
+      expiresNodeIndex: Math.max(0, Math.round(Number(item.expiresNodeIndex) || 0)),
+      priority: Math.round(Number(item.priority) || 0),
+      spentScore: Math.max(0, Math.round(Number(item.spentScore) || 0))
+    };
+  }
+
+  function normalizeEncounterReplayCharacterState(value) {
+    const source = isPlainObject(value) ? value : {};
+    const rawStatus = _normalizeTrimmedString(source.status, 'locked').toLowerCase();
+    const status = ['locked', 'queued', 'placed', 'pre_signal', 'first_meet', 'introduced'].includes(rawStatus)
+      ? rawStatus
+      : 'locked';
+    return {
+      status,
+      firstMeetDone: source.firstMeetDone === true,
+      preSignalDone: source.preSignalDone === true,
+      preSignalNodeId: _normalizeTrimmedString(source.preSignalNodeId, ''),
+      preSignalAtNodeIndex: Math.max(0, Math.round(Number(source.preSignalAtNodeIndex) || 0)),
+      preSignalPhaseIndex: Number.isFinite(Number(source.preSignalPhaseIndex))
+        ? Math.max(0, Math.min(3, Math.round(Number(source.preSignalPhaseIndex))))
+        : -1,
+      cooldownUntilNodeIndex: Math.max(0, Math.round(Number(source.cooldownUntilNodeIndex) || 0)),
+      queuedRequestId: _normalizeTrimmedString(source.queuedRequestId, ''),
+      placedNodeId: _normalizeTrimmedString(source.placedNodeId, ''),
+      introducedNodeId: _normalizeTrimmedString(source.introducedNodeId, ''),
+      introducedAtNodeIndex: Math.max(0, Math.round(Number(source.introducedAtNodeIndex) || 0)),
+      introducedPhaseIndex: Number.isFinite(Number(source.introducedPhaseIndex))
+        ? Math.max(0, Math.min(3, Math.round(Number(source.introducedPhaseIndex))))
+        : -1,
+      lastEvaluatedNodeIndex: Math.max(0, Math.round(Number(source.lastEvaluatedNodeIndex) || 0))
+    };
+  }
+
+  function isMeaningfulEncounterReplayCharacter(state) {
+    return state.status !== 'locked'
+      || state.firstMeetDone === true
+      || state.preSignalDone === true
+      || Boolean(state.preSignalNodeId)
+      || state.preSignalAtNodeIndex > 0
+      || state.cooldownUntilNodeIndex > 0
+      || Boolean(state.queuedRequestId)
+      || Boolean(state.placedNodeId)
+      || Boolean(state.introducedNodeId)
+      || state.introducedAtNodeIndex > 0
+      || state.lastEvaluatedNodeIndex > 0;
+  }
+
+  function compactCharacterEncounterForReplay(value) {
+    if (!isPlainObject(value)) return {};
+    const out = {};
+    const meta = isPlainObject(value.meta) ? value.meta : {};
+    const normalizedMeta = {
+      version: Math.max(1, Math.round(Number(meta.version) || 1)),
+      lastFirstMeetNodeIndex: Math.max(0, Math.round(Number(meta.lastFirstMeetNodeIndex) || 0)),
+      lastSignalNodeIndex: Math.max(0, Math.round(Number(meta.lastSignalNodeIndex) || 0))
+    };
+    if (
+      normalizedMeta.version > 1
+      || normalizedMeta.lastFirstMeetNodeIndex > 0
+      || normalizedMeta.lastSignalNodeIndex > 0
+    ) {
+      out.meta = normalizedMeta;
+    }
+
+    const queue = (Array.isArray(value.queue) ? value.queue : [])
+      .map((item, index) => normalizeEncounterReplayQueueItem(item, index))
+      .filter(Boolean);
+    if (queue.length) out.queue = queue;
+
+    const charactersSource = isPlainObject(value.characters) ? value.characters : {};
+    const characters = {};
+    Object.entries(charactersSource).forEach(([rawKey, rawValue]) => {
+      const charKey = _normalizeTrimmedString(rawKey, '').toUpperCase();
+      if (!charKey) return;
+      const state = normalizeEncounterReplayCharacterState(rawValue);
+      if (isMeaningfulEncounterReplayCharacter(state)) characters[charKey] = state;
+    });
+    if (Object.keys(characters).length) out.characters = characters;
+    return out;
+  }
+
+  function normalizeReplayValueForPath(path, value) {
+    if (path === '/world/act/characterEncounter') {
+      return compactCharacterEncounterForReplay(value);
+    }
+    return value;
   }
 
   function mergeMvuPatch(base, patch) {
@@ -613,9 +726,9 @@
         ];
     const patches = [];
     patchPaths.forEach((path) => {
-      const nextValue = readJsonPointer(afterVars, path);
+      const nextValue = normalizeReplayValueForPath(path, readJsonPointer(afterVars, path));
       if (nextValue === undefined) return;
-      const prevValue = readJsonPointer(beforeVars, path);
+      const prevValue = normalizeReplayValueForPath(path, readJsonPointer(beforeVars, path));
       collectReplayDiffPatches(prevValue, nextValue, path, patches);
     });
     return patches;
@@ -625,7 +738,7 @@
     const patchPaths = Array.isArray(paths) && paths.length ? paths : [];
     const patches = [];
     patchPaths.forEach((path) => {
-      const nextValue = readJsonPointer(afterVars, path);
+      const nextValue = normalizeReplayValueForPath(path, readJsonPointer(afterVars, path));
       if (nextValue === undefined || isDefaultReplayAddition(path, nextValue)) return;
       patches.push(buildReplacePatch(path, nextValue));
     });
