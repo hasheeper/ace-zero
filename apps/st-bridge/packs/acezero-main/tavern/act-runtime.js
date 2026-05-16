@@ -46,7 +46,7 @@
           return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
         },
         getEraVars = async () => ({}),
-        updateEraVars = async () => {},
+        persistEraVarsPatch = async () => ({ ok: false, reason: 'mvu_replay_unavailable' }),
         getWorldState = () => ({}),
         getHeroState = () => ({}),
         getHeroCast = () => ({}),
@@ -185,6 +185,25 @@
     } catch (_) {
       return fallback;
     }
+  }
+
+  function isRuntimeObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function hasWritableWorldState(eraVars) {
+    return isRuntimeObject(eraVars) && isRuntimeObject(eraVars.world);
+  }
+
+  function hasWritableActState(eraVars) {
+    return hasWritableWorldState(eraVars) && isRuntimeObject(eraVars.world.act);
+  }
+
+  async function getWritableEraVars(options = {}) {
+    const eraVars = options.eraVars || (typeof getEraVars === 'function' ? await getEraVars() : null);
+    if (!hasWritableWorldState(eraVars)) return null;
+    if (options.requireAct === true && !hasWritableActState(eraVars)) return null;
+    return eraVars;
   }
 
   function installActModuleHostBridge() {
@@ -722,7 +741,10 @@
     if (beforeEncounter === afterEncounter) return { eraVars, changed: false };
 
     if (options.persist !== false) {
-      await updateEraVars({ world: { act: nextAct } });
+      await persistEraVarsPatch({ world: { act: nextAct } }, {
+        operationId: options.operationId || 'runtime:auto-encounters',
+        paths: ['/world/act/characterEncounter']
+      });
     }
     return {
       eraVars: {
@@ -787,8 +809,11 @@
 
     if (changed) {
       if (options.persist !== false) {
-        await updateEraVars({
+        await persistEraVarsPatch({
           hero: { cast: castPatch }
+        }, {
+          operationId: options.operationId || 'runtime:sync-character-cast',
+          paths: Object.keys(castPatch).map((key) => `/hero/cast/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`)
         });
       }
 
@@ -1281,40 +1306,50 @@
     { min: 85, max: 101, level: 'strong', hint: '当前世界时段基本吃满，强烈建议推进到下一时段。' }
   ];
 
-  async function adjustNarrativeTensionInternal(delta) {
-    const eraVars = (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
+  async function adjustNarrativeTensionInternal(delta, options = {}) {
+    const eraVars = await getWritableEraVars({ ...options, requireAct: true });
+    if (!eraVars) return 0;
     const act = getWorldActState(eraVars);
     const current = Math.max(0, Math.min(100, Math.round(Number(act.narrativeTension) || 0)));
     const next = Math.max(0, Math.min(100, current + Math.round(Number(delta) || 0)));
     if (next === current) return next;
-    await updateEraVars({
+    await persistEraVarsPatch({
       world: {
         act: {
           ...act,
           narrativeTension: next
         }
       }
+    }, {
+      ...options,
+      operationId: options.operationId || 'runtime:narrative-tension',
+      paths: ['/world/act/narrativeTension']
     });
     return next;
   }
 
-  async function setNarrativeTensionInternal(value) {
-    const eraVars = (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
+  async function setNarrativeTensionInternal(value, options = {}) {
+    const eraVars = await getWritableEraVars({ ...options, requireAct: true });
+    if (!eraVars) return 0;
     const act = getWorldActState(eraVars);
     const v = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-    await updateEraVars({
+    await persistEraVarsPatch({
       world: {
         act: {
           ...act,
           narrativeTension: v
         }
       }
+    }, {
+      ...options,
+      operationId: options.operationId || 'runtime:narrative-tension',
+      paths: ['/world/act/narrativeTension']
     });
     return v;
   }
 
-  async function resetNarrativeTensionInternal() {
-    return setNarrativeTensionInternal(0);
+  async function resetNarrativeTensionInternal(options = {}) {
+    return setNarrativeTensionInternal(0, options);
   }
 
   function getWorldClockPressure(eraVars) {
@@ -1341,23 +1376,34 @@
     };
   }
 
-  async function adjustClockPressureInternal(delta) {
-    const eraVars = (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
+  async function adjustClockPressureInternal(delta, options = {}) {
+    const eraVars = await getWritableEraVars(options);
+    if (!eraVars) return 0;
     const current = getWorldClockPressure(eraVars);
     const next = Math.max(0, Math.min(100, current + Math.round(Number(delta) || 0)));
     if (next === current) return next;
-    await updateEraVars({ world: { clockPressure: next } });
+    await persistEraVarsPatch({ world: { clockPressure: next } }, {
+      ...options,
+      operationId: options.operationId || 'runtime:clock-pressure',
+      paths: ['/world/clockPressure']
+    });
     return next;
   }
 
-  async function setClockPressureInternal(value) {
+  async function setClockPressureInternal(value, options = {}) {
+    const eraVars = await getWritableEraVars(options);
+    if (!eraVars) return 0;
     const next = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-    await updateEraVars({ world: { clockPressure: next } });
+    await persistEraVarsPatch({ world: { clockPressure: next } }, {
+      ...options,
+      operationId: options.operationId || 'runtime:clock-pressure',
+      paths: ['/world/clockPressure']
+    });
     return next;
   }
 
-  async function resetClockPressureInternal() {
-    return setClockPressureInternal(0);
+  async function resetClockPressureInternal(options = {}) {
+    return setClockPressureInternal(0, options);
   }
 
   function deriveWorldTimeFromAct(actState) {
@@ -1669,7 +1715,7 @@
     }
 
     // 阶段2：ACT 推进不再触及 world.current_time（世界时钟完全独立）。
-    // 若需推进时钟，调用 ACE0Plugin.advanceWorldClock() 或直接写 world.current_time。
+    // 若需推进时钟，调用 ACE0Plugin.advanceWorldClock()，由 replay 写回当前楼。
     const worldPatch = {
       clockPressure: nextClockPressure,
       act: actState
@@ -1678,7 +1724,7 @@
       worldPatch.assetDeck = settledAssetDeck.world.assetDeck;
     }
     if (options.persist !== false) {
-      await updateEraVars({
+      await persistEraVarsPatch({
         hero: {
           funds: nextHero.funds,
           roster: nextHero.roster && typeof nextHero.roster === 'object'
@@ -1688,6 +1734,15 @@
               }
         },
         world: worldPatch
+      }, {
+        operationId: options.operationId || 'runtime:act-advance',
+        paths: [
+          '/hero/funds',
+          '/hero/roster',
+          '/world/act',
+          '/world/assetDeck',
+          '/world/clockPressure'
+        ]
       });
     }
 
@@ -1713,7 +1768,8 @@
     const msg = message && typeof message === 'object' ? message : {};
     if (msg.role !== 'assistant') return { changed: false, reason: 'not_assistant' };
     lastHandledMk = mk;
-    const eraVars = options.eraVars || (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
+    const eraVars = await getWritableEraVars({ ...options, requireAct: true });
+    if (!eraVars) return { changed: false, reason: 'mvu_replay_missing_base' };
     const world = getWorldState(eraVars);
     const act = getWorldActState(eraVars);
     const currentTension = Math.max(0, Math.min(100, Math.round(Number(act.narrativeTension) || 0)));
@@ -1736,18 +1792,22 @@
       }
     };
     if (options.persist !== false) {
-      await updateEraVars({
+      await persistEraVarsPatch({
         world: {
           clockPressure: nextClockPressure,
           act: nextAct
         }
+      }, {
+        operationId: options.operationId || 'runtime:floor-progress',
+        paths: ['/world/act/narrativeTension', '/world/clockPressure']
       });
     }
     return { changed: true, eraVars: nextEraVars };
   }
 
-  async function advanceWorldClock(steps) {
-    const eraVars = (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
+  async function advanceWorldClock(steps, options = {}) {
+    const eraVars = await getWritableEraVars(options);
+    if (!eraVars) return normalizeWorldClock(DEFAULT_WORLD_CLOCK);
     const current = getWorldClock(eraVars);
     const next = advanceWorldClockState(current, steps == null ? 1 : steps);
     const changed = next.day !== current.day || next.phase !== current.phase;
@@ -1759,7 +1819,7 @@
     const nextMajorDebt = changed
       ? applyDebtInterest(hero?.majorDebt, phaseSteps, MAJOR_DEBT_INTEREST_RATE_PER_PHASE)
       : normalizeFundsAmount(hero?.majorDebt);
-    await updateEraVars({
+    await persistEraVarsPatch({
       ...(changed ? {
         hero: {
           debt: nextDebt,
@@ -1770,12 +1830,17 @@
         current_time: next,
         ...(changed ? { clockPressure: 0 } : {})
       }
+    }, {
+      ...options,
+      operationId: options.operationId || 'runtime:world-clock',
+      paths: ['/hero/debt', '/hero/majorDebt', '/world/current_time', '/world/clockPressure']
     });
     return next;
   }
 
-  async function setWorldClock(input) {
-    const eraVars = (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
+  async function setWorldClock(input, options = {}) {
+    const eraVars = await getWritableEraVars(options);
+    if (!eraVars) return normalizeWorldClock(input);
     const current = getWorldClock(eraVars);
     const next = normalizeWorldClock(input);
     const changed = next.day !== current.day || next.phase !== current.phase;
@@ -1787,7 +1852,7 @@
     const nextMajorDebt = phaseSteps > 0
       ? applyDebtInterest(hero?.majorDebt, phaseSteps, MAJOR_DEBT_INTEREST_RATE_PER_PHASE)
       : normalizeFundsAmount(hero?.majorDebt);
-    await updateEraVars({
+    await persistEraVarsPatch({
       ...(phaseSteps > 0 ? {
         hero: {
           debt: nextDebt,
@@ -1798,6 +1863,10 @@
         current_time: next,
         ...(changed ? { clockPressure: 0 } : {})
       }
+    }, {
+      ...options,
+      operationId: options.operationId || 'runtime:world-clock',
+      paths: ['/hero/debt', '/hero/majorDebt', '/world/current_time', '/world/clockPressure']
     });
     return next;
   }

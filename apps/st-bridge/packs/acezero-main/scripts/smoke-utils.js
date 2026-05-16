@@ -189,9 +189,10 @@ function createTavernRuntime(tavernFactory, sandbox, hooks = {}) {
         return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
       },
       getEraVars: async () => eraVarsRef,
-      updateEraVars: async (patch) => {
+      persistEraVarsPatch: async (patch) => {
         patches.push(clone(patch));
         eraVarsRef = deepMerge(eraVarsRef, patch);
+        return { ok: true };
       },
       getWorldState: (eraVars) => eraVars && eraVars.world ? eraVars.world : {},
       getHeroState: (eraVars) => eraVars && eraVars.hero ? eraVars.hero : {},

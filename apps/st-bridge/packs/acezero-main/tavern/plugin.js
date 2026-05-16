@@ -157,7 +157,7 @@
 
   let isProcessing = false;
   let pendingActBaselineSnapshot = null;
-  let lastObservedWorldClock = null;
+  let expansionPromptInjectIds = [];
 
   function getAce0HostRoot() {
     try {
@@ -186,11 +186,6 @@
       }
     } catch (_) {}
     return '';
-  }
-
-  function isSameWorldClock(a, b) {
-    if (!a || !b) return false;
-    return Number(a.day) === Number(b.day) && String(a.phase || '') === String(b.phase || '');
   }
 
   console.log(`${PLUGIN_NAME} 插件加载中...`);
@@ -626,6 +621,79 @@
     return patches;
   }
 
+  function buildReplayValuePatchesFromEraVars(afterVars, paths = null) {
+    const patchPaths = Array.isArray(paths) && paths.length ? paths : [];
+    const patches = [];
+    patchPaths.forEach((path) => {
+      const nextValue = readJsonPointer(afterVars, path);
+      if (nextValue === undefined || isDefaultReplayAddition(path, nextValue)) return;
+      patches.push(buildReplacePatch(path, nextValue));
+    });
+    return patches;
+  }
+
+  function inferReplayPathsFromEraVarsPatch(patch) {
+    const paths = [];
+    const push = (path) => {
+      if (path && !paths.includes(path)) paths.push(path);
+    };
+    const heroPatch = isPlainObject(patch?.hero) ? patch.hero : null;
+    if (heroPatch) {
+      Object.keys(heroPatch).forEach((key) => {
+        const value = heroPatch[key];
+        if ((key === 'cast' || key === 'roster' || key === 'relationship') && isPlainObject(value)) {
+          Object.keys(value).forEach((childKey) => push(`/hero/${key}/${escapeJsonPointerPart(childKey)}`));
+        } else {
+          push(`/hero/${escapeJsonPointerPart(key)}`);
+        }
+      });
+    }
+
+    const worldPatch = isPlainObject(patch?.world) ? patch.world : null;
+    if (worldPatch) {
+      Object.keys(worldPatch).forEach((key) => {
+        if (key === 'act') push('/world/act');
+        else push(`/world/${escapeJsonPointerPart(key)}`);
+      });
+    }
+
+    return paths.length ? paths : null;
+  }
+
+  function inferReplayOperationIdFromPatch(messageId, patch) {
+    const id = Number.isFinite(Number(messageId)) ? Math.round(Number(messageId)) : 'current';
+    const heroPatch = isPlainObject(patch?.hero) ? patch.hero : null;
+    const worldPatch = isPlainObject(patch?.world) ? patch.world : null;
+    if (worldPatch?.act) return `runtime:${id}:act-state`;
+    if (Object.prototype.hasOwnProperty.call(worldPatch || {}, 'assetDeck')) return `runtime:${id}:asset-deck`;
+    if (Object.prototype.hasOwnProperty.call(worldPatch || {}, 'current_time')) return `runtime:${id}:world-clock`;
+    if (Object.prototype.hasOwnProperty.call(worldPatch || {}, 'clockPressure')) return `runtime:${id}:clock-pressure`;
+    if (Object.prototype.hasOwnProperty.call(worldPatch || {}, 'expansion_state')) return `api:${id}:expansion-state`;
+    if (isPlainObject(heroPatch?.cast)) {
+      const keys = Object.keys(heroPatch.cast).sort().join('-') || 'cast';
+      return `api:${id}:hero-cast:${keys}`;
+    }
+    if (isPlainObject(heroPatch?.roster)) {
+      const keys = Object.keys(heroPatch.roster).sort().join('-') || 'roster';
+      return `api:${id}:hero-roster:${keys}`;
+    }
+    return `api:${id}:state`;
+  }
+
+  async function parseMvuVariablesFromMessage(messageId, messageText) {
+    const mvuApi = resolveMvuApi();
+    if (!mvuApi) return null;
+    const baseVars = await getMvuReplayBaseVariables(messageId);
+    if (!hasCompleteMvuVariableBundle(baseVars)) return null;
+    try {
+      const parsed = await mvuApi.parseMessage(String(messageText || ''), baseVars);
+      return hasCompleteMvuVariableBundle(parsed) ? parsed : null;
+    } catch (error) {
+      console.warn(`${PLUGIN_NAME} MVU replay 基线解析失败:`, error);
+      return null;
+    }
+  }
+
   function normalizeReplayPatches(patches) {
     const byPath = new Map();
     (Array.isArray(patches) ? patches : []).forEach((patch) => {
@@ -641,8 +709,8 @@
   }
 
   async function commitAce0ReplayPatch(options = {}) {
-    const patches = Array.isArray(options.patches) ? options.patches.filter(item => item && typeof item === 'object') : [];
-    if (!patches.length) return { ok: false, reason: 'empty_replay_patch' };
+    const requestedPatches = Array.isArray(options.patches) ? options.patches.filter(item => item && typeof item === 'object') : [];
+    const hasAfterVars = isPlainObject(options.afterVars);
 
     const messageId = resolveReplayMessageId(options);
     if (!Number.isFinite(Number(messageId)) || Number(messageId) < 0) {
@@ -688,6 +756,54 @@
       (content, stripId) => stripAce0ReplayBlock(content, stripId),
       originalMessage
     );
+
+    let patches = requestedPatches;
+    if (hasAfterVars) {
+      const parsedBaseline = await parseMvuVariablesFromMessage(normalizedMessageId, stripped);
+      const hasParsedBaseline = hasCompleteMvuVariableBundle(parsedBaseline);
+      const baselineEraVars = hasCompleteMvuVariableBundle(parsedBaseline)
+        ? parsedBaseline.stat_data
+        : (isPlainObject(options.beforeVars) ? options.beforeVars : vars.stat_data);
+      const patchPaths = Array.isArray(options.paths) ? options.paths : null;
+      patches = buildReplayPatchesFromEraVars(
+        baselineEraVars,
+        options.afterVars,
+        patchPaths
+      );
+      if (!hasParsedBaseline && stripped !== originalMessage && patchPaths?.length) {
+        patches = buildReplayValuePatchesFromEraVars(options.afterVars, patchPaths);
+      }
+    }
+    patches = normalizeReplayPatches(patches);
+    if (!patches.length) {
+      if (hasAfterVars && stripped !== originalMessage) {
+        await setChatMessages([{
+          message_id: normalizedMessageId,
+          message: stripped
+        }], { refresh: options.refresh || 'affected' });
+        const replayResult = await replayMessageThroughMvu(normalizedMessageId);
+        if (!replayResult.ok) {
+          return {
+            ok: false,
+            reason: replayResult.reason || 'mvu_replay_failed',
+            messageId: normalizedMessageId,
+            floorKey: actualFloorKey,
+            operationId
+          };
+        }
+        return {
+          ok: true,
+          messageId: normalizedMessageId,
+          floorKey: actualFloorKey,
+          operationId,
+          patchCount: 0,
+          removedReplayBlock: true,
+          replayMethod: replayResult.method || ''
+        };
+      }
+      return { ok: false, reason: 'empty_replay_patch', messageId: normalizedMessageId, floorKey: actualFloorKey };
+    }
+
     const block = buildAce0ReplayBlock(operationId, patches);
     const nextMessage = insertAce0ReplayBlock(stripped, block);
     await setChatMessages([{
@@ -829,7 +945,7 @@
   function _getPartyRoster(hero) { return CHARACTER_RUNTIME.getPartyRoster(hero); }
 
   // ==========================================================
-  //  MVU 变量读写（通过酒馆助手 variable API）
+  //  MVU 变量读取 + replay-only 持久化
   //  变量存储: message 变量 → stat_data
   // ==========================================================
 
@@ -843,33 +959,42 @@
     }
   }
 
-  async function updateEraVars(data) {
+  async function persistEraVarsPatch(data, options = {}) {
     try {
       const patch = isPlainObject(data) ? data : {};
-      const currentBundle = typeof getVariables === 'function' ? await getVariables({ type: 'message' }) : null;
-      if (!hasCompleteMvuVariableBundle(currentBundle)) {
-        console.warn(`${PLUGIN_NAME} 当前楼缺少完整 MVU 基底，直接变量写入已拒绝。需要先重演/恢复变量。`);
-        return false;
+      const messageId = resolveReplayMessageId(options);
+      if (!Number.isFinite(Number(messageId)) || Number(messageId) < 0) {
+        return { ok: false, reason: 'missing_message_id' };
       }
-      if (typeof updateVariablesWith === 'function') {
-        await updateVariablesWith((vars) => {
-          const currentVars = isPlainObject(vars) ? vars : {};
-          if (!hasCompleteMvuVariableBundle(currentVars)) return currentVars;
-          return {
-            ...currentVars,
-            stat_data: mergeMvuPatch(currentVars.stat_data, patch)
-          };
-        }, { type: 'message' });
-        return true;
+      const normalizedMessageId = Math.round(Number(messageId));
+      const floorKey = makeMessageFloorKey(normalizedMessageId);
+      if (options.floorKey && String(options.floorKey).trim() !== floorKey) {
+        return { ok: false, reason: 'floor_key_mismatch', floorKey, expectedFloorKey: String(options.floorKey).trim() };
       }
-
-      await insertOrAssignVariables({
-        stat_data: mergeMvuPatch(currentBundle.stat_data, patch)
-      }, { type: 'message' });
-      return true;
+      const currentEraVars = await getMessageEraVars(normalizedMessageId);
+      if (!isPlainObject(currentEraVars)) {
+        console.warn(`${PLUGIN_NAME} ${floorKey} 缺少完整 MVU 基底，ACE0_REPLAY 写入已拒绝。需要先重演/恢复变量。`);
+        return { ok: false, reason: 'mvu_replay_missing_base', floorKey };
+      }
+      const nextEraVars = mergeMvuPatch(currentEraVars, patch);
+      const paths = Array.isArray(options.paths) && options.paths.length
+        ? options.paths
+        : inferReplayPathsFromEraVarsPatch(patch);
+      const operationId = options.operationId || inferReplayOperationIdFromPatch(normalizedMessageId, patch);
+      const result = await commitAce0ReplayPatch({
+        messageId: normalizedMessageId,
+        floorKey,
+        operationId,
+        replaceOperationIds: options.replaceOperationIds,
+        beforeVars: currentEraVars,
+        afterVars: nextEraVars,
+        paths
+      });
+      if (result.ok) refreshDashboardUiAfterExternalWrite();
+      return result;
     } catch (e) {
-      console.error(`${PLUGIN_NAME} MVU 变量写入失败:`, e);
-      return false;
+      console.error(`${PLUGIN_NAME} MVU replay 写入失败:`, e);
+      return { ok: false, reason: 'mvu_replay_error', error: e?.message || String(e) };
     }
   }
 
@@ -893,16 +1018,6 @@
     return hostRoot.ACE0ExpansionRegistry && typeof hostRoot.ACE0ExpansionRegistry === 'object'
       ? hostRoot.ACE0ExpansionRegistry
       : null;
-  }
-
-  function getExpansionPromptStateStore() {
-    const hostRoot = getAce0HostRoot();
-    if (!hostRoot.__ACE0_EXPANSION_PROMPT_STATE__) {
-      hostRoot.__ACE0_EXPANSION_PROMPT_STATE__ = {
-        ids: []
-      };
-    }
-    return hostRoot.__ACE0_EXPANSION_PROMPT_STATE__;
   }
 
   function normalizeExpansionPrompt(prompt, index) {
@@ -1280,7 +1395,7 @@
       normalizeActResourceKey,
       normalizeFundsAmount: _normalizeFundsAmount,
       getEraVars,
-      updateEraVars,
+      persistEraVarsPatch,
       getWorldState,
       getHeroState,
       getHeroCast,
@@ -1328,20 +1443,20 @@
   function createActRuntimeSnapshot(eraVars, derivedActState = null) { return ACT_RUNTIME.createActRuntimeSnapshot(eraVars, derivedActState); }
   function getAssetDeckModuleApi() { return ACT_RUNTIME.getAssetDeckModuleApi(); }
   function advanceActToNextNode(actState, config, heroState = {}, contextInput = {}) { return ACT_RUNTIME.advanceActToNextNode(actState, config, heroState, contextInput); }
-  function adjustNarrativeTensionInternal(delta) { return ACT_RUNTIME.adjustNarrativeTensionInternal(delta); }
-  function setNarrativeTensionInternal(value) { return ACT_RUNTIME.setNarrativeTensionInternal(value); }
-  function resetNarrativeTensionInternal() { return ACT_RUNTIME.resetNarrativeTensionInternal(); }
+  function adjustNarrativeTensionInternal(delta, options = {}) { return ACT_RUNTIME.adjustNarrativeTensionInternal(delta, options); }
+  function setNarrativeTensionInternal(value, options = {}) { return ACT_RUNTIME.setNarrativeTensionInternal(value, options); }
+  function resetNarrativeTensionInternal(options = {}) { return ACT_RUNTIME.resetNarrativeTensionInternal(options); }
   function getWorldClockPressure(eraVars) { return ACT_RUNTIME.getWorldClockPressure(eraVars); }
   function pickWorldClockAdvanceTier(pressure) { return ACT_RUNTIME.pickWorldClockAdvanceTier(pressure); }
   function buildWorldClockAdvanceSuggestion(pressure) { return ACT_RUNTIME.buildWorldClockAdvanceSuggestion(pressure); }
-  function adjustClockPressureInternal(delta) { return ACT_RUNTIME.adjustClockPressureInternal(delta); }
-  function setClockPressureInternal(value) { return ACT_RUNTIME.setClockPressureInternal(value); }
-  function resetClockPressureInternal() { return ACT_RUNTIME.resetClockPressureInternal(); }
+  function adjustClockPressureInternal(delta, options = {}) { return ACT_RUNTIME.adjustClockPressureInternal(delta, options); }
+  function setClockPressureInternal(value, options = {}) { return ACT_RUNTIME.setClockPressureInternal(value, options); }
+  function resetClockPressureInternal(options = {}) { return ACT_RUNTIME.resetClockPressureInternal(options); }
   function buildEncounterContextFromEraVars(eraVars) { return ACT_RUNTIME.buildEncounterContextFromEraVars(eraVars); }
   async function resolvePendingActAdvance(eraVars, options = {}) { return await ACT_RUNTIME.resolvePendingActAdvance(eraVars, options); }
   async function applyFloorProgressDelta(messageId, message, options = {}) { return await ACT_RUNTIME.applyFloorProgressDelta(messageId, message, options); }
-  async function advanceWorldClock(steps) { return await ACT_RUNTIME.advanceWorldClock(steps); }
-  async function setWorldClock(input) { return await ACT_RUNTIME.setWorldClock(input); }
+  async function advanceWorldClock(steps, options = {}) { return await ACT_RUNTIME.advanceWorldClock(steps, options); }
+  async function setWorldClock(input, options = {}) { return await ACT_RUNTIME.setWorldClock(input, options); }
 
   function areActSnapshotsEqual(before, after) {
     if (!before || !after) return false;
@@ -1463,8 +1578,6 @@
     }
 
     try {
-      const expansionPromptState = getExpansionPromptStateStore();
-
       try {
         uninjectPrompts([
           PRIMARY_CONTEXT_INJECT_ID,
@@ -1484,21 +1597,20 @@
           WORLD_CONTEXT_INJECT_ID,
           LOCATION_DOC_INJECT_ID,
           ...Object.values(CHAR_DOC_INJECT_IDS),
-          ...expansionPromptState.ids
+          ...expansionPromptInjectIds
         ]);
       } catch (_) { /* ignore */ }
 
-      const syncedState = await synchronizeActCharacterState(await getEraVars(), { persist: false });
-      const eraVars = syncedState.eraVars;
-      const currentWorldClock = getWorldClock(eraVars);
-      if (lastObservedWorldClock && !isSameWorldClock(lastObservedWorldClock, currentWorldClock)) {
-        if (getWorldClockPressure(eraVars) !== 0) {
-          if (eraVars.world && typeof eraVars.world === 'object') {
-            eraVars.world.clockPressure = 0;
-          }
-        }
+      const baseEraVars = await getEraVars();
+      if (!isPlainObject(baseEraVars) || !isPlainObject(baseEraVars.world) || !isPlainObject(baseEraVars.world.act)) {
+        pendingActBaselineSnapshot = null;
+        expansionPromptInjectIds = [];
+        console.warn(`${PLUGIN_NAME} 当前楼缺少完整 MVU 基底，生成前注入已跳过。需要先重演/恢复变量。`);
+        return;
       }
-      lastObservedWorldClock = { day: currentWorldClock.day, phase: currentWorldClock.phase };
+
+      const syncedState = await synchronizeActCharacterState(baseEraVars, { persist: false });
+      const eraVars = syncedState.eraVars;
       pendingActBaselineSnapshot = createActRuntimeSnapshot(eraVars, syncedState.derived);
       const heroSummary = buildHeroSummary(eraVars);
       const relationState = buildRelationshipStateSummary(eraVars);
@@ -1560,7 +1672,7 @@
         content: replaceHeroPromptMacro(prompt.content)
       }));
 
-      expansionPromptState.ids = expansionPrompts.map(prompt => prompt.id);
+      expansionPromptInjectIds = expansionPrompts.map(prompt => prompt.id);
 
       injectPrompts(normalizedPrompts);
       const hasPendingTransitionPrompt = normalizedPrompts.some((prompt) => prompt.id === ACT_TRANSITION_INJECT_ID);
@@ -2096,7 +2208,7 @@
     },
 
     async getActStateSummary() {
-      const result = await synchronizeActCharacterState(await getEraVars());
+      const result = await synchronizeActCharacterState(await getEraVars(), { persist: false });
       return buildActStateSummary(result.eraVars, result.derived);
     },
 
@@ -2148,16 +2260,20 @@
       };
     },
 
-    async setActiveMajorExpansion(expansionId) {
+    async setActiveMajorExpansion(expansionId, options = {}) {
       const normalizedId = typeof expansionId === 'string' ? expansionId.trim() : '';
-      await updateEraVars({
+      const result = await persistEraVarsPatch({
         world: {
           expansion_state: {
             activeMajor: normalizedId
           }
         }
+      }, {
+        ...options,
+        operationId: options.operationId || 'api:expansion-major',
+        paths: ['/world/expansion_state/activeMajor']
       });
-      return true;
+      return result.ok === true;
     },
 
     // 扫描所有消息，为有 ACE0_BATTLE 但无 ACE0_FRONTEND 的消息补注入
@@ -2196,7 +2312,7 @@
       return _getPartyRoster(vars.hero);
     },
 
-    async setCharacterState(charKey, patch) {
+    async setCharacterState(charKey, patch, options = {}) {
       const key = String(charKey || '').toUpperCase();
       if (!NON_PLAYER_CHARACTER_KEYS.includes(key)) {
         console.warn(`${PLUGIN_NAME} 未知角色: ${charKey}`);
@@ -2212,15 +2328,19 @@
         normalizedPatch.activated = true;
         normalizedPatch.introduced = true;
       }
-      await updateEraVars({
+      const result = await persistEraVarsPatch({
         hero: {
           cast: {
             [key]: normalizedPatch
           }
         }
+      }, {
+        ...options,
+        operationId: options.operationId || `api:hero-cast:${key}`,
+        paths: [`/hero/cast/${escapeJsonPointerPart(key)}`]
       });
 
-      return true;
+      return result.ok === true;
     },
 
     async introduceCharacter(charKey, options = {}) {
@@ -2228,24 +2348,24 @@
         activated: true,
         introduced: true,
         present: options.present ?? true
-      });
+      }, options);
     },
 
-    async setCharacterPresent(charKey, present) {
+    async setCharacterPresent(charKey, present, options = {}) {
       if (present) {
         return this.setCharacterState(charKey, {
           activated: true,
           introduced: true,
           present: true
-        });
+        }, options);
       }
-      return this.setCharacterState(charKey, { present: false });
+      return this.setCharacterState(charKey, { present: false }, options);
     },
 
-    async setCharacterActivated(charKey, activated) {
+    async setCharacterActivated(charKey, activated, options = {}) {
       return this.setCharacterState(charKey, {
         activated: !!activated
-      });
+      }, options);
     },
 
     async addCharacterToParty(charKey, options = {}) {
@@ -2282,14 +2402,21 @@
         };
       }
 
-      await updateEraVars({ hero: heroPatch });
-      return true;
+      const result = await persistEraVarsPatch({ hero: heroPatch }, {
+        ...options,
+        operationId: options.operationId || `api:hero-party:${key}`,
+        paths: [
+          `/hero/cast/${escapeJsonPointerPart(key)}`,
+          `/hero/roster/${escapeJsonPointerPart(key)}`
+        ]
+      });
+      return result.ok === true;
     },
 
-    async removeCharacterFromParty(charKey) {
+    async removeCharacterFromParty(charKey, options = {}) {
       return this.setCharacterState(charKey, {
         inParty: false
-      });
+      }, options);
     },
 
     CHARACTER_PROMPT_DOCS,
@@ -2339,18 +2466,18 @@
     getCharTrait,
 
     // 阶段 4：情节张力 API
-    adjustNarrativeTension(delta) { return adjustNarrativeTensionInternal(delta); },
-    setNarrativeTension(v) { return setNarrativeTensionInternal(v); },
-    resetNarrativeTension() { return resetNarrativeTensionInternal(); },
+    adjustNarrativeTension(delta, options = {}) { return adjustNarrativeTensionInternal(delta, options); },
+    setNarrativeTension(v, options = {}) { return setNarrativeTensionInternal(v, options); },
+    resetNarrativeTension(options = {}) { return resetNarrativeTensionInternal(options); },
     async getNarrativeTension() {
       const eraVars = (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
       const act = getWorldActState(eraVars);
       return Math.max(0, Math.min(100, Math.round(Number(act.narrativeTension) || 0)));
     },
     TENSION_DELTA: Object.assign({}, TENSION_DELTA),
-    adjustClockPressure(delta) { return adjustClockPressureInternal(delta); },
-    setClockPressure(v) { return setClockPressureInternal(v); },
-    resetClockPressure() { return resetClockPressureInternal(); },
+    adjustClockPressure(delta, options = {}) { return adjustClockPressureInternal(delta, options); },
+    setClockPressure(v, options = {}) { return setClockPressureInternal(v, options); },
+    resetClockPressure(options = {}) { return resetClockPressureInternal(options); },
     async getClockPressure() {
       const eraVars = (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
       return getWorldClockPressure(eraVars);

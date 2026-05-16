@@ -271,6 +271,16 @@
     return patches;
   }
 
+  function buildDashboardReplayValuePatchesForPaths(nextRoot, paths) {
+    const patches = [];
+    (Array.isArray(paths) ? paths : []).forEach((path) => {
+      const nextValue = readDashboardJsonPointer(nextRoot, path);
+      if (nextValue === undefined) return;
+      patches.push(buildDashboardReplacePatch(path, nextValue));
+    });
+    return patches;
+  }
+
   function sanitizeDashboardReplayOperationId(value) {
     return String(value || 'ace0')
       .trim()
@@ -460,9 +470,22 @@
     return { ok: true, method: 'Mvu.parseMessage' };
   }
 
-  async function commitDashboardReplayPatchLocally({ floorKey, operationId, patches }) {
-    const patchList = Array.isArray(patches) ? patches.filter(item => item && typeof item === 'object') : [];
-    if (!patchList.length) return { ok: false, reason: 'empty_replay_patch' };
+  async function parseDashboardMvuVariablesFromMessage(messageId, messageText) {
+    const mvuApi = resolveDashboardMvuApi();
+    if (!mvuApi) return null;
+    const baseVars = await getDashboardMvuReplayBaseVariables(messageId);
+    if (!hasDashboardMvuReplayBase(baseVars)) return null;
+    try {
+      const parsed = await mvuApi.parseMessage(String(messageText || ''), baseVars);
+      return hasDashboardMvuReplayBase(parsed) ? parsed : null;
+    } catch (error) {
+      console.warn('[ACE0 Dashboard] MVU replay 基线解析失败:', error);
+      return null;
+    }
+  }
+
+  async function commitDashboardReplayPatchLocally({ floorKey, operationId, patches, afterVars, paths }) {
+    const hasAfterVars = afterVars && typeof afterVars === 'object' && !Array.isArray(afterVars);
 
     const messageId = resolveDashboardReplayMessageId(floorKey);
     if (!Number.isFinite(Number(messageId)) || Number(messageId) < 0) {
@@ -507,6 +530,50 @@
     const opId = sanitizeDashboardReplayOperationId(operationId || `dashboard:${actualFloorKey}`);
     const originalMessage = msg.message || '';
     const stripped = stripDashboardReplayBlock(originalMessage, opId);
+    let patchList = Array.isArray(patches) ? patches.filter(item => item && typeof item === 'object') : [];
+    if (hasAfterVars) {
+      const parsedBaseline = await parseDashboardMvuVariablesFromMessage(normalizedMessageId, stripped);
+      const hasParsedBaseline = hasDashboardMvuReplayBase(parsedBaseline);
+      const baselineEraVars = hasParsedBaseline
+        ? parsedBaseline.stat_data
+        : vars.stat_data;
+      patchList = buildDashboardReplayDiffPatchesForPaths(
+        baselineEraVars,
+        afterVars,
+        Array.isArray(paths) ? paths : []
+      );
+      if (!hasParsedBaseline && stripped !== originalMessage && Array.isArray(paths) && paths.length) {
+        patchList = buildDashboardReplayValuePatchesForPaths(afterVars, paths);
+      }
+    }
+    if (!patchList.length) {
+      if (hasAfterVars && stripped !== originalMessage) {
+        await setChatMessages([{
+          message_id: normalizedMessageId,
+          message: stripped
+        }], { refresh: 'affected' });
+        const replayResult = await replayDashboardMessageThroughMvu(normalizedMessageId);
+        if (!replayResult.ok) {
+          return {
+            ok: false,
+            reason: replayResult.reason || 'mvu_replay_failed',
+            floorKey: actualFloorKey,
+            operationId: opId
+          };
+        }
+        return {
+          ok: true,
+          messageId: normalizedMessageId,
+          floorKey: actualFloorKey,
+          operationId: opId,
+          patchCount: 0,
+          removedReplayBlock: true,
+          replayMethod: replayResult.method || ''
+        };
+      }
+      return { ok: false, reason: 'empty_replay_patch' };
+    }
+
     const block = buildDashboardReplayBlock(opId, patchList);
     const nextMessage = insertDashboardReplayBlock(stripped, block);
     await setChatMessages([{
@@ -532,18 +599,18 @@
     };
   }
 
-  async function commitDashboardReplayPatch({ floorKey, operationId, patches }) {
+  async function commitDashboardReplayPatch({ floorKey, operationId, patches, afterVars, paths }) {
     const hostRoot = getAce0HostRoot();
     let unavailableResult = null;
     for (const candidate of [ROOT?.ACE0Plugin, hostRoot?.ACE0Plugin]) {
       if (candidate && typeof candidate.commitReplayPatch === 'function') {
-        const result = await candidate.commitReplayPatch({ floorKey, operationId, patches });
+        const result = await candidate.commitReplayPatch({ floorKey, operationId, patches, afterVars, paths });
         if (result?.ok) return result;
         if (result && result.reason !== 'mvu_replay_unavailable') return result;
         if (result) unavailableResult = result;
       }
     }
-    const localResult = await commitDashboardReplayPatchLocally({ floorKey, operationId, patches });
+    const localResult = await commitDashboardReplayPatchLocally({ floorKey, operationId, patches, afterVars, paths });
     return localResult?.ok ? localResult : (unavailableResult || localResult);
   }
 
@@ -953,6 +1020,8 @@
     if (currentFloorKey && commitFloorKey !== currentFloorKey) {
       throw new Error('Stale ACT commit rejected: floorKey mismatch.');
     }
+    const targetFloorKey = commitFloorKey || currentFloorKey;
+    if (!targetFloorKey) return false;
 
     const nextState = cloneJsonData(eraVars, {}) || {};
     if (!nextState.world || typeof nextState.world !== 'object') nextState.world = {};
@@ -966,15 +1035,18 @@
 
     nextActState = applyPendingActAssetDeckCommands(nextState, nextActState);
     nextState.world.act = nextActState;
-    const patches = buildDashboardReplayDiffPatchesForPaths(eraVars, nextState, [
+    const replayPaths = [
       ...DASHBOARD_ACT_REPLAY_PATHS,
       '/world/assetDeck'
-    ]);
+    ];
+    const patches = buildDashboardReplayDiffPatchesForPaths(eraVars, nextState, replayPaths);
     if (!patches.length) return true;
     const replayResult = await commitDashboardReplayPatch({
-      floorKey: currentFloorKey,
-      operationId: `dashboard-act:${currentFloorKey || 'current'}`,
-      patches
+      floorKey: targetFloorKey,
+      operationId: `dashboard-act:${targetFloorKey}`,
+      patches,
+      afterVars: nextState,
+      paths: replayPaths
     });
     if (replayResult?.ok) return true;
     console.warn('[ACE0 Dashboard] ACE0_REPLAY 不可用，无法回写 MVU:', replayResult?.reason || 'unknown');
@@ -1094,10 +1166,11 @@
         assetDeck: cloneJsonData(commandResult.assetDeck, null)
       };
     }
+    const replayPaths = DASHBOARD_ASSET_COMMAND_REPLAY_PATHS;
     const patches = buildDashboardReplayDiffPatchesForPaths(
       eraVars,
       nextState,
-      DASHBOARD_ASSET_COMMAND_REPLAY_PATHS
+      replayPaths
     );
     if (!patches.length) {
       return {
@@ -1110,7 +1183,9 @@
     const replayResult = await commitDashboardReplayPatch({
       floorKey: commandFloorKey || currentFloorKey,
       operationId: `dashboard-asset:${commandFloorKey || currentFloorKey || 'current'}`,
-      patches
+      patches,
+      afterVars: nextState,
+      paths: replayPaths
     });
 
     if (!replayResult?.ok) {

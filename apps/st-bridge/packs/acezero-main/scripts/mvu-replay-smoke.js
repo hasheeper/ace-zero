@@ -62,6 +62,10 @@ function applyReplayBlocksToVars(message, vars) {
   }
 }
 
+function countOccurrences(text, pattern) {
+  return (String(text || '').match(new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+}
+
 function makePluginSandbox() {
   const handlers = {};
   const sandbox = {
@@ -119,10 +123,13 @@ function makePluginSandbox() {
     throw new Error('direct updateVariablesWith should not be used in replay smoke');
   };
   sandbox.handleVariablesInMessage = async (messageId) => {
-    const vars = sandbox.__messageVars[messageId];
     const msg = sandbox.__messages[messageId];
-    if (!vars || !vars.stat_data || !msg) return false;
-    applyReplayBlocksToVars(msg.message, vars);
+    const previousId = Math.max(0, Math.round(Number(messageId) || 0) - 1);
+    const baseVars = sandbox.__messageVars[previousId] || sandbox.__messageVars[messageId];
+    if (!baseVars || !baseVars.stat_data || !msg) return false;
+    const nextVars = clone(baseVars);
+    applyReplayBlocksToVars(msg.message, nextVars);
+    sandbox.__messageVars[messageId] = nextVars;
     return true;
   };
   vm.createContext(sandbox);
@@ -151,6 +158,10 @@ function makePluginSandbox() {
 async function testMissingBaseDoesNotCreateDefaultAct() {
   const sandbox = makePluginSandbox();
   sandbox.__currentMessageId = 24;
+  let injectedPromptCount = 0;
+  sandbox.injectPrompts = (prompts) => {
+    injectedPromptCount += Array.isArray(prompts) ? prompts.length : 1;
+  };
   sandbox.__messages[24] = {
     message_id: 24,
     role: 'assistant',
@@ -158,8 +169,12 @@ async function testMissingBaseDoesNotCreateDefaultAct() {
   };
   sandbox.__messageVars[24] = {};
 
+  await sandbox.__handlers.GENERATION_AFTER_COMMANDS(null, {}, false);
   await sandbox.__handlers.character_message_rendered(24);
+  assertEqual(await sandbox.ACE0Plugin.setActiveMajorExpansion('major-missing-base'), false, 'public API should reject missing MVU base');
+  await sandbox.ACE0Plugin.setClockPressure(7);
 
+  assertEqual(injectedPromptCount, 0, 'missing MVU base should not inject default ACT prompts');
   assert(!sandbox.__messages[24].message.includes('ACE0_REPLAY'), 'missing MVU base should not append ACE0_REPLAY');
   assert(!sandbox.__messageVars[24].stat_data, 'missing MVU base should not synthesize stat_data');
 }
@@ -270,6 +285,104 @@ async function testFloorProgressWritesOnlyLeafPatches() {
   assert(!message.includes('/world/act/characterEncounter'), 'floor progress replay should not persist characterEncounter defaults');
   assertEqual(sandbox.__messageVars[12].stat_data.world.act.narrativeTension, 10, 'floor progress should replay narrative tension');
   assertEqual(sandbox.__messageVars[12].stat_data.world.clockPressure, 10, 'floor progress should replay clock pressure');
+}
+
+async function testPublicApisPersistThroughReplayOnly() {
+  const sandbox = makePluginSandbox();
+  const act = sandbox.ACE0Modules.act;
+  sandbox.__currentMessageId = 15;
+  sandbox.__messages[15] = {
+    message_id: 15,
+    role: 'assistant',
+    message: 'public api replay smoke\n<StatusPlaceHolderImpl/>'
+  };
+  sandbox.__messageVars[15] = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero({
+        cast: {
+          COTA: {
+            activated: false,
+            introduced: false,
+            present: false,
+            inParty: false
+          }
+        }
+      }),
+      world: {
+        current_time: { day: 1, phase: 'MORNING' },
+        clockPressure: 0,
+        expansion_state: { activeMajor: '', activeLight: [] },
+        act: createActStateAt(act, 1, ['node1-entry'], {
+          narrativeTension: 0
+        })
+      }
+    },
+    schema: 'smoke'
+  };
+
+  assertEqual(await sandbox.ACE0Plugin.setActiveMajorExpansion('major-a'), true, 'expansion API should persist through replay');
+  assertEqual(await sandbox.ACE0Plugin.setCharacterState('COTA', { activated: true, introduced: true }), true, 'character API should persist through replay');
+  assertEqual(await sandbox.ACE0Plugin.setCharacterState('COTA', { present: true }), true, 'repeated character API should replace one replay block safely');
+  await sandbox.ACE0Plugin.setClockPressure(33);
+  await sandbox.ACE0Plugin.setNarrativeTension(44);
+
+  const message = sandbox.__messages[15].message;
+  assert(message.includes('ACE0_REPLAY:api:expansion-major'), 'expansion API should append replay block');
+  assert(message.includes('ACE0_REPLAY:api:hero-cast:COTA'), 'character API should append replay block');
+  assert(message.includes('ACE0_REPLAY:runtime:clock-pressure'), 'clock pressure API should append replay block');
+  assert(message.includes('ACE0_REPLAY:runtime:narrative-tension'), 'narrative tension API should append replay block');
+  assertEqual(countOccurrences(message, 'ACE0_REPLAY:api:hero-cast:COTA'), 1, 'same character operation should keep one replay block');
+  assert(!message.includes('"path": "/world/act",'), 'public API replay should not replace whole ACT subtree');
+  assertEqual(sandbox.__messageVars[15].stat_data.world.expansion_state.activeMajor, 'major-a', 'expansion replay should apply');
+  assertEqual(sandbox.__messageVars[15].stat_data.hero.cast.COTA.activated, true, 'replaced character replay should preserve prior activated field');
+  assertEqual(sandbox.__messageVars[15].stat_data.hero.cast.COTA.present, true, 'replaced character replay should apply latest present field');
+  assertEqual(sandbox.__messageVars[15].stat_data.world.clockPressure, 33, 'clock pressure replay should apply');
+  assertEqual(sandbox.__messageVars[15].stat_data.world.act.narrativeTension, 44, 'narrative tension replay should apply');
+}
+
+async function testReplayBlockRemovedWhenOperationReturnsToBaseline() {
+  const sandbox = makePluginSandbox();
+  const act = sandbox.ACE0Modules.act;
+  sandbox.__currentMessageId = 16;
+  const baseVars = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero(),
+      world: {
+        current_time: { day: 1, phase: 'MORNING' },
+        clockPressure: 0,
+        act: createActStateAt(act, 1, ['node1-entry'])
+      }
+    },
+    schema: 'smoke'
+  };
+  sandbox.__messages[16] = {
+    message_id: 16,
+    role: 'assistant',
+    message: 'replay removal smoke\n<StatusPlaceHolderImpl/>'
+  };
+  sandbox.__messageVars[15] = clone(baseVars);
+  sandbox.__messageVars[16] = clone(baseVars);
+  sandbox.Mvu = {
+    parseMessage: async (message, oldVars) => {
+      const nextVars = clone(oldVars);
+      applyReplayBlocksToVars(message, nextVars);
+      return nextVars;
+    },
+    replaceMvuData: async (vars, options = {}) => {
+      const id = Number.isFinite(Number(options.message_id)) ? Math.round(Number(options.message_id)) : sandbox.__currentMessageId;
+      sandbox.__messageVars[id] = clone(vars);
+    }
+  };
+
+  await sandbox.ACE0Plugin.setClockPressure(33);
+  assert(sandbox.__messages[16].message.includes('ACE0_REPLAY:runtime:clock-pressure'), 'first write should append replay block');
+  assertEqual(sandbox.__messageVars[16].stat_data.world.clockPressure, 33, 'first replay should apply clock pressure');
+
+  await sandbox.ACE0Plugin.setClockPressure(0);
+  assert(!sandbox.__messages[16].message.includes('ACE0_REPLAY:runtime:clock-pressure'), 'returning to baseline should remove stale replay block');
+  assertEqual(sandbox.__messageVars[16].stat_data.world.clockPressure, 0, 'removed replay block should restore baseline value');
 }
 
 async function testFloorKeyMismatchRejected() {
@@ -490,6 +603,28 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   assertEqual(sandbox.__messageVars[13].stat_data.world.act.pendingTransitionTarget, 'chapter-debug', 'dashboard replay should preserve transition scratch fields');
   assertEqual(sandbox.__messageVars[13].stat_data.world.current_time.day, 1, 'dashboard replay should not apply full world time payload');
   assertEqual(sandbox.__messageVars[13].stat_data.world.clockPressure, 5, 'dashboard replay should not apply full world clock payload');
+
+  const secondWorld = clone(sandbox.__messageVars[13].stat_data.world);
+  secondWorld.act = clone(secondWorld.act);
+  secondWorld.act.reserve = {
+    ...secondWorld.act.reserve,
+    rest: 0
+  };
+  const didPersistAgain = await sandbox.ACE0DashboardLoaderTestHooks.persistDashboardActState({
+    requestId: 'dashboard-compact-smoke-2',
+    meta: { floorKey: 'message:13' },
+    world: secondWorld
+  });
+
+  assertEqual(didPersistAgain, true, 'second dashboard ACT commit should persist through same replay operation');
+  const messageAfterSecondCommit = sandbox.__messages[13].message;
+  assertEqual(countOccurrences(messageAfterSecondCommit, 'ACE0_REPLAY:dashboard-act:message:13'), 1, 'dashboard should keep one replay block per floor');
+  assert(messageAfterSecondCommit.includes('"path": "/world/act/reserve/combat"'), 'replaced dashboard block should keep prior reserve combat change');
+  assert(messageAfterSecondCommit.includes('"path": "/world/act/reserve/rest"'), 'replaced dashboard block should include latest reserve rest change');
+  assert(messageAfterSecondCommit.includes('"path": "/world/act/phase_slots"'), 'replaced dashboard block should keep prior phase slot change');
+  assertEqual(sandbox.__messageVars[13].stat_data.world.act.reserve.combat, 0, 'second dashboard replay should preserve prior reserve combat');
+  assertEqual(sandbox.__messageVars[13].stat_data.world.act.reserve.rest, 0, 'second dashboard replay should apply latest reserve rest');
+  assertEqual(sandbox.__messageVars[13].stat_data.world.act.phase_slots[1].key, 'combat', 'second dashboard replay should preserve prior phase slot');
 }
 
 async function testActResultMissingActBaseDoesNotCreateActReplay() {
@@ -521,6 +656,8 @@ async function main() {
   await testMissingBaseDoesNotCreateDefaultAct();
   await testActResultMissingActBaseDoesNotCreateActReplay();
   await testFloorProgressWritesOnlyLeafPatches();
+  await testPublicApisPersistThroughReplayOnly();
+  await testReplayBlockRemovedWhenOperationReturnsToBaseline();
   await testPhaseAdvanceWritesReplayAndReplaysActAdvance();
   await testFloorKeyMismatchRejected();
   await testParentMvuReplayHandlerIsUsed();
