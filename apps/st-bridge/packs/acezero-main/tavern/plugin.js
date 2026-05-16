@@ -336,111 +336,38 @@
     return trimmed ? `${trimmed}\n\n${block}` : block;
   }
 
-  function collectMvuReplayHandlers() {
+  function resolveMvuReplayHandler() {
     const root = getAce0HostRoot();
     const candidates = [];
     const seen = [];
-    const pushCandidate = (name, fn) => {
-      if (typeof fn !== 'function' || seen.includes(fn)) return;
-      seen.push(fn);
-      candidates.push({ name, run: fn });
-    };
-    collectMvuApiReplayHandlers().forEach((candidate) => pushCandidate(candidate.name, candidate.run));
-    const pushHandler = (owner, key = 'handleVariablesInMessage') => {
+    const pushHandler = (owner) => {
       try {
-        const fn = owner && owner[key];
-        pushCandidate(key, fn && fn.bind(owner));
+        const fn = owner && owner.handleVariablesInMessage;
+        if (typeof fn !== 'function' || seen.includes(fn)) return;
+        seen.push(fn);
+        candidates.push(fn.bind(owner));
       } catch (_) {}
     };
     try {
-      pushCandidate('handleVariablesInMessage', typeof handleVariablesInMessage === 'function' ? handleVariablesInMessage : null);
+      if (typeof handleVariablesInMessage === 'function' && !seen.includes(handleVariablesInMessage)) {
+        seen.push(handleVariablesInMessage);
+        candidates.push(handleVariablesInMessage);
+      }
     } catch (_) {}
     try { pushHandler(window); } catch (_) {}
     try { pushHandler(window?.parent); } catch (_) {}
+    try { pushHandler(window?.parent?.parent); } catch (_) {}
     try { pushHandler(window?.top); } catch (_) {}
     try { pushHandler(root); } catch (_) {}
     try { pushHandler(root?.parent); } catch (_) {}
+    try { pushHandler(root?.parent?.parent); } catch (_) {}
     try { pushHandler(root?.top); } catch (_) {}
+    try { pushHandler(typeof unsafeWindow === 'object' ? unsafeWindow : null); } catch (_) {}
+    try { pushHandler(typeof unsafeWindow === 'object' ? unsafeWindow?.parent : null); } catch (_) {}
+    try { pushHandler(typeof unsafeWindow === 'object' ? unsafeWindow?.top : null); } catch (_) {}
     try { pushHandler(window?.STBridge?.mvu); } catch (_) {}
     try { pushHandler(root?.STBridge?.mvu); } catch (_) {}
-    return candidates;
-  }
-
-  function collectMvuApiReplayHandlers() {
-    const root = getAce0HostRoot();
-    const owners = [];
-    const candidates = [];
-    const seenApis = [];
-    const pushOwner = (owner) => {
-      try {
-        if (owner && !owners.includes(owner)) owners.push(owner);
-      } catch (_) {}
-    };
-    try { pushOwner(window); } catch (_) {}
-    try { pushOwner(window?.parent); } catch (_) {}
-    try { pushOwner(window?.top); } catch (_) {}
-    try { pushOwner(root); } catch (_) {}
-    try { pushOwner(root?.parent); } catch (_) {}
-    try { pushOwner(root?.top); } catch (_) {}
-
-    for (const owner of owners) {
-      const api = owner?.Mvu;
-      if (
-        api &&
-        typeof api.parseMessage === 'function' &&
-        typeof api.replaceMvuData === 'function' &&
-        !seenApis.includes(api)
-      ) {
-        seenApis.push(api);
-        candidates.push({
-          name: 'Mvu.parseMessage',
-          run: async (messageId) => replayMessageThroughMvuApi(api, messageId)
-        });
-      }
-    }
-    return candidates;
-  }
-
-  async function readMvuApiBaseVariables(messageId) {
-    const id = Math.round(Number(messageId) || 0);
-    try {
-      const chat = window?.SillyTavern?.chat || getAce0HostRoot()?.SillyTavern?.chat;
-      if (Array.isArray(chat)) {
-        for (let index = Math.min(id - 1, chat.length - 1); index >= 0; index -= 1) {
-          const item = chat[index];
-          const swipeId = Math.max(0, Math.round(Number(item?.swipe_id) || 0));
-          const vars = item?.variables?.[swipeId];
-          if (hasCompleteMvuVariableBundle(vars)) return cloneJsonData(vars, vars);
-        }
-      }
-    } catch (_) {}
-    try {
-      if (typeof getVariables === 'function') {
-        const targetId = id > 0 ? id - 1 : id;
-        const vars = await getVariables({ type: 'message', message_id: targetId });
-        if (hasCompleteMvuVariableBundle(vars)) return cloneJsonData(vars, vars);
-      }
-    } catch (_) {}
-    try {
-      if (typeof getVariables === 'function') {
-        const vars = await getVariables({ type: 'message', message_id: id });
-        if (hasCompleteMvuVariableBundle(vars)) return cloneJsonData(vars, vars);
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  async function replayMessageThroughMvuApi(mvuApi, messageId) {
-    const id = Math.round(Number(messageId) || 0);
-    const messages = typeof getChatMessages === 'function' ? getChatMessages(id) : [];
-    const msg = Array.isArray(messages) ? messages[0] : null;
-    if (!msg || typeof msg.message !== 'string') return false;
-    const baseVars = await readMvuApiBaseVariables(id);
-    if (!hasCompleteMvuVariableBundle(baseVars)) return false;
-    const nextVars = await mvuApi.parseMessage(msg.message, baseVars);
-    if (!hasCompleteMvuVariableBundle(nextVars)) return false;
-    await mvuApi.replaceMvuData(nextVars, { type: 'message', message_id: id });
-    return true;
+    return candidates[0] || null;
   }
 
   function buildReplacePatch(path, value) {
@@ -564,40 +491,6 @@
     return Array.from(byPath.values());
   }
 
-  function doesVariableBundleMatchReplayPatches(vars, patches) {
-    const statData = vars?.stat_data;
-    if (!statData || typeof statData !== 'object') return false;
-    return (Array.isArray(patches) ? patches : []).every((patch) => {
-      if (!patch || typeof patch !== 'object') return true;
-      const path = typeof patch.path === 'string' ? patch.path.trim() : '';
-      if (!path) return true;
-      const actual = readJsonPointer(statData, path);
-      if (patch.op === 'remove') return actual === undefined;
-      if (patch.op === 'replace' || patch.op === 'add') return areJsonValuesEqual(actual, patch.value);
-      return false;
-    });
-  }
-
-  async function runMvuReplayHandlers(messageId, patches, replayHandlers = null) {
-    const handlers = Array.isArray(replayHandlers) ? replayHandlers : collectMvuReplayHandlers();
-    if (!handlers.length) return { ok: false, reason: 'mvu_replay_unavailable' };
-
-    let lastReason = 'mvu_replay_not_applied';
-    for (const handler of handlers) {
-      if (!handler || typeof handler.run !== 'function') continue;
-      try {
-        await handler.run(messageId);
-        const nextVars = await getMessageVariableBundle(messageId);
-        if (doesVariableBundleMatchReplayPatches(nextVars, patches)) {
-          return { ok: true, handler: handler.name || 'unknown' };
-        }
-      } catch (error) {
-        lastReason = error?.message || 'mvu_replay_failed';
-      }
-    }
-    return { ok: false, reason: lastReason };
-  }
-
   async function commitAce0ReplayPatch(options = {}) {
     const patches = Array.isArray(options.patches) ? options.patches.filter(item => item && typeof item === 'object') : [];
     if (!patches.length) return { ok: false, reason: 'empty_replay_patch' };
@@ -629,8 +522,8 @@
       return { ok: false, reason: 'message_not_found', messageId: normalizedMessageId, floorKey: actualFloorKey };
     }
 
-    const replayHandlers = collectMvuReplayHandlers();
-    if (!replayHandlers.length) {
+    const replayHandler = resolveMvuReplayHandler();
+    if (typeof replayHandler !== 'function') {
       return { ok: false, reason: 'mvu_replay_unavailable', messageId: normalizedMessageId, floorKey: actualFloorKey };
     }
 
@@ -652,27 +545,13 @@
       message: nextMessage
     }], { refresh: options.refresh || 'affected' });
 
-    const replayResult = await runMvuReplayHandlers(normalizedMessageId, patches, replayHandlers);
-    if (!replayResult.ok) {
-      await setChatMessages([{
-        message_id: normalizedMessageId,
-        message: originalMessage
-      }], { refresh: options.refresh || 'affected' });
-      return {
-        ok: false,
-        reason: replayResult.reason || 'mvu_replay_not_applied',
-        messageId: normalizedMessageId,
-        floorKey: actualFloorKey,
-        operationId
-      };
-    }
+    await replayHandler(normalizedMessageId);
     return {
       ok: true,
       messageId: normalizedMessageId,
       floorKey: actualFloorKey,
       operationId,
-      patchCount: patches.length,
-      replayHandler: replayResult.handler || ''
+      patchCount: patches.length
     };
   }
 

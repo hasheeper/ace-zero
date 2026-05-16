@@ -326,43 +326,6 @@ async function testParentMvuReplayHandlerIsUsed() {
   assertEqual(sandbox.__messageVars[9].stat_data.world.clockPressure, 45, 'parent MVU handler should replay variables');
 }
 
-async function testParentMvuApiReplayFallbackIsUsed() {
-  const sandbox = makePluginSandbox();
-  sandbox.__currentMessageId = 10;
-  sandbox.__messages[10] = { message_id: 10, role: 'assistant', message: 'parent Mvu API smoke' };
-  sandbox.__messageVars[10] = {
-    initialized_lorebooks: {},
-    stat_data: {
-      hero: createHero(),
-      world: { act: sandbox.ACE0Modules.act.getDefaultActState(), clockPressure: 0 }
-    },
-    schema: 'smoke'
-  };
-  sandbox.handleVariablesInMessage = undefined;
-  sandbox.parent = {
-    Mvu: {
-      parseMessage: async (message, oldVars) => {
-        const nextVars = clone(oldVars);
-        applyReplayBlocksToVars(message, nextVars);
-        return nextVars;
-      },
-      replaceMvuData: async (vars, options = {}) => {
-        const id = Number.isFinite(Number(options.message_id)) ? Math.round(Number(options.message_id)) : sandbox.__currentMessageId;
-        sandbox.__messageVars[id] = clone(vars);
-      }
-    }
-  };
-
-  const result = await sandbox.ACE0Plugin.commitReplayPatch({
-    floorKey: 'message:10',
-    messageId: 10,
-    operationId: 'parent-mvu-api-smoke',
-    patches: [{ op: 'replace', path: '/world/clockPressure', value: 55 }]
-  });
-  assertEqual(result.ok, true, 'replay should use parent Mvu API fallback');
-  assertEqual(sandbox.__messageVars[10].stat_data.world.clockPressure, 55, 'parent Mvu API should replay variables');
-}
-
 async function testDashboardActCommitWritesOnlyChangedActPointers() {
   const sandbox = makePluginSandbox();
   const act = sandbox.ACE0Modules.act;
@@ -406,16 +369,12 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   };
   sandbox.ACE0Plugin = undefined;
   sandbox.parent = {
-    Mvu: {
-      parseMessage: async (message, oldVars) => {
-        const nextVars = clone(oldVars);
-        applyReplayBlocksToVars(message, nextVars);
-        return nextVars;
-      },
-      replaceMvuData: async (vars, options = {}) => {
-        const id = Number.isFinite(Number(options.message_id)) ? Math.round(Number(options.message_id)) : sandbox.__currentMessageId;
-        sandbox.__messageVars[id] = clone(vars);
-      }
+    handleVariablesInMessage: async (messageId) => {
+      const vars = sandbox.__messageVars[messageId];
+      const msg = sandbox.__messages[messageId];
+      if (!vars || !vars.stat_data || !msg) return false;
+      applyReplayBlocksToVars(msg.message, vars);
+      return true;
     }
   };
   sandbox.__ACE0_DASHBOARD_LOADER_TEST_HOOKS__ = true;
@@ -497,7 +456,6 @@ async function main() {
   await testPhaseAdvanceWritesReplayAndReplaysActAdvance();
   await testFloorKeyMismatchRejected();
   await testParentMvuReplayHandlerIsUsed();
-  await testParentMvuApiReplayFallbackIsUsed();
   await testDashboardActCommitWritesOnlyChangedActPointers();
   console.log('[mvu-replay-smoke] all checks passed');
 }
