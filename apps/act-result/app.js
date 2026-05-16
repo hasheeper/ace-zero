@@ -396,7 +396,7 @@
         return targets;
       }
 
-      function postActResultAssetCommand(command) {
+      function postActResultAssetCommand(command, floorKey) {
         var targets = getHostMessageTargets();
         if (!targets.length) return Promise.resolve({ ok: false, error: 'No parent/top host window available.' });
 
@@ -414,6 +414,7 @@
                 type: 'acezero-act-result-asset-command',
                 payload: {
                   requestId: requestId,
+                  floorKey: floorKey || '',
                   command: command
                 }
               }, '*');
@@ -445,7 +446,7 @@
         });
       }
 
-      function postActResultRouteCommand(nodeId) {
+      function postActResultRouteCommand(nodeId, floorKey) {
         var targets = getHostMessageTargets();
         if (!targets.length) return Promise.resolve({ ok: false, error: 'No parent/top host window available.' });
 
@@ -463,7 +464,8 @@
                 type: 'acezero-act-result-route-command',
                 payload: {
                   requestId: requestId,
-                  nodeId: nodeId
+                  nodeId: nodeId,
+                  floorKey: floorKey || ''
                 }
               }, '*');
             } catch (e) {}
@@ -479,18 +481,8 @@
         return String((data && (data.floorKey || data.__ace0FloorKey || data.messageId || data.floorId)) || '');
       }
 
-      function getAssetOfferClearStorageKey(clearKey, floorKey) {
-        if (!clearKey || !floorKey) return '';
-        return 'ace0.actResult.assetOfferCleared:' + String(floorKey) + ':' + String(clearKey);
-      }
-
       function rememberAssetOfferCleared(offerOrClearKey, floorKey) {
-        var clearKey = typeof offerOrClearKey === 'string' ? offerOrClearKey : getAssetOfferClearKey(offerOrClearKey);
-        var storageKey = getAssetOfferClearStorageKey(clearKey, floorKey);
-        if (!storageKey) return;
-        try {
-          window.localStorage.setItem(storageKey, '1');
-        } catch (e) {}
+        return;
       }
 
       function syncAssetOfferButtonClearKey(clearKey) {
@@ -501,14 +493,7 @@
       }
 
       function isAssetOfferClearedLocally(offer, floorKey) {
-        var clearKey = getAssetOfferClearKey(offer);
-        var storageKey = getAssetOfferClearStorageKey(clearKey, floorKey);
-        if (!storageKey) return false;
-        try {
-          return window.localStorage.getItem(storageKey) === '1';
-        } catch (e) {
-          return false;
-        }
+        return false;
       }
 
       function isAssetOfferCleared(act, offer) {
@@ -746,16 +731,16 @@
         try {
           var result;
           if (api && typeof api.chooseAssetCard === 'function') {
-            result = await api.chooseAssetCard(choiceIndex, slotType, clearKey);
+            result = await api.chooseAssetCard(choiceIndex, slotType, clearKey, { floorKey: floorKey });
           } else {
             var bridge = resolveAssetDeckBridge();
             var command = {
                 kind: 'choose_card',
-                payload: { choiceIndex: choiceIndex, slotType: slotType, clearKey: clearKey }
+                payload: { choiceIndex: choiceIndex, slotType: slotType, clearKey: clearKey, floorKey: floorKey }
             };
             result = bridge
-              ? await bridge({ requestId: 'act-result-asset-direct-' + Date.now().toString(36), command: command })
-              : await postActResultAssetCommand(command);
+              ? await bridge({ requestId: 'act-result-asset-direct-' + Date.now().toString(36), floorKey: floorKey, command: command })
+              : await postActResultAssetCommand(command, floorKey);
           }
 
           if (result && result.ok) {
@@ -851,6 +836,7 @@
 
       async function handleRouteClick(btn, data) {
         var nId = btn.getAttribute('data-node-id'); if(!nId) return;
+        var floorKey = getAssetOfferFloorKey(data);
         var api = resolveAce0Api();
         
         btn.classList.add('is-chosen');
@@ -858,8 +844,8 @@
         
         try {
            var r = api && typeof api.chooseActRoute === 'function'
-             ? await api.chooseActRoute(nId)
-             : await postActResultRouteCommand(nId);
+             ? await api.chooseActRoute(nId, { floorKey: floorKey })
+             : await postActResultRouteCommand(nId, floorKey);
            var hint = document.getElementById('ui-route-hint');
            if(r && r.ok) { hint.textContent = '命运已推演 ✓'; hint.className = 'route-panel-hint success'; }
            else { 

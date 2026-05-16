@@ -241,6 +241,7 @@
 
     return {
       type: resultType,
+      floorKey: typeof options.floorKey === 'string' ? options.floorKey.trim() : '',
       fromNodeIndex: before.nodeIndex,
       toNodeIndex: after.nodeIndex,
       fromPhaseIndex: before.phaseIndex,
@@ -291,10 +292,11 @@
     return `<${ACT_RESULT_TAG}>\n${JSON.stringify(resultPayload)}\n</${ACT_RESULT_TAG}>`;
   }
 
-  async function buildPendingActResult(content = '', eraVars = null) {
+  async function buildPendingActResult(content = '', eraVars = null, options = {}) {
     const currentVars = eraVars || await getEraVars();
-    const resolvedAdvance = await resolvePendingActAdvance(currentVars);
-    const syncedState = await synchronizeActCharacterState(resolvedAdvance.eraVars);
+    const persist = options.persist !== false;
+    const resolvedAdvance = await resolvePendingActAdvance(currentVars, { persist });
+    const syncedState = await synchronizeActCharacterState(resolvedAdvance.eraVars, { persist });
     const nextSnapshot = createActRuntimeSnapshot(syncedState.eraVars, syncedState.derived);
     const changedPatches = getNonRelationshipPatchesFromContent(content);
     const changedPaths = changedPatches
@@ -304,20 +306,36 @@
     const baselineSnapshot = getPendingActBaselineSnapshot();
     if (!baselineSnapshot || !nextSnapshot) {
       setPendingActBaselineSnapshot(nextSnapshot);
-      return { payload: null, eraVars: syncedState.eraVars, snapshot: nextSnapshot };
+      return {
+        payload: null,
+        eraVars: syncedState.eraVars,
+        snapshot: nextSnapshot,
+        stateChanged: resolvedAdvance.changed === true || syncedState.changed === true
+      };
     }
 
     if (areActSnapshotsEqual(baselineSnapshot, nextSnapshot) && !shouldForceStateUpdate) {
       setPendingActBaselineSnapshot(nextSnapshot);
-      return { payload: null, eraVars: syncedState.eraVars, snapshot: nextSnapshot };
+      return {
+        payload: null,
+        eraVars: syncedState.eraVars,
+        snapshot: nextSnapshot,
+        stateChanged: resolvedAdvance.changed === true || syncedState.changed === true
+      };
     }
 
     const payload = buildActResultPayload(baselineSnapshot, nextSnapshot, {
       forceStateUpdate: shouldForceStateUpdate,
-      changedPaths
+      changedPaths,
+      floorKey: options.floorKey
     });
     setPendingActBaselineSnapshot(nextSnapshot);
-    return { payload, eraVars: syncedState.eraVars, snapshot: nextSnapshot };
+    return {
+      payload,
+      eraVars: syncedState.eraVars,
+      snapshot: nextSnapshot,
+      stateChanged: true
+    };
   }
 
   async function appendActResultIfNeeded(content, options = {}) {
@@ -325,13 +343,27 @@
     if (!baseContent.trim()) return { content: baseContent, changed: false, payload: null };
     if (baseContent.includes(`<${ACT_RESULT_TAG}>`)) return { content: baseContent, changed: false, payload: null };
 
-    const built = await buildPendingActResult(baseContent, options.eraVars || null);
+    const built = await buildPendingActResult(baseContent, options.eraVars || null, options);
     if (!built.payload) {
-      return { content: baseContent, changed: false, payload: null };
+      return {
+        content: baseContent,
+        changed: false,
+        payload: null,
+        eraVars: built.eraVars,
+        snapshot: built.snapshot,
+        stateChanged: built.stateChanged === true
+      };
     }
 
     const nextContent = `${baseContent.trim()}\n\n${buildActResultTag(built.payload)}`;
-    return { content: nextContent, changed: true, payload: built.payload };
+    return {
+      content: nextContent,
+      changed: true,
+      payload: built.payload,
+      eraVars: built.eraVars,
+      snapshot: built.snapshot,
+      stateChanged: built.stateChanged === true
+    };
   }
 
 

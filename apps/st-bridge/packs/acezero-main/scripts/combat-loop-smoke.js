@@ -116,10 +116,19 @@ function testCombatPromptInjection() {
   const prompt = prompts.find((item) => item.id === 'ace0_combat_request');
   assert(prompt, 'pending combat should inject combat request prompt');
   assertEqual(prompt.depth, 0, 'combat prompt depth');
-  assert(prompt.content.includes('"requestId": "boss-req"'), 'requestId should be in prompt');
-  assert(prompt.content.includes('"requestIndex": 1'), 'requestIndex should point to original pending index');
-  assert(prompt.content.includes('"level": 3'), 'level should be in prompt');
-  assert(prompt.content.includes('"stakeGold": 105'), 'stakeGold should use 70% of positive funds + assets');
+  assert(prompt.content.includes('"ace0Combat": true'), 'combat prompt should ask AI for compact marker');
+  assert(!prompt.content.includes('"requestId"'), 'combat prompt should not expose request id');
+  assert(!prompt.content.includes('"requestIndex"'), 'combat prompt should not expose request index');
+  assert(!prompt.content.includes('"stakeGold"'), 'combat prompt should not expose stakeGold');
+
+  const combatConfig = runtime.resolveAce0CombatConfig(eraVars);
+  assert(combatConfig, 'pending combat should resolve frontend combat config');
+  assertEqual(combatConfig.requestId, 'boss-req', 'request id should resolve from pending request');
+  assertEqual(combatConfig.requestIndex, 1, 'request index should point to original pending index');
+  assertEqual(combatConfig.level, 3, 'level should resolve from pending request');
+  assertEqual(combatConfig.kind, 'boss', 'kind should default from level');
+  assertEqual(combatConfig.stakeGold, 105, 'stakeGold should use 70% of positive funds + assets');
+  assertEqual(combatConfig.stakeChips, 10500, 'stakeChips should convert resolved gold to silver');
 }
 
 function testStaleCombatPromptDoesNotInject() {
@@ -197,11 +206,42 @@ function testActiveCombatTokenPromptInjection() {
   const prompts = runtime.buildActNarrativePrompts(eraVars);
   const prompt = prompts.find((item) => item.id === 'ace0_combat_request');
   assert(prompt, 'active combat token should inject combat request prompt before pending exists');
-  assert(prompt.content.includes('"requestId": "chapter0_exchange:node1-entry:1:combat:1:0"'), 'active token request id should match future pending id');
-  assert(prompt.content.includes('"requestIndex": 0'), 'active token request index should point to future pending index');
-  assert(prompt.content.includes('"level": 1'), 'active token level should be carried');
-  assert(prompt.content.includes('"stakeGold": 2.2'), 'active token stakeGold should use level 1 10% estimate');
+  assert(prompt.content.includes('"ace0Combat": true'), 'active token prompt should ask AI for compact marker');
+  assert(!prompt.content.includes('"requestId"'), 'active token prompt should not expose request id');
+  assert(!prompt.content.includes('"requestIndex"'), 'active token prompt should not expose request index');
+  assert(!prompt.content.includes('"stakeGold"'), 'active token prompt should not expose stakeGold');
   assert(prompt.content.includes('phase_advance'), 'active token prompt should ask to advance current phase when opening combat');
+
+  const combatConfig = runtime.resolveAce0CombatConfig(eraVars);
+  assert(combatConfig, 'active combat token should resolve frontend combat config before pending exists');
+  assertEqual(combatConfig.requestId, 'chapter0_exchange:node1-entry:1:combat:1:0', 'active token request id should match future pending id');
+  assertEqual(combatConfig.requestIndex, 0, 'active token request index should point to future pending index');
+  assertEqual(combatConfig.level, 1, 'active token level should be carried');
+  assertEqual(combatConfig.kind, 'skirmish', 'active token kind should default from level');
+  assertEqual(combatConfig.stakeGold, 2.2, 'active token stakeGold should use level 1 10% estimate');
+}
+
+function testNoCombatRequestDoesNotResolveConfig() {
+  const { sandbox, act, tavernFactory } = loadTavernSandbox();
+  const eraVars = {
+    hero: { funds: 20, assets: 0, cast: {}, roster: {} },
+    world: {
+      current_time: { day: 1, phase: 'MORNING' },
+      location: { layer: 'THE_EXCHANGE', site: 'casino_floor', tags: [] },
+      act: createActStateAt(act, 1, ['node1-entry'], {
+        phase_index: 1,
+        phase_slots: [
+          null,
+          { key: 'rest', source: 'reserve', amount: 1 },
+          null,
+          null
+        ],
+        pendingResolutions: []
+      })
+    }
+  };
+  const { runtime } = createTavernRuntime(tavernFactory, sandbox, { eraVars });
+  assertEqual(runtime.resolveAce0CombatConfig(eraVars), null, 'ordinary ACT phase should not resolve combat config');
 }
 
 function testMiniGamePromptMarker() {
@@ -351,6 +391,7 @@ function main() {
   testCombatPromptInjection();
   testStaleCombatPromptDoesNotInject();
   testActiveCombatTokenPromptInjection();
+  testNoCombatRequestDoesNotResolveConfig();
   testMiniGamePromptMarker();
   testTexasPromptMarker();
   testTexasPromptMarkerUsesSessionNet();

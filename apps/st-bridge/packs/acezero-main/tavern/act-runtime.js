@@ -60,6 +60,7 @@
       let hasWarnedMissingAssetDeckModule = false;
       let lastHandledMk = null;
       let latchedTransitionRequestTarget = '';
+      const SILVER_PER_GOLD = 100;
 
   function normalizeWorldClock(raw) {
     const src = raw && typeof raw === 'object' ? raw : {};
@@ -696,7 +697,7 @@
     return hints;
   }
 
-  async function autoUpdateHostEncounters(eraVars) {
+  async function autoUpdateHostEncounters(eraVars, options = {}) {
     const world = getWorldState(eraVars);
     const hero = eraVars?.hero && typeof eraVars.hero === 'object' ? eraVars.hero : {};
     const act = getWorldActState(eraVars);
@@ -720,7 +721,9 @@
     const afterEncounter = JSON.stringify(nextAct.characterEncounter || {});
     if (beforeEncounter === afterEncounter) return { eraVars, changed: false };
 
-    await updateEraVars({ world: { act: nextAct } });
+    if (options.persist !== false) {
+      await updateEraVars({ world: { act: nextAct } });
+    }
     return {
       eraVars: {
         ...(eraVars || {}),
@@ -735,8 +738,8 @@
     };
   }
 
-  async function synchronizeActCharacterState(eraVars) {
-    const autoEncounter = await autoUpdateHostEncounters(eraVars);
+  async function synchronizeActCharacterState(eraVars, options = {}) {
+    const autoEncounter = await autoUpdateHostEncounters(eraVars, options);
     const workingEraVars = autoEncounter.eraVars || eraVars;
     const derived = deriveActCharacterStates(workingEraVars);
     if (!derived) return { eraVars: workingEraVars, derived: null, changed: autoEncounter.changed === true };
@@ -783,9 +786,11 @@
     }
 
     if (changed) {
-      await updateEraVars({
-        hero: { cast: castPatch }
-      });
+      if (options.persist !== false) {
+        await updateEraVars({
+          hero: { cast: castPatch }
+        });
+      }
 
       const nextEraVars = {
         ...(workingEraVars || {}),
@@ -840,14 +845,24 @@
     return null;
   }
 
-  function findActiveCombatTokenRequest(liveAct, derived) {
-    const act = derived?.act || liveAct;
+  function getCurrentCombatSlot(act) {
     const slots = Array.isArray(act?.phase_slots) ? act.phase_slots : [];
     const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
     const token = slots[phaseIndex];
     const key = normalizeActResourceKey(token?.key, '');
     if (key !== 'combat') return null;
-    const amount = Math.max(1, Math.min(3, Math.round(Number(token.amount) || 1)));
+    return {
+      token,
+      phaseIndex,
+      amount: Math.max(1, Math.min(3, Math.round(Number(token.amount) || 1)))
+    };
+  }
+
+  function findActiveCombatTokenRequest(liveAct, derived) {
+    const act = liveAct || derived?.act;
+    const activeSlot = getCurrentCombatSlot(act);
+    if (!activeSlot) return null;
+    const { token, phaseIndex, amount } = activeSlot;
     const nodeId = typeof derived?.currentNodeId === 'string' && derived.currentNodeId.trim()
       ? derived.currentNodeId.trim()
       : (Array.isArray(act?.route_history) ? act.route_history[Math.max(0, Math.round(Number(act?.nodeIndex) || 1) - 1)] : '') || 'node';
@@ -872,11 +887,20 @@
     };
   }
 
-  function buildCombatRequestPromptContent(liveAct, eraVars, derived = null) {
+  function resolveCombatLevelFromContext(request, liveAct, derived) {
+    const explicitLevel = Number(request?.level || request?.combatLevel || request?.tier);
+    if (Number.isFinite(explicitLevel) && explicitLevel > 0) {
+      return Math.max(1, Math.min(3, Math.round(explicitLevel)));
+    }
+    const activeSlot = getCurrentCombatSlot(liveAct) || getCurrentCombatSlot(derived?.act);
+    return activeSlot ? activeSlot.amount : 1;
+  }
+
+  function buildAce0CombatConfigFromContext(liveAct, eraVars, derived = null) {
     const pending = findPendingCombatRequest(liveAct, derived) || findActiveCombatTokenRequest(liveAct, derived);
-    if (!pending) return '';
+    if (!pending) return null;
     const request = pending.request;
-    const level = Math.max(1, Math.min(3, Math.round(Number(request.level || request.combatLevel || request.tier) || 1)));
+    const level = resolveCombatLevelFromContext(request, liveAct, derived);
     const kind = typeof request.kind === 'string' && request.kind.trim()
       ? request.kind.trim()
       : (level >= 3 ? 'boss' : level === 2 ? 'elite' : 'skirmish');
@@ -888,7 +912,7 @@
     const requestId = typeof request.id === 'string' && request.id.trim()
       ? request.id.trim()
       : (typeof request.requestId === 'string' && request.requestId.trim() ? request.requestId.trim() : 'combat-' + pending.index);
-    const payload = {
+    return {
       ace0Combat: {
         protocol: 'ace0.combat.v1',
         requestId,
@@ -896,19 +920,36 @@
         level,
         kind,
         special: true,
-        stakeGold
-      }
+        stakeGold,
+        stakeChips: Math.max(0, Math.round(stakeGold * SILVER_PER_GOLD))
+      },
+      fromActiveToken: Boolean(pending.fromActiveToken)
     };
+  }
+
+  function resolveAce0CombatConfig(eraVars, derivedActState = null) {
+    const liveAct = getWorldActState(eraVars);
+    const derived = derivedActState || deriveActCharacterStates(eraVars);
+    const world = getWorldState(eraVars);
+    const rawAct = world?.act && typeof world.act === 'object' && !Array.isArray(world.act) ? world.act : null;
+    const resolved = buildAce0CombatConfigFromContext(liveAct, eraVars, derived)
+      || (rawAct ? buildAce0CombatConfigFromContext(rawAct, eraVars, derived) : null);
+    return resolved && resolved.ace0Combat ? resolved.ace0Combat : null;
+  }
+
+  function buildCombatRequestPromptContent(liveAct, eraVars, derived = null) {
+    const resolved = buildAce0CombatConfigFromContext(liveAct, eraVars, derived);
+    if (!resolved) return '';
+    const level = resolved.ace0Combat.level;
     const label = level >= 3 ? 'Combat 3 / Boss 交锋' : level === 2 ? 'Combat 2 / 精英交锋' : 'Combat 1 / 小交锋';
     return [
       '<ace0_combat_request>',
-      '当前相位存在一个待结算交锋点 pending request。本轮若进入这个特殊交锋局，必须在 <ACE0_BATTLE> JSON 顶层原样写入以下 ace0Combat 字段；普通赌局、非交锋点赌局、回放模式都不要写 ace0Combat。',
+      '当前相位存在一个待结算交锋点。本轮若进入这个特殊交锋局，只需在 <ACE0_BATTLE> JSON 顶层写入布尔标记；普通赌局、非交锋点赌局、回放模式都不要写 ace0Combat。',
       '特殊档位: ' + label,
-      '筹码参考: level 1 约正资产 10%，level 2 约 33%，level 3 约 70%。stakeGold 已由系统按当前资源估算，AI 不要自由改动。',
       '```json',
-      JSON.stringify(payload, null, 2),
+      JSON.stringify({ ace0Combat: true }, null, 2),
       '```',
-      pending.fromActiveToken ? '若本轮开启该交锋，正文末尾同步写 <UpdateVariable>：将 /world/act/phase_advance 设为 1。' : '',
+      resolved.fromActiveToken ? '若本轮开启该交锋，正文末尾同步写 <UpdateVariable>：将 /world/act/phase_advance 设为 1。' : '',
       '</ace0_combat_request>'
     ].filter(line => line !== '').join('\n');
   }
@@ -1530,7 +1571,7 @@
     return compact.id ? compact : null;
   }
 
-  async function resolvePendingActAdvance(eraVars) {
+  async function resolvePendingActAdvance(eraVars, options = {}) {
     const world = getWorldState(eraVars);
     const hero = eraVars?.hero && typeof eraVars.hero === 'object'
       ? JSON.parse(JSON.stringify(eraVars.hero))
@@ -1636,17 +1677,19 @@
     if (settledAssetDeck.changed) {
       worldPatch.assetDeck = settledAssetDeck.world.assetDeck;
     }
-    await updateEraVars({
-      hero: {
-        funds: nextHero.funds,
-        roster: nextHero.roster && typeof nextHero.roster === 'object'
-          ? nextHero.roster
-          : {
-              [HERO_INTERNAL_KEY]: getRosterNode(nextHero, HERO_INTERNAL_KEY)
-            }
-      },
-      world: worldPatch
-    });
+    if (options.persist !== false) {
+      await updateEraVars({
+        hero: {
+          funds: nextHero.funds,
+          roster: nextHero.roster && typeof nextHero.roster === 'object'
+            ? nextHero.roster
+            : {
+                [HERO_INTERNAL_KEY]: getRosterNode(nextHero, HERO_INTERNAL_KEY)
+              }
+        },
+        world: worldPatch
+      });
+    }
 
     return {
       eraVars: {
@@ -1663,19 +1706,44 @@
     };
   }
 
-  async function applyFloorProgressDelta(messageId, message) {
+  async function applyFloorProgressDelta(messageId, message, options = {}) {
     const mk = String(messageId ?? '');
-    if (!mk) return;
-    if (lastHandledMk === mk) return;
+    if (!mk) return { changed: false, reason: 'missing_message_id' };
+    if (lastHandledMk === mk) return { changed: false, reason: 'already_handled' };
     const msg = message && typeof message === 'object' ? message : {};
-    if (msg.role !== 'assistant') return;
+    if (msg.role !== 'assistant') return { changed: false, reason: 'not_assistant' };
     lastHandledMk = mk;
-    try {
-      await adjustNarrativeTensionInternal(FLOOR_PROGRESS_DELTA.NARRATIVE_TENSION);
-    } catch (_) {}
-    try {
-      await adjustClockPressureInternal(FLOOR_PROGRESS_DELTA.CLOCK_PRESSURE);
-    } catch (_) {}
+    const eraVars = options.eraVars || (typeof getEraVars === 'function' ? await getEraVars() : null) || {};
+    const world = getWorldState(eraVars);
+    const act = getWorldActState(eraVars);
+    const currentTension = Math.max(0, Math.min(100, Math.round(Number(act.narrativeTension) || 0)));
+    const nextTension = Math.max(0, Math.min(100, currentTension + Math.round(Number(FLOOR_PROGRESS_DELTA.NARRATIVE_TENSION) || 0)));
+    const currentClockPressure = getWorldClockPressure(eraVars);
+    const nextClockPressure = Math.max(0, Math.min(100, currentClockPressure + Math.round(Number(FLOOR_PROGRESS_DELTA.CLOCK_PRESSURE) || 0)));
+    if (nextTension === currentTension && nextClockPressure === currentClockPressure) {
+      return { changed: false, eraVars };
+    }
+    const nextAct = {
+      ...act,
+      narrativeTension: nextTension
+    };
+    const nextEraVars = {
+      ...(eraVars || {}),
+      world: {
+        ...(world || {}),
+        clockPressure: nextClockPressure,
+        act: nextAct
+      }
+    };
+    if (options.persist !== false) {
+      await updateEraVars({
+        world: {
+          clockPressure: nextClockPressure,
+          act: nextAct
+        }
+      });
+    }
+    return { changed: true, eraVars: nextEraVars };
   }
 
   async function advanceWorldClock(steps) {
@@ -1783,6 +1851,7 @@
         synchronizeActCharacterState,
         buildActStateSummary,
         buildActNarrativePrompts,
+        resolveAce0CombatConfig,
         normalizeActSnapshotCounts,
         getHeroResourceSnapshot,
         getHeroCastStateSnapshot,

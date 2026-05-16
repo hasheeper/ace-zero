@@ -115,6 +115,33 @@
     return '';
   }
 
+  function getAce0ReplayBridge() {
+    const hostRoot = getAce0HostRoot();
+    const candidates = [ROOT?.ACE0Plugin, hostRoot?.ACE0Plugin];
+    for (const candidate of candidates) {
+      if (candidate && typeof candidate.commitReplayPatch === 'function') {
+        return candidate.commitReplayPatch.bind(candidate);
+      }
+    }
+    return null;
+  }
+
+  function buildDashboardReplacePatch(path, value) {
+    return {
+      op: 'replace',
+      path,
+      value: cloneJsonData(value, value)
+    };
+  }
+
+  async function commitDashboardReplayPatch({ floorKey, operationId, patches }) {
+    const bridge = getAce0ReplayBridge();
+    if (!bridge) {
+      return { ok: false, reason: 'mvu_replay_unavailable' };
+    }
+    return await bridge({ floorKey, operationId, patches });
+  }
+
   function normalizeDashboardString(value, fallback = '') {
     return typeof value === 'string' ? value.trim() : fallback;
   }
@@ -538,15 +565,23 @@
 
     nextActState = applyPendingActAssetDeckCommands(nextState, nextActState);
     nextState.world.act = nextActState;
-    if (typeof insertOrAssignVariables === 'function') {
-      await insertOrAssignVariables({ stat_data: nextState }, { type: 'message' });
-      return true;
+    const patchedWorldKeys = new Set(Object.keys(worldPatch).filter((key) => key !== 'act'));
+    if (
+      !patchedWorldKeys.has('assetDeck') &&
+      JSON.stringify(nextState.world.assetDeck) !== JSON.stringify(eraVars?.world?.assetDeck)
+    ) {
+      patchedWorldKeys.add('assetDeck');
     }
-    if (ROOT.STBridge?.mvu?.writeVariables) {
-      await ROOT.STBridge.mvu.writeVariables({ stat_data: nextState }, { type: 'message' });
-      return true;
-    }
-    console.warn('[ACE0 Dashboard] insertOrAssignVariables 不可用，无法回写 MVU');
+    const patches = Array.from(patchedWorldKeys)
+      .map((key) => buildDashboardReplacePatch(`/world/${key}`, nextState.world[key]));
+    patches.push(buildDashboardReplacePatch('/world/act', nextState.world.act));
+    const replayResult = await commitDashboardReplayPatch({
+      floorKey: currentFloorKey,
+      operationId: `dashboard-act:${currentFloorKey || 'current'}`,
+      patches
+    });
+    if (replayResult?.ok) return true;
+    console.warn('[ACE0 Dashboard] ACE0_REPLAY 不可用，无法回写 MVU:', replayResult?.reason || 'unknown');
     return false;
   }
 
@@ -646,22 +681,39 @@
         }
       };
     }
-    let didPersist = false;
-    if (typeof insertOrAssignVariables === 'function') {
-      await insertOrAssignVariables({ stat_data: nextState }, { type: 'message' });
-      didPersist = true;
-    } else if (ROOT.STBridge?.mvu?.writeVariables) {
-      await ROOT.STBridge.mvu.writeVariables({ stat_data: nextState }, { type: 'message' });
-      didPersist = true;
+    if (!nextState.world.act || typeof nextState.world.act !== 'object' || Array.isArray(nextState.world.act)) {
+      nextState.world.act = cloneJsonData(actState, {}) || {};
     }
-
-    if (!didPersist) {
-      console.warn('[ACE0 Dashboard] insertOrAssignVariables 不可用，无法回写 AssetDeck');
+    const commandFloorKey = normalizeDashboardString(
+      commandPayload?.meta?.floorKey || commandPayload?.floorKey || command?.payload?.floorKey,
+      ''
+    );
+    const currentFloorKey = getCurrentDashboardFloorKey();
+    if (currentFloorKey && commandFloorKey && commandFloorKey !== currentFloorKey) {
       return {
         ok: false,
         requestId,
-        code: 'persist_unavailable',
-        error: 'Persist bridge is unavailable. MVU state was not updated.',
+        code: 'floor_key_mismatch',
+        error: 'Stale AssetDeck command rejected: floorKey mismatch.',
+        assetDeck: cloneJsonData(commandResult.assetDeck, null)
+      };
+    }
+    const replayResult = await commitDashboardReplayPatch({
+      floorKey: commandFloorKey || currentFloorKey,
+      operationId: `dashboard-asset:${commandFloorKey || currentFloorKey || 'current'}`,
+      patches: [
+        buildDashboardReplacePatch('/world/assetDeck', nextState.world.assetDeck),
+        buildDashboardReplacePatch('/world/act', nextState.world.act)
+      ]
+    });
+
+    if (!replayResult?.ok) {
+      console.warn('[ACE0 Dashboard] ACE0_REPLAY 不可用，无法回写 AssetDeck:', replayResult?.reason || 'unknown');
+      return {
+        ok: false,
+        requestId,
+        code: replayResult?.reason || 'mvu_replay_unavailable',
+        error: 'MVU replay bridge is unavailable. MVU state was not updated.',
         assetDeck: cloneJsonData(commandResult.assetDeck, null)
       };
     }

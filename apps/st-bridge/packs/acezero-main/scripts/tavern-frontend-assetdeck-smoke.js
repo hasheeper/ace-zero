@@ -6,7 +6,9 @@ const vm = require('vm');
 const {
   PACK_ROOT,
   assert,
-  assertDeepEqual
+  assertEqual,
+  assertDeepEqual,
+  createActStateAt
 } = require('./smoke-utils');
 
 function runPackFile(sandbox, relativeFile) {
@@ -142,6 +144,77 @@ setTimeout(() => {
     );
     assert(!Object.prototype.hasOwnProperty.call(config.assetDeck, 'pending_offer'), 'Battle config should not carry pending offer state');
     assert(!Object.prototype.hasOwnProperty.call(config.assetDeck, 'history'), 'Battle config should not carry AssetDeck history');
+
+    const act = sandbox.ACE0Modules.act;
+    const baseBattle = {
+      ace0Combat: true,
+      hero: { vanguard: 'Yota', rearguard: 'RINO' },
+      heroSeat: 'BTN',
+      blinds: [0.1, 0.2],
+      chips: 10,
+      seats: {
+        BB: { character: 'COTA', mood: 'calm' }
+      }
+    };
+
+    sandbox.__vars.hero.funds = 100;
+    sandbox.__vars.hero.assets = 50;
+    sandbox.__vars.world.act = createActStateAt(act, 1, ['node1-entry'], {
+      phase_index: 1,
+      pendingResolutions: [
+        { type: 'combat', status: 'pending', id: 'boss-req', level: 3, nodeId: 'node1-entry', nodeIndex: 1, phaseIndex: 1 }
+      ]
+    });
+    const pendingCombatConfig = await sandbox.ACE0Plugin.triggerBattle(baseBattle);
+    assert(pendingCombatConfig.ace0Combat, 'ace0Combat true should build frontend combat config from pending request');
+    assertEqual(pendingCombatConfig.ace0Combat.requestId, 'boss-req', 'frontend combat request id should come from pending request');
+    assertEqual(pendingCombatConfig.ace0Combat.level, 3, 'frontend combat level should come from pending request');
+    assertEqual(pendingCombatConfig.ace0Combat.stakeGold, 105, 'frontend combat stake should be system-derived');
+    assertEqual(pendingCombatConfig.ace0Combat.stakeChips, 10500, 'frontend combat stake chips should be system-derived');
+
+    sandbox.__vars.hero.funds = 21.98;
+    sandbox.__vars.hero.assets = 0;
+    sandbox.__vars.world.act = createActStateAt(act, 1, ['node1-entry'], {
+      phase_index: 1,
+      resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
+      phase_slots: [
+        null,
+        { key: 'combat', source: 'limited', amount: 1 },
+        null,
+        null
+      ],
+      pendingResolutions: []
+    });
+    const activeTokenCombatConfig = await sandbox.ACE0Plugin.triggerBattle(baseBattle);
+    assert(activeTokenCombatConfig.ace0Combat, 'ace0Combat true should build frontend combat config from active combat token');
+    assertEqual(activeTokenCombatConfig.ace0Combat.requestId, 'chapter0_exchange:node1-entry:1:combat:1:0', 'active token request id should be system-derived');
+    assertEqual(activeTokenCombatConfig.ace0Combat.level, 1, 'active token level should come from phase slot amount');
+    assertEqual(activeTokenCombatConfig.ace0Combat.stakeGold, 2.2, 'active token stake should be system-derived');
+
+    const legacyObjectConfig = await sandbox.ACE0Plugin.triggerBattle({
+      ...baseBattle,
+      ace0Combat: {
+        requestId: 'legacy-should-not-pass',
+        requestIndex: 0,
+        level: 3,
+        stakeGold: 999
+      }
+    });
+    assert(!legacyObjectConfig.ace0Combat, 'legacy ace0Combat object should no longer be accepted as AI input');
+
+    sandbox.__vars.world.act = createActStateAt(act, 1, ['node1-entry'], {
+      phase_index: 1,
+      phase_slots: [
+        null,
+        { key: 'rest', source: 'reserve', amount: 1 },
+        null,
+        null
+      ],
+      pendingResolutions: []
+    });
+    const missingRequestConfig = await sandbox.ACE0Plugin.triggerBattle(baseBattle);
+    assert(!missingRequestConfig.ace0Combat, 'ace0Combat true without ACT combat request should build ordinary frontend config');
+
     console.log('[tavern-frontend-assetdeck-smoke] all checks passed');
   })().catch((error) => {
     console.error(error);

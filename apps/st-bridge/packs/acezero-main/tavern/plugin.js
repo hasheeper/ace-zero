@@ -220,6 +220,238 @@
     return output;
   }
 
+  function escapeRegExp(text) {
+    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function sanitizeReplayOperationId(value) {
+    const text = typeof value === 'string' ? value.trim() : '';
+    return (text || `op:${Date.now()}`).replace(/[^\w:.-]+/g, '_').slice(0, 160);
+  }
+
+  function parseMessageIdFromFloorKey(floorKey) {
+    const match = String(floorKey || '').trim().match(/^message:(\d+)$/i);
+    if (!match) return null;
+    const id = Number(match[1]);
+    return Number.isFinite(id) && id >= 0 ? Math.round(id) : null;
+  }
+
+  function makeMessageFloorKey(messageId) {
+    if (messageId === null || messageId === undefined || messageId === '') return '';
+    const id = Number(messageId);
+    return Number.isFinite(id) && id >= 0 ? `message:${Math.round(id)}` : '';
+  }
+
+  function getLatestMessageId() {
+    try {
+      if (typeof getCurrentMessageId === 'function') {
+        const id = Number(getCurrentMessageId());
+        if (Number.isFinite(id) && id >= 0) return Math.round(id);
+      }
+    } catch (_) {}
+    try {
+      if (typeof getChatMessages === 'function') {
+        const latest = getChatMessages(-1)?.[0];
+        const id = Number(latest?.message_id);
+        if (Number.isFinite(id) && id >= 0) return Math.round(id);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function resolveReplayMessageId(options = {}) {
+    const explicitId = Number(options.messageId ?? options.message_id);
+    if (Number.isFinite(explicitId) && explicitId >= 0) return Math.round(explicitId);
+    const floorId = parseMessageIdFromFloorKey(options.floorKey);
+    if (floorId !== null) return floorId;
+    return getLatestMessageId();
+  }
+
+  function hasCompleteMvuVariableBundle(vars) {
+    return isPlainObject(vars)
+      && isPlainObject(vars.stat_data)
+      && Object.prototype.hasOwnProperty.call(vars, 'schema');
+  }
+
+  async function getMessageVariableBundle(messageId) {
+    if (typeof getVariables !== 'function') return null;
+    try {
+      const id = Number(messageId);
+      const options = { type: 'message' };
+      if (Number.isFinite(id) && id >= 0) options.message_id = Math.round(id);
+      const vars = await getVariables(options);
+      return isPlainObject(vars) ? vars : null;
+    } catch (error) {
+      console.warn(`${PLUGIN_NAME} 读取 message:${messageId} MVU 变量失败:`, error);
+      return null;
+    }
+  }
+
+  async function getMessageEraVars(messageId) {
+    const vars = await getMessageVariableBundle(messageId);
+    return hasCompleteMvuVariableBundle(vars) ? vars.stat_data : null;
+  }
+
+  function buildAce0ReplayBlock(operationId, patches) {
+    const id = sanitizeReplayOperationId(operationId);
+    const patchList = Array.isArray(patches) ? patches.filter(item => item && typeof item === 'object') : [];
+    return [
+      '<UpdateVariable>',
+      `<Analyze>ACE0_REPLAY:${id}</Analyze>`,
+      '<JSONPatch>',
+      JSON.stringify(patchList, null, 2),
+      '</JSONPatch>',
+      '</UpdateVariable>'
+    ].join('\n');
+  }
+
+  function stripAce0ReplayBlock(content, operationId) {
+    const id = sanitizeReplayOperationId(operationId);
+    const text = typeof content === 'string' ? content : '';
+    const pattern = new RegExp(
+      `\\n*<UpdateVariable>\\s*<Analyze>\\s*ACE0_REPLAY:${escapeRegExp(id)}\\s*<\\/Analyze>\\s*<JSONPatch>[\\s\\S]*?<\\/JSONPatch>\\s*<\\/UpdateVariable>\\s*`,
+      'gi'
+    );
+    return text.replace(pattern, '\n\n').replace(/\n{4,}/g, '\n\n\n').trimEnd();
+  }
+
+  function hasAce0ReplayBlock(content, operationId) {
+    const id = sanitizeReplayOperationId(operationId);
+    const text = typeof content === 'string' ? content : '';
+    const pattern = new RegExp(
+      `<UpdateVariable>\\s*<Analyze>\\s*ACE0_REPLAY:${escapeRegExp(id)}\\s*<\\/Analyze>\\s*<JSONPatch>[\\s\\S]*?<\\/JSONPatch>\\s*<\\/UpdateVariable>`,
+      'i'
+    );
+    return pattern.test(text);
+  }
+
+  function insertAce0ReplayBlock(content, block) {
+    const text = typeof content === 'string' ? content : '';
+    const placeholder = '<StatusPlaceHolderImpl/>';
+    const index = text.indexOf(placeholder);
+    if (index >= 0) {
+      const before = text.slice(0, index).trimEnd();
+      const after = text.slice(index);
+      return `${before}\n\n${block}\n\n${after.trimStart()}`;
+    }
+    const trimmed = text.trimEnd();
+    return trimmed ? `${trimmed}\n\n${block}` : block;
+  }
+
+  function resolveMvuReplayHandler() {
+    const root = getAce0HostRoot();
+    const candidates = [];
+    try { if (typeof handleVariablesInMessage === 'function') candidates.push(handleVariablesInMessage); } catch (_) {}
+    try { if (window && typeof window.handleVariablesInMessage === 'function') candidates.push(window.handleVariablesInMessage); } catch (_) {}
+    try { if (root && typeof root.handleVariablesInMessage === 'function') candidates.push(root.handleVariablesInMessage); } catch (_) {}
+    try { if (root?.STBridge?.mvu && typeof root.STBridge.mvu.handleVariablesInMessage === 'function') candidates.push(root.STBridge.mvu.handleVariablesInMessage.bind(root.STBridge.mvu)); } catch (_) {}
+    return candidates[0] || null;
+  }
+
+  function buildReplacePatch(path, value) {
+    return {
+      op: 'replace',
+      path,
+      value: cloneJsonData(value, value)
+    };
+  }
+
+  function readJsonPointer(rootValue, pointer) {
+    if (!pointer || pointer === '/') return rootValue;
+    const parts = String(pointer).split('/').slice(1).map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
+    let current = rootValue;
+    for (const part of parts) {
+      if (current == null || typeof current !== 'object') return undefined;
+      current = current[part];
+    }
+    return current;
+  }
+
+  function areJsonValuesEqual(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function buildReplayPatchesFromEraVars(beforeVars, afterVars, paths = null) {
+    const patchPaths = Array.isArray(paths) && paths.length
+      ? paths
+      : [
+          '/hero',
+          '/world/act',
+          '/world/assetDeck',
+          '/world/clockPressure',
+          '/world/current_time',
+          '/world/location',
+          '/world/tags',
+          '/world/flags',
+          '/world/storyFlags',
+          '/world/expansion_state'
+        ];
+    const patches = [];
+    patchPaths.forEach((path) => {
+      const nextValue = readJsonPointer(afterVars, path);
+      if (nextValue === undefined) return;
+      const prevValue = readJsonPointer(beforeVars, path);
+      if (areJsonValuesEqual(prevValue, nextValue)) return;
+      patches.push(buildReplacePatch(path, nextValue));
+    });
+    return patches;
+  }
+
+  async function commitAce0ReplayPatch(options = {}) {
+    const patches = Array.isArray(options.patches) ? options.patches.filter(item => item && typeof item === 'object') : [];
+    if (!patches.length) return { ok: false, reason: 'empty_replay_patch' };
+
+    const messageId = resolveReplayMessageId(options);
+    if (!Number.isFinite(Number(messageId)) || Number(messageId) < 0) {
+      return { ok: false, reason: 'missing_message_id' };
+    }
+    const normalizedMessageId = Math.round(Number(messageId));
+    const expectedFloorKey = typeof options.floorKey === 'string' ? options.floorKey.trim() : '';
+    const actualFloorKey = makeMessageFloorKey(normalizedMessageId);
+    if (expectedFloorKey && expectedFloorKey !== actualFloorKey) {
+      return { ok: false, reason: 'floor_key_mismatch', floorKey: actualFloorKey, expectedFloorKey };
+    }
+
+    const vars = await getMessageVariableBundle(normalizedMessageId);
+    if (!hasCompleteMvuVariableBundle(vars)) {
+      console.warn(`${PLUGIN_NAME} ${actualFloorKey} 缺少完整 MVU 基底，ACE0_REPLAY 写入已拒绝。需要先重演/恢复变量。`);
+      return { ok: false, reason: 'mvu_replay_missing_base', messageId: normalizedMessageId, floorKey: actualFloorKey };
+    }
+
+    if (typeof getChatMessages !== 'function' || typeof setChatMessages !== 'function') {
+      return { ok: false, reason: 'chat_message_api_unavailable', messageId: normalizedMessageId, floorKey: actualFloorKey };
+    }
+
+    const messages = getChatMessages(normalizedMessageId);
+    const msg = Array.isArray(messages) ? messages[0] : null;
+    if (!msg || typeof msg !== 'object') {
+      return { ok: false, reason: 'message_not_found', messageId: normalizedMessageId, floorKey: actualFloorKey };
+    }
+
+    const operationId = sanitizeReplayOperationId(options.operationId || `message:${normalizedMessageId}:ace0`);
+    const stripped = stripAce0ReplayBlock(msg.message || '', operationId);
+    const block = buildAce0ReplayBlock(operationId, patches);
+    const nextMessage = insertAce0ReplayBlock(stripped, block);
+    await setChatMessages([{
+      message_id: normalizedMessageId,
+      message: nextMessage
+    }], { refresh: options.refresh || 'affected' });
+
+    const replayHandler = resolveMvuReplayHandler();
+    if (typeof replayHandler !== 'function') {
+      return { ok: false, reason: 'mvu_replay_unavailable', messageId: normalizedMessageId, floorKey: actualFloorKey };
+    }
+
+    await replayHandler(normalizedMessageId);
+    return {
+      ok: true,
+      messageId: normalizedMessageId,
+      floorKey: actualFloorKey,
+      operationId,
+      patchCount: patches.length
+    };
+  }
+
   function normalizeActResourceKey(value, fallback = 'vision') {
     const normalized = _normalizeTrimmedString(value, fallback).toLowerCase();
     return ACT_RESOURCE_KEYS.includes(normalized) ? normalized : fallback;
@@ -351,23 +583,30 @@
   async function updateEraVars(data) {
     try {
       const patch = isPlainObject(data) ? data : {};
+      const currentBundle = typeof getVariables === 'function' ? await getVariables({ type: 'message' }) : null;
+      if (!hasCompleteMvuVariableBundle(currentBundle)) {
+        console.warn(`${PLUGIN_NAME} 当前楼缺少完整 MVU 基底，直接变量写入已拒绝。需要先重演/恢复变量。`);
+        return false;
+      }
       if (typeof updateVariablesWith === 'function') {
         await updateVariablesWith((vars) => {
           const currentVars = isPlainObject(vars) ? vars : {};
+          if (!hasCompleteMvuVariableBundle(currentVars)) return currentVars;
           return {
             ...currentVars,
             stat_data: mergeMvuPatch(currentVars.stat_data, patch)
           };
         }, { type: 'message' });
-        return;
+        return true;
       }
 
-      const vars = typeof getVariables === 'function' ? await getVariables({ type: 'message' }) : {};
       await insertOrAssignVariables({
-        stat_data: mergeMvuPatch(isPlainObject(vars?.stat_data) ? vars.stat_data : {}, patch)
+        stat_data: mergeMvuPatch(currentBundle.stat_data, patch)
       }, { type: 'message' });
+      return true;
     } catch (e) {
       console.error(`${PLUGIN_NAME} MVU 变量写入失败:`, e);
+      return false;
     }
   }
 
@@ -567,8 +806,16 @@
     const gameMode = battle.gameMode || (Object.keys(battle.seats || {}).length > 0 ? 'texas-holdem' : null);
     if (gameMode) result.gameMode = gameMode;
 
-    const ace0Combat = _normalizeAce0CombatConfig(battle.ace0Combat);
-    if (ace0Combat) result.ace0Combat = ace0Combat;
+    if (battle.ace0Combat === true) {
+      const ace0Combat = resolveAce0CombatConfig(eraVars);
+      if (ace0Combat) {
+        result.ace0Combat = ace0Combat;
+      } else {
+        console.warn(`${PLUGIN_NAME} ace0Combat 标记存在，但当前 MVU/ACT 状态中没有可绑定的 combat request。`);
+      }
+    } else if (battle.ace0Combat && typeof battle.ace0Combat === 'object') {
+      console.warn(`${PLUGIN_NAME} 已忽略旧式 ace0Combat 对象；请在 ${BATTLE_TAG} 中使用 ace0Combat: true。`);
+    }
 
     // 小游戏配置：根据主手/副手属性映射
     if (gameMode === 'blackjack' || gameMode === 'dice' || gameMode === 'dragon-tiger' || gameMode === 'dragon_tiger') {
@@ -637,25 +884,6 @@
     const numeric = Number(silver);
     if (!Number.isFinite(numeric)) return 0;
     return _normalizeFundsAmount(numeric / SILVER_PER_GOLD);
-  }
-
-  function _normalizeAce0CombatConfig(value) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const requestId = _normalizeTrimmedString(value.requestId, '');
-    if (!requestId) return null;
-    const level = Math.max(1, Math.min(3, Math.round(Number(value.level) || 1)));
-    const kind = _normalizeTrimmedString(value.kind, level >= 3 ? 'boss' : level === 2 ? 'elite' : 'skirmish');
-    const stakeGold = _normalizeFundsAmount(value.stakeGold);
-    return {
-      protocol: 'ace0.combat.v1',
-      requestId,
-      requestIndex: Math.max(0, Math.round(Number(value.requestIndex) || 0)),
-      level,
-      kind,
-      special: true,
-      stakeGold,
-      stakeChips: _goldFundsToSilverUnits(stakeGold)
-    };
   }
 
   function _normalizeBattleBlinds(blinds) {
@@ -831,9 +1059,10 @@
   function getNormalizedActNodeEffects(config, nodeId) { return ACT_RUNTIME.getNormalizedActNodeEffects(config, nodeId); }
   function getNormalizedActPhaseEffects(config, nodeId, phaseIndex) { return ACT_RUNTIME.getNormalizedActPhaseEffects(config, nodeId, phaseIndex); }
   function deriveActCharacterStates(eraVars) { return ACT_RUNTIME.deriveActCharacterStates(eraVars); }
-  async function synchronizeActCharacterState(eraVars) { return await ACT_RUNTIME.synchronizeActCharacterState(eraVars); }
+  async function synchronizeActCharacterState(eraVars, options = {}) { return await ACT_RUNTIME.synchronizeActCharacterState(eraVars, options); }
   function buildActStateSummary(eraVars, derivedActState = null) { return ACT_RUNTIME.buildActStateSummary(eraVars, derivedActState); }
   function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) { return ACT_RUNTIME.buildActNarrativePrompts(eraVars, derivedActState, firstMeetHints, preSignalHints); }
+  function resolveAce0CombatConfig(eraVars, derivedActState = null) { return ACT_RUNTIME.resolveAce0CombatConfig(eraVars, derivedActState); }
 
   function getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState = null) {
     return ACT_RUNTIME && typeof ACT_RUNTIME.getActiveFirstMeetHintsForCurrentPhase === 'function'
@@ -863,8 +1092,8 @@
   function resetClockPressureInternal() { return ACT_RUNTIME.resetClockPressureInternal(); }
   function deriveWorldTimeFromAct(actState) { return ACT_RUNTIME.deriveWorldTimeFromAct(actState); }
   function buildEncounterContextFromEraVars(eraVars) { return ACT_RUNTIME.buildEncounterContextFromEraVars(eraVars); }
-  async function resolvePendingActAdvance(eraVars) { return await ACT_RUNTIME.resolvePendingActAdvance(eraVars); }
-  async function applyFloorProgressDelta(messageId, message) { return await ACT_RUNTIME.applyFloorProgressDelta(messageId, message); }
+  async function resolvePendingActAdvance(eraVars, options = {}) { return await ACT_RUNTIME.resolvePendingActAdvance(eraVars, options); }
+  async function applyFloorProgressDelta(messageId, message, options = {}) { return await ACT_RUNTIME.applyFloorProgressDelta(messageId, message, options); }
   async function advanceWorldClock(steps) { return await ACT_RUNTIME.advanceWorldClock(steps); }
   async function setWorldClock(input) { return await ACT_RUNTIME.setWorldClock(input); }
 
@@ -1041,12 +1270,11 @@
         ]);
       } catch (_) { /* ignore */ }
 
-      const syncedState = await synchronizeActCharacterState(await getEraVars());
+      const syncedState = await synchronizeActCharacterState(await getEraVars(), { persist: false });
       const eraVars = syncedState.eraVars;
       const currentWorldClock = getWorldClock(eraVars);
       if (lastObservedWorldClock && !isSameWorldClock(lastObservedWorldClock, currentWorldClock)) {
         if (getWorldClockPressure(eraVars) !== 0) {
-          await updateEraVars({ world: { clockPressure: 0 } });
           if (eraVars.world && typeof eraVars.world === 'object') {
             eraVars.world.clockPressure = 0;
           }
@@ -1119,7 +1347,6 @@
       injectPrompts(normalizedPrompts);
       const hasPendingTransitionPrompt = normalizedPrompts.some((prompt) => prompt.id === ACT_TRANSITION_INJECT_ID);
       if (hasPendingTransitionPrompt) {
-        await updateEraVars({ world: { act: { pendingTransitionPrompt: '' } } });
         if (eraVars?.world?.act && typeof eraVars.world.act === 'object') {
           eraVars.world.act.pendingTransitionPrompt = '';
         }
@@ -1160,9 +1387,7 @@
         if (result) {
           content = result.content;
           changed = true;
-          // 阶段 4：每次 Battle 成功结算 +15 tension
-          try { await adjustNarrativeTensionInternal(TENSION_DELTA.BATTLE_RESULT); } catch (_) {}
-          console.log(`${PLUGIN_NAME} [before_message_update] 游戏前端已注入 (+${TENSION_DELTA.BATTLE_RESULT} tension)`);
+          console.log(`${PLUGIN_NAME} [before_message_update] 游戏前端已注入`);
         }
       } catch (e) {
         console.error(`${PLUGIN_NAME} [before_message_update] 处理失败:`, e);
@@ -1187,30 +1412,86 @@
       if (!messages || messages.length === 0) return;
 
       const msg = messages[0];
-      if (options.applyFloorProgress === true) {
-        await applyFloorProgressDelta(messageId, msg);
-      }
       const content = msg.message || '';
       let nextContent = content;
       let changed = false;
+      const floorKey = makeMessageFloorKey(messageId);
+      let workingEraVars = await getMessageEraVars(messageId);
+      const hasReplayBase = isPlainObject(workingEraVars);
+      const replayOps = [];
 
       isProcessing = true;
 
-      if (hasCompleteBattleTag(nextContent) && !nextContent.includes(`<${FRONTEND_TAG}>`)) {
+      if (hasReplayBase && options.applyFloorProgress === true) {
+        const operationId = `render:${messageId}:floor-progress`;
+        if (!hasAce0ReplayBlock(nextContent, operationId)) {
+          const progressResult = await applyFloorProgressDelta(messageId, msg, {
+            eraVars: workingEraVars,
+            persist: false
+          });
+          if (progressResult?.changed && progressResult.eraVars) {
+            const patches = buildReplayPatchesFromEraVars(workingEraVars, progressResult.eraVars, [
+              '/world/act',
+              '/world/clockPressure'
+            ]);
+            if (patches.length) replayOps.push({ operationId, patches });
+            workingEraVars = progressResult.eraVars;
+          }
+        }
+      }
+
+      if (hasReplayBase && hasCompleteBattleTag(nextContent) && !nextContent.includes(`<${FRONTEND_TAG}>`)) {
         console.log(`${PLUGIN_NAME} [rendered_fallback] 检测到未处理的 ${BATTLE_TAG}，补注入...`);
         const battleResult = await processBattleContent(nextContent);
         if (battleResult) {
           nextContent = battleResult.content;
           changed = true;
-          try { await adjustNarrativeTensionInternal(TENSION_DELTA.BATTLE_RESULT); } catch (_) {}
         }
       }
 
-      const actResult = await appendActResultIfNeeded(nextContent);
-      if (actResult.changed) {
-        nextContent = actResult.content;
-        changed = true;
-        console.log(`${PLUGIN_NAME} [rendered_fallback] ACT 结算回执已注入到消息 #${messageId}`);
+      if (hasReplayBase && hasCompleteBattleTag(nextContent)) {
+        const operationId = `render:${messageId}:battle-result`;
+        if (!hasAce0ReplayBlock(nextContent, operationId)) {
+          const act = getWorldActState(workingEraVars);
+          const currentTension = Math.max(0, Math.min(100, Math.round(Number(act.narrativeTension) || 0)));
+          const nextTension = Math.max(0, Math.min(100, currentTension + Math.round(Number(TENSION_DELTA.BATTLE_RESULT) || 0)));
+          if (nextTension !== currentTension) {
+            const nextEraVars = {
+              ...(workingEraVars || {}),
+              world: {
+                ...(workingEraVars?.world || {}),
+                act: {
+                  ...act,
+                  narrativeTension: nextTension
+                }
+              }
+            };
+            const patches = buildReplayPatchesFromEraVars(workingEraVars, nextEraVars, ['/world/act']);
+            if (patches.length) replayOps.push({ operationId, patches });
+            workingEraVars = nextEraVars;
+          }
+        }
+      }
+
+      if (hasReplayBase) {
+        const operationId = `render:${messageId}:act-result`;
+        const actResult = await appendActResultIfNeeded(nextContent, {
+          eraVars: workingEraVars,
+          persist: false,
+          floorKey
+        });
+        if (actResult.changed) {
+          nextContent = actResult.content;
+          changed = true;
+          console.log(`${PLUGIN_NAME} [rendered_fallback] ACT 结算回执已注入到消息 #${messageId}`);
+        }
+        if (actResult.stateChanged && actResult.eraVars && !hasAce0ReplayBlock(nextContent, operationId)) {
+          const patches = buildReplayPatchesFromEraVars(workingEraVars, actResult.eraVars);
+          if (patches.length) replayOps.push({ operationId, patches });
+          workingEraVars = actResult.eraVars;
+        }
+      } else {
+        console.warn(`${PLUGIN_NAME} message:${messageId} 缺少完整 MVU 基底，已跳过 ACE0 可重演变量写入。需要先重演/恢复变量。`);
       }
 
       if (changed) {
@@ -1218,6 +1499,18 @@
           message_id: messageId,
           message: nextContent
         }], { refresh: 'affected' });
+      }
+
+      for (const op of replayOps) {
+        const result = await commitAce0ReplayPatch({
+          messageId,
+          floorKey,
+          operationId: op.operationId,
+          patches: op.patches
+        });
+        if (!result.ok) {
+          console.warn(`${PLUGIN_NAME} ACE0_REPLAY ${op.operationId} 写入失败: ${result.reason || 'unknown'}`);
+        }
       }
 
       isProcessing = false;
@@ -1323,6 +1616,8 @@
 
   hostRoot.ACE0Plugin = {
     getEraVars,
+    commitReplayPatch: commitAce0ReplayPatch,
+    buildReplacePatch,
 
     getDefaultActState(actId) {
       return getActDefaultStateFromModule(actId);
@@ -1351,7 +1646,7 @@
     },
 
     async syncActState() {
-      const result = await synchronizeActCharacterState(await getEraVars());
+      const result = await synchronizeActCharacterState(await getEraVars(), { persist: false });
       return {
         changed: result.changed,
         derived: result.derived
@@ -1361,11 +1656,18 @@
     // 路线选择 API：由结算卡 / Dashboard / 外部 UI 调用。
     // 只在 stage=route 且 nodeId 为合法下一节点时生效，避免误触。
     // 返回 { ok, reason?, nextNodeIndex?, nextNodeId? }。
-    async chooseActRoute(nodeId) {
+    async chooseActRoute(nodeId, options = {}) {
       const targetNodeId = typeof nodeId === 'string' ? nodeId.trim() : '';
       if (!targetNodeId) return { ok: false, reason: 'invalid_node_id' };
 
-      const eraVars = await getEraVars();
+      const messageId = resolveReplayMessageId(options);
+      const floorKey = makeMessageFloorKey(messageId);
+      if (!floorKey) return { ok: false, reason: 'missing_message_id' };
+      if (options.floorKey && String(options.floorKey).trim() !== floorKey) {
+        return { ok: false, reason: 'floor_key_mismatch', floorKey, expectedFloorKey: String(options.floorKey).trim() };
+      }
+      const eraVars = await getMessageEraVars(messageId);
+      if (!eraVars) return { ok: false, reason: 'mvu_replay_missing_base', floorKey };
       const act = getWorldActState(eraVars);
       if (act.stage !== 'route') return { ok: false, reason: 'not_in_route_stage' };
 
@@ -1407,7 +1709,16 @@
         actState.vision.jumpReady = false;
         actState.vision.pendingReplace = null;
       }
-      await updateEraVars({ world: { act: actState } });
+      const replayResult = await commitAce0ReplayPatch({
+        messageId,
+        floorKey,
+        operationId: `act-route:${messageId}:${targetNodeId}`,
+        patches: [buildReplacePatch('/world/act', actState)]
+      });
+      if (!replayResult.ok) {
+        return { ok: false, reason: replayResult.reason || 'mvu_replay_failed', floorKey };
+      }
+      refreshDashboardUiAfterExternalWrite();
       return {
         ok: true,
         nextNodeIndex: actState.nodeIndex,
@@ -1417,7 +1728,7 @@
 
     // 契约卡选择 API：由 ACT_RESULT 卡片直接调用。
     // 只处理当前 pending_offer 的 choose_card，不打开 Dashboard 悬浮窗。
-    async chooseAssetCard(choiceIndex, slotType = 'general', clearKey = '') {
+    async chooseAssetCard(choiceIndex, slotType = 'general', clearKey = '', options = {}) {
       const index = Math.max(0, Math.round(Number(choiceIndex) || 0));
       const normalizedSlot = String(slotType || 'general').trim().toLowerCase() === 'void' ? 'void' : 'general';
       const requestedClearKey = String(clearKey || '').trim();
@@ -1426,7 +1737,14 @@
         return { ok: false, reason: 'asset_runtime_missing' };
       }
 
-      const eraVars = await getEraVars();
+      const messageId = resolveReplayMessageId(options);
+      const floorKey = makeMessageFloorKey(messageId);
+      if (!floorKey) return { ok: false, reason: 'missing_message_id' };
+      if (options.floorKey && String(options.floorKey).trim() !== floorKey) {
+        return { ok: false, reason: 'floor_key_mismatch', floorKey, expectedFloorKey: String(options.floorKey).trim() };
+      }
+      const eraVars = await getMessageEraVars(messageId);
+      if (!eraVars) return { ok: false, reason: 'mvu_replay_missing_base', floorKey };
       const currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
         ? assetDeckModule.normalizeAssetDeckState(eraVars?.world?.assetDeck)
         : (eraVars?.world?.assetDeck || {});
@@ -1499,9 +1817,17 @@
         }
       }
 
-      await updateEraVars({
-        world: nextWorld
+      const patches = [buildReplacePatch('/world/assetDeck', nextWorld.assetDeck)];
+      if (nextWorld.act) patches.push(buildReplacePatch('/world/act', nextWorld.act));
+      const replayResult = await commitAce0ReplayPatch({
+        messageId,
+        floorKey,
+        operationId: `asset-choice:${messageId}:${offerClearKey || currentOfferId || requestedClearKey || index}`,
+        patches
       });
+      if (!replayResult.ok) {
+        return { ok: false, reason: replayResult.reason || 'mvu_replay_failed', floorKey };
+      }
       refreshDashboardUiAfterExternalWrite();
 
       return {
@@ -1845,8 +2171,9 @@
       const payload = message.payload || message.data || {};
       const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
       const nodeId = typeof payload.nodeId === 'string' ? payload.nodeId : '';
+      const floorKey = typeof payload.floorKey === 'string' ? payload.floorKey.trim() : '';
       try {
-        const result = await hostRoot.ACE0Plugin.chooseActRoute(nodeId);
+        const result = await hostRoot.ACE0Plugin.chooseActRoute(nodeId, { floorKey });
         postActResultMessage(event.source, 'acezero-act-result-route-command-result', {
           ...(result && typeof result === 'object' ? result : { ok: false, reason: 'empty_result' }),
           requestId
@@ -1868,6 +2195,9 @@
     const command = payload.command && typeof payload.command === 'object' ? payload.command : {};
     const commandKind = String(command.kind || command.type || '').trim().toLowerCase();
     const commandPayload = command.payload && typeof command.payload === 'object' ? command.payload : {};
+    const floorKey = typeof payload.floorKey === 'string'
+      ? payload.floorKey.trim()
+      : (typeof commandPayload.floorKey === 'string' ? commandPayload.floorKey.trim() : '');
 
     if (requestId && actResultAssetCommandRequestCache.has(requestId)) {
       const cached = actResultAssetCommandRequestCache.get(requestId);
@@ -1884,7 +2214,7 @@
         if (commandKind !== 'choose_card') {
           return { ok: false, reason: 'unsupported_asset_command' };
         }
-        return await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general', commandPayload.clearKey || commandPayload.offerId || '');
+        return await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general', commandPayload.clearKey || commandPayload.offerId || '', { floorKey });
       } catch (error) {
         return { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };
       }
