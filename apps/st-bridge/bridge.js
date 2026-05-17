@@ -21,40 +21,186 @@
   const FALLBACK_BRIDGE_URL = 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js';
   const TOAST_TITLE = '[ACE0]脚本加载';
   const LOADING_TOAST_KEY = '__ACEZERO_ST_BRIDGE_LOADING_TOAST__';
+  const DOM_TOAST_HOST_ID = 'acezero-st-bridge-toast-host';
+
+  function getWindowCandidates() {
+    const candidates = [ROOT, globalThis];
+    try {
+      if (ROOT.parent && ROOT.parent !== ROOT) candidates.push(ROOT.parent);
+    } catch (_) {}
+    try {
+      if (ROOT.top && ROOT.top !== ROOT) candidates.push(ROOT.top);
+    } catch (_) {}
+    return candidates.filter(Boolean);
+  }
 
   function getToastr() {
+    for (const candidate of getWindowCandidates()) {
+      try {
+        if (candidate.toastr && typeof candidate.toastr.info === 'function') return candidate.toastr;
+      } catch (_) {}
+    }
     try {
-      return ROOT.toastr && typeof ROOT.toastr.info === 'function' ? ROOT.toastr : null;
+      const globalToastr = Function('return typeof toastr !== "undefined" ? toastr : null')();
+      if (globalToastr && typeof globalToastr.info === 'function') return globalToastr;
+    } catch (_) {}
+    return null;
+  }
+
+  function getSillyTavern() {
+    for (const candidate of getWindowCandidates()) {
+      try {
+        if (candidate.SillyTavern && typeof candidate.SillyTavern.callGenericPopup === 'function') {
+          return candidate.SillyTavern;
+        }
+      } catch (_) {}
+    }
+    try {
+      const globalSillyTavern = Function('return typeof SillyTavern !== "undefined" ? SillyTavern : null')();
+      if (globalSillyTavern && typeof globalSillyTavern.callGenericPopup === 'function') return globalSillyTavern;
+    } catch (_) {}
+    return null;
+  }
+
+  function ensureDomToastHost() {
+    try {
+      const doc = ROOT.document || document;
+      if (!doc || !doc.body) return null;
+      let host = doc.getElementById(DOM_TOAST_HOST_ID);
+      if (host) return host;
+      host = doc.createElement('div');
+      host.id = DOM_TOAST_HOST_ID;
+      host.style.position = 'fixed';
+      host.style.top = '12px';
+      host.style.right = '12px';
+      host.style.zIndex = '2147483647';
+      host.style.display = 'grid';
+      host.style.gap = '8px';
+      host.style.maxWidth = '360px';
+      host.style.pointerEvents = 'none';
+      doc.body.appendChild(host);
+      return host;
     } catch (_) {
       return null;
     }
   }
 
-  function showToast(level, message, title = TOAST_TITLE, options = {}) {
-    const toastr = getToastr();
-    if (!toastr || typeof toastr[level] !== 'function') return null;
+  function getDomToastColors(level) {
+    if (level === 'success') return { border: '#2f9e44', background: '#17351f' };
+    if (level === 'warning') return { border: '#f08c00', background: '#3b2a12' };
+    if (level === 'error') return { border: '#e03131', background: '#3b1717' };
+    return { border: '#228be6', background: '#172b3f' };
+  }
+
+  function showDomToast(level, message, title, options = {}) {
+    const host = ensureDomToastHost();
+    if (!host) return null;
     try {
-      return toastr[level](message, title, {
-        closeButton: true,
-        newestOnTop: true,
-        progressBar: false,
-        escapeHtml: true,
-        ...options
-      });
+      const doc = host.ownerDocument;
+      const colors = getDomToastColors(level);
+      const toast = doc.createElement('div');
+      toast.setAttribute('role', 'status');
+      toast.style.pointerEvents = 'auto';
+      toast.style.border = `1px solid ${colors.border}`;
+      toast.style.borderLeft = `4px solid ${colors.border}`;
+      toast.style.background = colors.background;
+      toast.style.color = '#fff';
+      toast.style.borderRadius = '6px';
+      toast.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.35)';
+      toast.style.padding = '10px 12px';
+      toast.style.fontSize = '13px';
+      toast.style.lineHeight = '1.45';
+      toast.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+      const titleEl = doc.createElement('div');
+      titleEl.textContent = title || TOAST_TITLE;
+      titleEl.style.fontWeight = '700';
+      titleEl.style.marginBottom = '4px';
+      toast.appendChild(titleEl);
+
+      const messageEl = doc.createElement('div');
+      messageEl.textContent = message;
+      toast.appendChild(messageEl);
+
+      host.appendChild(toast);
+      const handle = { kind: 'dom', element: toast, timer: null };
+      if (options.timeOut !== 0) {
+        handle.timer = setTimeout(() => clearDomToast(handle), Number(options.timeOut) || 3200);
+      }
+      return handle;
     } catch (error) {
-      console.warn(`${BRIDGE_NAME} toast failed:`, error);
+      console.warn(`${BRIDGE_NAME} DOM toast failed:`, error);
       return null;
     }
   }
 
-  function clearLoadingToast() {
+  function clearDomToast(handle) {
+    try {
+      if (!handle || !handle.element) return;
+      if (handle.timer) clearTimeout(handle.timer);
+      handle.element.remove();
+    } catch (_) {}
+  }
+
+  function showGenericPopup(level, message, title) {
+    const tavern = getSillyTavern();
+    if (!tavern) return null;
+    try {
+      const popupType = tavern.POPUP_TYPE && tavern.POPUP_TYPE.TEXT || 'text';
+      const content = `<strong>${escapeHtml(title || TOAST_TITLE)}</strong><br>${escapeHtml(message)}`;
+      tavern.callGenericPopup(content, popupType, '', { wide: false, large: false });
+      return { kind: 'popup' };
+    } catch (error) {
+      console.warn(`${BRIDGE_NAME} popup failed:`, error);
+      return null;
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function showToast(level, message, title = TOAST_TITLE, options = {}) {
     const toastr = getToastr();
+    if (toastr && typeof toastr[level] === 'function') {
+      try {
+        const value = toastr[level](message, title, {
+          closeButton: true,
+          newestOnTop: true,
+          progressBar: false,
+          escapeHtml: true,
+          ...options
+        });
+        return { kind: 'toastr', api: toastr, value };
+      } catch (error) {
+        console.warn(`${BRIDGE_NAME} toast failed:`, error);
+      }
+    }
+    if (options.useGenericPopup === true) {
+      const popup = showGenericPopup(level, message, title);
+      if (popup) return popup;
+    }
+    return showDomToast(level, message, title, options);
+  }
+
+  function clearLoadingToast() {
     const toast = ROOT[LOADING_TOAST_KEY];
     ROOT[LOADING_TOAST_KEY] = null;
-    if (!toastr || !toast || typeof toastr.clear !== 'function') return;
-    try {
-      toastr.clear(toast);
-    } catch (_) {}
+    if (!toast) return;
+    if (toast.kind === 'dom') {
+      clearDomToast(toast);
+      return;
+    }
+    if (toast.kind === 'toastr' && toast.api && typeof toast.api.clear === 'function') {
+      try {
+        toast.api.clear(toast.value);
+      } catch (_) {}
+    }
   }
 
   function showLoadingToast() {
@@ -86,7 +232,8 @@
     showToast('error', '脚本加载失败，请检查网络，或关闭后重新开启脚本。', '[ACE0]脚本加载失败', {
       timeOut: 0,
       extendedTimeOut: 0,
-      tapToDismiss: false
+      tapToDismiss: false,
+      useGenericPopup: true
     });
   }
 
