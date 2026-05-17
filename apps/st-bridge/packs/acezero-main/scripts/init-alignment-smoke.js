@@ -21,6 +21,7 @@ sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 runPackFile(sandbox, 'tavern/npc-data.js');
 runPackFile(sandbox, 'tavern/battle-runtime.js');
+runPackFile(sandbox, 'asset/data.js');
 
 const data = sandbox.ACE0TavernPluginData;
 const runtime = sandbox.ACE0TavernBattleRuntime.create({ data });
@@ -47,13 +48,13 @@ assert(initText.includes('id: asset_skill_insulation_l1'), 'initvar should start
 assert(!initText.includes('static_field'), 'initvar should not contain removed static_field');
 
 const schemaText = fs.readFileSync(path.join(PACK_ROOT, 'schema/acezero-schema.js'), 'utf8');
-[
-  'asset_skill_minor_wish_l4',
-  'asset_skill_hex_l3',
-  'asset_skill_analysis_l3',
-  'asset_skill_premonition_l2',
-  'asset_skill_insulation_l3'
-].forEach((cardId) => {
+const catalog = Array.isArray(sandbox.ACE0AssetDeckData?.ASSET_CARD_CATALOG)
+  ? sandbox.ACE0AssetDeckData.ASSET_CARD_CATALOG
+  : [];
+assert(catalog.length > 0, 'Asset catalog should load for schema alignment');
+catalog.forEach((card) => {
+  const cardId = card && typeof card.id === 'string' ? card.id : '';
+  assert(cardId, 'Every asset catalog card should have an id');
   assert(schemaText.includes(cardId), `schema card whitelist should include ${cardId}`);
 });
 
