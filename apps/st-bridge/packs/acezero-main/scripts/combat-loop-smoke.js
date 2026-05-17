@@ -63,9 +63,11 @@ function testOutcomeAndRewards() {
     assertEqual(outcome.key, key, `bucket key for ${net}`);
     assertEqual(outcome.label, label, `bucket label for ${net}`);
   });
-  assertEqual(helper.buildRewardDelta(1, 'great_victory').total, 2, 'level 1 max reward');
-  assertEqual(helper.buildRewardDelta(2, 'great_victory').total, 5, 'level 2 max reward');
-  assertEqual(helper.buildRewardDelta(3, 'great_victory').total, 9, 'level 3 max reward');
+  assertEqual(helper.buildRewardDelta(1, 'great_victory').total, 3, 'level 1 max reward');
+  assertEqual(helper.buildRewardDelta(2, 'great_victory').total, 6, 'level 2 max reward');
+  assertEqual(helper.buildRewardDelta(3, 'great_victory').total, 10, 'level 3 max reward');
+  assertEqual(helper.buildRewardDelta(2, 'minor_defeat').total, 0, 'minor defeat should not return points');
+  assertEqual(helper.buildRewardDelta(3, 'draw').total, 2, 'level 3 draw should return low consolation points');
   assertEqual(helper.buildSettlement({}), null, 'ordinary config should not build settlement');
 }
 
@@ -92,6 +94,7 @@ function testSettlementPatch() {
   assertEqual(settlement.level, 2, 'level preserved');
   assertEqual(settlement.fundsDeltaGold, 5, 'silver delta converted to gold funds');
   assert(settlement.suggestedJsonPatch.some((op) => op.path === '/world/act/pendingResolutions/2/status' && op.value === 'resolved'), 'patch resolves pending request');
+  assert(!settlement.suggestedJsonPatch.some((op) => op.path === '/world/act/pendingResolutions/2/outcome'), 'patch should not write redundant pending outcome');
   assert(settlement.suggestedJsonPatch.some((op) => op.path === '/world/act/reserve/combat'), 'patch returns combat reserve');
 }
 
@@ -120,6 +123,7 @@ function testCombatPromptInjection() {
   assert(!prompt.content.includes('"requestId"'), 'combat prompt should not expose request id');
   assert(!prompt.content.includes('"requestIndex"'), 'combat prompt should not expose request index');
   assert(!prompt.content.includes('"stakeGold"'), 'combat prompt should not expose stakeGold');
+  assert(prompt.content.includes('建议买入'), 'combat prompt should provide buy-in guidance');
 
   const combatConfig = runtime.resolveAce0CombatConfig(eraVars);
   assert(combatConfig, 'pending combat should resolve frontend combat config');
@@ -127,8 +131,8 @@ function testCombatPromptInjection() {
   assertEqual(combatConfig.requestIndex, 1, 'request index should point to original pending index');
   assertEqual(combatConfig.level, 3, 'level should resolve from pending request');
   assertEqual(combatConfig.kind, 'boss', 'kind should default from level');
-  assertEqual(combatConfig.stakeGold, 105, 'stakeGold should use 70% of positive funds + assets');
-  assertEqual(combatConfig.stakeChips, 10500, 'stakeChips should convert resolved gold to silver');
+  assertEqual(combatConfig.stakeGold, 127.5, 'stakeGold should use 85% of positive funds + assets for level 3');
+  assertEqual(combatConfig.stakeChips, 12750, 'stakeChips should convert resolved gold to silver');
 }
 
 function testStaleCombatPromptDoesNotInject() {
@@ -210,6 +214,7 @@ function testActiveCombatTokenPromptInjection() {
   assert(!prompt.content.includes('"requestId"'), 'active token prompt should not expose request id');
   assert(!prompt.content.includes('"requestIndex"'), 'active token prompt should not expose request index');
   assert(!prompt.content.includes('"stakeGold"'), 'active token prompt should not expose stakeGold');
+  assert(prompt.content.includes('建议买入'), 'active token prompt should provide buy-in guidance');
   assert(prompt.content.includes('phase_advance'), 'active token prompt should ask to advance current phase when opening combat');
 
   const combatConfig = runtime.resolveAce0CombatConfig(eraVars);
@@ -218,7 +223,7 @@ function testActiveCombatTokenPromptInjection() {
   assertEqual(combatConfig.requestIndex, 0, 'active token request index should point to future pending index');
   assertEqual(combatConfig.level, 1, 'active token level should be carried');
   assertEqual(combatConfig.kind, 'skirmish', 'active token kind should default from level');
-  assertEqual(combatConfig.stakeGold, 2.2, 'active token stakeGold should use level 1 10% estimate');
+  assertEqual(combatConfig.stakeGold, 5.5, 'active token stakeGold should use level 1 25% estimate');
 }
 
 function testNoCombatRequestDoesNotResolveConfig() {
@@ -381,7 +386,7 @@ function testTexasPromptMarkerUsesSessionNet() {
   assert(prompt.includes('<ACE0_COMBAT_SETTLEMENT>'), 'multi-round texas prompt should include settlement marker');
   assert(prompt.includes('"path": "/hero/funds"'), 'multi-round marker should include funds patch');
   assert(prompt.includes('"value": 2'), 'multi-round marker should settle session net +200 silver, not last hand +900 silver');
-  assert(prompt.includes('"value": "minor_victory"'), 'multi-round outcome should classify session net, not last hand');
+  assert(!prompt.includes('/world/act/pendingResolutions/1/outcome'), 'multi-round marker should not write redundant pending outcome');
   assert(!prompt.includes('"value": 9'), 'multi-round marker should not use only final hand funds');
 }
 

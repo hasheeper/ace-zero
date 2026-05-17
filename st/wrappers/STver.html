@@ -170,9 +170,6 @@
           if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveAppUrl === 'function') {
             return root.STBridge.utils.resolveAppUrl('game');
           }
-          if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveUrl === 'function') {
-            return root.STBridge.utils.resolveUrl('../../index.html?app=game');
-          }
         } catch (_) {}
         return 'https://hasheeper.github.io/ace-zero/index.html?app=game';
       }

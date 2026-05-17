@@ -17,20 +17,20 @@
     { key: 'victory', label: '胜利', maxRatio: 0.75 },
     { key: 'great_victory', label: '大胜', maxRatio: Infinity }
   ];
-  var MAX_POINTS_BY_LEVEL = { 1: 2, 2: 5, 3: 9 };
+  var MAX_POINTS_BY_LEVEL = { 1: 3, 2: 6, 3: 10 };
   var POINT_RATE_BY_BUCKET = {
     rout: 0,
     defeat: 0,
-    minor_defeat: 0.15,
-    draw: 0.25,
-    minor_victory: 0.5,
+    minor_defeat: 0,
+    draw: 0.2,
+    minor_victory: 0.45,
     victory: 0.75,
     great_victory: 1
   };
   var REWARD_SEQUENCE_BY_LEVEL = {
-    1: ['combat', 'rest'],
-    2: ['combat', 'asset', 'vision', 'rest', 'combat'],
-    3: ['combat', 'asset', 'vision', 'combat', 'rest', 'asset', 'vision', 'combat', 'rest']
+    1: ['combat', 'rest', 'vision'],
+    2: ['combat', 'asset', 'vision', 'rest', 'combat', 'asset'],
+    3: ['combat', 'asset', 'vision', 'combat', 'rest', 'asset', 'vision', 'combat', 'rest', 'asset']
   };
   function clampInt(value, min, max, fallback) {
     var n = Math.round(Number(value));
@@ -114,7 +114,6 @@
       }
     });
     patch.push({ op: 'replace', path: '/world/act/pendingResolutions/' + settlement.requestIndex + '/status', value: 'resolved' });
-    patch.push({ op: 'replace', path: '/world/act/pendingResolutions/' + settlement.requestIndex + '/outcome', value: settlement.outcome.key });
     return patch;
   }
 

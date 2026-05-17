@@ -6,11 +6,6 @@
     "acezero-main": {
       "label": "AceZero Main",
       "product": "acezero",
-      "globals": {
-        "ACE0_GAME_APP_URL": "https://hasheeper.github.io/ace-zero/index.html?app=game",
-        "ACE0_DASHBOARD_APP_URL": "https://hasheeper.github.io/ace-zero/index.html?app=dashboard",
-        "ACE0_ACT_RESULT_APP_URL": "https://hasheeper.github.io/ace-zero/index.html?app=act-result"
-      },
       "scripts": [
         {
           "id": "acezero-schema",

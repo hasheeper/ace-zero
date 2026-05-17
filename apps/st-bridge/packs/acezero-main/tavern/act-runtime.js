@@ -61,6 +61,7 @@
       let lastHandledMk = null;
       let latchedTransitionRequestTarget = '';
       const SILVER_PER_GOLD = 100;
+      const COMBAT_STAKE_RATE_BY_LEVEL = { 1: 0.25, 2: 0.5, 3: 0.85 };
 
   function normalizeWorldClock(raw) {
     const src = raw && typeof raw === 'object' ? raw : {};
@@ -924,7 +925,7 @@
     const resource = getHeroResourceSnapshot(eraVars);
     const positiveAssets = Math.max(0, Number(resource.assets) || 0);
     const available = Math.max(0, (Number(resource.funds) || 0) + positiveAssets);
-    const rate = level >= 3 ? 0.7 : level === 2 ? 0.33 : 0.1;
+    const rate = COMBAT_STAKE_RATE_BY_LEVEL[level] || COMBAT_STAKE_RATE_BY_LEVEL[1];
     const stakeGold = Math.round(available * rate * 100) / 100;
     const requestId = typeof request.id === 'string' && request.id.trim()
       ? request.id.trim()
@@ -959,10 +960,12 @@
     if (!resolved) return '';
     const level = resolved.ace0Combat.level;
     const label = level >= 3 ? 'Combat 3 / Boss 交锋' : level === 2 ? 'Combat 2 / 精英交锋' : 'Combat 1 / 小交锋';
+    const suggestedBuyIn = Number(resolved.ace0Combat.stakeGold || 0).toFixed(2).replace(/\.?0+$/, '');
     return [
       '<ace0_combat_request>',
       '当前相位存在一个待结算交锋点。本轮若进入这个特殊交锋局，只需在 <ACE0_BATTLE> JSON 顶层写入布尔标记；普通赌局、非交锋点赌局、回放模式都不要写 ace0Combat。',
       '特殊档位: ' + label,
+      '建议买入: 约 ' + suggestedBuyIn + 'G；AI 仍可按剧情在 ACE0_BATTLE.chips 中决定本局实际买入，缺省时系统会采用该建议值。',
       '```json',
       JSON.stringify({ ace0Combat: true }, null, 2),
       '```',

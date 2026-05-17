@@ -35,6 +35,15 @@ http://127.0.0.1:4173/apps/act-result/index.html
 http://127.0.0.1:4173/apps/st-bridge/bridge.js
 ```
 
+本机服务同时兼容 GitHub Pages 子路径别名：
+
+```text
+http://127.0.0.1:4173/ace-zero/assets/svg/gaze.svg
+http://127.0.0.1:4173/ace-zero/games/texasholdem/texas-holdem/texas-holdem.html
+```
+
+这样即使本机 profile、iframe 缓存或旧页面里残留 `/ace-zero/...` 路径，德州 SVG、牌面和游戏资源也不会因为本机根路径不同而 404。
+
 ## 酒馆助手脚本
 
 本机测试时粘贴这一份：
@@ -114,6 +123,22 @@ node apps/st-bridge/scripts/serve-local.mjs --port 4173 --root .
 ```
 
 不要从 `apps/st-bridge` 子目录当 root 启动，否则 `/index.html` 和 `/apps/act-result/index.html` 会找不到。
+
+### ACT_RESULT 在本机模式被压成一条线
+
+优先确认酒馆正则使用的是 `st/wrappers/local/ACT_RESULT.local.html`。该 wrapper 会同时监听 `acezero-act-result-size` 消息，并在同源可读时主动读取 `apps/act-result` 内容高度；如果仍然只有 1px，通常是酒馆正则还贴着旧 wrapper，或浏览器缓存没有刷新。
+
+### 德州 SVG 或牌面在本机模式不加载
+
+先检查服务是否从仓库根目录启动，再直接打开：
+
+```text
+http://127.0.0.1:4173/assets/svg/gaze.svg
+http://127.0.0.1:4173/assets/deck-of-cards/example/faces/0_1.svg
+http://127.0.0.1:4173/ace-zero/assets/svg/gaze.svg
+```
+
+前三个都应该返回 SVG。若前两个失败，多半是本机服务 root 不对；若只有第三个失败，说明本机服务不是最新版本。
 
 ### 改了代码但酒馆没刷新
 

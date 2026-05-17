@@ -10,10 +10,16 @@ const {
 } = require('./smoke-utils');
 
 const bridgeSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/bridge.js'), 'utf8');
+const manifestSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/manifest.json'), 'utf8');
+const serveLocalSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/scripts/serve-local.mjs'), 'utf8');
 const worldbookProfileSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/packs/acezero-main/tavern/worldbook-profile.js'), 'utf8');
 const OLD_WORLDBOOK_SOURCE_GLOBAL = ['ACE0', 'FULL', 'DOC', 'WORLDBOOK', 'SOURCE'].join('_');
 const OLD_WORLDBOOK_PROFILE_ALIAS = ['ACE0', 'WORLDBOOK', 'PROFILE'].join('_');
 const OLD_WORLDBOOK_DEBUG_MARKER = ['__ACE0', 'APPLIED', 'FULL', 'DOC', 'WORLDBOOK__'].join('_');
+const OLD_PACK_GLOBALS_ACCESS = ['pack', 'globals'].join('.');
+const OLD_GAME_RELATIVE_RESOLVER = ['resolveUrl(', "'../../index.html?app=game')"].join('');
+const OLD_DASHBOARD_RELATIVE_RESOLVER = ['resolveUrl(', "'../../index.html?app=dashboard')"].join('');
+const OLD_ACT_RESULT_RELATIVE_RESOLVER = ['resolveUrl(', "'../../../../apps/act-result/index.html')"].join('');
 
 function createSandbox({ bridgeUrl, globals = {} }) {
   const loadedScriptUrls = [];
@@ -40,11 +46,6 @@ function createSandbox({ bridgeUrl, globals = {} }) {
             packs: {
               'acezero-main': {
                 product: 'acezero',
-                globals: {
-                  ACE0_GAME_APP_URL: 'https://hasheeper.github.io/ace-zero/index.html?app=game',
-                  ACE0_DASHBOARD_APP_URL: 'https://hasheeper.github.io/ace-zero/index.html?app=dashboard',
-                  ACE0_ACT_RESULT_APP_URL: 'https://hasheeper.github.io/ace-zero/apps/act-result/index.html'
-                },
                 scripts: [
                   { id: 'acezero-tavern-worldbook-profile', type: 'script', url: './packs/acezero-main/tavern/worldbook-profile.js' },
                   { id: 'acezero-test-script', type: 'script', url: './packs/acezero-main/test-script.js' }
@@ -107,6 +108,8 @@ function runWorldbookProfileOnly(globals = {}) {
   const prod = await runBridge({
     bridgeUrl: 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?v=test'
   });
+  assert(!bridgeSource.includes(OLD_PACK_GLOBALS_ACCESS), 'bridge should not replay manifest globals');
+  assert(!manifestSource.includes('"globals"'), 'manifest should not carry stale URL globals');
   assertEqual(prod.STBridge.state.env, 'prod', 'prod bridge should expose prod env');
   assertEqual(prod.STBridge.state.appBaseUrl, 'https://hasheeper.github.io/ace-zero', 'prod bridge should expose GitHub app base');
   assertEqual(prod.STBridge.state.fullDocWorldbookName, prod.ACE0WorldbookProfile.names.prod, 'prod bridge should use configured main worldbook');
@@ -169,13 +172,19 @@ function runWorldbookProfileOnly(globals = {}) {
   const localActResultWrapperSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/local/ACT_RESULT.local.html'), 'utf8');
   const dashboardLoaderSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/packs/acezero-main/dashboard/loader.js'), 'utf8');
   assert(stverSource.includes("resolveAppUrl('game')"), 'STver wrapper should use bridge app resolver for game');
+  assert(!stverSource.includes(OLD_GAME_RELATIVE_RESOLVER), 'STver wrapper should not keep legacy relative game resolver');
   assert(actResultWrapperSource.includes('ACE0_ACT_RESULT_APP_URL'), 'ACT_RESULT wrapper should accept bridge-published ACT_RESULT app URL');
   assert(actResultWrapperSource.includes("resolveAppUrl('act-result')"), 'ACT_RESULT wrapper should use bridge app resolver for ACT_RESULT');
+  assert(actResultWrapperSource.includes('measureFrameContentHeight'), 'ACT_RESULT wrapper should have same-origin height fallback');
+  assert(!actResultWrapperSource.includes(OLD_ACT_RESULT_RELATIVE_RESOLVER), 'ACT_RESULT wrapper should not keep legacy relative resolver');
   assert(localStverSource.includes("return 'http://127.0.0.1:4173/index.html?app=game';"), 'local STver wrapper should hardcode the local game app');
   assert(localActResultWrapperSource.includes("return 'http://127.0.0.1:4173/apps/act-result/index.html';"), 'local ACT_RESULT wrapper should hardcode the local ACT_RESULT app');
+  assert(localActResultWrapperSource.includes('measureFrameContentHeight'), 'local ACT_RESULT wrapper should resize even without host frame access');
   assert(!localStverSource.includes('hasheeper.github.io'), 'local STver wrapper must not fall back to GitHub Pages');
   assert(!localActResultWrapperSource.includes('hasheeper.github.io'), 'local ACT_RESULT wrapper must not fall back to GitHub Pages');
   assert(dashboardLoaderSource.includes("resolveAppUrl('dashboard')"), 'Dashboard loader should use bridge app resolver for dashboard');
+  assert(!dashboardLoaderSource.includes(OLD_DASHBOARD_RELATIVE_RESOLVER), 'Dashboard loader should not keep legacy relative dashboard resolver');
+  assert(serveLocalSource.includes("/ace-zero"), 'local server should serve GitHub Pages /ace-zero path aliases for assets and games');
 
   console.log('[bridge-profile-smoke] all checks passed');
 })().catch((error) => {

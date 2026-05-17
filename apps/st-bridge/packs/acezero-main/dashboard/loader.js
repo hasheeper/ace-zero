@@ -32,9 +32,6 @@
     if (ROOT.STBridge?.utils?.resolveAppUrl) {
       return ROOT.STBridge.utils.resolveAppUrl('dashboard');
     }
-    if (ROOT.STBridge?.utils?.resolveUrl) {
-      return ROOT.STBridge.utils.resolveUrl('../../index.html?app=dashboard');
-    }
     return 'https://hasheeper.github.io/ace-zero/index.html?app=dashboard';
   }
 

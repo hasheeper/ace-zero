@@ -48,15 +48,22 @@ function writeCorsHeaders(res, extra = {}) {
 async function resolveFilePath(rootDir, requestUrl) {
   const url = new URL(requestUrl || '/', 'http://127.0.0.1');
   const decodedPath = decodeURIComponent(url.pathname || '/');
-  const relativePath = decodedPath.replace(/^\/+/, '') || 'index.html';
-  const candidate = path.resolve(rootDir, relativePath);
-  if (!candidate.startsWith(rootDir + path.sep) && candidate !== rootDir) {
-    return null;
+  const candidates = [decodedPath];
+  if (decodedPath === '/ace-zero' || decodedPath.startsWith('/ace-zero/')) {
+    candidates.push(decodedPath.replace(/^\/ace-zero\/?/, '/'));
   }
 
-  const candidateStat = await stat(candidate).catch(() => null);
-  if (candidateStat?.isDirectory()) return path.join(candidate, 'index.html');
-  if (candidateStat?.isFile()) return candidate;
+  for (const candidatePath of candidates) {
+    const relativePath = candidatePath.replace(/^\/+/, '') || 'index.html';
+    const candidate = path.resolve(rootDir, relativePath);
+    if (!candidate.startsWith(rootDir + path.sep) && candidate !== rootDir) {
+      continue;
+    }
+
+    const candidateStat = await stat(candidate).catch(() => null);
+    if (candidateStat?.isDirectory()) return path.join(candidate, 'index.html');
+    if (candidateStat?.isFile()) return candidate;
+  }
   return null;
 }
 

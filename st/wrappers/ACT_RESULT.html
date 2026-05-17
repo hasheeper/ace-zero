@@ -63,9 +63,6 @@
           if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveAppUrl === 'function') {
             return root.STBridge.utils.resolveAppUrl('act-result');
           }
-          if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveUrl === 'function') {
-            return root.STBridge.utils.resolveUrl('../../../../apps/act-result/index.html');
-          }
         } catch (_) {}
         return 'https://hasheeper.github.io/ace-zero/apps/act-result/index.html';
       }
@@ -94,9 +91,12 @@
       }
 
       function resizeHostFrame() {
-        if (!hostFrame) return;
-        const parentWidth = hostFrame.parentElement ? hostFrame.parentElement.clientWidth : 0;
+        const parentWidth = hostFrame && hostFrame.parentElement ? hostFrame.parentElement.clientWidth : 0;
         const width = Math.min(parentWidth || window.innerWidth || 860, 860);
+        frame.style.width = `${width}px`;
+        frame.style.maxWidth = '100%';
+        frame.style.height = `${lastHeight}px`;
+        if (!hostFrame) return;
         hostFrame.style.width = '100%';
         hostFrame.style.maxWidth = '100%';
         hostFrame.style.height = `${lastHeight}px`;
@@ -104,9 +104,6 @@
         hostFrame.style.border = 'none';
         hostFrame.style.margin = '0';
         hostFrame.style.display = 'block';
-        frame.style.width = `${width}px`;
-        frame.style.maxWidth = '100%';
-        frame.style.height = `${lastHeight}px`;
       }
 
       function applyContentHeight(value) {
@@ -122,6 +119,38 @@
           type: 'acezero-act-result-data',
           payload
         }, '*');
+      }
+
+      function measureFrameContentHeight() {
+        try {
+          const doc = frame && (frame.contentDocument || (frame.contentWindow && frame.contentWindow.document));
+          if (!doc) return 0;
+          const widget = doc.querySelector('.mech-widget');
+          const widgetRect = widget && widget.getBoundingClientRect ? widget.getBoundingClientRect() : null;
+          const body = doc.body;
+          const html = doc.documentElement;
+          return Math.max(
+            widget ? widget.offsetHeight || 0 : 0,
+            widgetRect ? widgetRect.height || 0 : 0,
+            body ? body.scrollHeight || body.offsetHeight || 0 : 0,
+            html ? html.scrollHeight || html.offsetHeight || 0 : 0
+          );
+        } catch (_) {
+          return 0;
+        }
+      }
+
+      function syncFrameContentHeight() {
+        const height = measureFrameContentHeight();
+        if (height > 1) applyContentHeight(height);
+      }
+
+      function scheduleFrameContentHeightSync() {
+        syncFrameContentHeight();
+        setTimeout(syncFrameContentHeight, 80);
+        setTimeout(syncFrameContentHeight, 240);
+        setTimeout(syncFrameContentHeight, 600);
+        setTimeout(syncFrameContentHeight, 1200);
       }
 
       function forwardToHost(message) {
@@ -140,7 +169,10 @@
       }
 
       frame.src = appendNoCache(resolveActResultUrl());
-      frame.addEventListener('load', postPayload);
+      frame.addEventListener('load', () => {
+        postPayload();
+        scheduleFrameContentHeightSync();
+      });
       window.addEventListener('message', (event) => {
         const message = event && event.data;
         if (!message) return;
@@ -177,7 +209,10 @@
           return;
         }
       });
-      window.addEventListener('resize', resizeHostFrame);
+      window.addEventListener('resize', () => {
+        resizeHostFrame();
+        syncFrameContentHeight();
+      });
       resizeHostFrame();
     })();
   </script>

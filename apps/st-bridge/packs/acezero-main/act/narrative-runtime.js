@@ -379,8 +379,8 @@ ${phaseLines.join('\n')}
 
     const currentLines = [
       '[当前进行]',
-      `本轮演绎: ${currentPhaseAction || `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - 未规划｜自然推进`}`,
-      '写出这件事的实际发生、阻力与结果；如果已经形成可观察结果，结尾推进 /world/act/phase_advance 进入下一段。'
+      `本轮要求演绎: ${currentPhaseAction || `${ACT_PHASE_LABELS[phaseIndex] || '当前段'} - 未规划｜自然推进`}`,
+      '写出这件事的实际发生、阻力与结果；如果结尾自然过渡，推进 phase_advance 进入下一段，但不要演绎下一段的内容'
     ];
 
     const decisionLines = [

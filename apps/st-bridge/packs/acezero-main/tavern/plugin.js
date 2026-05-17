@@ -1351,10 +1351,20 @@
     const legacyMaxMana = vMaxMana;
     const legacyMana = vMana;
 
-    // 赌局筹码：NPC 使用 table chips，hero 使用 MVU funds（上限为 table chips）
-    const tableChips = _goldFundsToSilverUnits(battle.chips != null ? battle.chips : 10);
+    const resolvedAce0Combat = battle.ace0Combat === true ? resolveAce0CombatConfig(eraVars) : null;
+
+    // 赌局筹码：普通局沿用默认 10G；combat 局缺省时使用系统建议买入。
+    const hasBattleChips = battle.chips != null && _normalizeFundsAmount(battle.chips) > 0;
+    const combatFallbackChips = resolvedAce0Combat && Number(resolvedAce0Combat.stakeChips) > 0
+      ? Math.max(1, Math.round(Number(resolvedAce0Combat.stakeChips)))
+      : _goldFundsToSilverUnits(10);
+    const tableChips = hasBattleChips
+      ? _goldFundsToSilverUnits(battle.chips)
+      : (resolvedAce0Combat ? combatFallbackChips : _goldFundsToSilverUnits(10));
     const heroFunds = _goldFundsToSilverUnits(hero.funds);
-    const heroChips = heroFunds > 0 ? Math.min(heroFunds, tableChips) : tableChips;
+    const heroChips = resolvedAce0Combat
+      ? tableChips
+      : (heroFunds > 0 ? Math.min(heroFunds, tableChips) : tableChips);
 
     // 构建 hero 配置（game-config v5 格式：区分主手/副手技能）
     const heroConfig = {
@@ -1391,7 +1401,7 @@
     }
 
     const result = {
-      blinds: _normalizeBattleBlinds(battle.blinds),
+      blinds: _normalizeBattleBlinds(battle.blinds, resolvedAce0Combat ? tableChips : null),
       chips: tableChips,
       heroChips: heroChips,
       heroDisplayName: resolveHeroAliasDisplayName(hero, HERO_INTERNAL_KEY),
@@ -1423,9 +1433,12 @@
     if (gameMode) result.gameMode = gameMode;
 
     if (battle.ace0Combat === true) {
-      const ace0Combat = resolveAce0CombatConfig(eraVars);
-      if (ace0Combat) {
-        result.ace0Combat = ace0Combat;
+      if (resolvedAce0Combat) {
+        result.ace0Combat = {
+          ...resolvedAce0Combat,
+          stakeGold: _silverUnitsToGoldFunds(tableChips),
+          stakeChips: tableChips
+        };
       } else {
         console.warn(`${PLUGIN_NAME} ace0Combat 标记存在，但当前 MVU/ACT 状态中没有可绑定的 combat request。`);
       }
@@ -1502,7 +1515,13 @@
     return _normalizeFundsAmount(numeric / SILVER_PER_GOLD);
   }
 
-  function _normalizeBattleBlinds(blinds) {
+  function _normalizeBattleBlinds(blinds, fallbackTableChips = null) {
+    if ((!Array.isArray(blinds) || !blinds.length) && Number(fallbackTableChips) > 0) {
+      const tableChips = Math.max(1, Math.round(Number(fallbackTableChips)));
+      const smallBlind = Math.max(1, Math.round(tableChips * 0.01));
+      const bigBlind = Math.max(smallBlind + 1, Math.round(tableChips * 0.02));
+      return [smallBlind, bigBlind];
+    }
     const normalized = Array.isArray(blinds) ? blinds : [0.1, 0.2];
     const sb = _goldFundsToSilverUnits(normalized[0] != null ? normalized[0] : 0.1);
     const bb = _goldFundsToSilverUnits(normalized[1] != null ? normalized[1] : 0.2);

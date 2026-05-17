@@ -149,8 +149,21 @@ setTimeout(() => {
     assert(pendingCombatConfig.ace0Combat, 'ace0Combat true should build frontend combat config from pending request');
     assertEqual(pendingCombatConfig.ace0Combat.requestId, 'boss-req', 'frontend combat request id should come from pending request');
     assertEqual(pendingCombatConfig.ace0Combat.level, 3, 'frontend combat level should come from pending request');
-    assertEqual(pendingCombatConfig.ace0Combat.stakeGold, 105, 'frontend combat stake should be system-derived');
-    assertEqual(pendingCombatConfig.ace0Combat.stakeChips, 10500, 'frontend combat stake chips should be system-derived');
+    assertEqual(pendingCombatConfig.chips, 1000, 'explicit battle chips should control combat table buy-in');
+    assertEqual(pendingCombatConfig.heroChips, 1000, 'explicit combat buy-in should control hero chips');
+    assertEqual(pendingCombatConfig.ace0Combat.stakeGold, 10, 'frontend combat stake should follow explicit battle chips');
+    assertEqual(pendingCombatConfig.ace0Combat.stakeChips, 1000, 'frontend combat stake chips should follow explicit battle chips');
+
+    const fallbackBattle = { ...baseBattle };
+    delete fallbackBattle.chips;
+    delete fallbackBattle.blinds;
+    const fallbackCombatConfig = await sandbox.ACE0Plugin.triggerBattle(fallbackBattle);
+    assert(fallbackCombatConfig.ace0Combat, 'ace0Combat true without chips should still build frontend combat config');
+    assertEqual(fallbackCombatConfig.chips, 12750, 'missing combat chips should fall back to system suggested stake');
+    assertEqual(fallbackCombatConfig.heroChips, 12750, 'combat fallback should align hero chips with stake');
+    assertDeepEqual(fallbackCombatConfig.blinds, [128, 255], 'combat fallback should derive blinds from buy-in');
+    assertEqual(fallbackCombatConfig.ace0Combat.stakeGold, 127.5, 'fallback combat stake should use level 3 suggestion');
+    assertEqual(fallbackCombatConfig.ace0Combat.stakeChips, 12750, 'fallback combat stake chips should use level 3 suggestion');
 
     sandbox.__vars.hero.funds = 21.98;
     sandbox.__vars.hero.assets = 0;
@@ -169,7 +182,7 @@ setTimeout(() => {
     assert(activeTokenCombatConfig.ace0Combat, 'ace0Combat true should build frontend combat config from active combat token');
     assertEqual(activeTokenCombatConfig.ace0Combat.requestId, 'chapter0_exchange:node1-entry:1:combat:1:0', 'active token request id should be system-derived');
     assertEqual(activeTokenCombatConfig.ace0Combat.level, 1, 'active token level should come from phase slot amount');
-    assertEqual(activeTokenCombatConfig.ace0Combat.stakeGold, 2.2, 'active token stake should be system-derived');
+    assertEqual(activeTokenCombatConfig.ace0Combat.stakeGold, 10, 'active token stake should follow explicit battle chips');
 
     const legacyObjectConfig = await sandbox.ACE0Plugin.triggerBattle({
       ...baseBattle,

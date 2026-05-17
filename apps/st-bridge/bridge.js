@@ -409,11 +409,6 @@
   function applyGlobals(pack, packId, profile = bridgeProfile) {
     ROOT.ST_BRIDGE_PACK = packId;
     ROOT.ST_BRIDGE_PRODUCT = pack.product || packId;
-    if (pack.globals && typeof pack.globals === 'object') {
-      Object.entries(pack.globals).forEach(([key, value]) => {
-        ROOT[key] = value;
-      });
-    }
     ROOT.ST_BRIDGE_ENV = profile.env;
     ROOT.ACE0_APP_BASE_URL = profile.appBaseUrl;
     if (profile.fullDocWorldbookName) {
