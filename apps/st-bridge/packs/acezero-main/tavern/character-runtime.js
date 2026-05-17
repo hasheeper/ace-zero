@@ -10,8 +10,12 @@
   const root = typeof window !== 'undefined' ? window : globalThis;
 
   function resolveDefaultFullDocWorldbookName() {
-    const profile = root.ACE0WorldbookProfile || root.ACE0_WORLDBOOK_PROFILE || null;
+    const profile = root.ACE0WorldbookProfile || null;
     const env = typeof root.ST_BRIDGE_ENV === 'string' ? root.ST_BRIDGE_ENV : 'prod';
+    if (profile && typeof profile.applyFullDocWorldbookProfile === 'function') {
+      const resolved = profile.applyFullDocWorldbookProfile();
+      if (typeof resolved === 'string' && resolved.trim()) return resolved.trim();
+    }
     if (profile && typeof profile.resolveFullDocWorldbookName === 'function') {
       return profile.resolveFullDocWorldbookName(env);
     }

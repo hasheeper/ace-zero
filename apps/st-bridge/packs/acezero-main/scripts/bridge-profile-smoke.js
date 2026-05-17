@@ -10,6 +10,10 @@ const {
 } = require('./smoke-utils');
 
 const bridgeSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/bridge.js'), 'utf8');
+const worldbookProfileSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/packs/acezero-main/tavern/worldbook-profile.js'), 'utf8');
+const OLD_WORLDBOOK_SOURCE_GLOBAL = ['ACE0', 'FULL', 'DOC', 'WORLDBOOK', 'SOURCE'].join('_');
+const OLD_WORLDBOOK_PROFILE_ALIAS = ['ACE0', 'WORLDBOOK', 'PROFILE'].join('_');
+const OLD_WORLDBOOK_DEBUG_MARKER = ['__ACE0', 'APPLIED', 'FULL', 'DOC', 'WORLDBOOK__'].join('_');
 
 function createSandbox({ bridgeUrl, globals = {} }) {
   const loadedScriptUrls = [];
@@ -87,6 +91,18 @@ async function runBridge(options) {
   return sandbox;
 }
 
+function runWorldbookProfileOnly(globals = {}) {
+  const sandbox = {
+    ...globals,
+    console
+  };
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(worldbookProfileSource, sandbox, { filename: 'worldbook-profile.js' });
+  return sandbox;
+}
+
 (async () => {
   const prod = await runBridge({
     bridgeUrl: 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?v=test'
@@ -95,6 +111,9 @@ async function runBridge(options) {
   assertEqual(prod.STBridge.state.appBaseUrl, 'https://hasheeper.github.io/ace-zero', 'prod bridge should expose GitHub app base');
   assertEqual(prod.STBridge.state.fullDocWorldbookName, prod.ACE0WorldbookProfile.names.prod, 'prod bridge should use configured main worldbook');
   assertEqual(prod.STBridge.state.fullDocWorldbookSource, 'profile', 'prod worldbook should come from profile defaults');
+  assertEqual(typeof prod[OLD_WORLDBOOK_SOURCE_GLOBAL], 'undefined', 'worldbook source should not be mirrored to a stale global');
+  assertEqual(typeof prod[OLD_WORLDBOOK_PROFILE_ALIAS], 'undefined', 'old worldbook profile alias should not be exported');
+  assertEqual(typeof prod[OLD_WORLDBOOK_DEBUG_MARKER], 'undefined', 'worldbook debug marker should not be exported');
   assertEqual(prod.ACE0_GAME_APP_URL, 'https://hasheeper.github.io/ace-zero/index.html?app=game', 'prod bridge should publish game URL');
   assert(prod.__loadedScriptUrls.every(url => url.startsWith('https://hasheeper.github.io/ace-zero/apps/st-bridge/')), 'prod scripts should load from GitHub Pages');
 
@@ -130,6 +149,19 @@ async function runBridge(options) {
   });
   assertEqual(globalOverride.STBridge.state.fullDocWorldbookName, 'GlobalBook', 'marked global worldbook should override profile defaults');
   assertEqual(globalOverride.STBridge.state.fullDocWorldbookSource, 'globalOverride', 'marked global worldbook should be marked as override-sourced');
+
+  const staleState = runWorldbookProfileOnly({
+    ST_BRIDGE_ENV: 'local',
+    STBridge: {
+      state: {
+        env: 'local',
+        fullDocWorldbookName: 'LegacyStateWorldbook'
+      },
+      utils: {}
+    }
+  });
+  assertEqual(staleState.STBridge.state.fullDocWorldbookName, staleState.ACE0WorldbookProfile.names.local, 'legacy bridge state without source should be ignored');
+  assertEqual(staleState.STBridge.state.fullDocWorldbookSource, 'profile', 'legacy bridge state without source should be rewritten as profile-sourced');
 
   const stverSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/STver.html'), 'utf8');
   const actResultWrapperSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/ACT_RESULT.html'), 'utf8');

@@ -37,15 +37,19 @@
     const bridgeState = root.STBridge && root.STBridge.state ? root.STBridge.state : null;
     const env = normalizeEnv(root.ST_BRIDGE_ENV || bridgeState?.env);
     const currentName = normalizeString(root.ACE0_FULL_DOC_WORLDBOOK_NAME, '');
-    const bridgeSource = normalizeString(bridgeState?.fullDocWorldbookSource || root.ACE0_FULL_DOC_WORLDBOOK_SOURCE, '');
-    const explicitName = (isExplicitWorldbookSource(bridgeSource) ? normalizeString(bridgeState?.fullDocWorldbookName, '') : '')
-      || (root.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true ? currentName : '');
+    const bridgeSource = normalizeString(bridgeState?.fullDocWorldbookSource, '');
+    const bridgeName = normalizeString(bridgeState?.fullDocWorldbookName, '');
+    const overrideName = root.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true ? currentName : '';
+    const explicitSource = isExplicitWorldbookSource(bridgeSource) && bridgeName
+      ? bridgeSource
+      : (overrideName ? 'globalOverride' : '');
+    const explicitName = explicitSource
+      ? (explicitSource === 'globalOverride' ? overrideName : bridgeName)
+      : '';
     const nextName = resolveFullDocWorldbookName(env, explicitName);
-    const nextSource = explicitName ? (bridgeSource || 'globalOverride') : 'profile';
+    const nextSource = explicitSource || 'profile';
 
     root.ACE0_FULL_DOC_WORLDBOOK_NAME = nextName;
-    root.ACE0_FULL_DOC_WORLDBOOK_SOURCE = nextSource;
-    root.__ACE0_APPLIED_FULL_DOC_WORLDBOOK__ = { env, name: nextName, source: nextSource };
 
     if (bridgeState) {
       bridgeState.fullDocWorldbookName = nextName;
@@ -65,6 +69,5 @@
   });
 
   root.ACE0WorldbookProfile = profile;
-  root.ACE0_WORLDBOOK_PROFILE = profile;
   applyFullDocWorldbookProfile();
 })(typeof window !== 'undefined' ? window : globalThis);
