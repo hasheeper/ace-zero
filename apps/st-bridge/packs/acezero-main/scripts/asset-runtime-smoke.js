@@ -182,6 +182,38 @@ function testSkillMergeAndReroll() {
   assert(!Object.prototype.hasOwnProperty.call(rerolled.assetDeck.offer, 'reroll'), 'Used reroll should be removed');
 }
 
+function testChoiceIdPreventsIndexDrift() {
+  const idWins = assetDeck.applyAssetDeckCommand(assetDeck.normalizeAssetDeckState({
+    offer: makeOffer('asset_mana_max_bronze', {
+      choices: [
+        { id: 'asset_mana_max_bronze', lv: 1 },
+        { id: 'asset_mana_reduce_bronze', lv: 1 }
+      ]
+    })
+  }), {
+    kind: 'choose_card',
+    payload: { choiceIndex: 0, choiceId: 'asset_mana_reduce_bronze', slotType: 'general' }
+  });
+  assertEqual(idWins.ok, true, 'Explicit choiceId should resolve even if index drifted');
+  assertEqual(idWins.assetDeck.bag.general[0].id, 'asset_mana_reduce_bronze', 'Explicit choiceId should choose the clicked card id');
+
+  const mismatch = assetDeck.applyAssetDeckCommand(assetDeck.normalizeAssetDeckState({
+    offer: makeOffer('asset_mana_max_bronze', {
+      choices: [
+        { id: 'asset_mana_max_bronze', lv: 1 },
+        { id: 'asset_mana_reduce_bronze', lv: 1 }
+      ]
+    })
+  }), {
+    kind: 'choose_card',
+    payload: { choiceIndex: 0, choiceId: 'asset_skill_minor_wish_l1', slotType: 'general' }
+  });
+  assertEqual(mismatch.ok, false, 'Missing explicit choiceId should reject instead of falling back to index');
+  assertEqual(mismatch.code, 'choice_id_mismatch', 'Missing explicit choiceId should report mismatch');
+  assertEqual(mismatch.assetDeck.offer.settled, false, 'Mismatched choiceId must not settle the offer');
+  assertEqual(mismatch.assetDeck.bag.general.length, 0, 'Mismatched choiceId must not equip the indexed card');
+}
+
 function testUnlockSlotUsesAssetPoints() {
   const unlocked = assetDeck.applyAssetDeckCommand(assetDeck.makeDefaultAssetDeckState(), {
     kind: 'unlock_slot'
@@ -196,6 +228,7 @@ testNormalizeOnlyKeepsCompactState();
 testOpenOfferIsCompactAndIdempotent();
 testChooseEquipAndReplace();
 testSkillMergeAndReroll();
+testChoiceIdPreventsIndexDrift();
 testUnlockSlotUsesAssetPoints();
 
 console.log('asset-runtime-smoke ok');

@@ -508,7 +508,11 @@
 
         const requestedId = normalizeId(payload.choiceId || payload.cardId || payload.id, '');
         const requestedIndex = Number.isFinite(Number(payload.choiceIndex)) ? Math.round(Number(payload.choiceIndex)) : -1;
-        const cardRef = offer.choices.find(choice => choice.id === requestedId) || offer.choices[requestedIndex] || null;
+        const cardById = requestedId ? offer.choices.find(choice => choice.id === requestedId) : null;
+        if (requestedId && !cardById) {
+          return result(assetDeck, false, 'choice_id_mismatch', { requestedId, requestedIndex });
+        }
+        const cardRef = cardById || offer.choices[requestedIndex] || null;
         const card = hydrateCardRef(cardRef);
         if (!cardRef || !card) return result(assetDeck, false, 'invalid_choice');
 

@@ -2294,6 +2294,7 @@
       const index = Math.max(0, Math.round(Number(choiceIndex) || 0));
       const normalizedSlot = String(slotType || 'general').trim().toLowerCase() === 'void' ? 'void' : 'general';
       const requestedClearKey = String(clearKey || '').trim();
+      const requestedChoiceId = String(options.choiceId || options.cardId || options.id || '').trim();
       const assetDeckModule = getAssetDeckModuleApi();
       if (!assetDeckModule || typeof assetDeckModule.applyAssetDeckCommand !== 'function') {
         return { ok: false, reason: 'asset_runtime_missing' };
@@ -2327,6 +2328,7 @@
           kind: 'choose_card',
           payload: {
             choiceIndex: index,
+            ...(requestedChoiceId ? { choiceId: requestedChoiceId, cardId: requestedChoiceId } : {}),
             slotType: normalizedSlot,
             ...(Number.isFinite(Number(options.targetIndex ?? options.replaceIndex))
               ? { targetIndex: Math.max(0, Math.round(Number(options.targetIndex ?? options.replaceIndex))) }

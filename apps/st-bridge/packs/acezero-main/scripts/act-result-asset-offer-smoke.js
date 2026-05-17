@@ -99,6 +99,7 @@ async function main() {
   const assetAdapterSource = fs.readFileSync(path.join(PACK_ROOT, '../../../dashboard/pages/overview/adapters/asset-adapter.js'), 'utf8');
   const dashboardLoaderSource = fs.readFileSync(path.join(PACK_ROOT, 'dashboard/loader.js'), 'utf8');
   assert(appSource.includes('assetDeck.offer'), 'ACT_RESULT UI should read compact assetDeck.offer');
+  assert(appSource.includes('choiceId: choiceId'), 'ACT_RESULT card click should submit the clicked card id, not only choiceIndex');
   assert(!appSource.includes('assetDeck.pending_offer'), 'ACT_RESULT UI must not read legacy pending_offer');
   assert(!appSource.includes('resolutionHistory'), 'ACT_RESULT UI must not use asset resolutionHistory to lock offers');
   assert(wrapperSource.includes('payload.assetOffer.floor'), 'ACT_RESULT wrapper should reuse assetOffer.floor');

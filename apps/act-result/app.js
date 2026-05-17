@@ -717,6 +717,7 @@
         if (!btn || btn.classList.contains('is-disabled') || btn.classList.contains('is-chosen')) return;
         var choiceIndex = Math.max(0, Math.round(Number(btn.getAttribute('data-choice-index')) || 0));
         var slotType = btn.getAttribute('data-slot-type') || 'general';
+        var choiceId = btn.getAttribute('data-card-id') || '';
         var clearKey = btn.getAttribute('data-clear-key') || '';
         var floorKey = getAssetOfferFloorKey(getPayload());
         var hint = document.getElementById('ui-asset-hint');
@@ -731,12 +732,12 @@
         try {
           var result;
           if (api && typeof api.chooseAssetCard === 'function') {
-            result = await api.chooseAssetCard(choiceIndex, slotType, clearKey, { floorKey: floorKey });
+            result = await api.chooseAssetCard(choiceIndex, slotType, clearKey, { floorKey: floorKey, choiceId: choiceId, cardId: choiceId });
           } else {
             var bridge = resolveAssetDeckBridge();
             var command = {
                 kind: 'choose_card',
-                payload: { choiceIndex: choiceIndex, slotType: slotType, clearKey: clearKey, floorKey: floorKey }
+                payload: { choiceIndex: choiceIndex, choiceId: choiceId, cardId: choiceId, slotType: slotType, clearKey: clearKey, floorKey: floorKey }
             };
             result = bridge
               ? await bridge({ requestId: 'act-result-asset-direct-' + Date.now().toString(36), floorKey: floorKey, command: command })
@@ -747,7 +748,7 @@
             var topStatus = document.getElementById('ui-top-status');
             var needsReplace = result.needsReplace === true || result.code === 'needs_replace';
             if (topStatus) topStatus.textContent = needsReplace ? '等待替换' : '契约入库';
-            lockAssetPanel(result.selectedCardId || btn.getAttribute('data-card-id') || '', needsReplace ? '需要指定替换槽位' : '契约卡已写入 ✓');
+            lockAssetPanel(choiceId || result.selectedCardId || '', needsReplace ? '需要指定替换槽位' : '契约卡已写入 ✓');
             if (hint) {
               hint.textContent = needsReplace
                 ? '需要指定替换槽位'

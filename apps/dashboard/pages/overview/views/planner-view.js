@@ -548,8 +548,10 @@
         if (!card) {
             return `<div class="mini-slot empty"><span class="type">EMPTY</span><div class="name-row"><span class="name">未装配指令</span></div></div>`;
         }
+        const cardId = String(card?.cardId || card?.id || '').trim();
         const attrs = [
             action ? `data-asset-action="${escapePartyHtml(action)}"` : '',
+            cardId ? `data-card-id="${escapePartyHtml(cardId)}"` : '',
             choiceIndex != null ? `data-choice-index="${choiceIndex}"` : '',
             slotType ? `data-slot-type="${escapePartyHtml(slotType)}"` : '',
             slotIndex != null ? `data-slot-index="${slotIndex}"` : '',

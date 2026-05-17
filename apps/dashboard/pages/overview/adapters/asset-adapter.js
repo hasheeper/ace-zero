@@ -424,10 +424,12 @@
             return applyAssetDeckCommand({ kind: 'refresh_offer', payload: {} });
         }
         if (action === 'choose-card') {
+            const choiceId = String(target.dataset.cardId || '').trim();
             return applyAssetDeckCommand({
                 kind: 'choose_card',
                 payload: {
                     choiceIndex: Math.max(0, Math.round(Number(target.dataset.choiceIndex) || 0)),
+                    ...(choiceId ? { choiceId, cardId: choiceId } : {}),
                     slotType: target.dataset.slotType || 'general'
                 }
             });
