@@ -33,11 +33,9 @@
     const bridgeState = root.STBridge && root.STBridge.state ? root.STBridge.state : null;
     const env = normalizeEnv(root.ST_BRIDGE_ENV || bridgeState?.env);
     const currentName = normalizeString(root.ACE0_FULL_DOC_WORLDBOOK_NAME, '');
-    const previousApplied = root.__ACE0_APPLIED_FULL_DOC_WORLDBOOK__;
-    const hasExplicitName = Boolean(currentName && (!previousApplied || previousApplied.name !== currentName));
-    const nextName = hasExplicitName
-      ? currentName
-      : resolveFullDocWorldbookName(env);
+    const explicitName = normalizeString(bridgeState?.fullDocWorldbookName, '')
+      || (root.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true ? currentName : '');
+    const nextName = resolveFullDocWorldbookName(env, explicitName);
 
     root.ACE0_FULL_DOC_WORLDBOOK_NAME = nextName;
     root.__ACE0_APPLIED_FULL_DOC_WORLDBOOK__ = { env, name: nextName };

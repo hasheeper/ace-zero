@@ -16,7 +16,7 @@
  *   window.ST_BRIDGE_ENV = 'local';
  *   window.ACE0_APP_BASE_URL = 'http://127.0.0.1:4173';
  *   window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
- *   import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
+ *   import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&force=1&v=dev';
  */
 (async function () {
   'use strict';
@@ -325,10 +325,11 @@
     );
     const fallbackAppBaseUrl = env === 'local' ? LOCAL_APP_BASE_URL : PROD_APP_BASE_URL;
     const appBaseUrl = trimTrailingSlash(params.get('appBase') || ROOT.ACE0_APP_BASE_URL || fallbackAppBaseUrl) || fallbackAppBaseUrl;
-    const fullDocWorldbookName = normalizeString(
-      ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME || params.get('worldbook'),
-      ''
-    );
+    const queryWorldbookName = normalizeString(params.get('worldbook'), '');
+    const globalWorldbookName = ROOT.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true
+      ? normalizeString(ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME, '')
+      : '';
+    const fullDocWorldbookName = queryWorldbookName || globalWorldbookName;
     return {
       env,
       appBaseUrl,

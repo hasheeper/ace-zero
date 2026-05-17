@@ -44,7 +44,7 @@ window.ST_BRIDGE_PACK = 'acezero-main';
 window.ST_BRIDGE_ENV = 'local';
 window.ACE0_APP_BASE_URL = 'http://127.0.0.1:4173';
 window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
-import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
+import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&force=1&v=dev';
 ```
 
 生产环境继续使用 GitHub Pages 版本：
@@ -59,6 +59,7 @@ import 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?env=prod&v
 临时覆盖世界书时，可以额外加一行：
 
 ```js
+window.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE = true;
 window.ACE0_FULL_DOC_WORLDBOOK_NAME = '你的临时世界书名';
 ```
 
@@ -101,7 +102,7 @@ git diff --check
 
 检查两处：
 
-1. 酒馆助手脚本是否使用了本机 `import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev'`。
+1. 酒馆助手脚本是否使用了本机 `import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&force=1&v=dev'`。
 2. 酒馆正则 wrapper 是否粘贴了 `st/wrappers/local/*.html`，而不是生产 wrapper。
 
 ### 页面 404 或 module import 失败

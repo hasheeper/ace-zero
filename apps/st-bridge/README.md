@@ -30,11 +30,11 @@ window.ST_BRIDGE_PACK = 'acezero-main';
 window.ST_BRIDGE_ENV = 'local';
 window.ACE0_APP_BASE_URL = 'http://127.0.0.1:4173';
 window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
-import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
+import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&force=1&v=dev';
 ```
 
 Full-doc worldbook names are centralized in `packs/acezero-main/tavern/worldbook-profile.js`.
-Only set `window.ACE0_FULL_DOC_WORLDBOOK_NAME` in the Tavern helper script when you intentionally want to override that profile for one test session.
+Only set `window.ACE0_FULL_DOC_WORLDBOOK_NAME` with `window.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE = true` when you intentionally want to override that profile for one test session.
 
 For Tavern regex wrappers, production uses `st/wrappers/STver.html` and `st/wrappers/ACT_RESULT.html`.
 Local offline testing uses `st/wrappers/local/STver.local.html` and `st/wrappers/local/ACT_RESULT.local.html`; these two files hardcode `http://127.0.0.1:4173` and do not fall back to GitHub Pages.

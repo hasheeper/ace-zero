@@ -246,32 +246,37 @@
       || globalThis?.ACE0WorldbookProfile
       || globalThis?.ACE0_WORLDBOOK_PROFILE
       || null;
+    const env = _normalizeTrimmedString(
+      hostRoot?.STBridge?.state?.env
+        || (typeof window !== 'undefined' ? window.STBridge?.state?.env : '')
+        || globalThis?.STBridge?.state?.env
+        || hostRoot?.ST_BRIDGE_ENV
+        || (typeof window !== 'undefined' ? window.ST_BRIDGE_ENV : '')
+        || globalThis?.ST_BRIDGE_ENV,
+      ''
+    ).toLowerCase();
     const globalName = _normalizeTrimmedString(
       hostRoot?.ACE0_FULL_DOC_WORLDBOOK_NAME
         || (typeof window !== 'undefined' ? window.ACE0_FULL_DOC_WORLDBOOK_NAME : '')
         || globalThis?.ACE0_FULL_DOC_WORLDBOOK_NAME,
       ''
     );
-    if (globalName) return globalName;
+    const hasGlobalOverride = hostRoot?.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true
+      || (typeof window !== 'undefined' && window.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true)
+      || globalThis?.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true;
 
     const bridgeState = hostRoot?.STBridge?.state
       || (typeof window !== 'undefined' ? window.STBridge?.state : null)
       || globalThis?.STBridge?.state
       || {};
     const bridgeWorldbookName = _normalizeTrimmedString(bridgeState.fullDocWorldbookName, '');
-    if (bridgeWorldbookName) return bridgeWorldbookName;
-
-    const env = _normalizeTrimmedString(
-      bridgeState.env
-        || hostRoot?.ST_BRIDGE_ENV
-        || (typeof window !== 'undefined' ? window.ST_BRIDGE_ENV : '')
-        || globalThis?.ST_BRIDGE_ENV,
-      ''
-    ).toLowerCase();
     if (profile && typeof profile.resolveFullDocWorldbookName === 'function') {
-      const resolved = _normalizeTrimmedString(profile.resolveFullDocWorldbookName(env), '');
+      const explicitName = bridgeWorldbookName || (hasGlobalOverride ? globalName : '');
+      const resolved = _normalizeTrimmedString(profile.resolveFullDocWorldbookName(env, explicitName), '');
       if (resolved) return resolved;
     }
+    if (bridgeWorldbookName) return bridgeWorldbookName;
+    if (hasGlobalOverride && globalName) return globalName;
     const names = profile && profile.names ? profile.names : {};
     return _normalizeTrimmedString(env === 'local' ? names.local : names.prod, '');
   }
