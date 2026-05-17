@@ -46,6 +46,8 @@
             updateActStatePayloadAndCommit
         } = ctx;
 
+    let plannerEventsBound = false;
+
     function applyCurrentPhaseVisionChoice(action, replacementKeyValue = '') {
         const prompt = getCurrentVisionFixedPhasePrompt();
         if (!prompt) return false;
@@ -275,63 +277,60 @@
         refreshAllUI();
     }
 
-    function bindPlannerEvents() {
-        const inventoryPanel = global.document.getElementById('inventory');
-        const inventoryTokens = Array.from(global.document.querySelectorAll('.token-dispenser'));
-        const restTintButtons = Array.from(global.document.querySelectorAll('[data-rest-tint]'));
+    function handlePlannerDelegatedClick(event) {
+        const target = event.target;
+        if (!target || typeof target.closest !== 'function') return;
 
-        inventoryTokens.forEach((token) => {
-            if (token.dataset.bound === 'true') return;
-            token.dataset.bound = 'true';
-            token.addEventListener('click', () => {
-                if (!canUseInteractivePlannerControls()) return;
-                if (token.dataset.plannerTab) return;
-                // executing 下仍允许点击 inventory token，用于编辑未来相位
-                if (isRouteSelectionActive() || token.classList.contains('is-empty')) return;
-                const type = token.dataset.type;
-                setPlannerEditMode('add');
-                if (getTotalInventoryCount(type) > 0) selectInventoryToken(type);
-                else resetSelection();
-                appState.drawerOpen = true;
-                setPlannerPage(type);
-                syncPlannerOpenState();
-            });
-        });
-
-        restTintButtons.forEach((button) => {
-            if (button.dataset.bound === 'true') return;
-            button.dataset.bound = 'true';
-            button.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (!canUseInteractivePlannerControls()) return;
-                if (button.disabled || button.classList.contains('is-disabled')) return;
-                if (setSelectedRestTint(button.dataset.restTint)) {
-                    closeRestTintPopup();
-                    refreshPlannerUI();
-                }
-            });
-        });
-
-        global.document.querySelectorAll('[data-close-rest-tint]').forEach((button) => {
-            if (button.dataset.bound === 'true') return;
-            button.dataset.bound = 'true';
-            button.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
+        const restTintButton = target.closest('[data-rest-tint]');
+        if (restTintButton) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!canUseInteractivePlannerControls()) return;
+            if (restTintButton.disabled || restTintButton.classList.contains('is-disabled')) return;
+            if (setSelectedRestTint(restTintButton.dataset.restTint)) {
                 closeRestTintPopup();
                 refreshPlannerUI();
-            });
-        });
+            }
+            return;
+        }
 
-        if (inventoryPanel?.dataset.bound === 'true') return;
-        if (inventoryPanel) inventoryPanel.dataset.bound = 'true';
-        inventoryPanel?.addEventListener('click', (e) => {
+        const closeRestTintButton = target.closest('[data-close-rest-tint]');
+        if (closeRestTintButton) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeRestTintPopup();
+            refreshPlannerUI();
+            return;
+        }
+
+        const token = target.closest('.token-dispenser');
+        if (token && !token.dataset.plannerTab) {
             if (!canUseInteractivePlannerControls()) return;
-            if (isRouteSelectionActive() || e.target.closest('.token-dispenser')) return;
-            if (selectionState.source !== 'slot') return;
-            returnSelectedSlotTokenToInventory();
-        });
+            // executing 下仍允许点击 inventory token，用于编辑未来相位
+            if (isRouteSelectionActive() || token.classList.contains('is-empty')) return;
+            const type = token.dataset.type;
+            setPlannerEditMode('add');
+            if (getTotalInventoryCount(type) > 0) selectInventoryToken(type);
+            else resetSelection();
+            appState.drawerOpen = true;
+            setPlannerPage(type);
+            syncPlannerOpenState();
+            return;
+        }
+
+        const inventoryPanel = target.closest('#inventory');
+        if (!inventoryPanel) return;
+        if (!canUseInteractivePlannerControls()) return;
+        if (isRouteSelectionActive() || target.closest('.token-dispenser')) return;
+        if (selectionState.source !== 'slot') return;
+        returnSelectedSlotTokenToInventory();
+    }
+
+    function bindPlannerEvents() {
+        if (plannerEventsBound) return;
+        if (!global.document || typeof global.document.addEventListener !== 'function') return;
+        plannerEventsBound = true;
+        global.document.addEventListener('click', handlePlannerDelegatedClick);
     }
 
     return {

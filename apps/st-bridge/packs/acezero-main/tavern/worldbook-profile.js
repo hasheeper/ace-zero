@@ -10,8 +10,8 @@
   const root = global || (typeof window !== 'undefined' ? window : globalThis);
 
   const FULL_DOC_WORLDBOOK_NAMES = Object.freeze({
-    prod: 'AceZeroInfo-MVUVer-alpha2.0',
-    local: 'AceZeroInfo-MVUVer-alpha2.0-Test'
+    prod: 'AceZeroInfo-MVUVer-2.0-alpha',
+    local: 'AceZeroInfo-MVUVer-2.0-alpha-Test'
   });
 
   function normalizeString(value, fallback = '') {

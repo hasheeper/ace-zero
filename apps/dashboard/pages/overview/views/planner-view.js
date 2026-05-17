@@ -50,6 +50,60 @@
     let plannerLayoutResizeObserver = null;
     let observedPlannerDrawer = null;
     let observedPlannerAux = null;
+    let plannerLayoutSyncScheduled = false;
+
+    function isCurrentPhasePlanLocked() {
+        return typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+    }
+
+    function buildPlannerAssetHash() {
+        return JSON.stringify({
+            summary: getCurrentAssetDeckSummary(),
+            assetWarehouseOpen: appState.assetWarehouseOpen,
+            phaseSlots: appState.phaseSlots
+        });
+    }
+
+    function buildPlannerResourceHash(activePage = getActivePlannerPage()) {
+        return JSON.stringify({
+            page: activePage,
+            inventory: appState.inventory,
+            phaseSlots: appState.phaseSlots,
+            selection: selectionState,
+            phasePlanLocked: isCurrentPhasePlanLocked(),
+            restTintPopupSlotId: appState.restTintPopupSlotId,
+            nodeId: appState.currentNodeId,
+            nodeIndex: appState.currentNodeIndex,
+            vision: getVisionStateForDashboard()
+        });
+    }
+
+    function setClassNameIfChanged(element, className) {
+        if (element.className !== className) element.className = className;
+    }
+
+    function setTextContentIfChanged(element, text) {
+        const nextText = String(text ?? '');
+        if (element.textContent !== nextText) element.textContent = nextText;
+    }
+
+    function setAttributeIfChanged(element, name, value) {
+        const nextValue = String(value);
+        if (element.getAttribute(name) !== nextValue) element.setAttribute(name, nextValue);
+    }
+
+    function removeAttributeIfPresent(element, name) {
+        if (element.hasAttribute(name)) element.removeAttribute(name);
+    }
+
+    function setDatasetIfChanged(element, key, value) {
+        const nextValue = String(value);
+        if (element.dataset[key] !== nextValue) element.dataset[key] = nextValue;
+    }
+
+    function setInnerHTMLIfChanged(element, markup) {
+        if (element.innerHTML !== markup) element.innerHTML = markup;
+    }
 
     function getPlannerLayoutMode(drawer, auxContainer) {
         const drawerWidth = Math.max(0, drawer?.getBoundingClientRect?.().width || 0);
@@ -65,7 +119,7 @@
     function observePlannerLayout(drawer, auxContainer) {
         if (typeof ResizeObserver !== 'function' || !drawer || !auxContainer) return;
         if (!plannerLayoutResizeObserver) {
-            plannerLayoutResizeObserver = new ResizeObserver(() => syncPlannerLayoutChrome());
+            plannerLayoutResizeObserver = new ResizeObserver(() => requestPlannerLayoutChromeSync());
         }
         if (observedPlannerDrawer === drawer && observedPlannerAux === auxContainer) return;
         plannerLayoutResizeObserver.disconnect();
@@ -75,11 +129,28 @@
         observedPlannerAux = auxContainer;
     }
 
+    function requestPlannerLayoutChromeSync() {
+        if (plannerLayoutSyncScheduled) return;
+        if (typeof requestAnimationFrame !== 'function') {
+            syncPlannerLayoutChrome();
+            return;
+        }
+        plannerLayoutSyncScheduled = true;
+        requestAnimationFrame(() => {
+            plannerLayoutSyncScheduled = false;
+            syncPlannerLayoutChrome();
+        });
+    }
+
     function syncPlannerLayoutChrome() {
         const drawer = document.getElementById('drawer');
         if (!drawer) return;
         const auxContainer = drawer.querySelector('.aux-container');
         const mode = getPlannerLayoutMode(drawer, auxContainer);
+        if (drawer.dataset.planLayout === mode) {
+            observePlannerLayout(drawer, auxContainer);
+            return;
+        }
         drawer.classList.toggle('plan-layout-wide', mode === 'wide');
         drawer.classList.toggle('plan-layout-mid', mode === 'mid');
         drawer.classList.toggle('plan-layout-narrow', mode === 'narrow');
@@ -758,7 +829,7 @@
         const plannerDrawerMount = document.getElementById('plannerDrawerMount');
         if (!plannerDrawerMount) return;
         const readonlyClass = canUseInteractivePlannerControls() ? '' : ' is-host-readonly';
-        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+        const planLocked = isCurrentPhasePlanLocked();
         const lockClass = planLocked ? ' is-plan-locked' : '';
         const inventoryMarkup = appData.planner.inventory.map((item) => {
             const planned = getPlannedResourceState(item.key);
@@ -775,22 +846,8 @@
         const drawerTheme = activeResourcePage || 'asset';
         const drawerOpenClass = appState.drawerOpen ? ' is-hub-open' : '';
         const drawerExpandedClass = appState.drawerOpen && activeResourcePage ? ' is-expanded' : '';
-        const assetDeckHash = JSON.stringify({
-            summary: getCurrentAssetDeckSummary(),
-            assetWarehouseOpen: appState.assetWarehouseOpen,
-            phaseSlots: appState.phaseSlots
-        });
-        const resourceHash = JSON.stringify({
-            page: activePage,
-            inventory: appState.inventory,
-            phaseSlots: appState.phaseSlots,
-            selection: selectionState,
-            phasePlanLocked: typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode(),
-            restTintPopupSlotId: appState.restTintPopupSlotId,
-            nodeId: appState.currentNodeId,
-            nodeIndex: appState.currentNodeIndex,
-            vision: getVisionStateForDashboard()
-        });
+        const assetDeckHash = buildPlannerAssetHash();
+        const resourceHash = buildPlannerResourceHash(activePage);
         const editMode = normalizePlannerEditMode(appState.plannerEditMode);
         plannerDrawerMount.innerHTML = `
             <section class="drawer theme-${drawerTheme}${drawerOpenClass}${drawerExpandedClass}${readonlyClass}" id="drawer" data-active-tab="${activeResourcePage}" data-planner-page="${activePage}" data-edit-mode="${editMode}" data-asset-page="${activePage === 'asset' ? 'deck' : activePage}" data-asset-hash="${escapePartyHtml(assetDeckHash)}" data-resource-hash="${escapePartyHtml(resourceHash)}">
@@ -847,7 +904,7 @@
         const phaseBarMount = document.getElementById('phaseBarMount');
         if (!phaseBarMount) return;
         const readonlyClass = canUseInteractivePlannerControls() ? '' : ' is-host-readonly';
-        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+        const planLocked = isCurrentPhasePlanLocked();
         const lockClass = planLocked ? ' is-plan-locked' : '';
         const plannerControlsMarkup = canOpenPlannerDrawer()
             ? `<div class="planner-controls${readonlyClass}${lockClass}">
@@ -905,26 +962,12 @@ ${phaseSegments}
         if (inventory.classList.contains('is-host-readonly') !== shouldBeReadonly) return true;
         const activePage = getActivePlannerPage();
         const activeResourcePage = activePage === 'planner' ? '' : activePage;
-        const resourceHash = JSON.stringify({
-            page: activePage,
-            inventory: appState.inventory,
-            phaseSlots: appState.phaseSlots,
-            selection: selectionState,
-            restTintPopupSlotId: appState.restTintPopupSlotId,
-            nodeId: appState.currentNodeId,
-            nodeIndex: appState.currentNodeIndex,
-            vision: getVisionStateForDashboard()
-        });
         if (drawer.dataset.activeTab !== activeResourcePage) return true;
         if (drawer.dataset.plannerPage !== activePage) return true;
         if (drawer.dataset.editMode !== normalizePlannerEditMode(appState.plannerEditMode)) return true;
         if (drawer.dataset.assetPage !== (activePage === 'asset' ? 'deck' : activePage)) return true;
-        if (activePage === 'asset' && drawer.dataset.assetHash !== JSON.stringify({
-            summary: getCurrentAssetDeckSummary(),
-            assetWarehouseOpen: appState.assetWarehouseOpen,
-            phaseSlots: appState.phaseSlots
-        })) return true;
-        if (activePage !== 'asset' && activePage !== 'planner' && drawer.dataset.resourceHash !== resourceHash) return true;
+        if (activePage === 'asset' && drawer.dataset.assetHash !== buildPlannerAssetHash()) return true;
+        if (activePage !== 'asset' && activePage !== 'planner' && drawer.dataset.resourceHash !== buildPlannerResourceHash(activePage)) return true;
         const renderedCount = inventory.querySelectorAll('.token-dispenser').length;
         return renderedCount !== appData.planner.inventory.length;
     }
@@ -951,7 +994,7 @@ ${phaseSegments}
         if (!drawer) return;
         const activePage = getActivePlannerPage();
         const activeResourcePage = activePage === 'planner' ? '' : activePage;
-        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+        const planLocked = isCurrentPhasePlanLocked();
         drawer.classList.toggle('is-hub-open', appState.drawerOpen);
         drawer.classList.toggle('is-expanded', appState.drawerOpen && Boolean(activeResourcePage));
         drawer.classList.toggle('is-plan-locked', planLocked);
@@ -973,9 +1016,9 @@ ${phaseSegments}
             tokenEl.classList.toggle('is-plan-locked', planLocked);
             const planned = getPlannedResourceState(item.key);
             tokenEl.classList.toggle('is-planned', planned.amount > 0);
-            tokenEl.dataset.plannedAmount = String(planned.amount);
-            countEl.textContent = `×${total}`;
-            if (subEl) subEl.textContent = '';
+            setDatasetIfChanged(tokenEl, 'plannedAmount', planned.amount);
+            setTextContentIfChanged(countEl, `×${total}`);
+            if (subEl) setTextContentIfChanged(subEl, '');
         });
 
         document.querySelectorAll('[data-planner-edit-mode]').forEach((button) => {
@@ -1037,22 +1080,23 @@ ${phaseSegments}
         const toggleLabel = document.getElementById('toggle-planner-label');
         const confirmButton = document.getElementById('confirm-phase-plan');
         const commitButton = document.getElementById('commit-act-state');
-        const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
+        const planLocked = isCurrentPhasePlanLocked();
+        const currentNodeId = getCurrentNodeData().presentNode;
         if (toggleButton) toggleButton.classList.toggle('is-active', appState.drawerOpen);
         if (toggleLabel) {
-            toggleLabel.textContent = (appState.drawerOpen ? appData.planner.toggleOpenLabel : appData.planner.toggleClosedLabel).replace(/\s*\/\/$/, '');
+            setTextContentIfChanged(toggleLabel, (appState.drawerOpen ? appData.planner.toggleOpenLabel : appData.planner.toggleClosedLabel).replace(/\s*\/\/$/, ''));
         }
         if (confirmButton) {
             confirmButton.classList.toggle('is-plan-locked', planLocked);
             confirmButton.classList.toggle('is-saving', syncState.saving);
             confirmButton.disabled = planLocked || syncState.saving || !canUseInteractivePlannerControls();
-            confirmButton.textContent = planLocked ? 'PLAN LOCKED' : (syncState.saving ? 'SAVING' : 'CONFIRM PLAN');
+            setTextContentIfChanged(confirmButton, planLocked ? 'PLAN LOCKED' : (syncState.saving ? 'SAVING' : 'CONFIRM PLAN'));
         }
         if (commitButton) {
             commitButton.classList.toggle('is-dirty', syncState.dirty);
             commitButton.classList.toggle('is-saving', syncState.saving);
             commitButton.disabled = syncState.saving || !syncState.dirty;
-            commitButton.textContent = syncState.saving ? 'SAVING' : (syncState.dirty ? 'CONFIRM' : 'SYNCED');
+            setTextContentIfChanged(commitButton, syncState.saving ? 'SAVING' : (syncState.dirty ? 'CONFIRM' : 'SYNCED'));
         }
         appData.planner.phases.slice(0, -1).forEach((phase, index) => {
             const segment = document.getElementById(`phase-seg-${index}`);
@@ -1062,7 +1106,7 @@ ${phaseSegments}
                 if (index < appState.currentPhaseIndex - 1) segmentClass = 'seg-past';
                 else if (index === appState.currentPhaseIndex - 1) segmentClass = 'seg-active';
             }
-            segment.setAttribute('class', segmentClass);
+            setAttributeIfChanged(segment, 'class', segmentClass);
         });
 
         appData.planner.phases.forEach((phase, phaseIndex) => {
@@ -1072,8 +1116,6 @@ ${phaseSegments}
             const fixedGlyphEl = document.getElementById(`phase-fixed-glyph-${phaseIndex}`);
             const slotToken = appState.phaseSlots[phase.slotId];
             if (!nodeEl || !coreEl || !mountedEl) return;
-            const planLocked = typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
-            const currentNodeId = getCurrentNodeData().presentNode;
             const visionReplacement = getReadyVisionReplacementForPhase(currentNodeId, phaseIndex);
             const encounterMarker = getEncounterMarkerForPhase(currentNodeId, phaseIndex);
             const fixedKind = visionReplacement ? null : getFixedPhaseKind(currentNodeId, phaseIndex);
@@ -1086,56 +1128,68 @@ ${phaseSegments}
                 if (phaseIndex < appState.currentPhaseIndex) state = 'past';
                 else if (phaseIndex === appState.currentPhaseIndex) state = 'active';
             }
-            nodeEl.className = `phase-node ${state}`;
+            setClassNameIfChanged(nodeEl, `phase-node ${state}`);
 
-            coreEl.className = 'phase-core drop-zone';
-            if (displayToken) coreEl.classList.add('has-token', `type-${displayToken.key}`);
-            if (displayToken && !planLocked) coreEl.classList.add('is-draft-plan');
-            if (visionReplacement) coreEl.classList.add('has-vision-replacement');
-            if (fixedKind) coreEl.classList.add('has-fixed', `fixed-${fixedKind}`);
-            if (encounterMarker) coreEl.classList.add('has-fixed', 'has-encounter-fixed');
-            if (isVisionPromptPhase) coreEl.classList.add('vision-replace-prompt');
-            if ((selectionState.source === 'slot' && selectionState.slotId === phase.slotId) || appState.restTintPopupSlotId === phase.slotId) coreEl.classList.add('is-selected');
+            const isSlotSelected = (selectionState.source === 'slot' && selectionState.slotId === phase.slotId) || appState.restTintPopupSlotId === phase.slotId;
+            const coreClasses = ['phase-core', 'drop-zone'];
+            if (displayToken) coreClasses.push('has-token', `type-${displayToken.key}`);
+            if (displayToken && !planLocked) coreClasses.push('is-draft-plan');
+            if (visionReplacement) coreClasses.push('has-vision-replacement');
+            if (fixedKind) coreClasses.push('has-fixed', `fixed-${fixedKind}`);
+            if (encounterMarker) coreClasses.push('has-fixed', 'has-encounter-fixed');
+            if (isVisionPromptPhase) coreClasses.push('vision-replace-prompt');
+            if (isSlotSelected) coreClasses.push('is-selected');
             if (!canEditPhaseSlot(phase.slotId)) {
-                coreEl.classList.add(planLocked ? 'is-plan-readonly' : 'is-locked');
+                coreClasses.push(planLocked ? 'is-plan-readonly' : 'is-locked');
             }
+            setClassNameIfChanged(coreEl, coreClasses.join(' '));
 
-            mountedEl.className = 'mounted-token';
-            mountedEl.removeAttribute('data-type');
-            mountedEl.removeAttribute('data-source');
-            mountedEl.removeAttribute('data-amount');
-            mountedEl.removeAttribute('data-tint');
-            mountedEl.removeAttribute('data-vision-replacement');
+            const mountedClasses = ['mounted-token'];
+            let mountedTint = '';
             if (displayToken) {
-                mountedEl.classList.add(`type-${displayToken.key}`);
-                if (!planLocked) mountedEl.classList.add('is-draft-plan');
-                if ((selectionState.source === 'slot' && selectionState.slotId === phase.slotId) || appState.restTintPopupSlotId === phase.slotId) mountedEl.classList.add('is-selected');
-                mountedEl.dataset.type = displayToken.type;
-                mountedEl.dataset.source = displayToken.source;
-                mountedEl.dataset.amount = String(Math.max(1, Math.min(3, Math.round(Number(displayToken.amount) || 1))));
-                if (displayToken.visionReplacement) mountedEl.dataset.visionReplacement = 'true';
-                const tint = normalizeRestTintKey(displayToken.tint || displayToken.controlType || displayToken.targetKey, '');
-                if (displayToken.key === 'rest' && tint) {
-                    mountedEl.classList.add(`tint-${tint}`);
-                    mountedEl.dataset.tint = RESOURCE_TYPE_MAP[tint] || tint.toUpperCase();
+                mountedClasses.push(`type-${displayToken.key}`);
+                if (!planLocked) mountedClasses.push('is-draft-plan');
+                if (isSlotSelected) mountedClasses.push('is-selected');
+                mountedTint = normalizeRestTintKey(displayToken.tint || displayToken.controlType || displayToken.targetKey, '');
+                if (displayToken.key === 'rest' && mountedTint) mountedClasses.push(`tint-${mountedTint}`);
+            }
+            setClassNameIfChanged(mountedEl, mountedClasses.join(' '));
+            if (displayToken) {
+                setDatasetIfChanged(mountedEl, 'type', displayToken.type);
+                setDatasetIfChanged(mountedEl, 'source', displayToken.source);
+                setDatasetIfChanged(mountedEl, 'amount', Math.max(1, Math.min(3, Math.round(Number(displayToken.amount) || 1))));
+                if (displayToken.visionReplacement) setDatasetIfChanged(mountedEl, 'visionReplacement', 'true');
+                else removeAttributeIfPresent(mountedEl, 'data-vision-replacement');
+                if (displayToken.key === 'rest' && mountedTint) {
+                    setDatasetIfChanged(mountedEl, 'tint', RESOURCE_TYPE_MAP[mountedTint] || mountedTint.toUpperCase());
+                } else {
+                    removeAttributeIfPresent(mountedEl, 'data-tint');
                 }
+            } else {
+                removeAttributeIfPresent(mountedEl, 'data-type');
+                removeAttributeIfPresent(mountedEl, 'data-source');
+                removeAttributeIfPresent(mountedEl, 'data-amount');
+                removeAttributeIfPresent(mountedEl, 'data-tint');
+                removeAttributeIfPresent(mountedEl, 'data-vision-replacement');
             }
 
             if (fixedGlyphEl) {
-                fixedGlyphEl.className = 'phase-fixed-glyph';
+                const fixedGlyphClasses = ['phase-fixed-glyph'];
+                let fixedGlyphTitle = null;
+                let fixedGlyphMarkup = '<div class="magic-core"></div>';
                 if (encounterMarker) {
-                    fixedGlyphEl.classList.add('type-encounter', 'is-visible');
-                    fixedGlyphEl.classList.toggle('is-pre-signal', encounterMarker.type === 'pre_signal');
-                    fixedGlyphEl.title = `${encounterMarker.charKey} · ${encounterMarker.type === 'pre_signal' ? 'PRE SIGNAL' : 'FIRST MEET'}`;
-                    fixedGlyphEl.innerHTML = buildEncounterFixedGlyphMarkup(encounterMarker);
+                    fixedGlyphClasses.push('type-encounter', 'is-visible');
+                    if (encounterMarker.type === 'pre_signal') fixedGlyphClasses.push('is-pre-signal');
+                    fixedGlyphTitle = `${encounterMarker.charKey} · ${encounterMarker.type === 'pre_signal' ? 'PRE SIGNAL' : 'FIRST MEET'}`;
+                    fixedGlyphMarkup = buildEncounterFixedGlyphMarkup(encounterMarker);
                 } else if (fixedKind) {
-                    fixedGlyphEl.classList.add(`type-${fixedKind}`, 'is-visible');
-                    fixedGlyphEl.title = getFixedPhaseMarker(getCurrentNodeData().presentNode, phaseIndex)?.title || '';
-                    fixedGlyphEl.innerHTML = '<div class="magic-core"></div>';
-                } else {
-                    fixedGlyphEl.removeAttribute('title');
-                    fixedGlyphEl.innerHTML = '<div class="magic-core"></div>';
+                    fixedGlyphClasses.push(`type-${fixedKind}`, 'is-visible');
+                    fixedGlyphTitle = getFixedPhaseMarker(currentNodeId, phaseIndex)?.title || '';
                 }
+                setClassNameIfChanged(fixedGlyphEl, fixedGlyphClasses.join(' '));
+                if (fixedGlyphTitle === null) removeAttributeIfPresent(fixedGlyphEl, 'title');
+                else if (fixedGlyphEl.title !== fixedGlyphTitle) fixedGlyphEl.title = fixedGlyphTitle;
+                setInnerHTMLIfChanged(fixedGlyphEl, fixedGlyphMarkup);
             }
         });
     }
