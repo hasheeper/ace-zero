@@ -18,7 +18,7 @@ const sandbox = {
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 
-['tavern/docs.js', 'tavern/character-runtime.js'].forEach((relativeFile) => {
+['tavern/worldbook-profile.js', 'tavern/docs.js', 'tavern/character-runtime.js'].forEach((relativeFile) => {
   const filename = path.join(PACK_ROOT, relativeFile);
   vm.runInContext(fs.readFileSync(filename, 'utf8'), sandbox, { filename: relativeFile });
 });
@@ -60,10 +60,11 @@ const runtime = sandbox.ACE0TavernCharacterRuntime.create({
   assertEqual(Boolean(ordinaryPrompts.find((prompt) => prompt.id === 'ace0_char_doc_cota')), false, 'Unintroduced character without node first-meet key should not inject doc');
 
   const worldbookCalls = [];
+  const localWorldbookName = sandbox.ACE0WorldbookProfile.names.local;
   const fullDocRuntime = sandbox.ACE0TavernCharacterRuntime.create({
     data: sandbox.ACE0TavernPluginData,
     constants: {
-      FULL_DOC_WORLDBOOK_NAME: 'AceZeroInfo-MVUVer-2.0-Test'
+      FULL_DOC_WORLDBOOK_NAME: localWorldbookName
     },
     deps: {
       normalizeTrimmedString: (value, fallback = '') => {
@@ -80,11 +81,12 @@ const runtime = sandbox.ACE0TavernCharacterRuntime.create({
     introduced: true,
     present: true
   });
-  assertEqual(worldbookCalls[0], 'AceZeroInfo-MVUVer-2.0-Test', 'Full character doc should read the configured test worldbook');
+  assertEqual(worldbookCalls[0], localWorldbookName, 'Full character doc should read the configured test worldbook');
   assert(fullDoc.includes('TEST FULL DOC'), 'Configured test worldbook should provide full character docs');
 
   const pluginSource = fs.readFileSync(path.join(PACK_ROOT, 'tavern/plugin.js'), 'utf8');
   assert(pluginSource.includes('FULL_DOC_WORLDBOOK_NAME: resolveFullDocWorldbookName()'), 'Tavern plugin should pass resolved worldbook name into character runtime');
+  assert(pluginSource.includes('ACE0WorldbookProfile'), 'Tavern plugin should resolve worldbook names through the centralized profile');
 
   console.log('[character-doc-mini-smoke] all checks passed');
 })().catch((error) => {

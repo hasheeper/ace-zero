@@ -24,6 +24,7 @@ const ASSET_RUNTIME_FILES = [
 const TAVERN_RUNTIME_FILES = [
   ...ASSET_RUNTIME_FILES,
   ...ACT_RUNTIME_FILES,
+  'tavern/worldbook-profile.js',
   'tavern/act-runtime.js'
 ];
 

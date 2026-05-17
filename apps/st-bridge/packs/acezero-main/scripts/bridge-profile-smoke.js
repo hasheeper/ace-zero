@@ -42,11 +42,20 @@ function createSandbox({ bridgeUrl, globals = {} }) {
                   ACE0_ACT_RESULT_APP_URL: 'https://hasheeper.github.io/ace-zero/apps/act-result/index.html'
                 },
                 scripts: [
+                  { id: 'acezero-tavern-worldbook-profile', type: 'script', url: './packs/acezero-main/tavern/worldbook-profile.js' },
                   { id: 'acezero-test-script', type: 'script', url: './packs/acezero-main/test-script.js' }
                 ]
               }
             }
           })
+        };
+      }
+      if (href.includes('/packs/acezero-main/tavern/worldbook-profile.js')) {
+        loadedScriptUrls.push(href);
+        const source = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/packs/acezero-main/tavern/worldbook-profile.js'), 'utf8');
+        return {
+          ok: true,
+          text: async () => source
         };
       }
       if (href.includes('/packs/acezero-main/test-script.js')) {
@@ -70,7 +79,7 @@ async function runBridge(options) {
   vm.createContext(sandbox);
   vm.runInContext(bridgeSource, sandbox, { filename: 'bridge.js' });
   const deadline = Date.now() + 1000;
-  while (!sandbox.STBridge?.state?.loaded?.length && Date.now() < deadline) {
+  while (!sandbox.__ACE0_BRIDGE_PROFILE_SCRIPT_LOADED__ && Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
   assert(sandbox.STBridge?.state, 'Bridge should expose STBridge.state');
@@ -84,7 +93,7 @@ async function runBridge(options) {
   });
   assertEqual(prod.STBridge.state.env, 'prod', 'prod bridge should expose prod env');
   assertEqual(prod.STBridge.state.appBaseUrl, 'https://hasheeper.github.io/ace-zero', 'prod bridge should expose GitHub app base');
-  assertEqual(prod.STBridge.state.fullDocWorldbookName, 'AceZeroInfo-MVUVer-1.2.4', 'prod bridge should use main worldbook');
+  assertEqual(prod.STBridge.state.fullDocWorldbookName, prod.ACE0WorldbookProfile.names.prod, 'prod bridge should use configured main worldbook');
   assertEqual(prod.ACE0_GAME_APP_URL, 'https://hasheeper.github.io/ace-zero/index.html?app=game', 'prod bridge should publish game URL');
   assert(prod.__loadedScriptUrls.every(url => url.startsWith('https://hasheeper.github.io/ace-zero/apps/st-bridge/')), 'prod scripts should load from GitHub Pages');
 
@@ -93,7 +102,7 @@ async function runBridge(options) {
   });
   assertEqual(local.STBridge.state.env, 'local', 'local bridge should expose local env');
   assertEqual(local.STBridge.state.appBaseUrl, 'http://127.0.0.1:4173', 'local bridge should expose local app base');
-  assertEqual(local.STBridge.state.fullDocWorldbookName, 'AceZeroInfo-MVUVer-2.0-Test', 'local bridge should use test worldbook');
+  assertEqual(local.STBridge.state.fullDocWorldbookName, local.ACE0WorldbookProfile.names.local, 'local bridge should use configured test worldbook');
   assertEqual(local.STBridge.utils.resolveAppUrl('dashboard'), 'http://127.0.0.1:4173/index.html?app=dashboard', 'local dashboard URL should point to local app host');
   assertEqual(local.STBridge.utils.resolveAppUrl('act-result'), 'http://127.0.0.1:4173/apps/act-result/index.html', 'local ACT_RESULT URL should point to local app');
   assert(local.__loadedScriptUrls.every(url => url.startsWith('http://127.0.0.1:4173/apps/st-bridge/')), 'local scripts should load from local server');

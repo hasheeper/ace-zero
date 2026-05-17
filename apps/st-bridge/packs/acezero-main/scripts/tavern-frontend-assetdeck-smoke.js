@@ -88,6 +88,7 @@ vm.createContext(sandbox);
   'act/narrative-runtime.js',
   'act/plugin.js',
   'tavern/npc-data.js',
+  'tavern/worldbook-profile.js',
   'tavern/character-runtime.js',
   'tavern/battle-runtime.js',
   'tavern/result.js',

@@ -240,6 +240,12 @@
 
   function resolveFullDocWorldbookName() {
     const hostRoot = getAce0HostRoot();
+    const profile = hostRoot?.ACE0WorldbookProfile
+      || hostRoot?.ACE0_WORLDBOOK_PROFILE
+      || (typeof window !== 'undefined' ? (window.ACE0WorldbookProfile || window.ACE0_WORLDBOOK_PROFILE) : null)
+      || globalThis?.ACE0WorldbookProfile
+      || globalThis?.ACE0_WORLDBOOK_PROFILE
+      || null;
     const globalName = _normalizeTrimmedString(
       hostRoot?.ACE0_FULL_DOC_WORLDBOOK_NAME
         || (typeof window !== 'undefined' ? window.ACE0_FULL_DOC_WORLDBOOK_NAME : '')
@@ -262,9 +268,12 @@
         || globalThis?.ST_BRIDGE_ENV,
       ''
     ).toLowerCase();
-    return env === 'local'
-      ? 'AceZeroInfo-MVUVer-2.0-Test'
-      : 'AceZeroInfo-MVUVer-1.2.4';
+    if (profile && typeof profile.resolveFullDocWorldbookName === 'function') {
+      const resolved = _normalizeTrimmedString(profile.resolveFullDocWorldbookName(env), '');
+      if (resolved) return resolved;
+    }
+    const names = profile && profile.names ? profile.names : {};
+    return _normalizeTrimmedString(env === 'local' ? names.local : names.prod, '');
   }
 
   function isZeroActResourceMap(value) {

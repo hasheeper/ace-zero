@@ -73,6 +73,11 @@
           "url": "./packs/acezero-main/tavern/npc-data.js"
         },
         {
+          "id": "acezero-tavern-worldbook-profile",
+          "type": "script",
+          "url": "./packs/acezero-main/tavern/worldbook-profile.js"
+        },
+        {
           "id": "acezero-tavern-docs",
           "type": "script",
           "url": "./packs/acezero-main/tavern/docs.js"

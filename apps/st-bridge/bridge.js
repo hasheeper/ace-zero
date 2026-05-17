@@ -15,7 +15,6 @@
  *   window.ST_BRIDGE_PACK = 'acezero-main';
  *   window.ST_BRIDGE_ENV = 'local';
  *   window.ACE0_APP_BASE_URL = 'http://127.0.0.1:4173';
- *   window.ACE0_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-2.0-Test';
  *   window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
  *   import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
  */
@@ -29,8 +28,6 @@
   const FALLBACK_BRIDGE_URL = 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js';
   const PROD_APP_BASE_URL = 'https://hasheeper.github.io/ace-zero';
   const LOCAL_APP_BASE_URL = 'http://127.0.0.1:4173';
-  const PROD_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-1.2.4';
-  const LOCAL_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-2.0-Test';
   const TOAST_TITLE = '[ACE0]脚本加载';
   const LOADING_TOAST_KEY = '__ACEZERO_ST_BRIDGE_LOADING_TOAST__';
   const DOM_TOAST_HOST_ID = 'acezero-st-bridge-toast-host';
@@ -328,11 +325,10 @@
     );
     const fallbackAppBaseUrl = env === 'local' ? LOCAL_APP_BASE_URL : PROD_APP_BASE_URL;
     const appBaseUrl = trimTrailingSlash(params.get('appBase') || ROOT.ACE0_APP_BASE_URL || fallbackAppBaseUrl) || fallbackAppBaseUrl;
-    const fallbackWorldbookName = env === 'local' ? LOCAL_FULL_DOC_WORLDBOOK_NAME : PROD_FULL_DOC_WORLDBOOK_NAME;
     const fullDocWorldbookName = normalizeString(
       ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME || params.get('worldbook'),
-      fallbackWorldbookName
-    ) || fallbackWorldbookName;
+      ''
+    );
     return {
       env,
       appBaseUrl,
@@ -414,7 +410,9 @@
     }
     ROOT.ST_BRIDGE_ENV = profile.env;
     ROOT.ACE0_APP_BASE_URL = profile.appBaseUrl;
-    ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME = profile.fullDocWorldbookName;
+    if (profile.fullDocWorldbookName) {
+      ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME = profile.fullDocWorldbookName;
+    }
     ROOT.ACE0_GAME_APP_URL = resolveAppUrl('game', profile);
     ROOT.ACE0_DASHBOARD_APP_URL = resolveAppUrl('dashboard', profile);
     ROOT.ACE0_ACT_RESULT_APP_URL = resolveAppUrl('act-result', profile);

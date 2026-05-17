@@ -2,9 +2,9 @@
 
 ## 目标
 
-`codex/local-test-workspace` 是专门给本机调试用的分支。这个分支可以测试 ST Bridge、Dashboard、STver 和 ACT_RESULT 的本地构建，不需要先推送到 GitHub Pages。
+本机测试工作区是一组独立入口文件和本机 bridge profile。它可以测试 ST Bridge、Dashboard、STver 和 ACT_RESULT 的本地构建，不需要先推送到 GitHub Pages。
 
-生产发布仍然走 `main`。仓库的 GitHub Pages workflow 从 `main` 发布，所以这个本机测试分支只要不合并回 `main`，就不会影响线上 GitPage 入口。
+生产发布仍然走 `main` 的 GitHub Pages workflow。本机测试入口不会自动接管生产入口；只有在酒馆助手脚本和酒馆正则中显式选择 local 脚本/local wrapper 时，才会走 `127.0.0.1:4173`。
 
 ## 分支职责
 
@@ -15,8 +15,8 @@
   - `st/wrappers/local/STver.local.html`
   - `st/wrappers/local/ACT_RESULT.local.html`
 - 本机 wrapper 直接硬编码 `http://127.0.0.1:4173`，没有 GitHub fallback。
-- Bridge 本机 profile 使用测试世界书 `AceZeroInfo-MVUVer-2.0-Test`。
-- 生产 profile 使用主世界书 `AceZeroInfo-MVUVer-1.2.4`。
+- Full-doc 世界书名统一写在 `apps/st-bridge/packs/acezero-main/tavern/worldbook-profile.js`。
+- Bridge 会按 `prod/local` 自动读取该 profile；不要在 README、测试脚本、酒馆助手脚本里重复写死世界书名。
 
 ## 启动本机服务
 
@@ -43,7 +43,6 @@ http://127.0.0.1:4173/apps/st-bridge/bridge.js
 window.ST_BRIDGE_PACK = 'acezero-main';
 window.ST_BRIDGE_ENV = 'local';
 window.ACE0_APP_BASE_URL = 'http://127.0.0.1:4173';
-window.ACE0_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-2.0-Test';
 window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
 import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
 ```
@@ -54,9 +53,16 @@ import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
 window.ST_BRIDGE_PACK = 'acezero-main';
 window.ST_BRIDGE_ENV = 'prod';
 window.ST_BRIDGE_URL = 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js';
-window.ACE0_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-1.2.4';
 import 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?env=prod&v=fix-url';
 ```
+
+临时覆盖世界书时，可以额外加一行：
+
+```js
+window.ACE0_FULL_DOC_WORLDBOOK_NAME = '你的临时世界书名';
+```
+
+正常测试不要加这一行，避免绕过统一 profile。
 
 ## 酒馆正则 wrapper
 
@@ -110,10 +116,10 @@ node apps/st-bridge/scripts/serve-local.mjs --port 4173 --root .
 
 ### 改了代码但酒馆没刷新
 
-把酒馆助手脚本最后的 `v=dev` 改成新的值，例如：
+把酒馆助手脚本最后加上 `force=1`，并改一个新的 `v` 值，例如：
 
 ```js
-import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev2';
+import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&force=1&v=dev2';
 ```
 
 也可以重开脚本或刷新酒馆页面。

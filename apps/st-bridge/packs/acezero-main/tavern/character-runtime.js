@@ -9,6 +9,16 @@
 
   const root = typeof window !== 'undefined' ? window : globalThis;
 
+  function resolveDefaultFullDocWorldbookName() {
+    const profile = root.ACE0WorldbookProfile || root.ACE0_WORLDBOOK_PROFILE || null;
+    const env = typeof root.ST_BRIDGE_ENV === 'string' ? root.ST_BRIDGE_ENV : 'prod';
+    if (profile && typeof profile.resolveFullDocWorldbookName === 'function') {
+      return profile.resolveFullDocWorldbookName(env);
+    }
+    const names = profile && profile.names ? profile.names : {};
+    return env === 'local' ? (names.local || '') : (names.prod || '');
+  }
+
   root.ACE0TavernCharacterRuntime = {
     create(options = {}) {
       const pluginName = options.pluginName || '[ACE0]';
@@ -30,7 +40,7 @@
           KAKO: 'ace0_char_doc_kako',
           KUZUHA: 'ace0_char_doc_kuzuha'
         },
-        FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-1.2.4',
+        FULL_DOC_WORLDBOOK_NAME = resolveDefaultFullDocWorldbookName(),
         FULL_DOC_UIDS = {
           RINO: 10,
           SIA: 12,
