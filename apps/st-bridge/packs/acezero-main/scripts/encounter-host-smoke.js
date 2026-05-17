@@ -182,9 +182,10 @@ async function testQueuedPoppySchedulesAtNodeBoundary() {
 
   const resolved = await runtime.resolvePendingActAdvance(eraVars);
   const poppy = firstActiveQueueItem(resolved.eraVars.world.act, (item) => item.charKey === 'POPPY');
-  assert(poppy, 'POPPY should stay in the encounter queue at a route-choice boundary');
-  assertEqual(poppy.status, 'queued', 'POPPY should not be placed before the next route is chosen');
-  assertEqual(poppy.targetNodeIndex, 0, 'Queued POPPY should not bind to an unchosen future branch');
+  assert(poppy, 'POPPY should stay active at a route-choice boundary');
+  assertEqual(poppy.status, 'placed', 'POPPY should preview on a selectable future branch before route choice');
+  assert(poppy.targetNodeIndex > 4, 'POPPY preview should bind to the next route layer');
+  assert(poppy.targetNodeId, 'POPPY preview should expose a Dashboard node marker');
 }
 
 async function testFirstMeetPendingAndDossierWriteback() {

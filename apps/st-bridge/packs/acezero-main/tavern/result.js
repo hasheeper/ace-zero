@@ -121,6 +121,7 @@
       offerId: typeof offer.id === 'string' ? offer.id : '',
       floor: typeof offer.floor === 'string' ? offer.floor : '',
       pool: typeof offer.pool === 'string' ? offer.pool : 'low',
+      settled: offer.settled === true,
       choices: choices.slice(0, 3).map((choice, index) => {
         const card = choice && typeof choice === 'object' && !Array.isArray(choice) ? choice : {};
         const cardId = typeof card.id === 'string' ? card.id : '';

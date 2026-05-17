@@ -92,7 +92,7 @@
         let state = normalizeEncounterActiveState(value.state);
         const node = normalizeTrimmedString(value.node, '');
         if (state === 'placed' && !node) state = 'queued';
-        const hasPlacement = state === 'placed';
+        const hasTarget = Boolean(node);
         const phase = normalizeEncounterPhase(value.phase, null);
         const nodeIndex = Math.max(0, Math.round(Number(value.nodeIndex) || 0));
         const from = Math.max(0, Math.round(Number(value.from) || 0));
@@ -100,11 +100,11 @@
         const priority = Math.round(Number(value.priority) || 0);
 
         const entry = { kind, state };
-        if (hasPlacement && node) entry.node = node;
-        if (hasPlacement && nodeIndex > 0) entry.nodeIndex = nodeIndex;
-        if (hasPlacement && phase !== null && (kind === 'signal' || phase !== FIRST_MEET_PHASE_INDEX)) entry.phase = phase;
+        if (hasTarget) entry.node = node;
+        if (hasTarget && nodeIndex > 0) entry.nodeIndex = nodeIndex;
+        if (hasTarget && phase !== null && (kind === 'signal' || phase !== FIRST_MEET_PHASE_INDEX)) entry.phase = phase;
         if (from > 0) entry.from = from;
-        if (hasPlacement && until > 0) entry.until = until;
+        if (hasTarget && until > 0) entry.until = until;
         if (priority !== 0) entry.priority = priority;
         return { charKey, entry };
       }
@@ -586,7 +586,7 @@
         );
         const pastNodes = new Set(act.route_history.slice(0, currentIndex));
         const activeTargets = new Set(
-          getActiveEncounterEntries(act.characterEncounter, ({ entry }) => entry.state === 'placed' && normalizeTrimmedString(entry.node, ''))
+          getActiveEncounterEntries(act.characterEncounter, ({ entry }) => normalizeTrimmedString(entry.node, ''))
             .map(({ entry }) => normalizeTrimmedString(entry.node, ''))
         );
         const candidates = [];
@@ -1028,20 +1028,28 @@
           ''
         );
         return getActiveEncounterEntries(act.characterEncounter, ({ entry }) => (
-          (entry.state === 'placed' && normalizeTrimmedString(entry.node, ''))
+          normalizeTrimmedString(entry.node, '')
           || (entry.state === 'queued' && currentNodeId && Math.max(0, Math.round(Number(entry.from) || 0)) < currentNodeIndex)
         )).map(({ charKey, entry }) => {
-          const nodeId = entry.state === 'placed' ? normalizeTrimmedString(entry.node, '') : currentNodeId;
+          const targetNodeId = normalizeTrimmedString(entry.node, '');
+          const targetNodeIndex = Math.max(0, Math.round(Number(entry.nodeIndex) || 0));
+          const isOverdueQueuedTarget = entry.state === 'queued'
+            && targetNodeId
+            && targetNodeIndex > 0
+            && targetNodeIndex <= currentNodeIndex
+            && targetNodeId !== currentNodeId;
+          const nodeId = targetNodeId && !isOverdueQueuedTarget ? targetNodeId : currentNodeId;
           return {
             charKey,
             type: encounterKindToUiType(entry.kind),
             status: 'placed',
             nodeId,
-            nodeIndex: entry.state === 'placed'
+            nodeIndex: targetNodeId && !isOverdueQueuedTarget
               ? Math.max(0, Math.round(Number(entry.nodeIndex) || 0))
               : currentNodeIndex,
             phaseIndex: getEntryPhase(entry),
-            label: charKey
+            label: charKey,
+            encounterState: entry.state === 'placed' ? 'placed' : 'queued'
           };
         });
       }

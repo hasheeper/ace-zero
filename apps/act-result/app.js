@@ -478,7 +478,8 @@
       }
 
       function getAssetOfferFloorKey(data) {
-        return String((data && (data.floorKey || data.__ace0FloorKey || data.messageId || data.floorId)) || '');
+        var offer = data && data.assetOffer && typeof data.assetOffer === 'object' ? data.assetOffer : null;
+        return String((offer && offer.floor) || (data && (data.floorKey || data.__ace0FloorKey || data.messageId || data.floorId)) || '');
       }
 
       function syncAssetOfferButtonClearKey(clearKey) {
@@ -488,16 +489,19 @@
         });
       }
 
-      function isAssetOfferCleared(act, offer) {
-        var clearKey = getAssetOfferClearKey(offer);
-        if (!clearKey) return false;
-        var history = Array.isArray(act && act.resolutionHistory) ? act.resolutionHistory : [];
-        return history.some(function (item) {
-          if (!item || typeof item !== 'object') return false;
-          if (item.protocol !== 'ace0.assetOfferClear.v1' && item.type !== 'asset_offer_clear') return false;
-          if (item.status && item.status !== 'resolved') return false;
-          return String(item.clearKey || item.offerId || '') === clearKey;
-        });
+      function isSameAssetOffer(liveOffer, offer) {
+        if (!liveOffer || !offer) return false;
+        var liveId = String(liveOffer.id || '');
+        var offerId = getAssetOfferClearKey(offer);
+        var liveFloor = String(liveOffer.floor || '');
+        var offerFloor = String(offer.floor || '');
+        return (!offerId || !liveId || offerId === liveId) && (!offerFloor || !liveFloor || offerFloor === liveFloor);
+      }
+
+      function isAssetOfferSettled(assetDeck, offer) {
+        var liveOffer = assetDeck && assetDeck.offer && typeof assetDeck.offer === 'object' ? assetDeck.offer : null;
+        if (!liveOffer || !isSameAssetOffer(liveOffer, offer)) return false;
+        return liveOffer.settled === true;
       }
 
       function lockAssetPanel(chosenCardId, text) {
@@ -605,6 +609,8 @@
         titleEl.className = 'asset-panel-title';
         titleEl.textContent = 'CONTRACT EXTRACT · ' + String(offer.pool || 'POOL').toUpperCase();
         panel.appendChild(titleEl);
+        var topStatus = document.getElementById('ui-top-status');
+        if (topStatus && offer.settled !== true) topStatus.textContent = '契约待选';
 
         var listEl = document.createElement('div');
         listEl.className = 'asset-options';
@@ -663,6 +669,10 @@
         hint.textContent = '>> 点击一张契约卡并写入仓库 <<';
         panel.appendChild(hint);
 
+        if (offer.settled === true) {
+          lockAssetPanel('', '契约已结算');
+          return;
+        }
         syncAssetPanelStateToMvu(data);
         setTimeout(function () { syncAssetPanelStateToMvu(data); }, 250);
         setTimeout(function () { syncAssetPanelStateToMvu(data); }, 900);
@@ -677,26 +687,28 @@
             ? await api.getEraVars()
             : await postActResultEraVarsRequest();
           if (!v || typeof v !== 'object') return;
-          var act = v && v.world && v.world.act;
           var assetDeck = v && v.world && v.world.assetDeck;
           if (!assetDeck || typeof assetDeck !== 'object') return;
-          var liveOffer = assetDeck.pending_offer && typeof assetDeck.pending_offer === 'object' ? assetDeck.pending_offer : null;
+          var liveOffer = assetDeck.offer && typeof assetDeck.offer === 'object' ? assetDeck.offer : null;
           var liveOfferId = liveOffer && typeof liveOffer.id === 'string' ? liveOffer.id : '';
-          var offerId = typeof offer.offerId === 'string' ? offer.offerId : '';
           if (liveOffer && liveOfferId) {
             syncAssetOfferButtonClearKey(liveOfferId);
           }
-          if (liveOffer && offerId && liveOfferId && liveOfferId !== offerId) {
+          if (liveOffer && !isSameAssetOffer(liveOffer, offer)) {
             var hint = document.getElementById('ui-asset-hint');
-            if (hint && hint.textContent === '契约已结算') hint.textContent = '>> 点击一张契约卡并写入仓库 <<';
+            if (hint) {
+              hint.textContent = '这张契约不是当前楼层牌池';
+              hint.className = 'asset-panel-hint';
+            }
+            lockAssetPanel('', '这张契约不是当前楼层牌池');
             return;
           }
-          if (isAssetOfferCleared(act, offer)) {
-            lockAssetPanel('', assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
+          if (offer.settled === true || isAssetOfferSettled(assetDeck, offer)) {
+            lockAssetPanel('', '契约已结算');
             return;
           }
           if (!liveOffer) {
-            lockAssetPanel('', assetDeck.pending_replace ? '契约已暂存：需要在仓库选择替换槽位' : '契约已结算');
+            lockAssetPanel('', '当前楼层没有待选契约');
           }
         } catch (e) {}
       }
@@ -733,17 +745,18 @@
 
           if (result && result.ok) {
             var topStatus = document.getElementById('ui-top-status');
-            if (topStatus) topStatus.textContent = result.pendingReplace ? '等待替换' : '契约入库';
-            lockAssetPanel(result.selectedCardId || btn.getAttribute('data-card-id') || '', result.pendingReplace ? '契约已暂存：需要在仓库选择替换槽位' : '契约卡已写入 ✓');
+            var needsReplace = result.needsReplace === true || result.code === 'needs_replace';
+            if (topStatus) topStatus.textContent = needsReplace ? '等待替换' : '契约入库';
+            lockAssetPanel(result.selectedCardId || btn.getAttribute('data-card-id') || '', needsReplace ? '需要指定替换槽位' : '契约卡已写入 ✓');
             if (hint) {
-              hint.textContent = result.pendingReplace || result.code === 'pending_replace'
-                ? '契约已暂存：需要在仓库选择替换槽位'
+              hint.textContent = needsReplace
+                ? '需要指定替换槽位'
                 : '契约卡已写入 ✓';
               hint.className = 'asset-panel-hint success';
             }
           } else {
             var reason = String((result && (result.reason || result.error || result.code)) || 'Error');
-            if (reason === 'no_pending_offer' || reason === 'stale_asset_offer') {
+            if (reason === 'no_offer' || reason === 'offer_settled' || reason === 'stale_asset_offer') {
               lockAssetPanel('', '契约已结算');
               return;
             }

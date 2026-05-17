@@ -58,15 +58,9 @@
 
     function createFallbackAssetDeckState() {
         return {
-            version: 1,
-            general_slots_unlocked: 4,
-            void_slots_unlocked: 2,
-            active_general_cards: [],
-            active_void_cards: [],
-            pending_offer: null,
-            pending_offer_queue: [],
-            pending_replace: null,
-            history: []
+            slots: { general: 4, void: 2 },
+            bag: { general: [], void: [] },
+            offer: null
         };
     }
 
@@ -83,13 +77,17 @@
         return {
             ...createFallbackAssetDeckState(),
             ...deepCloneValue(source),
-            general_slots_unlocked: Math.max(4, Math.min(8, Math.round(Number(source.general_slots_unlocked ?? source.generalSlotsUnlocked) || 4))),
-            void_slots_unlocked: Math.max(0, Math.min(2, Math.round(Number(source.void_slots_unlocked ?? source.voidSlotsUnlocked) || 2))),
-            active_general_cards: Array.isArray(source.active_general_cards) ? deepCloneValue(source.active_general_cards) : [],
-            active_void_cards: Array.isArray(source.active_void_cards) ? deepCloneValue(source.active_void_cards) : [],
-            pending_offer: source.pending_offer && typeof source.pending_offer === 'object' ? deepCloneValue(source.pending_offer) : null,
-            pending_offer_queue: Array.isArray(source.pending_offer_queue || source.pendingOfferQueue) ? deepCloneValue(source.pending_offer_queue || source.pendingOfferQueue) : [],
-            pending_replace: source.pending_replace && typeof source.pending_replace === 'object' ? deepCloneValue(source.pending_replace) : null
+            slots: {
+                general: Math.max(0, Math.min(8, Math.round(Number(source.slots?.general) || 4))),
+                void: Math.max(0, Math.min(2, Math.round(Number(source.slots?.void) || 2)))
+            },
+            bag: {
+                general: Array.isArray(source.bag?.general) ? deepCloneValue(source.bag.general) : [],
+                void: Array.isArray(source.bag?.void) ? deepCloneValue(source.bag.void) : []
+            },
+            offer: source.offer && typeof source.offer === 'object' && !Array.isArray(source.offer)
+                ? deepCloneValue(source.offer)
+                : null
         };
     }
 
@@ -100,21 +98,15 @@
 
     function getAssetPendingOfferIdentity(assetDeckInput) {
         const normalized = normalizeAssetDeckForDashboard(assetDeckInput);
-        const offer = normalized.pending_offer;
+        const offer = normalized.offer;
         if (!offer || typeof offer !== 'object') return '';
-        const queueIdentity = Array.isArray(normalized.pending_offer_queue)
-            ? normalized.pending_offer_queue.map((queued) => [
-                queued?.id || '',
-                queued?.pool || '',
-                queued?.createdAt || ''
-            ].join(':')).join(';')
-            : '';
         return [
             offer.id || '',
             offer.pool || '',
-            offer.createdAt || '',
-            Array.isArray(offer.choices) ? offer.choices.map((card) => card?.cardId || '').join(',') : '',
-            queueIdentity
+            offer.floor || '',
+            offer.settled === true ? 'settled' : 'open',
+            Array.isArray(offer.choices) ? offer.choices.map((card) => card?.id || card?.cardId || '').join(',') : '',
+            Array.isArray(offer.reroll) ? offer.reroll.map((card) => card?.id || card?.cardId || '').join(',') : ''
         ].join('|');
     }
 
@@ -135,7 +127,7 @@
             const kind = String(card.kind || meta.kind || 'numeric').trim().toLowerCase() || 'numeric';
             const system = String(card.system || meta.system || '').trim().toLowerCase();
             const skillKey = String(card.skillKey || meta.skillKey || card.upgradeTargetSkillKey || meta.upgradeTargetSkillKey || '').trim();
-            const level = Math.max(0, Math.round(Number(card.level ?? meta.level) || 0));
+            const level = Math.max(0, Math.round(Number((card.level ?? card.lv) ?? meta.level) || 0));
             const gameTags = Array.isArray(card.gameTags || meta.gameTags) ? deepCloneValue(card.gameTags || meta.gameTags) : [];
             const slotTags = Array.isArray(card.slotTags || meta.slotTags) ? deepCloneValue(card.slotTags || meta.slotTags) : [slotType || 'general'];
             const effective = !gameTags.length || gameTags.includes('any') || gameTags.includes('general') || gameTags.includes(gameId) || gameTags.includes('texas') || gameTags.includes('texas-holdem');
@@ -170,11 +162,11 @@
                 modifiers
             };
         };
-        const generalCards = Array.isArray(normalized.active_general_cards)
-            ? normalized.active_general_cards.map((card, index) => summarizeCard(card, 'general', index))
+        const generalCards = Array.isArray(normalized.bag?.general)
+            ? normalized.bag.general.map((card, index) => summarizeCard(card, 'general', index))
             : [];
-        const voidCards = Array.isArray(normalized.active_void_cards)
-            ? normalized.active_void_cards.map((card, index) => summarizeCard(card, 'void', index))
+        const voidCards = Array.isArray(normalized.bag?.void)
+            ? normalized.bag.void.map((card, index) => summarizeCard(card, 'void', index))
             : [];
         const allCards = [...generalCards, ...voidCards];
         const summarizeOffer = (offerInput) => {
@@ -188,22 +180,15 @@
                 choices
             };
         };
-        const pendingReplace = normalized.pending_replace && typeof normalized.pending_replace === 'object'
-            ? {
-                ...deepCloneValue(normalized.pending_replace),
-                card: summarizeCard(normalized.pending_replace.card || normalized.pending_replace.candidate, 'replace', 0)
-            }
-            : null;
         return {
-            version: 1,
             gameId,
             mode: isOverviewDebugMode() ? 'debug' : 'host',
             points: Math.max(0, Math.round(Number(appState.resources.assets) || 0)),
             slots: {
                 generalUsed: generalCards.length,
-                generalMax: Math.max(0, Math.round(Number(normalized.general_slots_unlocked) || 0)),
+                generalMax: Math.max(0, Math.round(Number(normalized.slots?.general) || 0)),
                 voidUsed: voidCards.length,
-                voidMax: Math.max(0, Math.round(Number(normalized.void_slots_unlocked) || 0))
+                voidMax: Math.max(0, Math.round(Number(normalized.slots?.void) || 0))
             },
             activeCards: {
                 general: generalCards,
@@ -218,11 +203,11 @@
                 inactive: 0
             },
             pending: {
-                offer: summarizeOffer(normalized.pending_offer),
-                offerQueue: Array.isArray(normalized.pending_offer_queue) ? normalized.pending_offer_queue.map(summarizeOffer).filter(Boolean) : [],
-                replace: pendingReplace
+                offer: summarizeOffer(normalized.offer),
+                offerQueue: [],
+                replace: null
             },
-            recentHistory: Array.isArray(normalized.history) ? normalized.history.slice(-5) : [],
+            recentHistory: [],
             gameplay: {
                 skillLevels: [],
                 mana: [],
@@ -284,7 +269,7 @@
                 }
             };
         }
-        const offer = getCurrentAssetDeckState().pending_offer || {};
+        const offer = getCurrentAssetDeckState().offer || {};
         return {
             ...source,
             payload: {
@@ -448,14 +433,12 @@
             });
         }
         if (action === 'replace-card') {
-            const pending = getCurrentAssetDeckState().pending_replace;
             return applyAssetDeckCommand({
                 kind: 'replace_card',
                 payload: {
                     slotType: target.dataset.slotType || 'general',
                     targetIndex: Math.max(0, Math.round(Number(target.dataset.slotIndex) || 0)),
                     confirmDestroy: target.dataset.confirmDestroy === 'true'
-                        || !!(pending && pending.confirm_destroy === true)
                 }
             });
         }

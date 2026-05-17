@@ -86,11 +86,20 @@ async function main() {
   assertEqual(payload.assetOffer.protocol, 'ace0.assetOffer.v1', 'asset offer protocol should be stable');
   assertEqual(payload.assetOffer.floor, 'message:asset-result', 'ACT_RESULT assetOffer should expose the bound floor');
   assertEqual(payload.assetOffer.pool, 'low', 'asset I should expose low pool in ACT_RESULT');
+  assertEqual(payload.assetOffer.settled, false, 'ACT_RESULT assetOffer should expose settled state');
   assertEqual(payload.assetOffer.choices.length, 3, 'ACT_RESULT should expose three card choices');
   assert(!Object.prototype.hasOwnProperty.call(resolved.eraVars.world.assetDeck.offer, 'lv'), 'Offer state should not store lv');
   assert(payload.assetOffer.choices.every(card => card.name && card.cardId), 'card choices should include display names and ids');
   assert(payload.assetOffer.choices.every(card => card.effectText && card.rarity), 'card choices should include effect text and rarity');
   assert(payload.assetOffer.choices.every(card => Array.isArray(card.statusTags)), 'card choices should include status tags');
+
+  const appSource = fs.readFileSync(path.join(PACK_ROOT, '../../../act-result/app.js'), 'utf8');
+  const wrapperSource = fs.readFileSync(path.join(PACK_ROOT, '../../../../st/wrappers/ACT_RESULT.html'), 'utf8');
+  assert(appSource.includes('assetDeck.offer'), 'ACT_RESULT UI should read compact assetDeck.offer');
+  assert(!appSource.includes('assetDeck.pending_offer'), 'ACT_RESULT UI must not read legacy pending_offer');
+  assert(!appSource.includes('resolutionHistory'), 'ACT_RESULT UI must not use asset resolutionHistory to lock offers');
+  assert(wrapperSource.includes('payload.assetOffer.floor'), 'ACT_RESULT wrapper should reuse assetOffer.floor');
+  assert(!wrapperSource.includes('act-result-floor:'), 'ACT_RESULT wrapper must not invent random floor keys');
   console.log('[act-result-asset-offer-smoke] all checks passed');
 }
 

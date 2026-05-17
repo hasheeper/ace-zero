@@ -239,6 +239,60 @@ function testQueuedEncounterPlacesOnChosenRouteEntry() {
   assertEqual(marker.nodeId, 'node2-floor-side', 'Dashboard marker should use the chosen route node');
 }
 
+function testRouteChoicePreviewsQueuedEncounterOnBranch() {
+  const state = createActStateAt(act, 1, ['node1-entry'], {
+    stage: 'executing',
+    phase_index: 4,
+    characterEncounter: {
+      active: {
+        COTA: {
+          kind: 'meet',
+          state: 'queued',
+          from: 1,
+          priority: 188
+        }
+      }
+    }
+  });
+
+  act.resolveActNodeTransition(state, config, createHero(), createContext());
+  assertEqual(state.stage, 'route', 'Node transition should stop at route choice');
+  const cota = state.characterEncounter.active.COTA;
+  assertEqual(cota.state, 'placed', 'Route choice should pre-place queued COTA before node entry');
+  assert(['node2-floor-high', 'node2-floor-side'].includes(cota.node), 'COTA preview should bind to a selectable NODE2 branch');
+  assertEqual(cota.nodeIndex, 2, 'COTA preview should target the next node index');
+  const snapshot = act.createFrontendSnapshot({ actState: state });
+  const marker = snapshot.encounterMarkers.find((item) => item.charKey === 'COTA');
+  assert(marker, 'Dashboard snapshot should show COTA before choosing the route');
+  assertEqual(marker.nodeId, cota.node, 'Dashboard marker should sit on the preselected branch');
+}
+
+function testQueuedTargetMarkerShowsBeforeArrival() {
+  const state = createActStateAt(act, 1, ['node1-entry'], {
+    characterEncounter: {
+      active: {
+        COTA: {
+          kind: 'meet',
+          state: 'queued',
+          node: 'node2-floor-high',
+          nodeIndex: 2,
+          from: 1,
+          until: 4,
+          priority: 188
+        }
+      }
+    }
+  });
+
+  const normalized = act.normalizeCharacterEncounterState(state.characterEncounter);
+  assertEqual(normalized.active.COTA.node, 'node2-floor-high', 'Queued preview should keep its target node');
+  const snapshot = act.createFrontendSnapshot({ actState: state });
+  const marker = snapshot.encounterMarkers.find((item) => item.charKey === 'COTA');
+  assert(marker, 'Dashboard snapshot should expose queued target marker before arrival');
+  assertEqual(marker.nodeId, 'node2-floor-high', 'Queued target marker should stay on its preview branch');
+  assertEqual(marker.encounterState, 'queued', 'Queued target marker should preserve its encounter state for UI/debug');
+}
+
 function testOverdueQueuedEncounterSnapshotAndConsumeRepair() {
   const staleQueued = createActStateAt(act, 2, ['node1-entry', 'node2-floor-side'], {
     phase_index: 1,
@@ -419,6 +473,8 @@ testEncounterQueuePrefersHighestPriority();
 testVisionBonusDecaysAcrossNodeAdvance();
 testQueuePlaceConsumeFirstMeet();
 testQueuedEncounterPlacesOnChosenRouteEntry();
+testRouteChoicePreviewsQueuedEncounterOnBranch();
+testQueuedTargetMarkerShowsBeforeArrival();
 testOverdueQueuedEncounterSnapshotAndConsumeRepair();
 testForceSpecificCharacterAndQueuedSequence();
 testFirstMeetPacing();

@@ -180,6 +180,26 @@
   function debugForceCharacterEncounter(actStateInput, charKeyInput, configInput = null, options = {}) { return ACT_ENCOUNTER_RUNTIME.debugForceCharacterEncounter(actStateInput, charKeyInput, configInput, options); }
   function buildEncounterMarkersForSnapshot(actStateInput) { return ACT_ENCOUNTER_RUNTIME.buildEncounterMarkersForSnapshot(actStateInput); }
 
+  function prepareRouteChoiceEncounters(actState, heroState = {}, config = null, contextInput = {}) {
+    const enqueueResult = enqueueEligibleCharacterEncounters(actState, heroState, {
+      context: contextInput,
+      config,
+      limit: ENCOUNTER_CHARACTER_KEYS.length,
+      place: false
+    });
+    if (enqueueResult?.actState) Object.assign(actState, enqueueResult.actState);
+    const placedResult = placeNextCharacterEncounter(actState, config, {
+      context: contextInput,
+      distance: 1
+    });
+    if (placedResult?.actState) Object.assign(actState, placedResult.actState);
+    return {
+      created: enqueueResult?.created || [],
+      placed: placedResult?.placed || null,
+      reason: placedResult?.reason || null
+    };
+  }
+
   const ACT_CHAPTERS = {
     chapter0_exchange: normalizeChapterConfig('chapter0_exchange', PROLOGUE_EXCHANGE_CHAPTER)
   };
@@ -947,6 +967,7 @@
       : [];
     if (jumpOptions.length > 0) {
       actState.stage = 'route';
+      prepareRouteChoiceEncounters(actState, heroState, config, contextInput);
       return;
     }
 
@@ -968,6 +989,7 @@
         return;
       }
       actState.stage = 'route';
+      prepareRouteChoiceEncounters(actState, heroState, config, contextInput);
       return;
     }
 

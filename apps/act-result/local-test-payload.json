@@ -37,12 +37,12 @@
   "assetOffer": {
     "protocol": "ace0.assetOffer.v1",
     "offerId": "offer:low:demo",
+    "floor": "message:4",
     "pool": "low",
-    "points": 0,
+    "settled": false,
     "choices": [
       {
         "choiceIndex": 0,
-        "instanceId": "asset_skill_divine_order_l2:act-result-demo:0",
         "cardId": "asset_skill_divine_order_l2",
         "name": "神谕 II",
         "kind": "skill",
@@ -59,7 +59,6 @@
       },
       {
         "choiceIndex": 1,
-        "instanceId": "asset_mana_max_silver:act-result-demo:1",
         "cardId": "asset_mana_max_silver",
         "name": "魔运电池 II",
         "kind": "numeric",
@@ -73,7 +72,6 @@
       },
       {
         "choiceIndex": 2,
-        "instanceId": "asset_skill_catastrophe_l2:act-result-demo:2",
         "cardId": "asset_skill_catastrophe_l2",
         "name": "大灾变 II",
         "kind": "skill",
