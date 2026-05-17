@@ -1465,9 +1465,28 @@
 
   function settleActAssetDeckEventsForHost(worldInput, actStateInput, eventsInput = []) {
     const events = normalizeAssetDeckEvents(eventsInput);
+    const world = worldInput && typeof worldInput === 'object' && !Array.isArray(worldInput) ? worldInput : {};
+    const floorKeyForSettlement = normalizeTrimmedString(world.floorKey, '');
+    const worldAssetDeck = world.assetDeck && typeof world.assetDeck === 'object' && !Array.isArray(world.assetDeck)
+      ? world.assetDeck
+      : null;
     if (!events.length) {
+      const existingOfferFloor = normalizeTrimmedString(worldAssetDeck?.offer?.floor, '');
+      if (floorKeyForSettlement && worldAssetDeck?.offer && existingOfferFloor !== floorKeyForSettlement) {
+        return {
+          world: {
+            ...world,
+            assetDeck: {
+              ...cloneJsonData(worldAssetDeck, {}),
+              offer: null
+            }
+          },
+          actState: actStateInput,
+          changed: true
+        };
+      }
       return {
-        world: worldInput && typeof worldInput === 'object' ? worldInput : {},
+        world,
         actState: actStateInput,
         changed: false
       };
@@ -1480,14 +1499,14 @@
         console.warn('[ACE0 ACT] AssetDeck runtime missing; ACT asset commands will remain pending.');
       }
       return {
-        world: worldInput && typeof worldInput === 'object' ? worldInput : {},
+        world,
         actState: actStateInput,
         changed: false
       };
     }
 
     const nextWorld = {
-      ...(worldInput && typeof worldInput === 'object' && !Array.isArray(worldInput) ? worldInput : {})
+      ...world
     };
     const nextActState = cloneJsonData(actStateInput, actStateInput) || {};
     let currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
@@ -1496,9 +1515,17 @@
     const reserveCounts = normalizeActResourceCounts(nextActState.reserve);
     let currentAssetPoints = Math.max(0, Math.round(Number(reserveCounts.asset) || 0));
     let changed = false;
+    const currentOfferFloor = normalizeTrimmedString(currentAssetDeck?.offer?.floor, '');
+    if (floorKeyForSettlement && currentAssetDeck?.offer && currentOfferFloor !== floorKeyForSettlement) {
+      currentAssetDeck = {
+        ...currentAssetDeck,
+        offer: null
+      };
+      changed = true;
+    }
 
     events.forEach((event, index) => {
-      const floorKey = normalizeTrimmedString(worldInput?.floorKey || event.floorKey, '');
+      const floorKey = normalizeTrimmedString(floorKeyForSettlement || event.floorKey, '');
       const existingOfferFloor = normalizeTrimmedString(currentAssetDeck?.offer?.floor, '');
       if (floorKey && existingOfferFloor === floorKey) return;
 

@@ -85,9 +85,35 @@ async function testSameFloorSettlementIsIdempotent() {
   assertEqual(eraVars.world.act.reserve.asset, 0, 'Same-floor repeat should not grant extra asset points');
 }
 
+async function testStaleOfferClearsOnNextFloor() {
+  const { sandbox, act, tavernFactory } = loadTavernSandbox();
+  const oldFloorKey = 'message:asset-old';
+  const nextFloorKey = 'message:asset-next';
+  const eraVars = buildEraVars(act, 1, nextFloorKey);
+  eraVars.world.assetDeck.offer = {
+    floor: oldFloorKey,
+    id: 'offer:low:old',
+    pool: 'low',
+    settled: true,
+    choices: [{ id: 'asset_skill_hex_l1', lv: 1 }]
+  };
+  eraVars.world.act.phase_advance = 0;
+  eraVars.world.act.phase_slots = [null, null, null, null];
+  const { runtime } = createTavernRuntime(tavernFactory, sandbox, { eraVars });
+
+  const settled = runtime.settleActAssetDeckEventsForHost(eraVars.world, eraVars.world.act, []);
+  assertEqual(settled.changed, true, 'New floor without asset event should clear stale offer state');
+  assertEqual(settled.world.assetDeck.offer, null, 'Stale settled offer should not persist onto a different floor');
+
+  const resolved = await runtime.resolvePendingActAdvance(eraVars, { floorKey: nextFloorKey, persist: false });
+  assertEqual(resolved.changed, true, 'Resolve advance should persist stale-offer cleanup even without phase advance');
+  assertEqual(resolved.eraVars.world.assetDeck.offer, null, 'Resolved next-floor state should have no offer');
+}
+
 (async () => {
   await testAssetPhaseOpensCompactOffer();
   await testSameFloorSettlementIsIdempotent();
+  await testStaleOfferClearsOnNextFloor();
   console.log('[act-asset-flow-smoke] all checks passed');
 })().catch((error) => {
   console.error(error);

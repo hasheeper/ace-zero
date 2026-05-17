@@ -106,7 +106,7 @@
     return tags.slice(0, 5);
   }
 
-  function buildAssetOfferResultPayload(assetDeckInput) {
+  function buildAssetOfferResultPayload(assetDeckInput, expectedFloorKey = '') {
     const assetDeck = assetDeckInput && typeof assetDeckInput === 'object' && !Array.isArray(assetDeckInput)
       ? assetDeckInput
       : null;
@@ -115,11 +115,14 @@
       : null;
     const choices = Array.isArray(offer?.choices) ? offer.choices : [];
     if (!offer || !choices.length) return null;
+    const offerFloor = typeof offer.floor === 'string' ? offer.floor.trim() : '';
+    const floorKey = typeof expectedFloorKey === 'string' ? expectedFloorKey.trim() : '';
+    if (floorKey && offerFloor !== floorKey) return null;
 
     return {
       protocol: 'ace0.assetOffer.v1',
       offerId: typeof offer.id === 'string' ? offer.id : '',
-      floor: typeof offer.floor === 'string' ? offer.floor : '',
+      floor: offerFloor,
       pool: typeof offer.pool === 'string' ? offer.pool : 'low',
       settled: offer.settled === true,
       choices: choices.slice(0, 3).map((choice, index) => {
@@ -285,7 +288,7 @@
       activated: getArrayDiff(after.activated, before.activated),
       present: after.present,
       summary: buildActResultSummary(resultType, before, after, changedPaths),
-      assetOffer: buildAssetOfferResultPayload(after.assetDeck)
+      assetOffer: buildAssetOfferResultPayload(after.assetDeck, options.floorKey)
     };
   }
 

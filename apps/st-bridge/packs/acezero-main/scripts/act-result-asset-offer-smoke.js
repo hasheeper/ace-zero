@@ -92,6 +92,8 @@ async function main() {
   assert(payload.assetOffer.choices.every(card => card.name && card.cardId), 'card choices should include display names and ids');
   assert(payload.assetOffer.choices.every(card => card.effectText && card.rarity), 'card choices should include effect text and rarity');
   assert(payload.assetOffer.choices.every(card => Array.isArray(card.statusTags)), 'card choices should include status tags');
+  const staleFloorPayload = resultRuntime.buildActResultPayload(before, after, { floorKey: 'message:next-floor' });
+  assert(staleFloorPayload && staleFloorPayload.assetOffer === null, 'ACT_RESULT must not expose an offer from another floor');
 
   const appSource = fs.readFileSync(path.join(PACK_ROOT, '../../../act-result/app.js'), 'utf8');
   const wrapperSource = fs.readFileSync(path.join(PACK_ROOT, '../../../../st/wrappers/ACT_RESULT.html'), 'utf8');
