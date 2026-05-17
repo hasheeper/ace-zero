@@ -107,10 +107,16 @@ async function runBridge(options) {
 
   const stverSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/STver.html'), 'utf8');
   const actResultWrapperSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/ACT_RESULT.html'), 'utf8');
+  const localStverSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/local/STver.local.html'), 'utf8');
+  const localActResultWrapperSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/local/ACT_RESULT.local.html'), 'utf8');
   const dashboardLoaderSource = fs.readFileSync(path.join(REPO_ROOT, 'apps/st-bridge/packs/acezero-main/dashboard/loader.js'), 'utf8');
   assert(stverSource.includes("resolveAppUrl('game')"), 'STver wrapper should use bridge app resolver for game');
   assert(actResultWrapperSource.includes('ACE0_ACT_RESULT_APP_URL'), 'ACT_RESULT wrapper should accept bridge-published ACT_RESULT app URL');
   assert(actResultWrapperSource.includes("resolveAppUrl('act-result')"), 'ACT_RESULT wrapper should use bridge app resolver for ACT_RESULT');
+  assert(localStverSource.includes("return 'http://127.0.0.1:4173/index.html?app=game';"), 'local STver wrapper should hardcode the local game app');
+  assert(localActResultWrapperSource.includes("return 'http://127.0.0.1:4173/apps/act-result/index.html';"), 'local ACT_RESULT wrapper should hardcode the local ACT_RESULT app');
+  assert(!localStverSource.includes('hasheeper.github.io'), 'local STver wrapper must not fall back to GitHub Pages');
+  assert(!localActResultWrapperSource.includes('hasheeper.github.io'), 'local ACT_RESULT wrapper must not fall back to GitHub Pages');
   assert(dashboardLoaderSource.includes("resolveAppUrl('dashboard')"), 'Dashboard loader should use bridge app resolver for dashboard');
 
   console.log('[bridge-profile-smoke] all checks passed');

@@ -35,6 +35,9 @@ window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
 import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
 ```
 
+For Tavern regex wrappers, production uses `st/wrappers/STver.html` and `st/wrappers/ACT_RESULT.html`.
+Local offline testing uses `st/wrappers/local/STver.local.html` and `st/wrappers/local/ACT_RESULT.local.html`; these two files hardcode `http://127.0.0.1:4173` and do not fall back to GitHub Pages.
+
 ## Contract
 
 `bridge.js` owns loading, ordering, cache busting, pack selection, and shared MVU IO helpers.

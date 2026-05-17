@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AceZero ACT Result Wrapper</title>
+  <style>
+    * { box-sizing: border-box; }
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+    #act-result-frame {
+      width: 100%;
+      height: 1px;
+      min-height: 0;
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <script id="ace0-act-result-json" type="application/json">$1</script>
+  <iframe
+    id="act-result-frame"
+    title="AceZero ACT Result"
+    sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
+    allow="fullscreen"
+    referrerpolicy="no-referrer"
+  ></iframe>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const frame = document.getElementById('act-result-frame');
+      const hostFrame = window.frameElement;
+      const cacheKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      let lastHeight = 1;
+
+      function appendNoCache(url) {
+        try {
+          const next = new URL(url, window.location.href);
+          next.searchParams.set('_ace0_act_result_v', cacheKey);
+          return next.href;
+        } catch (_) {
+          const sep = String(url || '').includes('?') ? '&' : '?';
+          return String(url || '') + sep + '_ace0_act_result_v=' + encodeURIComponent(cacheKey);
+        }
+      }
+
+      function resolveActResultUrl() {
+        return 'http://127.0.0.1:4173/apps/act-result/index.html';
+      }
+
+      function parsePayload() {
+        try {
+          const node = document.getElementById('ace0-act-result-json');
+          const raw = (node && (node.textContent || node.innerText) || '').trim();
+          const placeholder = '$' + '1';
+          if (!raw || raw === placeholder) return null;
+          return JSON.parse(raw);
+        } catch (error) {
+          console.warn('[AceZero ACT Result Wrapper] Failed to parse payload:', error);
+          return null;
+        }
+      }
+
+      const payload = parsePayload();
+      if (payload && typeof payload === 'object') {
+        const offerFloor = payload.assetOffer && typeof payload.assetOffer.floor === 'string'
+          ? payload.assetOffer.floor.trim()
+          : '';
+        if (!payload.floorKey && /^message:\d+$/i.test(offerFloor)) {
+          payload.floorKey = offerFloor;
+        }
+      }
+
+      function resizeHostFrame() {
+        if (!hostFrame) return;
+        const parentWidth = hostFrame.parentElement ? hostFrame.parentElement.clientWidth : 0;
+        const width = Math.min(parentWidth || window.innerWidth || 860, 860);
+        hostFrame.style.width = '100%';
+        hostFrame.style.maxWidth = '100%';
+        hostFrame.style.height = `${lastHeight}px`;
+        hostFrame.style.minHeight = '0';
+        hostFrame.style.border = 'none';
+        hostFrame.style.margin = '0';
+        hostFrame.style.display = 'block';
+        frame.style.width = `${width}px`;
+        frame.style.maxWidth = '100%';
+        frame.style.height = `${lastHeight}px`;
+      }
+
+      function applyContentHeight(value) {
+        const next = Math.max(1, Math.ceil(Number(value) || 1));
+        if (Math.abs(next - lastHeight) < 2) return;
+        lastHeight = next;
+        resizeHostFrame();
+      }
+
+      function postPayload() {
+        if (!payload || !frame || !frame.contentWindow) return;
+        frame.contentWindow.postMessage({
+          type: 'acezero-act-result-data',
+          payload
+        }, '*');
+      }
+
+      function forwardToHost(message) {
+        const targets = [];
+        try { if (window.parent && window.parent !== window) targets.push(window.parent); } catch (_) {}
+        try { if (window.top && window.top !== window && !targets.includes(window.top)) targets.push(window.top); } catch (_) {}
+        targets.forEach((target) => {
+          try { target.postMessage(message, '*'); } catch (_) {}
+        });
+      }
+
+      function forwardToFrame(message) {
+        try {
+          if (frame && frame.contentWindow) frame.contentWindow.postMessage(message, '*');
+        } catch (_) {}
+      }
+
+      frame.src = appendNoCache(resolveActResultUrl());
+      frame.addEventListener('load', postPayload);
+      window.addEventListener('message', (event) => {
+        const message = event && event.data;
+        if (!message) return;
+        if (message.type === 'acezero-act-result-size') {
+          applyContentHeight(message.height);
+          return;
+        }
+        if (message.type === 'acezero-act-result-request') {
+          postPayload();
+          return;
+        }
+        if (message.type === 'acezero-act-result-asset-command') {
+          forwardToHost(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-asset-command-result') {
+          forwardToFrame(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-route-command') {
+          forwardToHost(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-route-command-result') {
+          forwardToFrame(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-era-vars-request') {
+          forwardToHost(message);
+          return;
+        }
+        if (message.type === 'acezero-act-result-era-vars-result') {
+          forwardToFrame(message);
+          return;
+        }
+      });
+      window.addEventListener('resize', resizeHostFrame);
+      resizeHostFrame();
+    })();
+  </script>
+</body>
+</html>

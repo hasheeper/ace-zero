@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AceZero - Frame Wrapper</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+    #app-frame {
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      border: 0;
+      display: block;
+      background: transparent;
+    }
+
+    #frame-toolbar {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 2147483647;
+      display: flex;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .tool-btn {
+      pointer-events: auto;
+      appearance: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(18, 18, 18, 0.38);
+      color: rgba(255, 255, 255, 0.68);
+      border-radius: 8px;
+      padding: 8px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.14);
+    }
+
+    .tool-btn:hover {
+      background: rgba(28, 28, 28, 0.86);
+      border-color: rgba(255, 255, 255, 0.36);
+      color: rgba(255, 255, 255, 0.92);
+      transform: translateY(-2px);
+    }
+
+    .tool-btn:active {
+      transform: translateY(0);
+    }
+
+    .tool-btn[hidden] {
+      display: none !important;
+    }
+
+    .tool-icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    html.pseudo-fullscreen,
+    html.pseudo-fullscreen body {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #000;
+      border-radius: 0 !important;
+      z-index: 999999;
+    }
+
+    html.pseudo-fullscreen #app-frame {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      border-radius: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="frame-toolbar">
+    <button id="btn-enter" class="tool-btn" type="button" title="放大" aria-label="放大">
+      <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+        <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
+        <path d="M21 16v3a2 2 0 0 1-2 2h-3"></path>
+        <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
+      </svg>
+    </button>
+    <button id="btn-exit" class="tool-btn" type="button" hidden title="退出" aria-label="退出">
+      <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+        <path d="M16 3v3a2 2 0 0 0 2 2h3"></path>
+        <path d="M21 16h-3a2 2 0 0 0-2 2v3"></path>
+        <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+      </svg>
+    </button>
+  </div>
+  <script id="acezero-json" type="application/json">$1</script>
+
+  <iframe
+    id="app-frame"
+    title="AceZero Game"
+    sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin"
+    allow="fullscreen"
+    allowfullscreen
+    referrerpolicy="no-referrer"
+  ></iframe>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const btnEnter = document.getElementById('btn-enter');
+      const btnExit = document.getElementById('btn-exit');
+      const frame = document.getElementById('app-frame');
+      const hostFrame = window.frameElement;
+      const cacheKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+      // ============================================
+      // 解析注入的 JSON 数据
+      // ============================================
+      function parseInjectedData() {
+        try {
+          const dataNode = document.getElementById('acezero-json');
+          if (!dataNode) return null;
+          const raw = (dataNode.textContent || dataNode.innerText || '').trim();
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch (e) {
+          console.warn('[AceZero] 解析注入数据失败:', e);
+          return null;
+        }
+      }
+
+      // ============================================
+      // 初始化：解析数据并一次性指向非缓存游戏入口
+      // ============================================
+      const injectedData = parseInjectedData();
+
+      console.log('[AceZero-ST] injectedData:', injectedData);
+
+      function appendNoCache(url) {
+        try {
+          const next = new URL(url, window.location.href);
+          next.searchParams.set('_ace0_st_v', cacheKey);
+          return next.href;
+        } catch (_) {
+          const sep = String(url || '').includes('?') ? '&' : '?';
+          return String(url || '') + sep + '_ace0_st_v=' + encodeURIComponent(cacheKey);
+        }
+      }
+
+      function resolveGameUrl() {
+        return 'http://127.0.0.1:4173/index.html?app=game';
+      }
+
+      frame.src = appendNoCache(resolveGameUrl());
+
+      // ============================================
+      // 调整宿主 iframe 尺寸（被 ST 嵌入时）
+      // ============================================
+      function resizeHostFrame() {
+        if (!hostFrame) return;
+        const designWidth = 1100;
+        const designHeight = 850;
+        const ratio = designHeight / designWidth;
+        const parentWidth = hostFrame.parentElement
+          ? hostFrame.parentElement.clientWidth
+          : 0;
+        const availableWidth = parentWidth || window.innerWidth || designWidth;
+        const width = Math.min(designWidth, Math.max(1, availableWidth));
+        const height = Math.round(width * ratio);
+
+        hostFrame.style.width = '100%';
+        hostFrame.style.maxWidth = designWidth + 'px';
+        hostFrame.style.height = height + 'px';
+        hostFrame.style.minHeight = '0';
+        hostFrame.style.border = 'none';
+        hostFrame.style.boxShadow = 'none';
+        hostFrame.style.borderRadius = '0';
+        hostFrame.style.margin = '0 auto';
+        hostFrame.style.display = 'block';
+      }
+      resizeHostFrame();
+      requestAnimationFrame(resizeHostFrame);
+      window.addEventListener('resize', resizeHostFrame);
+
+      // ============================================
+      // 全屏控制
+      // ============================================
+      function isFullscreen() {
+        return !!document.fullscreenElement;
+      }
+
+      function isPseudo() {
+        return root.classList.contains('pseudo-fullscreen');
+      }
+
+      function syncButtons() {
+        const active = isFullscreen() || isPseudo();
+        btnEnter.hidden = active;
+        btnExit.hidden = !active;
+      }
+
+      async function enterFullscreen() {
+        try {
+          if (root.requestFullscreen) {
+            await root.requestFullscreen();
+            return;
+          }
+        } catch (e) {}
+        root.classList.add('pseudo-fullscreen');
+      }
+
+      async function exitFullscreen() {
+        try {
+          if (isFullscreen() && document.exitFullscreen) {
+            await document.exitFullscreen();
+          }
+        } catch (e) {}
+        root.classList.remove('pseudo-fullscreen');
+      }
+
+      // ============================================
+      // postMessage 数据传递（仅首次生效，防重复）
+      // ============================================
+      let _dataSent = false;
+
+      function postGameData(force) {
+        if (!force && _dataSent) return;
+        if (!frame || !frame.contentWindow) return;
+        if (!injectedData) return;
+        _dataSent = true;
+        frame.contentWindow.postMessage(
+          {
+            type: 'acezero-game-data',
+            payload: injectedData,
+          },
+          '*'
+        );
+      }
+
+      // iframe 加载完成后发送数据
+      frame.addEventListener('load', () => postGameData(false));
+
+      // 游戏主动请求数据时响应
+      window.addEventListener('message', (event) => {
+        const payload = event?.data;
+        if (!payload || payload.type !== 'acezero-data-request') return;
+        postGameData(true);
+      });
+
+      // ============================================
+      // 按钮事件
+      // ============================================
+      btnEnter.addEventListener('click', () => {
+        enterFullscreen().finally(syncButtons);
+      });
+      btnExit.addEventListener('click', () => {
+        exitFullscreen().finally(syncButtons);
+      });
+
+      document.addEventListener('fullscreenchange', syncButtons);
+      syncButtons();
+    })();
+  </script>
+</body>
+</html>
