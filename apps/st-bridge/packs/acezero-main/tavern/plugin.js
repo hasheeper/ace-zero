@@ -2773,7 +2773,24 @@
         if (commandKind !== 'choose_card') {
           return { ok: false, reason: 'unsupported_asset_command' };
         }
-        return await hostRoot.ACE0Plugin.chooseAssetCard(commandPayload.choiceIndex, commandPayload.slotType || 'general', commandPayload.clearKey || commandPayload.offerId || '', { floorKey });
+        const choiceId = typeof commandPayload.choiceId === 'string' && commandPayload.choiceId.trim()
+          ? commandPayload.choiceId.trim()
+          : (typeof commandPayload.cardId === 'string' && commandPayload.cardId.trim()
+              ? commandPayload.cardId.trim()
+              : (typeof commandPayload.id === 'string' ? commandPayload.id.trim() : ''));
+        return await hostRoot.ACE0Plugin.chooseAssetCard(
+          commandPayload.choiceIndex,
+          commandPayload.slotType || 'general',
+          commandPayload.clearKey || commandPayload.offerId || '',
+          {
+            floorKey,
+            ...(choiceId ? { choiceId, cardId: choiceId } : {}),
+            ...(Number.isFinite(Number(commandPayload.targetIndex ?? commandPayload.replaceIndex))
+              ? { targetIndex: Math.max(0, Math.round(Number(commandPayload.targetIndex ?? commandPayload.replaceIndex))) }
+              : {}),
+            ...(commandPayload.confirmDestroy === true || commandPayload.confirm_destroy === true ? { confirmDestroy: true } : {})
+          }
+        );
       } catch (error) {
         return { ok: false, reason: 'asset_command_error', error: error?.message || String(error) };
       }

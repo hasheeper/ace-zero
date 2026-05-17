@@ -100,12 +100,14 @@ async function main() {
   const plannerSource = fs.readFileSync(path.join(PACK_ROOT, '../../../dashboard/pages/overview/views/planner-view.js'), 'utf8');
   const assetAdapterSource = fs.readFileSync(path.join(PACK_ROOT, '../../../dashboard/pages/overview/adapters/asset-adapter.js'), 'utf8');
   const dashboardLoaderSource = fs.readFileSync(path.join(PACK_ROOT, 'dashboard/loader.js'), 'utf8');
+  const pluginSource = fs.readFileSync(path.join(PACK_ROOT, 'tavern/plugin.js'), 'utf8');
   assert(appSource.includes('assetDeck.offer'), 'ACT_RESULT UI should read compact assetDeck.offer');
   assert(appSource.includes('choiceId: choiceId'), 'ACT_RESULT card click should submit the clicked card id, not only choiceIndex');
   assert(!appSource.includes('assetDeck.pending_offer'), 'ACT_RESULT UI must not read legacy pending_offer');
   assert(!appSource.includes('resolutionHistory'), 'ACT_RESULT UI must not use asset resolutionHistory to lock offers');
   assert(wrapperSource.includes('payload.assetOffer.floor'), 'ACT_RESULT wrapper should reuse assetOffer.floor');
   assert(!wrapperSource.includes('act-result-floor:'), 'ACT_RESULT wrapper must not invent random floor keys');
+  assert(pluginSource.includes('choiceId, cardId: choiceId'), 'ACT_RESULT host bridge should preserve clicked card id into chooseAssetCard');
   assert(plannerSource.includes('pendingOffer.settled === true) return'), 'Dashboard offer overlay should hide settled offers');
   assert(plannerSource.includes('SETTLED'), 'Dashboard asset panel should surface settled state');
   assert(
