@@ -270,12 +270,20 @@
       || globalThis?.STBridge?.state
       || {};
     const bridgeWorldbookName = _normalizeTrimmedString(bridgeState.fullDocWorldbookName, '');
+    const bridgeWorldbookSource = _normalizeTrimmedString(
+      bridgeState.fullDocWorldbookSource
+        || hostRoot?.ACE0_FULL_DOC_WORLDBOOK_SOURCE
+        || (typeof window !== 'undefined' ? window.ACE0_FULL_DOC_WORLDBOOK_SOURCE : '')
+        || globalThis?.ACE0_FULL_DOC_WORLDBOOK_SOURCE,
+      ''
+    );
+    const hasBridgeOverride = bridgeWorldbookSource === 'query' || bridgeWorldbookSource === 'globalOverride';
     if (profile && typeof profile.resolveFullDocWorldbookName === 'function') {
-      const explicitName = bridgeWorldbookName || (hasGlobalOverride ? globalName : '');
+      const explicitName = (hasBridgeOverride ? bridgeWorldbookName : '') || (hasGlobalOverride ? globalName : '');
       const resolved = _normalizeTrimmedString(profile.resolveFullDocWorldbookName(env, explicitName), '');
       if (resolved) return resolved;
     }
-    if (bridgeWorldbookName) return bridgeWorldbookName;
+    if (hasBridgeOverride && bridgeWorldbookName) return bridgeWorldbookName;
     if (hasGlobalOverride && globalName) return globalName;
     const names = profile && profile.names ? profile.names : {};
     return _normalizeTrimmedString(env === 'local' ? names.local : names.prod, '');

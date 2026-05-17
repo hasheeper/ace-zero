@@ -23,6 +23,10 @@
     return normalized === 'local' ? 'local' : 'prod';
   }
 
+  function isExplicitWorldbookSource(value) {
+    return value === 'query' || value === 'globalOverride';
+  }
+
   function resolveFullDocWorldbookName(env, explicitName = '') {
     const explicit = normalizeString(explicitName, '');
     if (explicit) return explicit;
@@ -33,18 +37,23 @@
     const bridgeState = root.STBridge && root.STBridge.state ? root.STBridge.state : null;
     const env = normalizeEnv(root.ST_BRIDGE_ENV || bridgeState?.env);
     const currentName = normalizeString(root.ACE0_FULL_DOC_WORLDBOOK_NAME, '');
-    const explicitName = normalizeString(bridgeState?.fullDocWorldbookName, '')
+    const bridgeSource = normalizeString(bridgeState?.fullDocWorldbookSource || root.ACE0_FULL_DOC_WORLDBOOK_SOURCE, '');
+    const explicitName = (isExplicitWorldbookSource(bridgeSource) ? normalizeString(bridgeState?.fullDocWorldbookName, '') : '')
       || (root.ACE0_FULL_DOC_WORLDBOOK_OVERRIDE === true ? currentName : '');
     const nextName = resolveFullDocWorldbookName(env, explicitName);
+    const nextSource = explicitName ? (bridgeSource || 'globalOverride') : 'profile';
 
     root.ACE0_FULL_DOC_WORLDBOOK_NAME = nextName;
-    root.__ACE0_APPLIED_FULL_DOC_WORLDBOOK__ = { env, name: nextName };
+    root.ACE0_FULL_DOC_WORLDBOOK_SOURCE = nextSource;
+    root.__ACE0_APPLIED_FULL_DOC_WORLDBOOK__ = { env, name: nextName, source: nextSource };
 
     if (bridgeState) {
       bridgeState.fullDocWorldbookName = nextName;
+      bridgeState.fullDocWorldbookSource = nextSource;
     }
     if (root.STBridge && root.STBridge.utils) {
       root.STBridge.utils.fullDocWorldbookName = nextName;
+      root.STBridge.utils.fullDocWorldbookSource = nextSource;
     }
     return nextName;
   }

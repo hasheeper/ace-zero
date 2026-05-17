@@ -94,6 +94,7 @@ async function runBridge(options) {
   assertEqual(prod.STBridge.state.env, 'prod', 'prod bridge should expose prod env');
   assertEqual(prod.STBridge.state.appBaseUrl, 'https://hasheeper.github.io/ace-zero', 'prod bridge should expose GitHub app base');
   assertEqual(prod.STBridge.state.fullDocWorldbookName, prod.ACE0WorldbookProfile.names.prod, 'prod bridge should use configured main worldbook');
+  assertEqual(prod.STBridge.state.fullDocWorldbookSource, 'profile', 'prod worldbook should come from profile defaults');
   assertEqual(prod.ACE0_GAME_APP_URL, 'https://hasheeper.github.io/ace-zero/index.html?app=game', 'prod bridge should publish game URL');
   assert(prod.__loadedScriptUrls.every(url => url.startsWith('https://hasheeper.github.io/ace-zero/apps/st-bridge/')), 'prod scripts should load from GitHub Pages');
 
@@ -103,6 +104,7 @@ async function runBridge(options) {
   assertEqual(local.STBridge.state.env, 'local', 'local bridge should expose local env');
   assertEqual(local.STBridge.state.appBaseUrl, 'http://127.0.0.1:4173', 'local bridge should expose local app base');
   assertEqual(local.STBridge.state.fullDocWorldbookName, local.ACE0WorldbookProfile.names.local, 'local bridge should use configured test worldbook');
+  assertEqual(local.STBridge.state.fullDocWorldbookSource, 'profile', 'local worldbook should come from profile defaults');
   assertEqual(local.STBridge.utils.resolveAppUrl('dashboard'), 'http://127.0.0.1:4173/index.html?app=dashboard', 'local dashboard URL should point to local app host');
   assertEqual(local.STBridge.utils.resolveAppUrl('act-result'), 'http://127.0.0.1:4173/apps/act-result/index.html', 'local ACT_RESULT URL should point to local app');
   assert(local.__loadedScriptUrls.every(url => url.startsWith('http://127.0.0.1:4173/apps/st-bridge/')), 'local scripts should load from local server');
@@ -112,6 +114,7 @@ async function runBridge(options) {
     globals: { ACE0_FULL_DOC_WORLDBOOK_NAME: 'LegacyStaleWorldbook' }
   });
   assertEqual(staleGlobal.STBridge.state.fullDocWorldbookName, staleGlobal.ACE0WorldbookProfile.names.local, 'stale global worldbook names should not override the local profile');
+  assertEqual(staleGlobal.STBridge.state.fullDocWorldbookSource, 'profile', 'stale global worldbook names should be rewritten as profile defaults');
 
   const explicit = await runBridge({
     bridgeUrl: 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&appBase=http%3A%2F%2F127.0.0.1%3A4999&worldbook=QueryBook&v=dev',
@@ -119,12 +122,14 @@ async function runBridge(options) {
   });
   assertEqual(explicit.STBridge.state.appBaseUrl, 'http://127.0.0.1:4999', 'appBase query should override default local base');
   assertEqual(explicit.STBridge.state.fullDocWorldbookName, 'QueryBook', 'worldbook query should override global worldbook override');
+  assertEqual(explicit.STBridge.state.fullDocWorldbookSource, 'query', 'query worldbook should be marked as query-sourced');
 
   const globalOverride = await runBridge({
     bridgeUrl: 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev',
     globals: { ACE0_FULL_DOC_WORLDBOOK_NAME: 'GlobalBook', ACE0_FULL_DOC_WORLDBOOK_OVERRIDE: true }
   });
   assertEqual(globalOverride.STBridge.state.fullDocWorldbookName, 'GlobalBook', 'marked global worldbook should override profile defaults');
+  assertEqual(globalOverride.STBridge.state.fullDocWorldbookSource, 'globalOverride', 'marked global worldbook should be marked as override-sourced');
 
   const stverSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/STver.html'), 'utf8');
   const actResultWrapperSource = fs.readFileSync(path.join(REPO_ROOT, 'st/wrappers/ACT_RESULT.html'), 'utf8');

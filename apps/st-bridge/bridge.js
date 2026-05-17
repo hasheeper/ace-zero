@@ -24,6 +24,7 @@
   const ROOT = typeof window !== 'undefined' ? window : globalThis;
   const BRIDGE_NAME = '[AceZero ST Bridge]';
   const VERSION = '0.1.0';
+  const REGISTRY_PROFILE_VERSION = 'worldbook-source-v2';
   const DEFAULT_MANIFEST = './manifest.json';
   const FALLBACK_BRIDGE_URL = 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js';
   const PROD_APP_BASE_URL = 'https://hasheeper.github.io/ace-zero';
@@ -330,10 +331,14 @@
       ? normalizeString(ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME, '')
       : '';
     const fullDocWorldbookName = queryWorldbookName || globalWorldbookName;
+    const fullDocWorldbookSource = queryWorldbookName
+      ? 'query'
+      : (globalWorldbookName ? 'globalOverride' : 'profile');
     return {
       env,
       appBaseUrl,
-      fullDocWorldbookName
+      fullDocWorldbookName,
+      fullDocWorldbookSource
     };
   }
 
@@ -411,6 +416,7 @@
     }
     ROOT.ST_BRIDGE_ENV = profile.env;
     ROOT.ACE0_APP_BASE_URL = profile.appBaseUrl;
+    ROOT.ACE0_FULL_DOC_WORLDBOOK_SOURCE = profile.fullDocWorldbookSource;
     if (profile.fullDocWorldbookName) {
       ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME = profile.fullDocWorldbookName;
     }
@@ -543,7 +549,8 @@
         bridgeRoot: bridgeRoot.href,
         appBaseUrl: state?.appBaseUrl || bridgeProfile.appBaseUrl,
         env: state?.env || bridgeProfile.env,
-        fullDocWorldbookName: state?.fullDocWorldbookName || bridgeProfile.fullDocWorldbookName
+        fullDocWorldbookName: state?.fullDocWorldbookName || bridgeProfile.fullDocWorldbookName,
+        fullDocWorldbookSource: state?.fullDocWorldbookSource || bridgeProfile.fullDocWorldbookSource
       },
       mvu: {
         readVariables,
@@ -583,9 +590,11 @@
     const registryKey = [
       manifestUrl,
       packId,
+      REGISTRY_PROFILE_VERSION,
       bridgeProfile.env,
       bridgeProfile.appBaseUrl,
-      bridgeProfile.fullDocWorldbookName
+      bridgeProfile.fullDocWorldbookName,
+      bridgeProfile.fullDocWorldbookSource
     ].join('::');
 
     if (registry[registryKey] && !forceReload) {
@@ -607,6 +616,7 @@
       env: bridgeProfile.env,
       appBaseUrl: bridgeProfile.appBaseUrl,
       fullDocWorldbookName: bridgeProfile.fullDocWorldbookName,
+      fullDocWorldbookSource: bridgeProfile.fullDocWorldbookSource,
       loaded: [],
       failedOptional: [],
       loadedAt: new Date().toISOString()
