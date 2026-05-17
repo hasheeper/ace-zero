@@ -84,6 +84,7 @@ async function main() {
 
   assert(payload.assetOffer, 'ACT_RESULT should include assetOffer when an AssetDeck offer is pending');
   assertEqual(payload.assetOffer.protocol, 'ace0.assetOffer.v1', 'asset offer protocol should be stable');
+  assertEqual(payload.assetOffer.floor, 'message:asset-result', 'ACT_RESULT assetOffer should expose the bound floor');
   assertEqual(payload.assetOffer.pool, 'low', 'asset I should expose low pool in ACT_RESULT');
   assertEqual(payload.assetOffer.choices.length, 3, 'ACT_RESULT should expose three card choices');
   assert(!Object.prototype.hasOwnProperty.call(resolved.eraVars.world.assetDeck.offer, 'lv'), 'Offer state should not store lv');

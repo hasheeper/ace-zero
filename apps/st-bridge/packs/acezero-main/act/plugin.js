@@ -173,6 +173,7 @@
   function findEncounterPlacementCandidates(actStateInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.findEncounterPlacementCandidates(actStateInput, configInput, options); }
   function pickEncounterTargetPhaseIndex(actStateInput, requestInput, targetInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.pickEncounterTargetPhaseIndex(actStateInput, requestInput, targetInput, options); }
   function placeNextCharacterEncounter(actStateInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.placeNextCharacterEncounter(actStateInput, configInput, options); }
+  function placeQueuedCharacterEncounterOnNode(actStateInput, nodeIdInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.placeQueuedCharacterEncounterOnNode(actStateInput, nodeIdInput, configInput, options); }
   function enqueueEligibleCharacterEncounters(actStateInput, heroStateInput = {}, options = {}) { return ACT_ENCOUNTER_RUNTIME.enqueueEligibleCharacterEncounters(actStateInput, heroStateInput, options); }
   function consumeCharacterEncounterForNode(actStateInput, nodeIdInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.consumeCharacterEncounterForNode(actStateInput, nodeIdInput, options); }
   function updateCharacterEncountersForNodeEntry(actStateInput, heroStateInput = {}, configInput = null, contextInput = {}) { return ACT_ENCOUNTER_RUNTIME.updateCharacterEncountersForNodeEntry(actStateInput, heroStateInput, configInput, contextInput); }
@@ -1256,12 +1257,6 @@
     return enqueueResult;
   }
 
-  function scheduleQueuedCharacterEncounterForCurrentNode(actState, config, options = {}) {
-    const placedResult = placeNextCharacterEncounter(actState, config, options);
-    if (placedResult?.actState) Object.assign(actState, placedResult.actState);
-    return placedResult;
-  }
-
   function consumeSingleActPhase(actState, heroState, config, contextInput = {}) {
     if (actState.stage === 'route') {
       if (actState.route_history.length >= actState.nodeIndex + 1) {
@@ -1274,12 +1269,15 @@
 
     const phaseIndex = Math.max(0, Math.min(4, Math.round(Number(actState.phase_index) || 0)));
     if (phaseIndex >= 4) {
-      scheduleQueuedCharacterEncounterForCurrentNode(actState, config);
       resolveActNodeTransition(actState, config, heroState, contextInput);
       return;
     }
 
     const currentNodeId = getCurrentActNodeId(actState);
+    const nodeEntryPlacement = placeQueuedCharacterEncounterOnNode(actState, currentNodeId, config, { onlyOverdue: true });
+    if (nodeEntryPlacement?.placed && nodeEntryPlacement.actState) {
+      Object.assign(actState, nodeEntryPlacement.actState);
+    }
     const visionReplacement = getVisionReplacementForPhase(actState, currentNodeId, phaseIndex);
     const token = Array.isArray(actState.phase_slots) && actState.phase_slots[phaseIndex]
       ? actState.phase_slots[phaseIndex]
@@ -1307,7 +1305,6 @@
 
     actState.phase_index = phaseIndex + 1;
     if (actState.phase_index >= 4) {
-      scheduleQueuedCharacterEncounterForCurrentNode(actState, config);
       resolveActNodeTransition(actState, config, heroState, contextInput);
       return;
     }
@@ -1568,6 +1565,7 @@
     evaluateCharacterEncounterEligibility,
     enqueueEligibleCharacterEncounters,
     placeNextCharacterEncounter,
+    placeQueuedCharacterEncounterOnNode,
     consumeCharacterEncounterForNode,
     updateCharacterEncountersForNodeEntry,
     debugForceCharacterEncounter,

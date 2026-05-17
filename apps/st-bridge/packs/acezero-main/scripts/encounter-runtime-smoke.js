@@ -210,6 +210,65 @@ function testQueuePlaceConsumeFirstMeet() {
   assert(!duplicateCota.created.some((item) => item.charKey === 'COTA'), 'Met COTA should not be queued again');
 }
 
+function testQueuedEncounterPlacesOnChosenRouteEntry() {
+  const state = createActStateAt(act, 1, ['node1-entry', 'node2-floor-side'], {
+    characterEncounter: {
+      active: {
+        COTA: {
+          kind: 'meet',
+          state: 'queued',
+          from: 1,
+          priority: 188
+        }
+      }
+    }
+  });
+
+  const advanced = act.advanceActToNextNode(state, config, createHero(), createContext());
+  assert(advanced, 'Route choice should advance to the selected node');
+  assertEqual(state.nodeIndex, 2, 'Route choice should enter node 2');
+  const cota = state.characterEncounter.active.COTA;
+  assertEqual(cota.state, 'placed', 'Queued COTA should become placed on node entry');
+  assertEqual(cota.node, 'node2-floor-side', 'COTA should bind to the chosen route node, not the unchosen branch');
+  assertEqual(cota.nodeIndex, 2, 'COTA marker should bind to the current node index');
+  assertEqual(cota.phase || 1, 1, 'COTA first-meet should target phase 2');
+
+  const snapshot = act.createFrontendSnapshot({ actState: state });
+  const marker = snapshot.encounterMarkers.find((item) => item.charKey === 'COTA');
+  assert(marker, 'Dashboard snapshot should expose COTA marker after route entry');
+  assertEqual(marker.nodeId, 'node2-floor-side', 'Dashboard marker should use the chosen route node');
+}
+
+function testOverdueQueuedEncounterSnapshotAndConsumeRepair() {
+  const staleQueued = createActStateAt(act, 2, ['node1-entry', 'node2-floor-side'], {
+    phase_index: 1,
+    phase_advance: 1,
+    characterEncounter: {
+      active: {
+        COTA: {
+          kind: 'meet',
+          state: 'queued',
+          node: 'node2-floor-high',
+          nodeIndex: 2,
+          from: 1,
+          until: 4,
+          priority: 188
+        }
+      }
+    }
+  });
+
+  const snapshot = act.createFrontendSnapshot({ actState: staleQueued });
+  const marker = snapshot.encounterMarkers.find((item) => item.charKey === 'COTA');
+  assert(marker, 'Dashboard snapshot should recover an overdue queued COTA marker');
+  assertEqual(marker.nodeId, 'node2-floor-side', 'Recovered marker should follow the current route');
+
+  const resolved = act.resolvePendingAdvanceState(staleQueued, createHero(), config, createContext());
+  assert(resolved.actState.characterEncounter.met.COTA, 'Overdue queued COTA should consume on the current first-meet phase');
+  assert(!resolved.actState.characterEncounter.active?.COTA, 'Consumed COTA should leave active ledger');
+  assertEqual(resolved.heroState.cast.COTA.introduced, true, 'Consumed COTA should unlock introduced');
+}
+
 function testForceSpecificCharacterAndQueuedSequence() {
   const context = createContext();
   const hero = createHero();
@@ -359,6 +418,8 @@ testFinalNodeCannotReceiveEncounter();
 testEncounterQueuePrefersHighestPriority();
 testVisionBonusDecaysAcrossNodeAdvance();
 testQueuePlaceConsumeFirstMeet();
+testQueuedEncounterPlacesOnChosenRouteEntry();
+testOverdueQueuedEncounterSnapshotAndConsumeRepair();
 testForceSpecificCharacterAndQueuedSequence();
 testFirstMeetPacing();
 testPreSignalThenFirstMeet();

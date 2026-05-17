@@ -289,6 +289,61 @@ async function testPhaseAdvanceWritesReplayAndReplaysActAdvance() {
   assert(Array.isArray(replayedAct.route_history) && replayedAct.route_history[0] === 'node1-entry', 'replayed ACT should preserve route history');
 }
 
+async function testRenderAssetOfferBindsCurrentFloor() {
+  const sandbox = makePluginSandbox();
+  const act = sandbox.ACE0Modules.act;
+  const assetDeck = sandbox.ACE0Modules.assetDeck;
+  sandbox.__currentMessageId = 51;
+  const initialAct = createActStateAt(act, 1, ['node1-entry'], {
+    stage: 'executing',
+    phase_index: 0,
+    phase_advance: 1,
+    phasePlanLock: { nodeId: 'node1-entry', nodeIndex: 1, locked: true, confirmedPhaseIndex: 0, floorKey: 'message:51' },
+    phase_slots: [
+      { key: 'asset', amount: 1, source: 'limited', sources: ['limited'] },
+      null,
+      null,
+      null
+    ],
+    reserve: { combat: 0, rest: 0, asset: 0, vision: 0 },
+    resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
+    pendingResolutions: []
+  });
+  sandbox.__messages[51] = {
+    message_id: 51,
+    role: 'assistant',
+    message: [
+      'asset floor smoke',
+      '<StatusPlaceHolderImpl/>'
+    ].join('\n')
+  };
+  sandbox.__messageVars[51] = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero(),
+      world: {
+        current_time: { day: 1, phase: 'MORNING' },
+        clockPressure: 0,
+        location: { layer: 'THE_EXCHANGE', site: 'smoke' },
+        tags: [],
+        flags: [],
+        storyFlags: {},
+        expansion_state: { activeMajor: '', activeLight: [] },
+        assetDeck: assetDeck.makeDefaultAssetDeckState(),
+        act: initialAct
+      }
+    },
+    schema: 'smoke'
+  };
+
+  await sandbox.__handlers.character_message_rendered(51);
+
+  const message = sandbox.__messages[51].message;
+  assert(message.includes('ACE0_REPLAY:render:51:state'), 'asset phase render should append replay state');
+  assertEqual(sandbox.__messageVars[51].stat_data.world.assetDeck.offer.floor, 'message:51', 'rendered AssetDeck offer should bind to the current message floor');
+  assertEqual(sandbox.__messageVars[51].stat_data.world.assetDeck.offer.pool, 'low', 'asset I should open low pool in render path');
+}
+
 async function testFloorProgressWritesOnlyLeafPatches() {
   const sandbox = makePluginSandbox();
   const act = sandbox.ACE0Modules.act;
@@ -848,6 +903,7 @@ async function main() {
   await testMissingBaseDoesNotCreateDefaultAct();
   await testDryRunStillInjectsPromptContext();
   await testActResultMissingActBaseDoesNotCreateActReplay();
+  await testRenderAssetOfferBindsCurrentFloor();
   await testFloorProgressWritesOnlyLeafPatches();
   await testPublicApisPersistThroughReplayOnly();
   await testEncounterReplayPersistsCompactState();

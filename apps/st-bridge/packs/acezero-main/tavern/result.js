@@ -119,6 +119,7 @@
     return {
       protocol: 'ace0.assetOffer.v1',
       offerId: typeof offer.id === 'string' ? offer.id : '',
+      floor: typeof offer.floor === 'string' ? offer.floor : '',
       pool: typeof offer.pool === 'string' ? offer.pool : 'low',
       choices: choices.slice(0, 3).map((choice, index) => {
         const card = choice && typeof choice === 'object' && !Array.isArray(choice) ? choice : {};
@@ -295,7 +296,10 @@
   async function buildPendingActResult(content = '', eraVars = null, options = {}) {
     const currentVars = eraVars || await getEraVars();
     const persist = options.persist !== false;
-    const resolvedAdvance = await resolvePendingActAdvance(currentVars, { persist });
+    const resolvedAdvance = await resolvePendingActAdvance(currentVars, {
+      persist,
+      floorKey: options.floorKey
+    });
     const syncedState = await synchronizeActCharacterState(resolvedAdvance.eraVars, { persist });
     const nextSnapshot = createActRuntimeSnapshot(syncedState.eraVars, syncedState.derived);
     const changedPatches = getNonRelationshipPatchesFromContent(content);
