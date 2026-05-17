@@ -43,7 +43,6 @@
             isPhasePlanConfirmedForCurrentNode,
             isRouteSelectionActive,
             normalizeActStage,
-            normalizePendingAssetDeckCommandsForDashboard,
             normalizeResourceKey,
             normalizeRestTintKey,
             syncState
@@ -757,15 +756,6 @@
         return phaseIndex === null ? nodeLabel : `${nodeLabel} · ${getPhaseRomanLabel(phaseIndex)}`;
     }
 
-    function formatActAssetCommandLabel(commandInput) {
-        const command = commandInput && typeof commandInput === 'object' ? commandInput : {};
-        const kind = typeof command.kind === 'string' ? command.kind : command.type;
-        const payload = command.payload && typeof command.payload === 'object' ? command.payload : {};
-        if (kind === 'grant_asset') return `+${Math.max(0, Math.round(Number(payload.amount) || 0))} DECK PT`;
-        if (kind === 'open_offer') return `OPEN ${String(payload.pool || 'low').toUpperCase()}`;
-        return String(kind || 'COMMAND').toUpperCase();
-    }
-
     function normalizeCombatPendingResolutionsForDashboard(actState) {
         return (Array.isArray(actState?.pendingResolutions) ? actState.pendingResolutions : [])
             .filter((item) => item && typeof item === 'object' && normalizeResourceKey(item.type, '') === 'combat')
@@ -824,39 +814,12 @@
         `;
     }
 
-    function buildAssetSettlementPanelMarkup(actState) {
+    function buildAssetSettlementPanelMarkup() {
         const assetSummary = getCurrentAssetDeckSummary();
-        const pendingCommands = normalizePendingAssetDeckCommandsForDashboard(actState);
-        const pendingRows = pendingCommands
-            .filter((item) => {
-                const status = typeof item.status === 'string' && item.status.trim() ? item.status.trim().toLowerCase() : 'pending';
-                return status === 'pending';
-            })
-            .slice(0, 2)
-            .map((item) => `
-                <div class="vision-task-row asset-task-row">
-                    <span>PENDING</span>
-                    <strong>${escapePartyHtml(formatActAssetCommandLabel(item.command))} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
-                </div>
-            `).join('');
-        const historyRows = (Array.isArray(actState.resolutionHistory) ? actState.resolutionHistory : [])
-            .filter((item) => item && typeof item === 'object' && item.type === 'asset')
-            .slice(-2)
-            .reverse()
-            .map((item) => {
-                const kind = item?.payload?.commandKind || item?.command?.kind || item?.command?.type || 'asset';
-                const outcome = item?.outcome || item?.status || '';
-                return `
-                    <div class="vision-task-row asset-task-row is-ready">
-                        <span>${escapePartyHtml(String(kind).replace(/_/g, ' ').toUpperCase().slice(0, 8))}</span>
-                        <strong>${escapePartyHtml(String(outcome).toUpperCase())} · ${escapePartyHtml(formatActAssetSourceLabel(item))}</strong>
-                    </div>
-                `;
-            }).join('');
         const offer = assetSummary.pending?.offer;
         const offerMarkup = offer ? `
             <div class="vision-task-row asset-task-row is-ready">
-                <span>OFFER</span>
+                <span>${offer.settled === true ? 'SETTLED' : 'OFFER'}</span>
                 <strong>${escapePartyHtml(String(offer.pool || 'low').toUpperCase())} · ${Array.isArray(offer.choices) ? offer.choices.length : 0} CARDS</strong>
             </div>
         ` : '';
@@ -868,8 +831,6 @@
                     <strong>${assetPoints} POINTS</strong>
                 </div>
                 ${offerMarkup}
-                ${pendingRows}
-                ${historyRows}
             </div>
         `;
     }

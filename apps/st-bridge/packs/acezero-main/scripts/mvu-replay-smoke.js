@@ -201,7 +201,7 @@ async function testDryRunStillInjectsPromptContext() {
         majorDebt: 395000000,
         cast: {
           RINO: { activated: true, introduced: true, present: true, inParty: true },
-          COTA: { activated: true, introduced: false, present: false, inParty: false }
+          COTA: { activated: true, introduced: true, present: false, inParty: false }
         },
         roster: {
           KAZU: { level: 3, mana: 0, maxMana: 0 },
@@ -222,10 +222,13 @@ async function testDryRunStillInjectsPromptContext() {
   await sandbox.__handlers.GENERATION_AFTER_COMMANDS(null, {}, true);
 
   const joinedContent = injectedPrompts.map((prompt) => prompt?.content || '').join('\n\n');
+  const introducedAwayIndex = joinedContent.indexOf('[INTRODUCED NOT PRESENT(introduced=true, present=false)]');
+  const notIntroducedIndex = joinedContent.indexOf('[NOT INTRODUCED(introduced=false, forbidden_to_appear=true)]');
   assert(injectedPrompts.length > 0, 'dryRun generation should still inject prompt context for worldbook preview');
   assert(joinedContent.includes('<ace0_hero_state>'), 'dryRun prompt context should include hero state');
+  assert(introducedAwayIndex >= 0, 'dryRun prompt context should include introduced-but-away cast section');
   assert(joinedContent.includes('NOT INTRODUCED(introduced=false, forbidden_to_appear=true)'), 'dryRun prompt context should keep not-introduced hard constraint');
-  assert(joinedContent.includes('COTA'), 'dryRun prompt context should include compact cast status');
+  assert(joinedContent.slice(introducedAwayIndex, notIntroducedIndex).includes('COTA'), 'dryRun prompt context should list introduced absent COTA outside NOT INTRODUCED');
 }
 
 async function testPhaseAdvanceWritesReplayAndReplaysActAdvance() {
@@ -814,7 +817,9 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
           from: 1,
           priority: 999
         }
-      }
+      },
+      queue: [{ charKey: 'COTA', status: 'queued' }],
+      characters: { COTA: { queuedRequestId: 'legacy' } }
     }
   };
   delete commitWorld.act.narrativeTension;
@@ -840,13 +845,17 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
   assert(!message.includes('"path": "/world/clockPressure"'), 'dashboard ACT commit should not write clock pressure from full payload');
   assert(!message.includes('"path": "/world/location"'), 'dashboard ACT commit should not write location from full payload');
   assert(!message.includes('"path": "/world/assetDeck"'), 'dashboard ACT commit should not write unchanged assetDeck');
-  assert(!message.includes('/world/act/characterEncounter'), 'dashboard ACT commit should not write characterEncounter UI expansion payloads');
+  assert(message.includes('"path": "/world/act/characterEncounter/active/COTA/priority"'), 'dashboard ACT commit should write compact encounter ledger changes');
+  assert(!message.includes('/world/act/characterEncounter/queue'), 'dashboard ACT commit should not write encounter queue payloads');
+  assert(!message.includes('/world/act/characterEncounter/characters'), 'dashboard ACT commit should not write encounter UI expansion payloads');
+  assert(!message.includes('queuedRequestId'), 'dashboard ACT commit should strip encounter request mirrors');
   assert(!message.includes('/world/act/narrativeTension'), 'dashboard ACT commit should not remove narrativeTension');
   assert(!message.includes('/world/act/pendingTransitionTarget'), 'dashboard ACT commit should not remove transition scratch fields');
   assert(!message.includes('/world/act/transitionRequestTarget'), 'dashboard ACT commit should not remove transition scratch fields');
   assert(!message.includes('/world/act/pendingTransitionPrompt'), 'dashboard ACT commit should not remove transition scratch fields');
   assertEqual(sandbox.__messageVars[13].stat_data.world.act.reserve.combat, 0, 'dashboard replay should apply ACT reserve leaf');
   assertEqual(sandbox.__messageVars[13].stat_data.world.act.characterEncounter.active.COTA.state, 'queued', 'dashboard replay should preserve existing compact encounter ledger');
+  assertEqual(sandbox.__messageVars[13].stat_data.world.act.characterEncounter.active.COTA.priority, 999, 'dashboard replay should apply compact encounter ledger changes');
   assertEqual(sandbox.__messageVars[13].stat_data.world.act.pendingTransitionTarget, 'chapter-debug', 'dashboard replay should preserve transition scratch fields');
   assertEqual(sandbox.__messageVars[13].stat_data.world.current_time.day, 1, 'dashboard replay should not apply full world time payload');
   assertEqual(sandbox.__messageVars[13].stat_data.world.clockPressure, 5, 'dashboard replay should not apply full world clock payload');

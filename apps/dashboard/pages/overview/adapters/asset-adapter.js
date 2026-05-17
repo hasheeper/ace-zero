@@ -110,6 +110,46 @@
         ].join('|');
     }
 
+    function normalizePendingReplaceCard(cardInput) {
+        const card = cardInput && typeof cardInput === 'object' && !Array.isArray(cardInput) ? cardInput : {};
+        const id = String(card.id || card.cardId || '').trim();
+        if (!id) return null;
+        const lv = Math.max(1, Math.round(Number((card.lv ?? card.level) ?? 1) || 1));
+        return { id, cardId: id, lv, level: lv };
+    }
+
+    function clearAssetPendingReplace() {
+        assetCommandState.pendingReplace = null;
+    }
+
+    function setAssetPendingReplaceFromResult(resultPayload) {
+        const code = String(resultPayload?.code || '').trim();
+        if (code !== 'needs_replace' && code !== 'requires_destroy_confirm') return false;
+        const card = normalizePendingReplaceCard(resultPayload?.card);
+        if (!card) return false;
+        const allowedSlots = Array.isArray(resultPayload.allowedSlots)
+            ? resultPayload.allowedSlots.map((item) => String(item || '').trim()).filter(Boolean)
+            : [];
+        if (!allowedSlots.length && resultPayload.slotType) {
+            allowedSlots.push(String(resultPayload.slotType).trim());
+        }
+        assetCommandState.pendingReplace = {
+            card,
+            allowedSlots: allowedSlots.length ? allowedSlots : ['general'],
+            reason: code,
+            confirm_destroy: code === 'requires_destroy_confirm'
+        };
+        appState.assetWarehouseOpen = true;
+        return true;
+    }
+
+    function getAssetPendingReplaceForSummary() {
+        const pending = assetCommandState.pendingReplace;
+        return pending && typeof pending === 'object' && !Array.isArray(pending)
+            ? deepCloneValue(pending)
+            : null;
+    }
+
     function getDashboardAssetSummaryGameId() {
         return 'texas-holdem';
     }
@@ -144,7 +184,6 @@
                 || kind.replace(/_/g, ' ')
                 || 'Asset effect';
             return {
-                instanceId: card.instanceId || '',
                 cardId,
                 name: card.name || meta.name || cardId || 'Asset Card',
                 rarity: String(card.rarity || meta.rarity || 'bronze').trim().toLowerCase() || 'bronze',
@@ -205,7 +244,7 @@
             pending: {
                 offer: summarizeOffer(normalized.offer),
                 offerQueue: [],
-                replace: null
+                replace: getAssetPendingReplaceForSummary()
             },
             recentHistory: [],
             gameplay: {
@@ -385,6 +424,14 @@
                 };
                 appState.resources.assets = nextAssetPoints;
             }
+            if (setAssetPendingReplaceFromResult(result)) {
+                syncState.statusText = 'ASSET: NEEDS REPLACE';
+                syncState.errorText = '';
+                return world;
+            }
+            if (result.ok || String(result.code || '') !== 'invalid_target') {
+                clearAssetPendingReplace();
+            }
             syncState.statusText = result.ok ? `ASSET: ${String(result.code || 'OK').toUpperCase()}` : 'ASSET COMMAND BLOCKED';
             syncState.errorText = result.ok ? '' : String(result.code || 'Command rejected.');
             return world;
@@ -398,9 +445,6 @@
         if (!action) return false;
         if (['open-offer', 'refresh-offer', 'choose-card', 'unlock-slot', 'replace-card', 'open-warehouse', 'close-warehouse'].includes(action)) {
             setPlannerPage('asset');
-        }
-        if (action === 'grant-asset') {
-            return applyAssetDeckCommand({ kind: 'grant_asset', payload: { amount: 1 } });
         }
         if (action === 'unlock-slot') {
             appState.assetWarehouseOpen = true;
@@ -435,10 +479,18 @@
             });
         }
         if (action === 'replace-card') {
+            const pending = assetCommandState.pendingReplace && typeof assetCommandState.pendingReplace === 'object'
+                ? assetCommandState.pendingReplace
+                : null;
+            const card = normalizePendingReplaceCard(pending?.card);
+            if (!card) return false;
+            const slotType = target.dataset.slotType || 'general';
             return applyAssetDeckCommand({
-                kind: 'replace_card',
+                kind: 'choose_card',
                 payload: {
-                    slotType: target.dataset.slotType || 'general',
+                    choiceId: card.id,
+                    cardId: card.id,
+                    slotType,
                     targetIndex: Math.max(0, Math.round(Number(target.dataset.slotIndex) || 0)),
                     confirmDestroy: target.dataset.confirmDestroy === 'true'
                 }
@@ -478,12 +530,16 @@
         }
 
         if (resultPayload?.ok) {
+            clearAssetPendingReplace();
             syncState.dirty = false;
             syncState.statusText = resultPayload.code ? `ASSET: ${String(resultPayload.code).toUpperCase()}` : getCommitIdleStatusText();
             syncState.errorText = '';
         } else {
+            const isPendingReplace = setAssetPendingReplaceFromResult(resultPayload);
             syncState.statusText = 'ASSET COMMAND BLOCKED';
-            syncState.errorText = typeof resultPayload?.error === 'string' && resultPayload.error.trim()
+            syncState.errorText = isPendingReplace
+                ? ''
+                : typeof resultPayload?.error === 'string' && resultPayload.error.trim()
                 ? resultPayload.error.trim()
                 : String(resultPayload?.code || 'AssetDeck command failed.');
         }

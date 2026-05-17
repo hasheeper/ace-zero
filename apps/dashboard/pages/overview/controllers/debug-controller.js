@@ -41,7 +41,6 @@
             normalizeWorldLocation,
             normalizeWorldLocationLayer,
             refreshAllUI,
-            settlePendingActAssetDeckCommandsForDashboardWorld,
             startNode,
             updateActStatePayloadAndCommit,
             updateWorldPayloadAndCommit,
@@ -315,21 +314,18 @@
         }
         if (!result?.actState) return false;
 
-        const settledWorld = settlePendingActAssetDeckCommandsForDashboardWorld({
+        const nextWorld = {
             ...(currentWorld || {}),
             act: result.actState
-        });
-        const settledActState = settledWorld?.act && typeof settledWorld.act === 'object'
-            ? settledWorld.act
-            : result.actState;
+        };
         const nextPayload = buildNormalizedDashboardPayload({
             ...(currentPayload || {}),
             hero: result.heroState && typeof result.heroState === 'object'
                 ? result.heroState
                 : currentHero,
-            world: settledWorld
+            world: nextWorld
         }, {
-            actState: settledActState,
+            actState: result.actState,
             forceActDerivedSnapshot: true
         });
         if (!nextPayload) return false;

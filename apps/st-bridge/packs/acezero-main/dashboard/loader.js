@@ -162,8 +162,17 @@
     '/world/act/phase_slots',
     '/world/act/phase_index',
     '/world/act/stage',
+    '/world/act/phase_advance',
+    '/world/act/eventTree',
+    '/world/act/controlledNodes',
     '/world/act/vision',
     '/world/act/resourceSpent',
+    '/world/act/characterEncounter',
+    '/world/act/pendingResolutions',
+    '/world/act/narrativeTension',
+    '/world/act/pendingTransitionTarget',
+    '/world/act/transitionRequestTarget',
+    '/world/act/pendingTransitionPrompt',
     '/world/act/resolutionHistory'
   ];
 
@@ -795,7 +804,29 @@
 
   function normalizeDashboardActStateForCommit(nextState, nextActState) {
     void nextState;
-    return nextActState;
+    const act = nextActState && typeof nextActState === 'object' && !Array.isArray(nextActState)
+      ? cloneJsonData(nextActState, {})
+      : {};
+    const encounter = act.characterEncounter && typeof act.characterEncounter === 'object' && !Array.isArray(act.characterEncounter)
+      ? act.characterEncounter
+      : {};
+    const actModule = getActModuleApi();
+    if (actModule && typeof actModule.normalizeCharacterEncounterState === 'function') {
+      try {
+        act.characterEncounter = cloneJsonData(actModule.normalizeCharacterEncounterState(encounter), {});
+        return act;
+      } catch (_) {}
+    }
+    const compactEncounter = {};
+    ['active', 'met', 'signaled'].forEach((key) => {
+      if (encounter[key] && typeof encounter[key] === 'object' && !Array.isArray(encounter[key])) {
+        compactEncounter[key] = cloneJsonData(encounter[key], {});
+      }
+    });
+    const lastMeet = Math.max(0, Math.round(Number(encounter.lastMeet) || 0));
+    if (lastMeet > 0) compactEncounter.lastMeet = lastMeet;
+    act.characterEncounter = compactEncounter;
+    return act;
   }
 
   function resolveDashboardActState(eraVars) {
@@ -1024,7 +1055,13 @@
         requestId,
         code: commandResult?.code || 'asset_command_rejected',
         error: commandResult?.code || 'AssetDeck command rejected.',
-        assetDeck: cloneJsonData(commandResult?.assetDeck, null)
+        assetDeck: cloneJsonData(commandResult?.assetDeck, null),
+        card: cloneJsonData(commandResult?.card, null),
+        removed: cloneJsonData(commandResult?.removed, null),
+        allowedSlots: Array.isArray(commandResult?.allowedSlots) ? cloneJsonData(commandResult.allowedSlots, []) : [],
+        slotType: normalizeDashboardString(commandResult?.slotType, ''),
+        targetIndex: Number.isFinite(Number(commandResult?.targetIndex)) ? Math.max(0, Math.round(Number(commandResult.targetIndex))) : -1,
+        needsReplace: commandResult?.code === 'needs_replace'
       };
     }
 
@@ -1068,7 +1105,9 @@
         ok: true,
         requestId,
         code: commandResult.code || 'asset_command_applied',
-        assetDeck: cloneJsonData(commandResult.assetDeck, null)
+        assetDeck: cloneJsonData(commandResult.assetDeck, null),
+        card: cloneJsonData(commandResult.card, null),
+        selectedCardId: normalizeDashboardString(commandResult.card?.id || commandResult.card?.cardId, '')
       };
     }
     const replayResult = await commitDashboardReplayPatch({
@@ -1094,7 +1133,9 @@
       ok: true,
       requestId,
       code: commandResult.code || 'asset_command_applied',
-      assetDeck: cloneJsonData(commandResult.assetDeck, null)
+      assetDeck: cloneJsonData(commandResult.assetDeck, null),
+      card: cloneJsonData(commandResult.card, null),
+      selectedCardId: normalizeDashboardString(commandResult.card?.id || commandResult.card?.cardId, '')
     };
   }
 

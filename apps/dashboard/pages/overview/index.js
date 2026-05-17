@@ -286,7 +286,6 @@ function createExecutionRuntimeContext() {
                 normalizeWorldLocation,
                 normalizeWorldLocationLayer,
                 refreshAllUI,
-                settlePendingActAssetDeckCommandsForDashboardWorld,
                 startNode,
                 updateActStatePayloadAndCommit,
                 updateWorldPayloadAndCommit,
@@ -414,7 +413,6 @@ function createExecutionRuntimeContext() {
             resourceSpent: createEmptyActResourceCounts(0),
             characterEncounter: {},
             pendingResolutions: [],
-            pendingAssetDeckCommands: [],
             resolutionHistory: []
         };
     }
@@ -497,14 +495,6 @@ function createExecutionRuntimeContext() {
 
     function normalizeHostPayload(payload) {
         return getOverviewDashboardRuntime().normalizeHostPayload(payload);
-    }
-
-    function normalizePendingAssetDeckCommandsForDashboard(actState) {
-        return getOverviewDashboardRuntime().normalizePendingAssetDeckCommandsForDashboard(actState);
-    }
-
-    function settlePendingActAssetDeckCommandsForDashboardWorld(worldInput) {
-        return getOverviewDashboardRuntime().settlePendingActAssetDeckCommandsForDashboardWorld(worldInput);
     }
 
     function ensureDashboardAdapter() {
@@ -1222,9 +1212,6 @@ function createExecutionRuntimeContext() {
             characterEncounter: deepCloneValue(currentActState.characterEncounter || {}),
             pendingResolutions: Array.isArray(currentActState.pendingResolutions)
                 ? deepCloneValue(currentActState.pendingResolutions)
-                : [],
-            pendingAssetDeckCommands: Array.isArray(currentActState.pendingAssetDeckCommands)
-                ? deepCloneValue(currentActState.pendingAssetDeckCommands)
                 : [],
             resolutionHistory: Array.isArray(currentActState.resolutionHistory)
                 ? deepCloneValue(currentActState.resolutionHistory)
@@ -2701,7 +2688,6 @@ function createExecutionRuntimeContext() {
             getEncounterMarkerForPhase,
             isPhasePlanConfirmedForCurrentNode,
             deepCloneValue,
-            normalizePendingAssetDeckCommandsForDashboard,
             getCurrentAssetDeckSummary,
             getActModuleApi,
             buildInitialDebugPayload,

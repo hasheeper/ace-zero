@@ -83,6 +83,11 @@ function readDashboardOverviewScripts() {
         .filter((src) => src.startsWith('./pages/overview/'));
 }
 
+function readDashboardSource(scriptSource) {
+    const relativePath = scriptSource.replace(/^\.\//, 'apps/dashboard/');
+    return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
+
 function assertFunction(value, label) {
     assert.equal(typeof value, 'function', `${label} must be a function`);
 }
@@ -117,6 +122,29 @@ assert.deepEqual(
     'apps/dashboard/index.html overview script load order changed'
 );
 assert(!actualOverviewScripts.includes('./pages/overview/runtime/legacy-generator.js'), 'legacy generator must stay out of the page load chain');
+
+[
+    ...expectedOverviewScripts,
+    './shell/shell.js'
+].forEach((scriptSource) => {
+    const source = readDashboardSource(scriptSource);
+    [
+        'pendingAssetDeckCommands',
+        'active_general_cards',
+        'active_void_cards',
+        'general_slots_unlocked',
+        'void_slots_unlocked',
+        'pending_offer',
+        'pending_offer_queue',
+        'pending_replace',
+        'instanceId',
+        'addedAt',
+        'grant_asset',
+        'replace_card'
+    ].forEach((token) => {
+        assert(!source.includes(token), `${scriptSource} must not use legacy AssetDeck field ${token}`);
+    });
+});
 
 const sandbox = createSandbox();
 expectedOverviewScripts

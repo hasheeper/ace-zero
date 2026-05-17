@@ -93,11 +93,9 @@
             deepCloneValue = (value) => value,
             extractHeroPayload = () => null,
             extractWorldPayload = () => null,
-            getAssetDeckModuleApi = () => null,
             getSearchParams = () => new URLSearchParams(''),
             hasUsableCampaignNodes = () => false,
             isTruthyQueryValue = () => false,
-            normalizeAssetDeckForDashboard = (assetDeck) => assetDeck,
             getCommitIdleStatusText = () => 'SYNCED'
         } = ctx;
 
@@ -281,101 +279,6 @@
             };
         }
 
-        function normalizePendingAssetDeckCommandsForDashboard(actState) {
-            const list = Array.isArray(actState?.pendingAssetDeckCommands) ? actState.pendingAssetDeckCommands : [];
-            return list.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
-        }
-
-        function settlePendingActAssetDeckCommandsForDashboardWorld(worldInput) {
-            const world = worldInput && typeof worldInput === 'object' && !Array.isArray(worldInput)
-                ? deepCloneValue(worldInput)
-                : {};
-            const actState = world.act && typeof world.act === 'object' && !Array.isArray(world.act)
-                ? deepCloneValue(world.act)
-                : null;
-            const pendingCommands = normalizePendingAssetDeckCommandsForDashboard(actState);
-            const commandsToApply = pendingCommands.filter((item) => {
-                const status = typeof item.status === 'string' && item.status.trim() ? item.status.trim().toLowerCase() : 'pending';
-                return status === 'pending' && item.command && typeof item.command === 'object' && !Array.isArray(item.command);
-            });
-            if (!actState || !commandsToApply.length) return world;
-
-            const assetModule = getAssetDeckModuleApi();
-            if (!assetModule || typeof assetModule.applyAssetDeckCommand !== 'function') return world;
-
-            let assetDeck = normalizeAssetDeckForDashboard(world.assetDeck);
-            const reserveSource = actState.reserve && typeof actState.reserve === 'object' && !Array.isArray(actState.reserve)
-                ? actState.reserve
-                : {};
-            let assetPoints = Math.max(0, Math.round(Number(reserveSource.asset) || 0));
-            const consumedIds = new Set();
-            const resolutionHistory = Array.isArray(actState.resolutionHistory) ? deepCloneValue(actState.resolutionHistory) : [];
-
-            commandsToApply.forEach((pending) => {
-                const command = deepCloneValue(pending.command || {});
-                const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
-                    ? deepCloneValue(command.payload)
-                    : {};
-                command.payload = {
-                    ...payload,
-                    requestId: typeof payload.requestId === 'string' && payload.requestId.trim() ? payload.requestId.trim() : pending.id
-                };
-                if (!command.payload.source && pending.nodeId) {
-                    command.payload.source = {
-                        type: 'act_asset_token',
-                        actId: actState.id || '',
-                        nodeId: pending.nodeId,
-                        nodeIndex: pending.nodeIndex,
-                        phaseIndex: pending.phaseIndex,
-                        level: pending.level,
-                        sources: Array.isArray(pending.sources) ? deepCloneValue(pending.sources) : []
-                    };
-                }
-
-                let result;
-                try {
-                    result = assetModule.applyAssetDeckCommand(assetDeck, command, {
-                        seed: `debug-act:${pending.id || [actState.id || 'act', pending.nodeId || 'node', pending.nodeIndex || 0, pending.phaseIndex || 0, command.kind || command.type || 'command'].join(':')}`,
-                        assetPoints
-                    });
-                } catch (error) {
-                    result = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
-                }
-
-                if (result?.assetDeck) assetDeck = normalizeAssetDeckForDashboard(result.assetDeck);
-                if (Number.isFinite(Number(result?.assetPoints))) {
-                    assetPoints = Math.max(0, Math.round(Number(result.assetPoints) || 0));
-                }
-                const status = result?.ok ? 'resolved' : 'failed';
-                resolutionHistory.push({
-                    ...deepCloneValue(pending),
-                    type: 'asset',
-                    status,
-                    outcome: result?.code || (result?.ok ? 'asset_command_applied' : 'asset_command_failed'),
-                    summary: pending.summary || `ACT AssetDeck command ${status}`,
-                    payload: {
-                        commandKind: command.kind || command.type || '',
-                        commandPayload: deepCloneValue(command.payload),
-                        resultCode: result?.code || '',
-                        error: result?.error || ''
-                    }
-                });
-                consumedIds.add(pending.id);
-            });
-
-            actState.pendingAssetDeckCommands = pendingCommands.filter((item) => !consumedIds.has(item.id));
-            actState.resolutionHistory = resolutionHistory;
-            actState.reserve = {
-                combat: Math.max(0, Number(reserveSource.combat) || 0),
-                rest: Math.max(0, Number(reserveSource.rest) || 0),
-                asset: assetPoints,
-                vision: Math.max(0, Number(reserveSource.vision) || 0)
-            };
-            world.act = actState;
-            world.assetDeck = assetDeck;
-            return world;
-        }
-
         function createDebugAdapter() {
             return {
                 mode: 'debug',
@@ -386,12 +289,14 @@
                     return true;
                 },
                 async commitActState(commitPayload) {
-                    const settledWorld = settlePendingActAssetDeckCommandsForDashboardWorld(commitPayload?.world || {});
+                    const world = commitPayload?.world && typeof commitPayload.world === 'object'
+                        ? deepCloneValue(commitPayload.world)
+                        : {};
                     const debugPayload = {
                         ...(adapterState.lastPayload || {}),
                         ...deepCloneValue(commitPayload),
-                        world: settledWorld,
-                        frontendSnapshot: createFrontendSnapshotForActState(settledWorld?.act || createDefaultActStateForDashboard())
+                        world,
+                        frontendSnapshot: createFrontendSnapshotForActState(world?.act || createDefaultActStateForDashboard())
                     };
                     writeStoredDebugPayload(debugPayload);
                     applyActStateFromPayload(debugPayload);
@@ -441,8 +346,6 @@
             createDebugPayloadFromActState,
             buildInitialDebugPayload,
             normalizeHostPayload,
-            normalizePendingAssetDeckCommandsForDashboard,
-            settlePendingActAssetDeckCommandsForDashboardWorld,
             ensureDashboardAdapter,
             switchDashboardAdapter
         });

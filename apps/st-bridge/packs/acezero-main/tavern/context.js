@@ -117,12 +117,15 @@ ${characterSection}
     if (roster.length === 0) return null;
 
     const presentLines = [];
+    const introducedAwayLines = [];
     const notIntroducedLines = [];
     const inPartyLines = [];
 
     for (const member of roster) {
       if (member.activated === true && member.introduced === true && member.present === true) {
         presentLines.push(`  ${member.name}`);
+      } else if (member.activated === true && member.introduced === true && member.present !== true) {
+        introducedAwayLines.push(`  ${member.name}`);
       } else if (member.activated === true && member.introduced !== true) {
         notIntroducedLines.push(`  ${member.name}`);
       }
@@ -139,6 +142,7 @@ ${characterSection}
     }
 
     const presentSection = presentLines.length > 0 ? presentLines.join('\n') : '  （无）';
+    const introducedAwaySection = introducedAwayLines.length > 0 ? introducedAwayLines.join('\n') : '  （无）';
     const notIntroducedSection = notIntroducedLines.length > 0 ? notIntroducedLines.join('\n') : '  （无）';
     const inPartySection = inPartyLines.length > 0 ? inPartyLines.join('\n') : '  （无）';
 
@@ -150,6 +154,8 @@ ${characterSection}
   主债务: ${_formatFunds(majorDebt)} (${_formatFundsNumber(majorDebt)} majorDebt)
 [PRESENT(present=true)]
 ${presentSection}
+[INTRODUCED NOT PRESENT(introduced=true, present=false)]
+${introducedAwaySection}
 [NOT INTRODUCED(introduced=false, forbidden_to_appear=true)]
 ${notIntroducedSection}
   规则: 上列角色尚未正式出场，禁止在正文中出现、发言、行动、被旁白写成在场，除非后续变量明确写入 introduced=true 或 present=true。

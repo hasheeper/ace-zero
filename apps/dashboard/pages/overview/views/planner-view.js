@@ -91,14 +91,15 @@
         if (!card) return null;
         const assetModule = getAssetDeckModuleApi();
         const catalog = assetModule && typeof assetModule.getCatalog === 'function' ? assetModule.getCatalog() : [];
+        const cardId = String(card?.cardId || card?.id || '').trim();
         const catalogCard = Array.isArray(catalog)
-            ? catalog.find((item) => item?.id === card?.cardId)
+            ? catalog.find((item) => item?.id === cardId)
             : null;
-        const name = catalogCard?.name || card?.name || card?.cardId || 'EMPTY';
+        const name = catalogCard?.name || card?.name || cardId || 'EMPTY';
         const rarity = String(card?.rarity || catalogCard?.rarity || 'bronze').toLowerCase();
         const kind = String(card?.kind || catalogCard?.kind || 'card').toLowerCase();
         const system = String(card?.system || catalogCard?.system || '').toLowerCase();
-        const level = Math.max(0, Math.round(Number(card?.level ?? catalogCard?.level) || 0));
+        const level = Math.max(0, Math.round(Number((card?.level ?? card?.lv) ?? catalogCard?.level) || 0));
         const levelLabel = level > 0 ? `LV ${level}` : kind.toUpperCase();
         const explicit = typeof card?.effectText === 'string' ? card.effectText.trim() : '';
         const modifiers = Array.isArray(card?.modifiers || catalogCard?.modifiers) ? (card.modifiers || catalogCard.modifiers) : [];

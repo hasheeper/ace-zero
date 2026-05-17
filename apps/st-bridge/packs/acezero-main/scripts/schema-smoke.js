@@ -64,6 +64,7 @@ matches(/RINO:\s*\{\s*activated:\s*true,\s*introduced:\s*true,\s*present:\s*true
 matches(/function makeDefaultCastNode\(\)\s*\{\s*return\s*\{\s*activated:\s*true,\s*introduced:\s*false,\s*present:\s*false,\s*inParty:\s*false,/m, 'Encounter cast nodes should default activated but not introduced/present/inParty');
 assert(!source.includes('miniKnown'), 'Schema should no longer expose miniKnown');
 includesIn(contextSource, '[NOT INTRODUCED(introduced=false, forbidden_to_appear=true)]', 'Hero context should mark not-introduced characters as forbidden to appear');
+includesIn(contextSource, '[INTRODUCED NOT PRESENT(introduced=true, present=false)]', 'Hero context should list introduced but currently absent characters');
 includesIn(contextSource, '禁止在正文中出现、发言、行动、被旁白写成在场', 'Hero context should state the not-introduced appearance ban');
 includesIn(initSource, 'characterEncounter: {}', 'Initial variables should start with empty compact encounter ledger');
 assert(!initSource.includes('v: 2'), 'Initial variables should not store encounter or AssetDeck version markers');

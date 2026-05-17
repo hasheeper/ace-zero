@@ -259,7 +259,8 @@
             assetCommandState: {
                 pendingRequestId: '',
                 pendingTimer: null,
-                resolver: null
+                resolver: null,
+                pendingReplace: null
             },
             adapterState: {
                 mode: INITIAL_OVERVIEW_MODE,

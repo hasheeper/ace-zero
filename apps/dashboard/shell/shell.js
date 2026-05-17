@@ -526,15 +526,17 @@ function buildDashboardAssetSummary(world) {
       console.warn('[ACE0 Dashboard] Asset summary failed:', error);
     }
   }
-  const generalCards = Array.isArray(assetDeck.active_general_cards) ? assetDeck.active_general_cards : [];
-  const voidCards = Array.isArray(assetDeck.active_void_cards) ? assetDeck.active_void_cards : [];
+  const slots = assetDeck.slots && typeof assetDeck.slots === 'object' ? assetDeck.slots : {};
+  const bag = assetDeck.bag && typeof assetDeck.bag === 'object' ? assetDeck.bag : {};
+  const generalCards = Array.isArray(bag.general) ? bag.general : [];
+  const voidCards = Array.isArray(bag.void) ? bag.void : [];
   return {
     points: assetPoints,
     slots: {
       generalUsed: generalCards.length,
-      generalMax: Math.max(0, Math.round(Number(assetDeck.general_slots_unlocked) || 0)),
+      generalMax: Math.max(0, Math.round(Number(slots.general) || 0)),
       voidUsed: voidCards.length,
-      voidMax: Math.max(0, Math.round(Number(assetDeck.void_slots_unlocked) || 0))
+      voidMax: Math.max(0, Math.round(Number(slots.void) || 0))
     },
     counts: {
       active: generalCards.length + voidCards.length,
