@@ -59,6 +59,33 @@ const runtime = sandbox.ACE0TavernCharacterRuntime.create({
   }, []);
   assertEqual(Boolean(ordinaryPrompts.find((prompt) => prompt.id === 'ace0_char_doc_cota')), false, 'Unintroduced character without node first-meet key should not inject doc');
 
+  const worldbookCalls = [];
+  const fullDocRuntime = sandbox.ACE0TavernCharacterRuntime.create({
+    data: sandbox.ACE0TavernPluginData,
+    constants: {
+      FULL_DOC_WORLDBOOK_NAME: 'AceZeroInfo-MVUVer-2.0-Test'
+    },
+    deps: {
+      normalizeTrimmedString: (value, fallback = '') => {
+        const normalized = typeof value === 'string' ? value.trim() : '';
+        return normalized || fallback;
+      },
+      getWorldbook: async (name) => {
+        worldbookCalls.push(name);
+        return [{ uid: 25, content: '<cota_full>TEST FULL DOC</cota_full>' }];
+      }
+    }
+  });
+  const fullDoc = await fullDocRuntime.getCharacterPromptDoc('COTA', {
+    introduced: true,
+    present: true
+  });
+  assertEqual(worldbookCalls[0], 'AceZeroInfo-MVUVer-2.0-Test', 'Full character doc should read the configured test worldbook');
+  assert(fullDoc.includes('TEST FULL DOC'), 'Configured test worldbook should provide full character docs');
+
+  const pluginSource = fs.readFileSync(path.join(PACK_ROOT, 'tavern/plugin.js'), 'utf8');
+  assert(pluginSource.includes('FULL_DOC_WORLDBOOK_NAME: resolveFullDocWorldbookName()'), 'Tavern plugin should pass resolved worldbook name into character runtime');
+
   console.log('[character-doc-mini-smoke] all checks passed');
 })().catch((error) => {
   console.error(error);

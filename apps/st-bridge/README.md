@@ -4,10 +4,14 @@ Stable SillyTavern entry for AceZero packs.
 
 ## Load
 
+Production script:
+
 ```js
 window.ST_BRIDGE_PACK = 'acezero-main';
+window.ST_BRIDGE_ENV = 'prod';
 window.ST_BRIDGE_URL = 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js';
-import 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?v=fix-url';
+window.ACE0_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-1.2.4';
+import 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?env=prod&v=fix-url';
 ```
 
 Explicit pack:
@@ -16,13 +20,28 @@ Explicit pack:
 import 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?pack=acezero-main&v=fix-url';
 ```
 
+Local testing:
+
+```sh
+node apps/st-bridge/scripts/serve-local.mjs --port 4173 --root .
+```
+
+```js
+window.ST_BRIDGE_PACK = 'acezero-main';
+window.ST_BRIDGE_ENV = 'local';
+window.ACE0_APP_BASE_URL = 'http://127.0.0.1:4173';
+window.ACE0_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-2.0-Test';
+window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
+import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
+```
+
 ## Contract
 
 `bridge.js` owns loading, ordering, cache busting, pack selection, and shared MVU IO helpers.
 
 Pack scripts own AceZero business behavior.
 
-Dashboard and visible UI surfaces should be loaded as GitPage apps through root `index.html?app=...`, not inlined into one large Tavern script.
+Dashboard and visible UI surfaces should be loaded as GitPage or local static apps through root `index.html?app=...`, not inlined into one large Tavern script. The bridge profile controls whether app iframes resolve to GitHub Pages or the local static server.
 
 ## Pack Layout
 

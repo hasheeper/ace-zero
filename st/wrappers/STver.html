@@ -167,6 +167,9 @@
         try {
           const root = window.parent && window.parent !== window ? window.parent : window;
           if (root.ACE0_GAME_APP_URL) return root.ACE0_GAME_APP_URL;
+          if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveAppUrl === 'function') {
+            return root.STBridge.utils.resolveAppUrl('game');
+          }
           if (root.STBridge && root.STBridge.utils && typeof root.STBridge.utils.resolveUrl === 'function') {
             return root.STBridge.utils.resolveUrl('../../index.html?app=game');
           }

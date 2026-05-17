@@ -106,6 +106,8 @@ async function main() {
   assert(!appSource.includes('assetDeck.pending_offer'), 'ACT_RESULT UI must not read legacy pending_offer');
   assert(!appSource.includes('resolutionHistory'), 'ACT_RESULT UI must not use asset resolutionHistory to lock offers');
   assert(wrapperSource.includes('payload.assetOffer.floor'), 'ACT_RESULT wrapper should reuse assetOffer.floor');
+  assert(wrapperSource.includes('ACE0_ACT_RESULT_APP_URL'), 'ACT_RESULT wrapper should accept bridge-published ACT_RESULT app URL');
+  assert(wrapperSource.includes("resolveAppUrl('act-result')"), 'ACT_RESULT wrapper should use bridge app resolver before legacy relative resolver');
   assert(!wrapperSource.includes('act-result-floor:'), 'ACT_RESULT wrapper must not invent random floor keys');
   assert(pluginSource.includes('choiceId, cardId: choiceId'), 'ACT_RESULT host bridge should preserve clicked card id into chooseAssetCard');
   assert(plannerSource.includes('pendingOffer.settled === true) return'), 'Dashboard offer overlay should hide settled offers');

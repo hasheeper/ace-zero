@@ -10,6 +10,14 @@
  *   import 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?v=fix-url';
  *
  *   import 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js?pack=acezero-main&v=fix-url';
+ *
+ * Local testing:
+ *   window.ST_BRIDGE_PACK = 'acezero-main';
+ *   window.ST_BRIDGE_ENV = 'local';
+ *   window.ACE0_APP_BASE_URL = 'http://127.0.0.1:4173';
+ *   window.ACE0_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-2.0-Test';
+ *   window.ST_BRIDGE_URL = 'http://127.0.0.1:4173/apps/st-bridge/bridge.js';
+ *   import 'http://127.0.0.1:4173/apps/st-bridge/bridge.js?env=local&v=dev';
  */
 (async function () {
   'use strict';
@@ -19,6 +27,10 @@
   const VERSION = '0.1.0';
   const DEFAULT_MANIFEST = './manifest.json';
   const FALLBACK_BRIDGE_URL = 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js';
+  const PROD_APP_BASE_URL = 'https://hasheeper.github.io/ace-zero';
+  const LOCAL_APP_BASE_URL = 'http://127.0.0.1:4173';
+  const PROD_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-1.2.4';
+  const LOCAL_FULL_DOC_WORLDBOOK_NAME = 'AceZeroInfo-MVUVer-2.0-Test';
   const TOAST_TITLE = '[ACE0]脚本加载';
   const LOADING_TOAST_KEY = '__ACEZERO_ST_BRIDGE_LOADING_TOAST__';
   const DOM_TOAST_HOST_ID = 'acezero-st-bridge-toast-host';
@@ -286,6 +298,50 @@
   const cacheBust = params.get('v') || params.get('cache') || '';
   const forceReload = params.get('force') === '1';
 
+  function normalizeString(value, fallback = '') {
+    return typeof value === 'string' ? value.trim() : fallback;
+  }
+
+  function trimTrailingSlash(value) {
+    return normalizeString(value, '').replace(/\/+$/, '');
+  }
+
+  function isLocalBridgeUrl(url) {
+    try {
+      const hostname = String(url.hostname || '').toLowerCase();
+      return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function normalizeEnv(value, fallback = '') {
+    const normalized = normalizeString(value, '').toLowerCase();
+    if (normalized === 'local' || normalized === 'prod') return normalized;
+    return fallback;
+  }
+
+  function resolveBridgeProfile() {
+    const env = normalizeEnv(
+      params.get('env') || ROOT.ST_BRIDGE_ENV,
+      isLocalBridgeUrl(bridgeUrl) ? 'local' : 'prod'
+    );
+    const fallbackAppBaseUrl = env === 'local' ? LOCAL_APP_BASE_URL : PROD_APP_BASE_URL;
+    const appBaseUrl = trimTrailingSlash(params.get('appBase') || ROOT.ACE0_APP_BASE_URL || fallbackAppBaseUrl) || fallbackAppBaseUrl;
+    const fallbackWorldbookName = env === 'local' ? LOCAL_FULL_DOC_WORLDBOOK_NAME : PROD_FULL_DOC_WORLDBOOK_NAME;
+    const fullDocWorldbookName = normalizeString(
+      ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME || params.get('worldbook'),
+      fallbackWorldbookName
+    ) || fallbackWorldbookName;
+    return {
+      env,
+      appBaseUrl,
+      fullDocWorldbookName
+    };
+  }
+
+  const bridgeProfile = resolveBridgeProfile();
+
   function withCache(url) {
     if (!cacheBust) return url;
     const next = new URL(url);
@@ -337,7 +393,18 @@
     }
   }
 
-  function applyGlobals(pack, packId) {
+  function resolveAppUrl(app, profile = bridgeProfile) {
+    const key = normalizeString(app, '').toLowerCase();
+    const appBaseUrl = trimTrailingSlash(profile?.appBaseUrl || PROD_APP_BASE_URL) || PROD_APP_BASE_URL;
+    if (key === 'game') return `${appBaseUrl}/index.html?app=game`;
+    if (key === 'dashboard') return `${appBaseUrl}/index.html?app=dashboard`;
+    if (key === 'act-result' || key === 'act_result' || key === 'actresult') {
+      return `${appBaseUrl}/apps/act-result/index.html`;
+    }
+    throw new Error(`Unknown AceZero app "${app}"`);
+  }
+
+  function applyGlobals(pack, packId, profile = bridgeProfile) {
     ROOT.ST_BRIDGE_PACK = packId;
     ROOT.ST_BRIDGE_PRODUCT = pack.product || packId;
     if (pack.globals && typeof pack.globals === 'object') {
@@ -345,6 +412,12 @@
         ROOT[key] = value;
       });
     }
+    ROOT.ST_BRIDGE_ENV = profile.env;
+    ROOT.ACE0_APP_BASE_URL = profile.appBaseUrl;
+    ROOT.ACE0_FULL_DOC_WORLDBOOK_NAME = profile.fullDocWorldbookName;
+    ROOT.ACE0_GAME_APP_URL = resolveAppUrl('game', profile);
+    ROOT.ACE0_DASHBOARD_APP_URL = resolveAppUrl('dashboard', profile);
+    ROOT.ACE0_ACT_RESULT_APP_URL = resolveAppUrl('act-result', profile);
   }
 
   async function readVariables(options = {}) {
@@ -466,8 +539,12 @@
         clone,
         isObject,
         resolveUrl,
+        resolveAppUrl,
         withCache,
-        bridgeRoot: bridgeRoot.href
+        bridgeRoot: bridgeRoot.href,
+        appBaseUrl: state?.appBaseUrl || bridgeProfile.appBaseUrl,
+        env: state?.env || bridgeProfile.env,
+        fullDocWorldbookName: state?.fullDocWorldbookName || bridgeProfile.fullDocWorldbookName
       },
       mvu: {
         readVariables,
@@ -504,7 +581,13 @@
     const manifest = await fetchJson(manifestUrl);
     const { id: packId, pack } = selectPack(manifest);
     const registry = getLoadedRegistry();
-    const registryKey = `${manifestUrl}::${packId}`;
+    const registryKey = [
+      manifestUrl,
+      packId,
+      bridgeProfile.env,
+      bridgeProfile.appBaseUrl,
+      bridgeProfile.fullDocWorldbookName
+    ].join('::');
 
     if (registry[registryKey] && !forceReload) {
       console.log(`${BRIDGE_NAME} ${packId} already loaded; add ?force=1 to reload`);
@@ -513,7 +596,7 @@
       return registry[registryKey];
     }
 
-    applyGlobals(pack, packId);
+    applyGlobals(pack, packId, bridgeProfile);
 
     const state = {
       bridgeVersion: VERSION,
@@ -522,6 +605,9 @@
       packId,
       product: pack.product || packId,
       label: pack.label || packId,
+      env: bridgeProfile.env,
+      appBaseUrl: bridgeProfile.appBaseUrl,
+      fullDocWorldbookName: bridgeProfile.fullDocWorldbookName,
       loaded: [],
       failedOptional: [],
       loadedAt: new Date().toISOString()

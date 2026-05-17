@@ -238,6 +238,35 @@
     }
   }
 
+  function resolveFullDocWorldbookName() {
+    const hostRoot = getAce0HostRoot();
+    const globalName = _normalizeTrimmedString(
+      hostRoot?.ACE0_FULL_DOC_WORLDBOOK_NAME
+        || (typeof window !== 'undefined' ? window.ACE0_FULL_DOC_WORLDBOOK_NAME : '')
+        || globalThis?.ACE0_FULL_DOC_WORLDBOOK_NAME,
+      ''
+    );
+    if (globalName) return globalName;
+
+    const bridgeState = hostRoot?.STBridge?.state
+      || (typeof window !== 'undefined' ? window.STBridge?.state : null)
+      || globalThis?.STBridge?.state
+      || {};
+    const bridgeWorldbookName = _normalizeTrimmedString(bridgeState.fullDocWorldbookName, '');
+    if (bridgeWorldbookName) return bridgeWorldbookName;
+
+    const env = _normalizeTrimmedString(
+      bridgeState.env
+        || hostRoot?.ST_BRIDGE_ENV
+        || (typeof window !== 'undefined' ? window.ST_BRIDGE_ENV : '')
+        || globalThis?.ST_BRIDGE_ENV,
+      ''
+    ).toLowerCase();
+    return env === 'local'
+      ? 'AceZeroInfo-MVUVer-2.0-Test'
+      : 'AceZeroInfo-MVUVer-1.2.4';
+  }
+
   function isZeroActResourceMap(value) {
     return isPlainObject(value) && ACT_RESOURCE_KEYS.every((key) => {
       return Math.max(0, Number(value[key]) || 0) === 0;
@@ -1118,7 +1147,8 @@
     constants: {
       HERO_INTERNAL_KEY,
       HERO_MACRO_NAME,
-      HERO_MACRO_ALT
+      HERO_MACRO_ALT,
+      FULL_DOC_WORLDBOOK_NAME: resolveFullDocWorldbookName()
     },
     deps: {
       normalizeTrimmedString: _normalizeTrimmedString,

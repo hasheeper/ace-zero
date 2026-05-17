@@ -29,6 +29,9 @@
     if (typeof ROOT.ACE0_DASHBOARD_APP_URL === 'string' && ROOT.ACE0_DASHBOARD_APP_URL) {
       return ROOT.ACE0_DASHBOARD_APP_URL;
     }
+    if (ROOT.STBridge?.utils?.resolveAppUrl) {
+      return ROOT.STBridge.utils.resolveAppUrl('dashboard');
+    }
     if (ROOT.STBridge?.utils?.resolveUrl) {
       return ROOT.STBridge.utils.resolveUrl('../../index.html?app=dashboard');
     }
