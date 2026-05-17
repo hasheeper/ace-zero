@@ -94,7 +94,7 @@ C.【变更计划】
 D.【演出计划】
 
 1. [出场真相来源]
-   - <ace0_hero_state> 是当前的角色信息
+   - <ace0_hero_state> 是当前的角色信息，其中NOT INTRODUCED的角色禁止主动出场。
    - <ace0_first_meet> 是否出现？说明列出的角色本轮首次登场
    - 首见的角色：按 `<ace0_first_meet>` 里的片段切入
    - 同场状态变化必须同步 UpdateVariable

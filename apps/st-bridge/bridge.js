@@ -19,6 +19,76 @@
   const VERSION = '0.1.0';
   const DEFAULT_MANIFEST = './manifest.json';
   const FALLBACK_BRIDGE_URL = 'https://hasheeper.github.io/ace-zero/apps/st-bridge/bridge.js';
+  const TOAST_TITLE = '[ACE0]脚本加载';
+  const LOADING_TOAST_KEY = '__ACEZERO_ST_BRIDGE_LOADING_TOAST__';
+
+  function getToastr() {
+    try {
+      return ROOT.toastr && typeof ROOT.toastr.info === 'function' ? ROOT.toastr : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function showToast(level, message, title = TOAST_TITLE, options = {}) {
+    const toastr = getToastr();
+    if (!toastr || typeof toastr[level] !== 'function') return null;
+    try {
+      return toastr[level](message, title, {
+        closeButton: true,
+        newestOnTop: true,
+        progressBar: false,
+        escapeHtml: true,
+        ...options
+      });
+    } catch (error) {
+      console.warn(`${BRIDGE_NAME} toast failed:`, error);
+      return null;
+    }
+  }
+
+  function clearLoadingToast() {
+    const toastr = getToastr();
+    const toast = ROOT[LOADING_TOAST_KEY];
+    ROOT[LOADING_TOAST_KEY] = null;
+    if (!toastr || !toast || typeof toastr.clear !== 'function') return;
+    try {
+      toastr.clear(toast);
+    } catch (_) {}
+  }
+
+  function showLoadingToast() {
+    clearLoadingToast();
+    ROOT[LOADING_TOAST_KEY] = showToast('info', '脚本正在加载，请稍后', '[ACE0]脚本加载中', {
+      timeOut: 0,
+      extendedTimeOut: 0,
+      tapToDismiss: false
+    });
+  }
+
+  function showLoadedToast(state) {
+    clearLoadingToast();
+    const failedOptional = Array.isArray(state && state.failedOptional) ? state.failedOptional : [];
+    if (failedOptional.length > 0) {
+      const names = failedOptional.map((entry) => entry.id || entry.url).filter(Boolean).join(', ');
+      showToast(
+        'warning',
+        `核心脚本加载完成，但部分模块加载失败：${names || '未知模块'}。如果功能异常，请检查网络，或关闭后重新开启脚本。`,
+        '[ACE0]脚本部分加载失败'
+      );
+      return;
+    }
+    showToast('success', '脚本加载完成', '[ACE0]脚本加载完成');
+  }
+
+  function showFailedToast() {
+    clearLoadingToast();
+    showToast('error', '脚本加载失败，请检查网络，或关闭后重新开启脚本。', '[ACE0]脚本加载失败', {
+      timeOut: 0,
+      extendedTimeOut: 0,
+      tapToDismiss: false
+    });
+  }
 
   function isUsableBridgeUrl(value) {
     if (!value || typeof value !== 'string') return false;
@@ -292,6 +362,7 @@
     if (registry[registryKey] && !forceReload) {
       console.log(`${BRIDGE_NAME} ${packId} already loaded; add ?force=1 to reload`);
       exposeApi(registry[registryKey]);
+      showLoadedToast(registry[registryKey]);
       return registry[registryKey];
     }
 
@@ -305,6 +376,7 @@
       product: pack.product || packId,
       label: pack.label || packId,
       loaded: [],
+      failedOptional: [],
       loadedAt: new Date().toISOString()
     };
 
@@ -318,6 +390,11 @@
       } catch (error) {
         console.error(`${BRIDGE_NAME} failed to load ${entry.id || entry.url}:`, error);
         if (entry.required !== false) throw error;
+        state.failedOptional.push({
+          id: entry.id || '',
+          url: entry.url || '',
+          message: error && error.message ? error.message : String(error)
+        });
       }
     }
 
@@ -325,13 +402,16 @@
       ROOT.dispatchEvent && ROOT.dispatchEvent(new CustomEvent('acezero:bridge-loaded', { detail: state }));
     } catch (_) {}
     console.log(`${BRIDGE_NAME} loaded ${packId}`, state);
+    showLoadedToast(state);
     return state;
   }
 
   try {
+    showLoadingToast();
     await main();
   } catch (error) {
     console.error(`${BRIDGE_NAME} startup failed:`, error);
+    showFailedToast();
     throw error;
   }
 })();
