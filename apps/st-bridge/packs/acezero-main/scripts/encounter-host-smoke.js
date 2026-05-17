@@ -15,6 +15,18 @@ const {
 const { sandbox, act, tavernFactory } = loadTavernSandbox();
 const config = act.getChapter('chapter0_exchange');
 
+function toPlacedMarker(placed) {
+  if (!placed) return null;
+  const kind = placed.kind === 'signal' ? 'signal' : 'meet';
+  return {
+    charKey: placed.charKey,
+    type: kind === 'signal' ? 'pre_signal' : 'first_meet',
+    targetNodeId: placed.node || '',
+    targetNodeIndex: Math.max(0, Math.round(Number(placed.nodeIndex) || 0)),
+    targetPhaseIndex: Number.isFinite(Number(placed.phase)) ? Math.max(0, Math.min(3, Math.round(Number(placed.phase)))) : (kind === 'signal' ? 0 : 1)
+  };
+}
+
 function makeRuntimeWithEra(eraVars) {
   return createTavernRuntime(tavernFactory, sandbox, { eraVars });
 }
@@ -24,11 +36,12 @@ function makePlacedCotaAct() {
   const base = createActStateAt(act, 4, currentRouteToNode4A());
   const forced = act.debugForceCharacterEncounter(base, 'COTA', config, { context });
   assert(forced.placed, 'COTA debug force should place for host smoke setup');
+  const placed = toPlacedMarker(forced.placed);
   return {
     ...forced.actState,
-    nodeIndex: 5,
-    route_history: currentRouteToNode5A(),
-    phase_index: forced.placed.targetPhaseIndex,
+    nodeIndex: placed.targetNodeIndex,
+    route_history: [...currentRouteToNode4A(), placed.targetNodeId],
+    phase_index: placed.targetPhaseIndex,
     phase_advance: 1
   };
 }
@@ -203,7 +216,7 @@ async function testFirstMeetPendingAndDossierWriteback() {
   assert(synced.changed, 'synchronizeActCharacterState should write first-meet cast patch');
   assertEqual(synced.eraVars.hero.cast.COTA.activated, true, 'COTA should be activated in Dossier after first meet');
   assertEqual(synced.eraVars.hero.cast.COTA.introduced, true, 'COTA should be introduced in Dossier after first meet');
-  assertEqual(synced.eraVars.hero.cast.COTA.present, false, 'COTA present should remain LLM-controlled after first meet consumption');
+  assertEqual(synced.eraVars.hero.cast.COTA.present, true, 'COTA should be present on the first-meet frame after consumption');
 
   const prompts = runtime.buildActNarrativePrompts(synced.eraVars);
   const firstMeetPrompt = prompts.find((prompt) => prompt.id === 'ace0_first_meet');
@@ -307,7 +320,6 @@ async function testIntroducedEncounterPreservesManualPresentAfterFirstMeetPendin
         route_history: [...currentRouteToNode5A(), 'node06-a-route'],
         phase_advance: 0,
         characterEncounter: {
-          v: 2,
           met: {
             COTA: {
               node: 'node05-a-route',
@@ -342,7 +354,6 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
   const base = createActStateAt(act, 9, route, {
     resourceSpent: { combat: 20, rest: 20, asset: 20, vision: 20 },
     characterEncounter: {
-      v: 2,
       met: {
         SIA: {},
         TRIXIE: {},
@@ -368,7 +379,8 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
     requestCharKey: 'VV',
     requestType: 'pre_signal'
   });
-  assert(placed.placed && placed.placed.type === 'pre_signal', 'VV pre_signal should place for host smoke setup');
+  const placedMarker = toPlacedMarker(placed.placed);
+  assert(placedMarker && placedMarker.type === 'pre_signal', 'VV pre_signal should place for host smoke setup');
 
   const eraVars = {
     hero: {
@@ -387,9 +399,9 @@ async function testPreSignalPendingDoesNotUnlockDossier() {
       clockPressure: 0,
       act: {
         ...placed.actState,
-        nodeIndex: placed.placed.targetNodeIndex,
-        route_history: [...route, placed.placed.targetNodeId],
-        phase_index: placed.placed.targetPhaseIndex,
+        nodeIndex: placedMarker.targetNodeIndex,
+        route_history: [...route, placedMarker.targetNodeId],
+        phase_index: placedMarker.targetPhaseIndex,
         phase_advance: 1
       }
     }

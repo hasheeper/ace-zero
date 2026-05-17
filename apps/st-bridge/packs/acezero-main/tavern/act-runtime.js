@@ -247,6 +247,7 @@
       'advanceActToNextNode',
       'resolveActNodeTransition',
       'consumeSingleActPhase',
+      'getAssetDeckEvents',
       'deriveWorldTimeFromAct',
       'resolvePendingAdvanceState',
       'deriveCharacterStatesFromActState',
@@ -505,11 +506,6 @@
             .filter(item => item && typeof item === 'object' && !Array.isArray(item))
             .map(item => JSON.parse(JSON.stringify(item)))
         : [],
-      pendingAssetDeckCommands: Array.isArray(rawAct.pendingAssetDeckCommands)
-        ? rawAct.pendingAssetDeckCommands
-            .filter(item => item && typeof item === 'object' && !Array.isArray(item))
-            .map(item => JSON.parse(JSON.stringify(item)))
-        : [],
       resolutionHistory: Array.isArray(rawAct.resolutionHistory)
         ? rawAct.resolutionHistory
             .filter(item => item && typeof item === 'object' && !Array.isArray(item))
@@ -750,7 +746,8 @@
         }
       },
       changed: true,
-      queued: result.value.queued || [],
+      created: result.value.created || [],
+      active: result.value.active || {},
       placed: null
     };
   }
@@ -1448,21 +1445,27 @@
     };
   }
 
-  function normalizePendingAssetDeckCommands(actState) {
-    return Array.isArray(actState?.pendingAssetDeckCommands)
-      ? actState.pendingAssetDeckCommands
-          .filter(item => item && typeof item === 'object' && !Array.isArray(item))
-          .map(item => cloneJsonData(item, {}))
-      : [];
+  function normalizeAssetDeckEvents(eventsInput) {
+    return (Array.isArray(eventsInput) ? eventsInput : [])
+      .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => ({
+        id: normalizeTrimmedString(item.id, ''),
+        type: 'asset_offer',
+        amount: Math.max(1, Math.min(3, Math.round(Number(item.amount || item.level) || 1))),
+        pool: normalizeTrimmedString(item.pool, 'low').toLowerCase(),
+        floorKey: normalizeTrimmedString(item.floorKey || item.floor, ''),
+        nodeId: normalizeTrimmedString(item.nodeId, ''),
+        nodeIndex: Math.max(1, Math.round(Number(item.nodeIndex) || 1)),
+        phaseIndex: Math.max(0, Math.min(3, Math.round(Number(item.phaseIndex) || 0))),
+        seed: normalizeTrimmedString(item.seed, ''),
+        sources: Array.isArray(item.sources) ? cloneJsonData(item.sources, []) : []
+      }))
+      .filter(item => item.id && ['low', 'mid', 'high'].includes(item.pool));
   }
 
-  function settlePendingActAssetDeckCommandsForHost(worldInput, actStateInput) {
-    const pendingCommands = normalizePendingAssetDeckCommands(actStateInput);
-    const commandsToApply = pendingCommands.filter((item) => {
-      const status = normalizeTrimmedString(item.status, 'pending').toLowerCase() || 'pending';
-      return status === 'pending' && item.command && typeof item.command === 'object' && !Array.isArray(item.command);
-    });
-    if (!commandsToApply.length) {
+  function settleActAssetDeckEventsForHost(worldInput, actStateInput, eventsInput = []) {
+    const events = normalizeAssetDeckEvents(eventsInput);
+    if (!events.length) {
       return {
         world: worldInput && typeof worldInput === 'object' ? worldInput : {},
         actState: actStateInput,
@@ -1492,111 +1495,71 @@
       : (nextWorld.assetDeck && typeof nextWorld.assetDeck === 'object' ? cloneJsonData(nextWorld.assetDeck, {}) : {});
     const reserveCounts = normalizeActResourceCounts(nextActState.reserve);
     let currentAssetPoints = Math.max(0, Math.round(Number(reserveCounts.asset) || 0));
-    const consumedIds = new Set();
-    const resolutionHistory = Array.isArray(nextActState.resolutionHistory)
-      ? nextActState.resolutionHistory.map(compactActResolutionHistoryItem).filter(Boolean).slice(-64)
-      : [];
+    let changed = false;
 
-    commandsToApply.forEach((pending, index) => {
-      const command = cloneJsonData(pending.command, {}) || {};
-      const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
-        ? cloneJsonData(command.payload, {})
-        : {};
-      command.payload = {
-        ...payload,
-        requestId: normalizeTrimmedString(payload.requestId || pending.id, pending.id || '')
+    events.forEach((event, index) => {
+      const floorKey = normalizeTrimmedString(worldInput?.floorKey || event.floorKey, '');
+      const existingOfferFloor = normalizeTrimmedString(currentAssetDeck?.offer?.floor, '');
+      if (floorKey && existingOfferFloor === floorKey) return;
+
+      currentAssetPoints += Math.max(1, Math.min(3, Math.round(Number(event.amount) || 1)));
+      const command = {
+        kind: 'open_offer',
+        payload: {
+          pool: event.pool,
+          floor: floorKey,
+          cost: Math.max(1, Math.min(3, Math.round(Number(event.amount) || 1))),
+          seed: event.seed || `act:${event.id || index}`
+        }
       };
-      if (!command.payload.source && pending.nodeId) {
-        command.payload.source = {
-          type: 'act_asset_token',
-          actId: normalizeTrimmedString(nextActState.id, ''),
-          nodeId: pending.nodeId,
-          nodeIndex: pending.nodeIndex,
-          phaseIndex: pending.phaseIndex,
-          level: pending.level,
-          sources: Array.isArray(pending.sources) ? cloneJsonData(pending.sources, []) : []
-        };
-      }
 
       let commandResult;
       try {
         commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
-          seed: `act:${pending.id || index}`,
+          seed: event.seed || `act:${event.id || index}`,
+          floorKey,
           assetPoints: currentAssetPoints
         });
       } catch (error) {
         commandResult = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
       }
 
-      const status = commandResult?.ok ? 'resolved' : 'failed';
       if (commandResult?.assetDeck) currentAssetDeck = cloneJsonData(commandResult.assetDeck, currentAssetDeck);
       if (Number.isFinite(Number(commandResult?.assetPoints))) {
         currentAssetPoints = Math.max(0, Math.round(Number(commandResult.assetPoints) || 0));
       }
-      resolutionHistory.push(buildCompactAssetDeckResolution(pending, command, commandResult, status));
-      if (pending.id) consumedIds.add(pending.id);
+      if (commandResult?.ok) changed = true;
     });
+
+    if (!changed) {
+      return {
+        world: worldInput && typeof worldInput === 'object' ? worldInput : {},
+        actState: actStateInput,
+        changed: false
+      };
+    }
 
     nextWorld.assetDeck = cloneJsonData(currentAssetDeck, currentAssetDeck);
     nextActState.reserve = {
       ...reserveCounts,
       asset: currentAssetPoints
     };
-    nextActState.pendingAssetDeckCommands = pendingCommands.filter((item) => !item.id || !consumedIds.has(item.id));
-    nextActState.resolutionHistory = resolutionHistory.slice(-64);
 
     return {
       world: nextWorld,
       actState: nextActState,
-      changed: true
+      changed
     };
-  }
-
-  function buildCompactAssetDeckResolution(pending, command, commandResult, status) {
-    const commandPayload = command && typeof command.payload === 'object' && !Array.isArray(command.payload)
-      ? command.payload
-      : {};
-    const source = commandPayload.source && typeof commandPayload.source === 'object' && !Array.isArray(commandPayload.source)
-      ? commandPayload.source
-      : {};
-    const out = {
-      id: normalizeTrimmedString(pending.id, ''),
-      protocol: 'ace0.assetDeckCommand.v1',
-      type: 'asset',
-      level: Math.max(1, Math.min(3, Math.round(Number(pending.level) || Number(commandPayload.amount) || 1))),
-      nodeId: normalizeTrimmedString(pending.nodeId || source.nodeId, ''),
-      nodeIndex: Math.max(0, Math.round(Number(pending.nodeIndex ?? source.nodeIndex) || 0)),
-      phaseIndex: Math.max(0, Math.round(Number(pending.phaseIndex ?? source.phaseIndex) || 0)),
-      status,
-      outcome: commandResult?.code || (commandResult?.ok ? 'asset_command_applied' : 'asset_command_failed'),
-      commandKind: normalizeTrimmedString(command.kind || command.type, '')
-    };
-    if (commandResult?.error) out.error = normalizeTrimmedString(commandResult.error, '');
-    if (commandPayload.pool) out.pool = normalizeTrimmedString(commandPayload.pool, '');
-    return out;
   }
 
   function compactActResolutionHistoryItem(item) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-    if (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') {
-      const clearKey = normalizeTrimmedString(item.clearKey || item.offerId, '');
-      if (!clearKey) return null;
-      return {
-        id: normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
-        protocol: 'ace0.assetOfferClear.v1',
-        type: 'asset_offer_clear',
-        status: normalizeTrimmedString(item.status, 'resolved') || 'resolved',
-        clearKey,
-        offerId: normalizeTrimmedString(item.offerId, clearKey),
-        outcome: normalizeTrimmedString(item.outcome, '')
-      };
-    }
     const type = normalizeTrimmedString(item.type, '');
-    if (type !== 'asset' && type !== 'combat') return null;
+    if (type !== 'combat') return null;
     const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
     const compact = {
       id: normalizeTrimmedString(item.id, ''),
-      protocol: normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+      protocol: normalizeTrimmedString(item.protocol, ''),
       type,
       level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
       nodeId: normalizeTrimmedString(item.nodeId, ''),
@@ -1627,6 +1590,7 @@
     let actState = JSON.parse(JSON.stringify(act));
     let nextHero = hero;
     let moduleAdvance = { ok: false };
+    let assetDeckEvents = [];
     const encounterContext = buildEncounterContextFromEraVars(eraVars);
 
     if (requestedSteps > 0) {
@@ -1637,6 +1601,9 @@
       nextHero = moduleAdvance.ok && moduleAdvance.value?.heroState
         ? moduleAdvance.value.heroState
         : hero;
+      assetDeckEvents = moduleAdvance.ok && Array.isArray(moduleAdvance.value?.assetDeckEvents)
+        ? moduleAdvance.value.assetDeckEvents
+        : [];
     }
 
     if (act.transitionRequestTarget) {
@@ -1652,6 +1619,8 @@
         if (actState.stage === 'complete') break;
         if (actState.stage === 'route' && actState.route_history.length < actState.nodeIndex + 1) break;
       }
+      const eventResult = runActModuleMethod('getAssetDeckEvents', actState);
+      assetDeckEvents = eventResult.ok && Array.isArray(eventResult.value) ? eventResult.value : [];
     }
 
     // 阶段推进后的两套积分独立累计：
@@ -1689,13 +1658,15 @@
       actState = completionTransition.actState;
     }
 
-    const settledAssetDeck = settlePendingActAssetDeckCommandsForHost(
+    const settledAssetDeck = settleActAssetDeckEventsForHost(
       {
         ...(world || {}),
+        floorKey: normalizeTrimmedString(options.floorKey, ''),
         clockPressure: nextClockPressure,
         act: actState
       },
-      actState
+      actState,
+      assetDeckEvents
     );
     if (settledAssetDeck.changed) {
       actState = settledAssetDeck.actState;
@@ -1938,7 +1909,7 @@
         resetClockPressureInternal,
         deriveWorldTimeFromAct,
         buildEncounterContextFromEraVars,
-        settlePendingActAssetDeckCommandsForHost,
+        settleActAssetDeckEventsForHost,
         resolvePendingActAdvance,
         applyFloorProgressDelta,
         advanceWorldClock,

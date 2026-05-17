@@ -91,15 +91,15 @@
           ? assetDeckInput
           : {};
         return {
-          version: Math.max(1, Math.round(normalizeNumber(source.version, 1))),
-          general_slots_unlocked: Math.max(0, Math.round(normalizeNumber(source.general_slots_unlocked, 4))),
-          void_slots_unlocked: Math.max(0, Math.round(normalizeNumber(source.void_slots_unlocked, 2))),
-          active_general_cards: normalizeList(source.active_general_cards || source.activeGeneralCards).map(card => clone(card, {})),
-          active_void_cards: normalizeList(source.active_void_cards || source.activeVoidCards).map(card => clone(card, {})),
-          pending_offer: source.pending_offer || source.pendingOffer || null,
-          pending_offer_queue: normalizeList(source.pending_offer_queue || source.pendingOfferQueue).map(offer => clone(offer, {})),
-          pending_replace: source.pending_replace || source.pendingReplace || null,
-          history: normalizeList(source.history).map(item => clone(item, {}))
+          slots: {
+            general: Math.max(0, Math.round(normalizeNumber(source.slots && source.slots.general, 4))),
+            void: Math.max(0, Math.round(normalizeNumber(source.slots && source.slots.void, 2)))
+          },
+          bag: {
+            general: normalizeList(source.bag && source.bag.general).map(card => clone(card, {})),
+            void: normalizeList(source.bag && source.bag.void).map(card => clone(card, {}))
+          },
+          offer: source.offer || null
         };
       }
 
@@ -118,7 +118,7 @@
         if (explicit) return explicit;
         const kind = normalizeKey((card && card.kind) || meta.kind, 'numeric');
         const skillKey = normalizeKey((card && card.skillKey) || meta.skillKey);
-        const level = Math.max(0, Math.round(normalizeNumber((card && card.level) ?? meta.level, 0)));
+        const level = Math.max(0, Math.round(normalizeNumber((card && (card.level ?? card.lv)) ?? meta.level, 0)));
         if (kind === 'skill' && skillKey) return `${skillKey.replace(/_/g, ' ')} ${romanLevel(level)}`;
         if (kind === 'upgrade') {
           const target = normalizeKey((card && card.upgradeTargetSkillKey) || (card && card.upgradeTarget) || meta.upgradeTargetSkillKey);
@@ -181,14 +181,13 @@
         const modifiers = normalizeList((card && card.modifiers) || meta.modifiers).map(modifier => clone(modifier, {}));
         const effective = isCardEffectiveForGame(card, gameId);
         return {
-          instanceId: normalizeId(card && card.instanceId),
           cardId,
           name: normalizeId((card && card.name) || meta.name, cardId || 'Asset Card'),
           rarity: normalizeKey((card && card.rarity) || meta.rarity, 'bronze'),
           kind: normalizeKey((card && card.kind) || meta.kind, 'numeric'),
           system: normalizeKey((card && card.system) || meta.system),
           skillKey: normalizeKey((card && card.skillKey) || meta.skillKey),
-          level: Math.max(0, Math.round(normalizeNumber((card && card.level) ?? meta.level, 0))),
+          level: Math.max(0, Math.round(normalizeNumber((card && (card.level ?? card.lv)) ?? meta.level, 0))),
           targetTags: normalizeList((card && card.targetTags) || meta.targetTags).map(tag => normalizeId(tag)).filter(Boolean),
           gameTags: getCardTags(card, 'gameTags'),
           slotTags: getCardTags(card, 'slotTags'),
@@ -208,22 +207,11 @@
         if (!offer || typeof offer !== 'object' || Array.isArray(offer)) return null;
         return {
           id: normalizeId(offer.id),
+          floor: normalizeId(offer.floor),
           pool: normalizeKey(offer.pool, 'low'),
-          cost: Math.max(0, Math.round(normalizeNumber(offer.cost, 0))),
-          refreshCount: Math.max(0, Math.round(normalizeNumber(offer.refreshCount, 0))),
-          freeRefreshUsed: Math.max(0, Math.round(normalizeNumber(offer.freeRefreshUsed, 0))),
-          choices: normalizeList(offer.choices).map((card, index) => summarizeCard(card, 'offer', index, gameId))
-        };
-      }
-
-      function summarizePendingReplace(pendingReplace, gameId) {
-        if (!pendingReplace || typeof pendingReplace !== 'object' || Array.isArray(pendingReplace)) return null;
-        const card = pendingReplace.card || pendingReplace.candidate || null;
-        return {
-          card: card ? summarizeCard(card, 'replace', 0, gameId) : null,
-          allowedSlots: normalizeList(pendingReplace.allowedSlots).map(slot => normalizeKey(slot)).filter(Boolean),
-          reason: normalizeId(pendingReplace.reason, 'slot_full'),
-          confirmDestroy: pendingReplace.confirm_destroy === true
+          settled: offer.settled === true,
+          choices: normalizeList(offer.choices).map((card, index) => summarizeCard(card, 'offer', index, gameId)),
+          reroll: normalizeList(offer.reroll).map((card, index) => summarizeCard(card, 'offer', index, gameId))
         };
       }
 
@@ -362,9 +350,9 @@
         const gameId = normalizeGameId(buildOptions.gameId || 'texas-holdem');
         const mode = normalizeKey(buildOptions.mode, 'host') === 'debug' ? 'debug' : 'host';
         const normalizedDeck = normalizeAssetDeck(assetDeckInput);
-        const generalCards = normalizeList(normalizedDeck.active_general_cards)
+        const generalCards = normalizeList(normalizedDeck.bag && normalizedDeck.bag.general)
           .map((card, index) => summarizeCard(card, 'general', index, gameId));
-        const voidCards = normalizeList(normalizedDeck.active_void_cards)
+        const voidCards = normalizeList(normalizedDeck.bag && normalizedDeck.bag.void)
           .map((card, index) => summarizeCard(card, 'void', index, gameId));
         const allCards = generalCards.concat(voidCards);
         const effectiveCards = allCards.filter(card => card.effective);
@@ -372,15 +360,14 @@
         const gameplay = summarizeCompiledModifiers(compiled);
 
         const summary = {
-          version: 1,
           gameId,
           mode,
           points: Math.max(0, Math.round(normalizeNumber(buildOptions.assetPoints ?? buildOptions.points, 0))),
           slots: {
             generalUsed: generalCards.length,
-            generalMax: Math.max(0, Math.round(normalizeNumber(normalizedDeck.general_slots_unlocked, 0))),
+            generalMax: Math.max(0, Math.round(normalizeNumber(normalizedDeck.slots && normalizedDeck.slots.general, 0))),
             voidUsed: voidCards.length,
-            voidMax: Math.max(0, Math.round(normalizeNumber(normalizedDeck.void_slots_unlocked, 0)))
+            voidMax: Math.max(0, Math.round(normalizeNumber(normalizedDeck.slots && normalizedDeck.slots.void, 0)))
           },
           activeCards: {
             general: generalCards,
@@ -395,11 +382,8 @@
             inactive: allCards.length - effectiveCards.length
           },
           pending: {
-            offer: summarizePendingOffer(normalizedDeck.pending_offer, gameId),
-            offerQueue: normalizeList(normalizedDeck.pending_offer_queue).map(offer => summarizePendingOffer(offer, gameId)).filter(Boolean),
-            replace: summarizePendingReplace(normalizedDeck.pending_replace, gameId)
+            offer: summarizePendingOffer(normalizedDeck.offer, gameId)
           },
-          recentHistory: normalizeList(normalizedDeck.history).slice(-5).map(item => clone(item, {})),
           gameplay
         };
 

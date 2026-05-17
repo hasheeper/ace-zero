@@ -110,8 +110,8 @@
     const assetDeck = assetDeckInput && typeof assetDeckInput === 'object' && !Array.isArray(assetDeckInput)
       ? assetDeckInput
       : null;
-    const offer = assetDeck?.pending_offer && typeof assetDeck.pending_offer === 'object' && !Array.isArray(assetDeck.pending_offer)
-      ? assetDeck.pending_offer
+    const offer = assetDeck?.offer && typeof assetDeck.offer === 'object' && !Array.isArray(assetDeck.offer)
+      ? assetDeck.offer
       : null;
     const choices = Array.isArray(offer?.choices) ? offer.choices : [];
     if (!offer || !choices.length) return null;
@@ -122,22 +122,22 @@
       pool: typeof offer.pool === 'string' ? offer.pool : 'low',
       choices: choices.slice(0, 3).map((choice, index) => {
         const card = choice && typeof choice === 'object' && !Array.isArray(choice) ? choice : {};
-        const catalogCard = getAssetCatalogCard(card.cardId);
+        const cardId = typeof card.id === 'string' ? card.id : '';
+        const catalogCard = getAssetCatalogCard(cardId);
         const slotTags = Array.isArray(card.slotTags) && card.slotTags.length
           ? card.slotTags.filter(tag => typeof tag === 'string')
           : (Array.isArray(catalogCard?.slotTags) ? catalogCard.slotTags.filter(tag => typeof tag === 'string') : []);
         return {
           choiceIndex: index,
-          instanceId: typeof card.instanceId === 'string' ? card.instanceId : '',
-          cardId: typeof card.cardId === 'string' ? card.cardId : '',
+          cardId,
           name: typeof catalogCard?.name === 'string' && catalogCard.name.trim()
             ? catalogCard.name.trim()
-            : (typeof card.name === 'string' ? card.name : card.cardId || `CARD ${index + 1}`),
+            : (typeof card.name === 'string' ? card.name : cardId || `CARD ${index + 1}`),
           kind: typeof card.kind === 'string' ? card.kind : (typeof catalogCard?.kind === 'string' ? catalogCard.kind : ''),
           rarity: typeof card.rarity === 'string' ? card.rarity : (typeof catalogCard?.rarity === 'string' ? catalogCard.rarity : ''),
           system: typeof card.system === 'string' ? card.system : (typeof catalogCard?.system === 'string' ? catalogCard.system : ''),
           skillKey: typeof card.skillKey === 'string' ? card.skillKey : (typeof catalogCard?.skillKey === 'string' ? catalogCard.skillKey : ''),
-          level: Math.max(0, Math.round(Number(card.level ?? catalogCard?.level) || 0)),
+          level: Math.max(0, Math.round(Number(card.lv ?? catalogCard?.level) || 0)),
           slotTags,
           effectText: buildAssetCardEffectText(card, catalogCard),
           statusTags: buildAssetCardStatusTags({ ...card, slotTags }, catalogCard)

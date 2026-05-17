@@ -105,9 +105,55 @@
 
   function getActiveCards(assetDeck) {
     if (!assetDeck || typeof assetDeck !== 'object') return [];
+    var bag = assetDeck.bag && typeof assetDeck.bag === 'object' ? assetDeck.bag : {};
     return []
-      .concat(Array.isArray(assetDeck.active_general_cards) ? assetDeck.active_general_cards : [])
-      .concat(Array.isArray(assetDeck.active_void_cards) ? assetDeck.active_void_cards : []);
+      .concat(Array.isArray(bag.general) ? bag.general : [])
+      .concat(Array.isArray(bag.void) ? bag.void : [])
+      .map(hydrateAssetCard)
+      .filter(Boolean);
+  }
+
+  function getAssetDeckRuntime() {
+    var modules = global && global.ACE0Modules && typeof global.ACE0Modules === 'object'
+      ? global.ACE0Modules
+      : null;
+    return modules && modules.assetDeck && typeof modules.assetDeck === 'object' ? modules.assetDeck : null;
+  }
+
+  function getCatalogCard(cardId) {
+    var id = String(cardId == null ? '' : cardId).trim();
+    if (!id) return null;
+    var data = global && global.ACE0AssetDeckData && typeof global.ACE0AssetDeckData === 'object'
+      ? global.ACE0AssetDeckData
+      : {};
+    var catalog = Array.isArray(data.ASSET_CARD_CATALOG) ? data.ASSET_CARD_CATALOG : [];
+    for (var index = 0; index < catalog.length; index += 1) {
+      if (catalog[index] && catalog[index].id === id) return catalog[index];
+    }
+    return null;
+  }
+
+  function hydrateAssetCard(cardRef) {
+    if (!cardRef || typeof cardRef !== 'object') return null;
+    var runtime = getAssetDeckRuntime();
+    if (runtime && typeof runtime.hydrateCardRef === 'function') {
+      var hydrated = runtime.hydrateCardRef(cardRef);
+      if (hydrated) return hydrated;
+    }
+    if (runtime && typeof runtime.normalizeAssetCardInstance === 'function') {
+      var normalized = runtime.normalizeAssetCardInstance(cardRef);
+      if (normalized) return normalized;
+    }
+    var id = cardRef.id || cardRef.cardId;
+    var catalogCard = getCatalogCard(id);
+    if (!catalogCard) return null;
+    var level = Math.max(1, Math.min(4, Math.round(Number(cardRef.lv || cardRef.level || catalogCard.level) || 1)));
+    return Object.assign({}, cloneJson(catalogCard, {}), {
+      id: catalogCard.id,
+      cardId: catalogCard.id,
+      lv: level,
+      level: level
+    });
   }
 
   function normalizeGameId(value) {

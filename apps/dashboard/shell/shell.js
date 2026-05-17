@@ -375,25 +375,37 @@ function getEncounterDashboardStateFromWorld(world, heroCode) {
   const encounter = act?.characterEncounter && typeof act.characterEncounter === 'object'
     ? act.characterEncounter
     : null;
-  const encounterChar = encounter?.characters?.[heroCode];
-  if (!encounterChar || typeof encounterChar !== 'object') return null;
+  const code = typeof heroCode === 'string' ? heroCode.trim().toUpperCase() : '';
+  if (!code || !encounter) return null;
 
   const routeHistory = Array.isArray(act.route_history) ? act.route_history : [];
   const nodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
   const currentNodeId = routeHistory[nodeIndex - 1] || routeHistory[routeHistory.length - 1] || '';
-  const introducedNodeId = typeof encounterChar.introducedNodeId === 'string' ? encounterChar.introducedNodeId : '';
-  const isIntroduced = encounterChar.firstMeetDone === true
-    || encounterChar.status === 'introduced'
-    || encounterChar.status === 'first_meet';
-  if (!isIntroduced) return null;
+  const met = encounter.met && typeof encounter.met === 'object' ? encounter.met[code] : null;
+  if (met && typeof met === 'object') {
+    const metNode = typeof met.node === 'string' ? met.node : '';
+    return {
+      activated: true,
+      introduced: true,
+      present: Boolean(metNode && metNode === currentNodeId),
+      inParty: false
+    };
+  }
 
-  return {
-    activated: true,
-    introduced: true,
-    present: encounterChar.status === 'first_meet'
-      || (introducedNodeId && introducedNodeId === currentNodeId),
-    inParty: false
-  };
+  const active = encounter.active && typeof encounter.active === 'object' ? encounter.active[code] : null;
+  const kind = typeof active?.kind === 'string' ? active.kind.trim().toLowerCase() : '';
+  const state = typeof active?.state === 'string' ? active.state.trim().toLowerCase() : '';
+  const node = typeof active?.node === 'string' ? active.node : '';
+  if ((kind === 'meet' || kind === 'first_meet') && state === 'placed' && node && node === currentNodeId) {
+    return {
+      activated: true,
+      introduced: true,
+      present: true,
+      inParty: false
+    };
+  }
+
+  return null;
 }
 
 function applyMvuHero(hero, world = null) {
@@ -411,13 +423,13 @@ function applyMvuHero(hero, world = null) {
 
     character.dashboardState = {
       ...defaults.dashboardState,
-      ...(encounterState || {}),
       ...(castNode && typeof castNode === 'object' ? {
         activated: true,
         introduced: castNode.introduced === true,
         present: castNode.present === true,
         inParty: castNode.inParty === true
-      } : {})
+      } : {}),
+      ...(encounterState || {})
     };
 
     character.level = rosterNode?.level != null ? Math.max(0, Math.round(Number(rosterNode.level) || 0)) : defaults.level;

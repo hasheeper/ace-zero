@@ -472,7 +472,7 @@
         const key = typeof marker?.charKey === 'string' ? marker.charKey.trim().toLowerCase() : '';
         const registry = (typeof window !== 'undefined' && window.dashboardCharacters) || {};
         const meta = registry[key] || null;
-        return meta?.watermark || meta?.name || marker?.debugLabel || marker?.charKey || 'UNKNOWN';
+        return meta?.watermark || meta?.name || marker?.charKey || 'UNKNOWN';
     }
 
     function getEncounterActionPreviewForPhase(phaseIndex, nodeId = getCurrentNodeData().presentNode, idPrefix = 'phase') {
@@ -943,27 +943,60 @@
         `;
     }
 
+    function normalizeEncounterPanelKind(value) {
+        const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+        return normalized === 'signal' || normalized === 'pre_signal' ? 'signal' : 'meet';
+    }
+
+    function normalizeEncounterPanelState(value) {
+        const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+        return normalized === 'placed' ? 'placed' : 'queued';
+    }
+
+    function getEncounterPanelPhaseIndex(active) {
+        const explicit = Number(active?.phase);
+        if (Number.isFinite(explicit)) return Math.max(0, Math.min(3, Math.round(explicit)));
+        return normalizeEncounterPanelKind(active?.kind) === 'signal' ? 0 : 1;
+    }
+
+    function getEncounterPanelTypeLabel(active, short = false) {
+        const isSignal = normalizeEncounterPanelKind(active?.kind) === 'signal';
+        if (short) return isSignal ? 'SIG' : 'MEET';
+        return isSignal ? 'SIGNAL' : 'PLACED';
+    }
+
+    function getEncounterPanelActiveEntries(encounter) {
+        const active = encounter?.active && typeof encounter.active === 'object' ? encounter.active : {};
+        return Object.entries(active)
+            .map(([charKey, entry]) => ({
+                charKey,
+                entry: entry && typeof entry === 'object' ? entry : {}
+            }))
+            .filter(({ charKey }) => Boolean(charKey));
+    }
+
     function getEncounterDebugState(charKey, encounter, eligibilityMap) {
-        const state = encounter?.characters?.[charKey] || {};
-        const queue = Array.isArray(encounter?.queue) ? encounter.queue : [];
-        const active = queue.find((item) => item?.charKey === charKey && !['triggered', 'expired', 'cancelled'].includes(item.status));
-        if (state.firstMeetDone === true || state.status === 'introduced') {
-            return { label: 'DONE', reason: state.introducedNodeId || 'introduced', canForce: false, className: 'is-done' };
+        const met = encounter?.met && typeof encounter.met === 'object' ? encounter.met[charKey] : null;
+        if (met && typeof met === 'object') {
+            return { label: 'DONE', reason: met.node || 'introduced', canForce: false, className: 'is-done' };
         }
-        if (state.preSignalDone === true) {
+        const signaled = encounter?.signaled && typeof encounter.signaled === 'object' ? encounter.signaled[charKey] : null;
+        if (signaled && typeof signaled === 'object') {
             return { label: 'PRE-SIGNAL', reason: 'signal done; first meet boosted', canForce: true, className: 'is-pre-signal' };
         }
-        if (active?.status === 'placed') {
-            const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(active.targetPhaseIndex) || 0)));
+        const active = encounter?.active && typeof encounter.active === 'object' ? encounter.active[charKey] : null;
+        if (active && normalizeEncounterPanelState(active.state) === 'placed') {
+            const phaseIndex = getEncounterPanelPhaseIndex(active);
+            const nodeId = typeof active.node === 'string' ? active.node : '';
             return {
-                label: active.type === 'pre_signal' ? 'SIGNAL' : 'PLACED',
-                reason: `${getRouteOptionLabel(active.targetNodeId || '') || active.targetNodeId || 'NODE'} · ${getPhaseRomanLabel(phaseIndex)}`,
+                label: getEncounterPanelTypeLabel(active),
+                reason: `${getRouteOptionLabel(nodeId) || nodeId || 'NODE'} · ${getPhaseRomanLabel(phaseIndex)}`,
                 canForce: false,
-                className: active.type === 'pre_signal' ? 'is-pre-signal' : 'is-placed'
+                className: normalizeEncounterPanelKind(active.kind) === 'signal' ? 'is-pre-signal' : 'is-placed'
             };
         }
         if (active) {
-            return { label: String(active.status || 'QUEUED').toUpperCase(), reason: 'queue', canForce: false, className: 'is-queued' };
+            return { label: normalizeEncounterPanelState(active.state).toUpperCase(), reason: 'active', canForce: false, className: 'is-queued' };
         }
         const evaluated = eligibilityMap.get(charKey);
         if (evaluated?.debugState === 'ready') {
@@ -1064,20 +1097,18 @@
         const encounter = actState.characterEncounter && typeof actState.characterEncounter === 'object'
             ? actState.characterEncounter
             : {};
-        const queue = Array.isArray(encounter.queue) ? encounter.queue : [];
-        const activeQueue = queue.filter((item) => item && !['triggered', 'expired', 'cancelled'].includes(item.status));
-        const placed = activeQueue.filter((item) => item.status === 'placed');
-        const introduced = Object.entries(encounter.characters || {})
-            .filter(([, state]) => state?.firstMeetDone === true || state?.status === 'introduced')
-            .map(([charKey]) => charKey);
+        const activeEntries = getEncounterPanelActiveEntries(encounter);
+        const placed = activeEntries.filter(({ entry }) => normalizeEncounterPanelState(entry.state) === 'placed');
+        const introduced = Object.keys(encounter.met && typeof encounter.met === 'object' ? encounter.met : {});
         const activeLabel = placed.length
-            ? placed.map((item) => {
-                const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(item.targetPhaseIndex) || 0)));
-                const typeLabel = item.type === 'pre_signal' ? 'SIG' : 'MEET';
-                return `${typeLabel}:${item.charKey}@${getRouteOptionLabel(item.targetNodeId || '') || item.targetNodeId || 'NODE'}·${getPhaseRomanLabel(phaseIndex)}`;
+            ? placed.map(({ charKey, entry }) => {
+                const phaseIndex = getEncounterPanelPhaseIndex(entry);
+                const typeLabel = getEncounterPanelTypeLabel(entry, true);
+                const nodeId = typeof entry.node === 'string' ? entry.node : '';
+                return `${typeLabel}:${charKey}@${getRouteOptionLabel(nodeId) || nodeId || 'NODE'}·${getPhaseRomanLabel(phaseIndex)}`;
             }).join(' / ')
-            : activeQueue.length
-                ? activeQueue.map((item) => `${item.type === 'pre_signal' ? 'SIG' : 'MEET'}:${item.charKey}:${String(item.status || 'queued').toUpperCase()}`).join(' / ')
+            : activeEntries.length
+                ? activeEntries.map(({ charKey, entry }) => `${getEncounterPanelTypeLabel(entry, true)}:${charKey}:${normalizeEncounterPanelState(entry.state).toUpperCase()}`).join(' / ')
                 : 'EMPTY';
         return `
             <div class="encounter-act-panel">

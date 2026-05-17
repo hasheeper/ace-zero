@@ -190,7 +190,6 @@ const DEFAULT_WORLD_ACT = {
     },
     characterEncounter: {},
     pendingResolutions: [],
-    pendingAssetDeckCommands: [],
     resolutionHistory: [],
     narrativeTension: 0
   };

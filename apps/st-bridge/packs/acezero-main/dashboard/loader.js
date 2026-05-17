@@ -164,7 +164,6 @@
     '/world/act/stage',
     '/world/act/vision',
     '/world/act/resourceSpent',
-    '/world/act/pendingAssetDeckCommands',
     '/world/act/resolutionHistory'
   ];
 
@@ -639,17 +638,10 @@
     const phaseNo = phaseIndex + 1;
     const actId = normalizeDashboardString(source.actId || actState.id, 'act') || 'act';
     const baseSeed = normalizeDashboardString(actState.seed, 'ASSET') || 'ASSET';
-    const offer = assetDeckInput?.pending_offer && typeof assetDeckInput.pending_offer === 'object' ? assetDeckInput.pending_offer : {};
+    const offer = assetDeckInput?.offer && typeof assetDeckInput.offer === 'object' ? assetDeckInput.offer : {};
     const pool = normalizeDashboardString(payload.pool || offer.pool, '');
     const poolPart = pool ? `:${pool.toLowerCase()}` : '';
-    const refreshCount = kind === 'refresh_offer' ? Math.max(1, Math.round(Number(offer.refreshCount) || 0) + 1) : 0;
-    const refreshPart = refreshCount ? `:refresh${refreshCount}` : '';
-    return `${baseSeed}:asset:${kind}:${actId}:${nodeId}:${nodeIndex}:phase${phaseNo}${poolPart}${refreshPart}`;
-  }
-
-  function normalizePendingActAssetDeckCommands(actState) {
-    const list = Array.isArray(actState?.pendingAssetDeckCommands) ? actState.pendingAssetDeckCommands : [];
-    return list.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+    return `${baseSeed}:asset:${kind}:${actId}:${nodeId}:${nodeIndex}:phase${phaseNo}${poolPart}`;
   }
 
   function isHeroMacroToken(value) {
@@ -778,51 +770,14 @@
     return null;
   }
 
-  function buildCompactAssetDeckResolution(pending, command, commandResult, status) {
-    const commandPayload = command && typeof command.payload === 'object' && !Array.isArray(command.payload)
-      ? command.payload
-      : {};
-    const source = commandPayload.source && typeof commandPayload.source === 'object' && !Array.isArray(commandPayload.source)
-      ? commandPayload.source
-      : {};
-    const out = {
-      id: normalizeDashboardString(pending.id, ''),
-      protocol: 'ace0.assetDeckCommand.v1',
-      type: 'asset',
-      level: Math.max(1, Math.min(3, Math.round(Number(pending.level) || Number(commandPayload.amount) || 1))),
-      nodeId: normalizeDashboardString(pending.nodeId || source.nodeId, ''),
-      nodeIndex: Math.max(0, Math.round(Number(pending.nodeIndex ?? source.nodeIndex) || 0)),
-      phaseIndex: Math.max(0, Math.round(Number(pending.phaseIndex ?? source.phaseIndex) || 0)),
-      status,
-      outcome: commandResult?.code || (commandResult?.ok ? 'asset_command_applied' : 'asset_command_failed'),
-      commandKind: normalizeDashboardString(command.kind || command.type, '')
-    };
-    if (commandResult?.error) out.error = normalizeDashboardString(commandResult.error, '');
-    if (commandPayload.pool) out.pool = normalizeDashboardString(commandPayload.pool, '');
-    return out;
-  }
-
   function compactActResolutionHistoryItem(item) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-    if (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') {
-      const clearKey = normalizeDashboardString(item.clearKey || item.offerId, '');
-      if (!clearKey) return null;
-      return {
-        id: normalizeDashboardString(item.id, `asset-offer-clear:${clearKey}`),
-        protocol: 'ace0.assetOfferClear.v1',
-        type: 'asset_offer_clear',
-        status: normalizeDashboardString(item.status, 'resolved') || 'resolved',
-        clearKey,
-        offerId: normalizeDashboardString(item.offerId, clearKey),
-        outcome: normalizeDashboardString(item.outcome, '')
-      };
-    }
     const type = normalizeDashboardString(item.type, '');
-    if (type !== 'asset' && type !== 'combat') return null;
+    if (type !== 'combat') return null;
     const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
     const compact = {
       id: normalizeDashboardString(item.id, ''),
-      protocol: normalizeDashboardString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+      protocol: normalizeDashboardString(item.protocol, ''),
       type,
       level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
       nodeId: normalizeDashboardString(item.nodeId, ''),
@@ -838,80 +793,8 @@
     return compact.id ? compact : null;
   }
 
-  function applyPendingActAssetDeckCommands(nextState, nextActState) {
-    const pendingCommands = normalizePendingActAssetDeckCommands(nextActState);
-    const commandsToApply = pendingCommands.filter((item) => {
-      const status = (normalizeDashboardString(item.status, 'pending') || 'pending').toLowerCase();
-      return status === 'pending' && item.command && typeof item.command === 'object' && !Array.isArray(item.command);
-    });
-    if (!commandsToApply.length) return nextActState;
-
-    const assetDeckModule = getAssetDeckModuleApi();
-    if (!assetDeckModule || typeof assetDeckModule.applyAssetDeckCommand !== 'function') {
-      throw new Error('AssetDeck runtime is not loaded in host; cannot settle ACT asset commands.');
-    }
-
-    let currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
-      ? assetDeckModule.normalizeAssetDeckState(nextState.world.assetDeck)
-      : (nextState.world.assetDeck || {});
-    const reserveSource = nextActState.reserve && typeof nextActState.reserve === 'object' && !Array.isArray(nextActState.reserve)
-      ? nextActState.reserve
-      : {};
-    let currentAssetPoints = Math.max(0, Math.round(Number(reserveSource.asset) || 0));
-    const consumedIds = new Set();
-    const resolutionHistory = Array.isArray(nextActState.resolutionHistory)
-      ? nextActState.resolutionHistory.map(compactActResolutionHistoryItem).filter(Boolean).slice(-64)
-      : [];
-
-    commandsToApply.forEach((pending) => {
-      const command = cloneJsonData(pending.command, {}) || {};
-      const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
-        ? cloneJsonData(command.payload, {})
-        : {};
-      command.payload = {
-        ...payload,
-        requestId: normalizeDashboardString(payload.requestId || pending.id, '')
-      };
-      if (!command.payload.source && pending.nodeId) {
-        command.payload.source = {
-          type: 'act_asset_token',
-          actId: normalizeDashboardString(nextActState.id, ''),
-          nodeId: pending.nodeId,
-          nodeIndex: pending.nodeIndex,
-          phaseIndex: pending.phaseIndex,
-          level: pending.level,
-          sources: Array.isArray(pending.sources) ? cloneJsonData(pending.sources, []) : []
-        };
-      }
-
-      let commandResult;
-      try {
-        commandResult = assetDeckModule.applyAssetDeckCommand(currentAssetDeck, command, {
-          seed: buildDashboardAssetCommandSeed(nextActState, currentAssetDeck, command),
-          assetPoints: currentAssetPoints
-        });
-      } catch (error) {
-        commandResult = { ok: false, code: 'asset_command_error', error: error?.message || String(error) };
-      }
-
-      const status = commandResult?.ok ? 'resolved' : 'failed';
-      if (commandResult?.assetDeck) currentAssetDeck = cloneJsonData(commandResult.assetDeck, currentAssetDeck);
-      if (Number.isFinite(Number(commandResult?.assetPoints))) {
-        currentAssetPoints = Math.max(0, Math.round(Number(commandResult.assetPoints) || 0));
-      }
-      resolutionHistory.push(buildCompactAssetDeckResolution(pending, command, commandResult, status));
-      consumedIds.add(pending.id);
-    });
-
-    nextState.world.assetDeck = cloneJsonData(currentAssetDeck, currentAssetDeck);
-    nextActState.reserve = {
-      combat: Math.max(0, Number(reserveSource.combat) || 0),
-      rest: Math.max(0, Number(reserveSource.rest) || 0),
-      asset: currentAssetPoints,
-      vision: Math.max(0, Number(reserveSource.vision) || 0)
-    };
-    nextActState.pendingAssetDeckCommands = pendingCommands.filter((item) => !consumedIds.has(item.id));
-    nextActState.resolutionHistory = resolutionHistory.slice(-64);
+  function normalizeDashboardActStateForCommit(nextState, nextActState) {
+    void nextState;
     return nextActState;
   }
 
@@ -1041,7 +924,7 @@
     let nextActState = cloneJsonData(worldPatch.act || commitPayload.act, null);
     if (!nextActState || typeof nextActState !== 'object') return false;
 
-    nextActState = applyPendingActAssetDeckCommands(nextState, nextActState);
+    nextActState = normalizeDashboardActStateForCommit(nextState, nextActState);
     nextState.world.act = nextActState;
     const replayPaths = [
       ...DASHBOARD_ACT_REPLAY_PATHS,
@@ -1251,9 +1134,8 @@
 
   if (ROOT.__ACE0_DASHBOARD_LOADER_TEST_HOOKS__ === true) {
     ROOT.ACE0DashboardLoaderTestHooks = {
-      applyPendingActAssetDeckCommands,
+      normalizeDashboardActStateForCommit,
       commitDashboardActState,
-      normalizePendingActAssetDeckCommands,
       persistDashboardActState,
       persistDashboardAssetDeckCommand
     };

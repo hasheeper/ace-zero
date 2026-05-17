@@ -81,12 +81,18 @@ async function evalJs(client, expression) {
 }
 
 function makeAssetDeck(cards = [], voidCards = []) {
+  const toRef = (card) => {
+    if (!card) return null;
+    const id = typeof card === 'string' ? card : (card.id || card.cardId);
+    if (!id) return null;
+    return { id, lv: Math.max(1, Math.round(Number(card.lv || card.level) || 1)) };
+  };
   return {
-    general_slots_unlocked: 4,
-    void_slots_unlocked: 2,
-    active_general_cards: cards,
-    active_void_cards: voidCards,
-    history: []
+    slots: { general: 4, void: 2 },
+    bag: {
+      general: cards.map(toRef).filter(Boolean),
+      void: voidCards.map(toRef).filter(Boolean)
+    }
   };
 }
 
@@ -94,75 +100,21 @@ function makeScenarioDeck(name) {
   if (name === 'baseline') return makeAssetDeck();
   if (name === 'mid_asset') {
     return makeAssetDeck([
-      {
-        cardId: 'balance_mid_minor_wish_l2',
-        skillKey: 'minor_wish',
-        system: 'moirai',
-        level: 2,
-        targetTags: ['RINO'],
-        gameTags: ['texas-holdem'],
-        modifiers: [
-          { type: 'skill_level', key: 'minor_wish', value: 2 },
-          { type: 'skill_cost_flat', key: 'minor_wish', value: -3 }
-        ]
-      },
-      {
-        cardId: 'balance_mid_moirai_lens',
-        gameTags: ['texas-holdem'],
-        modifiers: [{ type: 'force_power_pct', system: 'moirai', value: 0.08 }]
-      },
-      {
-        cardId: 'balance_mid_opening_glimmer',
-        gameTags: ['texas-holdem'],
-        modifiers: [{ type: 'once_per_hand_fortune_flat', value: 12 }]
-      }
+      { id: 'asset_skill_minor_wish_l2', level: 2 },
+      { id: 'asset_mana_reduce_gold', level: 3 },
+      { id: 'asset_moirai_power_silver', level: 2 },
+      { id: 'asset_moirai_street_rainbow', level: 4 }
     ]);
   }
   if (name === 'high_asset') {
     return makeAssetDeck([
-      {
-        cardId: 'balance_high_minor_wish_l4',
-        skillKey: 'minor_wish',
-        system: 'moirai',
-        level: 4,
-        targetTags: ['RINO'],
-        gameTags: ['texas-holdem'],
-        modifiers: [
-          { type: 'skill_level', key: 'minor_wish', value: 4 },
-          { type: 'skill_cost_flat', key: 'minor_wish', value: -5 }
-        ]
-      },
-      {
-        cardId: 'balance_high_grand_wish_l4',
-        skillKey: 'grand_wish',
-        system: 'moirai',
-        level: 4,
-        targetTags: ['RINO'],
-        gameTags: ['texas-holdem'],
-        modifiers: [
-          { type: 'skill_level', key: 'grand_wish', value: 4 },
-          { type: 'skill_cost_pct', key: 'grand_wish', value: -0.15 }
-        ]
-      },
-      {
-        cardId: 'balance_high_rainbow_force',
-        gameTags: ['any'],
-        modifiers: [
-          { type: 'all_force_power_bonus', value: 0.16 },
-          { type: 'first_force_power_pct', value: 0.1 }
-        ]
-      },
-      {
-        cardId: 'balance_high_opening_blessing',
-        gameTags: ['texas-holdem'],
-        modifiers: [{ type: 'once_per_hand_fortune_flat', value: 14 }]
-      }
+      { id: 'asset_skill_minor_wish_l4', level: 4 },
+      { id: 'asset_skill_grand_wish_l4', level: 4 },
+      { id: 'asset_moirai_power_rainbow', level: 4 },
+      { id: 'asset_moirai_street_rainbow', level: 4 },
+      { id: 'asset_rainbow_contract', level: 4 }
     ], [
-      {
-        cardId: 'balance_high_mana_battery',
-        gameTags: ['texas-holdem'],
-        modifiers: [{ type: 'mana_max_flat', value: 10 }]
-      }
+      { id: 'asset_mana_max_gold', level: 3 }
     ]);
   }
   throw new Error(`Unknown scenario: ${name}`);

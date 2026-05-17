@@ -94,7 +94,6 @@
     '/world/act/resourceSpent',
     '/world/act/characterEncounter',
     '/world/act/pendingResolutions',
-    '/world/act/pendingAssetDeckCommands',
     '/world/act/resolutionHistory',
     '/world/act/narrativeTension',
     '/world/act/pendingTransitionTarget',
@@ -114,8 +113,7 @@
   ];
   const ACE0_ASSET_CHOICE_REPLAY_PATHS = [
     '/world/assetDeck',
-    '/world/act/reserve',
-    '/world/act/resolutionHistory'
+    '/world/act/reserve'
   ];
 
   const DEFAULT_WORLD_ACT = {
@@ -141,7 +139,6 @@
     resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
     characterEncounter: {},
     pendingResolutions: [],
-    pendingAssetDeckCommands: [],
     resolutionHistory: [],
     // 情节张力 0-100
     narrativeTension: 0,
@@ -340,7 +337,6 @@
     const from = Math.max(0, Math.round(Number(value.from) || 0));
     const until = Math.max(0, Math.round(Number(value.until) || 0));
     const priority = Math.round(Number(value.priority) || 0);
-    const score = Math.max(0, Math.round(Number(value.score) || 0));
     const entry = { kind, state };
     if (node) entry.node = node;
     if (nodeIndex > 0) entry.nodeIndex = nodeIndex;
@@ -348,7 +344,6 @@
     if (from > 0) entry.from = from;
     if (until > 0) entry.until = until;
     if (priority !== 0) entry.priority = priority;
-    if (score > 0) entry.score = score;
     return { charKey, entry };
   }
 
@@ -375,9 +370,6 @@
 
   function compactCharacterEncounterForReplay(value) {
     if (!isPlainObject(value)) return {};
-    if (value.v !== 2) {
-      return Object.keys(value).length === 0 ? {} : undefined;
-    }
 
     const compact = {};
     const lastMeet = Math.max(0, Math.round(Number(value.lastMeet) || 0));
@@ -414,7 +406,7 @@
       || (compact.met && Object.keys(compact.met).length)
       || (compact.signaled && Object.keys(compact.signaled).length);
     if (!hasData) return {};
-    const out = { v: 2 };
+    const out = {};
     if (compact.active && Object.keys(compact.active).length) out.active = compact.active;
     if (compact.met && Object.keys(compact.met).length) out.met = compact.met;
     if (compact.signaled && Object.keys(compact.signaled).length) out.signaled = compact.signaled;
@@ -423,10 +415,65 @@
   }
 
   function normalizeReplayValueForPath(path, value) {
+    if (isForbiddenEncounterReplayPath(path)) return undefined;
     if (path === '/world/act/characterEncounter') {
       return compactCharacterEncounterForReplay(value);
     }
+    if (path === '/world/act/characterEncounter/active' && isPlainObject(value)) {
+      const out = {};
+      Object.entries(value).forEach(([rawKey, rawEntry]) => {
+        const normalized = normalizeEncounterReplayActive(rawEntry, rawKey);
+        if (normalized) out[normalized.charKey] = normalized.entry;
+      });
+      return out;
+    }
+    if (path.startsWith('/world/act/characterEncounter/active/') && isPlainObject(value)) {
+      const charKey = path.split('/')[5] || '';
+      const normalized = normalizeEncounterReplayActive(value, charKey);
+      return normalized ? normalized.entry : undefined;
+    }
+    if ((path === '/world/act/characterEncounter/met' || path === '/world/act/characterEncounter/signaled') && isPlainObject(value)) {
+      const out = {};
+      Object.entries(value).forEach(([rawKey, rawFact]) => {
+        const charKey = _normalizeTrimmedString(rawKey, '').toUpperCase();
+        if (charKey) out[charKey] = normalizeEncounterReplayFact(rawFact);
+      });
+      return out;
+    }
     return value;
+  }
+
+  function isForbiddenEncounterReplayPath(path) {
+    if (typeof path !== 'string' || !path.startsWith('/world/act/characterEncounter/')) return false;
+    const parts = path.split('/').slice(4).map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
+    const root = parts[0] || '';
+    if (!['active', 'met', 'signaled', 'lastMeet'].includes(root)) return true;
+    const staleFields = new Set([
+      'queue',
+      'characters',
+      'queuedRequestId',
+      'placedNodeId',
+      'firstMeetDone',
+      'preSignalDone',
+      'introducedNodeId',
+      'introducedAtNodeIndex',
+      'introducedPhaseIndex',
+      'preSignalNodeId',
+      'preSignalAtNodeIndex',
+      'preSignalPhaseIndex',
+      'score',
+      'spentScore',
+      'reasonCodes',
+      'debugLabel',
+      'firstMeetHint',
+      'preSignalHint'
+    ]);
+    if (parts.some(part => staleFields.has(part))) return true;
+    if (root === 'lastMeet') return parts.length > 1;
+    const field = parts[2] || '';
+    if (!field) return false;
+    if (root === 'active') return !['kind', 'state', 'node', 'nodeIndex', 'phase', 'from', 'until', 'priority'].includes(field);
+    return !['node', 'nodeIndex', 'phase'].includes(field);
   }
 
   function expandReplayPath(path) {
@@ -871,6 +918,7 @@
       if (!patch || typeof patch !== 'object') return;
       const path = typeof patch.path === 'string' ? patch.path.trim() : '';
       if (!path) return;
+      if (isForbiddenEncounterReplayPath(path)) return;
       byPath.set(path, {
         ...patch,
         path
@@ -1030,35 +1078,25 @@
     }
 
     return {
-      version: Math.max(1, Math.round(Number(normalizedDeck.version) || 1)),
-      general_slots_unlocked: Math.max(0, Math.round(Number(normalizedDeck.general_slots_unlocked) || 0)),
-      void_slots_unlocked: Math.max(0, Math.round(Number(normalizedDeck.void_slots_unlocked) || 0)),
-      active_general_cards: Array.isArray(normalizedDeck.active_general_cards) ? normalizedDeck.active_general_cards : [],
-      active_void_cards: Array.isArray(normalizedDeck.active_void_cards) ? normalizedDeck.active_void_cards : []
+      slots: {
+        general: Math.max(0, Math.round(Number(normalizedDeck.slots?.general) || 0)),
+        void: Math.max(0, Math.round(Number(normalizedDeck.slots?.void) || 0))
+      },
+      bag: {
+        general: Array.isArray(normalizedDeck.bag?.general) ? normalizedDeck.bag.general : [],
+        void: Array.isArray(normalizedDeck.bag?.void) ? normalizedDeck.bag.void : []
+      }
     };
   }
 
   function compactActResolutionHistoryItem(item) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-    if (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') {
-      const clearKey = _normalizeTrimmedString(item.clearKey || item.offerId, '');
-      if (!clearKey) return null;
-      return {
-        id: _normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
-        protocol: 'ace0.assetOfferClear.v1',
-        type: 'asset_offer_clear',
-        status: _normalizeTrimmedString(item.status, 'resolved') || 'resolved',
-        clearKey,
-        offerId: _normalizeTrimmedString(item.offerId, clearKey),
-        outcome: _normalizeTrimmedString(item.outcome, '')
-      };
-    }
     const type = normalizeActResourceKey(item.type, '');
-    if (type !== 'asset' && type !== 'combat') return null;
+    if (type !== 'combat') return null;
     const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
     const compact = {
       id: _normalizeTrimmedString(item.id, ''),
-      protocol: _normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+      protocol: _normalizeTrimmedString(item.protocol, ''),
       type,
       level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
       nodeId: _normalizeTrimmedString(item.nodeId, ''),
@@ -2252,7 +2290,7 @@
     },
 
     // 契约卡选择 API：由 ACT_RESULT 卡片直接调用。
-    // 只处理当前 pending_offer 的 choose_card，不打开 Dashboard 悬浮窗。
+    // 只处理当前 compact offer 的 choose_card，不打开 Dashboard 悬浮窗。
     async chooseAssetCard(choiceIndex, slotType = 'general', clearKey = '', options = {}) {
       const index = Math.max(0, Math.round(Number(choiceIndex) || 0));
       const normalizedSlot = String(slotType || 'general').trim().toLowerCase() === 'void' ? 'void' : 'general';
@@ -2273,10 +2311,13 @@
       const currentAssetDeck = typeof assetDeckModule.normalizeAssetDeckState === 'function'
         ? assetDeckModule.normalizeAssetDeckState(eraVars?.world?.assetDeck)
         : (eraVars?.world?.assetDeck || {});
-      if (!currentAssetDeck?.pending_offer) {
-        return { ok: false, reason: 'no_pending_offer' };
+      if (!currentAssetDeck?.offer) {
+        return { ok: false, reason: 'no_offer' };
       }
-      const currentOfferId = typeof currentAssetDeck.pending_offer.id === 'string' ? currentAssetDeck.pending_offer.id : '';
+      const currentOfferId = typeof currentAssetDeck.offer.id === 'string' ? currentAssetDeck.offer.id : '';
+      if (currentAssetDeck.offer.settled === true) {
+        return { ok: false, reason: 'offer_settled', offerId: currentOfferId };
+      }
       if (requestedClearKey && currentOfferId && requestedClearKey !== currentOfferId) {
         return { ok: false, reason: 'stale_asset_offer', clearKey: requestedClearKey, offerId: currentOfferId };
       }
@@ -2287,7 +2328,11 @@
           kind: 'choose_card',
           payload: {
             choiceIndex: index,
-            slotType: normalizedSlot
+            slotType: normalizedSlot,
+            ...(Number.isFinite(Number(options.targetIndex ?? options.replaceIndex))
+              ? { targetIndex: Math.max(0, Math.round(Number(options.targetIndex ?? options.replaceIndex))) }
+              : {}),
+            ...(options.confirmDestroy === true || options.confirm_destroy === true ? { confirmDestroy: true } : {})
           }
         }, {
           seed: `act-result:${currentOfferId || requestedClearKey || 'offer'}:${index}:${normalizedSlot}`
@@ -2310,44 +2355,13 @@
         };
       }
 
-      const nextWorld = { assetDeck: commandResult.assetDeck };
       const offerClearKey = requestedClearKey || currentOfferId;
-      if (offerClearKey) {
-        const rawAct = eraVars?.world?.act;
-        const actState = rawAct && typeof rawAct === 'object' && !Array.isArray(rawAct)
-          ? JSON.parse(JSON.stringify(rawAct))
-          : null;
-        if (actState) {
-          const history = Array.isArray(actState.resolutionHistory)
-            ? actState.resolutionHistory.map(compactActResolutionHistoryItem).filter(Boolean).slice(-64)
-            : [];
-          const alreadyRecorded = history.some(item =>
-            item && typeof item === 'object' &&
-            (item.protocol === 'ace0.assetOfferClear.v1' || item.type === 'asset_offer_clear') &&
-            String(item.clearKey || item.offerId || '') === offerClearKey
-          );
-          if (!alreadyRecorded) {
-            history.push({
-              id: `asset-offer-clear:${offerClearKey}`,
-              protocol: 'ace0.assetOfferClear.v1',
-              type: 'asset_offer_clear',
-              status: 'resolved',
-              clearKey: offerClearKey,
-              offerId: currentOfferId || offerClearKey,
-              outcome: commandResult.code || 'asset_card_chosen'
-            });
-          }
-          actState.resolutionHistory = history.slice(-64);
-          nextWorld.act = actState;
-        }
-      }
 
       const nextEraVars = {
         ...(eraVars || {}),
         world: {
           ...(eraVars?.world || {}),
-          assetDeck: nextWorld.assetDeck,
-          ...(nextWorld.act ? { act: nextWorld.act } : {})
+          assetDeck: commandResult.assetDeck
         }
       };
       const patches = buildReplayPatchesFromEraVars(eraVars, nextEraVars, ACE0_ASSET_CHOICE_REPLAY_PATHS);
@@ -2365,15 +2379,12 @@
       return {
         ok: commandResult.ok === true,
         code: commandResult.code || '',
-        pendingReplace: !!commandResult.assetDeck.pending_replace,
+        needsReplace: commandResult.code === 'needs_replace',
         clearKey: offerClearKey,
         offerId: currentOfferId || offerClearKey,
-        selectedCardId: typeof commandResult.card?.cardId === 'string'
-          ? commandResult.card.cardId
-          : (typeof commandResult.consumed?.cardId === 'string' ? commandResult.consumed.cardId : ''),
-        selectedInstanceId: typeof commandResult.card?.instanceId === 'string'
-          ? commandResult.card.instanceId
-          : (typeof commandResult.consumed?.instanceId === 'string' ? commandResult.consumed.instanceId : ''),
+        selectedCardId: typeof commandResult.card?.id === 'string'
+          ? commandResult.card.id
+          : (typeof commandResult.consumed?.id === 'string' ? commandResult.consumed.id : ''),
         assetDeck: commandResult.assetDeck
       };
     },

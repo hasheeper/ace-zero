@@ -113,49 +113,19 @@ function makeAssetConfig(baseConfig) {
     world: {
       ...(baseConfig.world || {}),
       assetDeck: {
-        general_slots_unlocked: 4,
-        void_slots_unlocked: 2,
-        active_general_cards: [
-          {
-            cardId: 'asset_skill_minor_wish_l2_regression',
-            skillKey: 'minor_wish',
-            system: 'moirai',
-            level: 2,
-            targetTags: ['RINO'],
-            gameTags: ['texas-holdem'],
-            modifiers: [
-              { type: 'skill_level', key: 'minor_wish', value: 2 },
-              { type: 'skill_cost_flat', key: 'minor_wish', value: -3 }
-            ]
-          },
-          {
-            cardId: 'asset_rainbow_contract_regression',
-            gameTags: ['any'],
-            modifiers: [{ type: 'all_force_power_bonus', value: 0.08 }]
-          },
-          {
-            cardId: 'asset_first_cast_discount_regression',
-            gameTags: ['texas-holdem'],
-            modifiers: [{ type: 'first_skill_cost_flat', value: -4 }]
-          },
-          {
-            cardId: 'asset_first_force_focus_regression',
-            gameTags: ['texas-holdem'],
-            modifiers: [{ type: 'first_force_power_pct', value: 0.1 }]
-          },
-          {
-            cardId: 'asset_opening_blessing_regression',
-            gameTags: ['texas-holdem'],
-            modifiers: [{ type: 'once_per_hand_fortune_flat', value: 9 }]
-          }
-        ],
-        active_void_cards: [
-          {
-            cardId: 'asset_mana_battery_regression',
-            gameTags: ['texas-holdem'],
-            modifiers: [{ type: 'mana_max_flat', value: 10 }]
-          }
-        ]
+        slots: { general: 4, void: 2 },
+        bag: {
+          general: [
+            { id: 'asset_skill_minor_wish_l2', lv: 2 },
+            { id: 'asset_mana_reduce_gold', lv: 3 },
+            { id: 'asset_moirai_power_gold', lv: 3 },
+            { id: 'asset_moirai_street_rainbow', lv: 4 },
+            { id: 'asset_rainbow_contract', lv: 4 }
+          ],
+          void: [
+            { id: 'asset_mana_max_gold', lv: 3 }
+          ]
+        }
       }
     }
   };
@@ -216,7 +186,7 @@ async function main() {
       hasSkillSystem: !!ss,
       hasCombatFormula: !!window.moz?.combatFormula,
       hasApplyHook: typeof window.__acezeroApplyGameConfig === 'function',
-      injectedCardIds: window.__ACEZERO_GAME_CONFIG__?.world?.assetDeck?.active_general_cards?.map(card => card.cardId) || [],
+      injectedCardIds: window.__ACEZERO_GAME_CONFIG__?.world?.assetDeck?.bag?.general?.map(card => card.id) || [],
       assetAppliedCards: ss?.assetModifiers?.debug?.applied?.map(item => item.type) || [],
       minorWishLevel: minor?.level ?? null,
       minorWishCost: minor && ss?.getSkillActualManaCost ? ss.getSkillActualManaCost(minor, {}) : null,

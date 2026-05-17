@@ -352,6 +352,11 @@ async function testEncounterReplayPersistsCompactState() {
       world: {
         current_time: { day: 1, phase: 'MORNING' },
         clockPressure: 0,
+        assetDeck: {
+          slots: { general: 4, void: 2 },
+          bag: { general: [], void: [] },
+          offer: null
+        },
         act: createActStateAt(act, 1, ['node1-entry'], {
           characterEncounter: {}
         })
@@ -369,7 +374,6 @@ async function testEncounterReplayPersistsCompactState() {
 
   const afterVars = clone(baseVars.stat_data);
   afterVars.world.act.characterEncounter = {
-    v: 2,
     active: {
       COTA: {
         kind: 'meet',
@@ -385,11 +389,11 @@ async function testEncounterReplayPersistsCompactState() {
     messageId: 17,
     operationId: 'runtime:auto-encounters',
     afterVars,
-    paths: ['/world/act']
+    paths: ['/world/act/characterEncounter']
   });
 
   const message = sandbox.__messages[17].message;
-  assertEqual(result.ok, true, 'encounter replay should persist through MVU replay');
+  assertEqual(result.ok, true, `encounter replay should persist through MVU replay (${result.reason || 'no reason'})`);
   assert(message.includes('ACE0_REPLAY:runtime:auto-encounters'), 'encounter replay should append deterministic replay block');
   assert(message.includes('"path": "/world/act/characterEncounter/active"'), 'encounter replay should include compact active ledger');
   assert(message.includes('"COTA"'), 'encounter replay should include active COTA state');
@@ -397,7 +401,7 @@ async function testEncounterReplayPersistsCompactState() {
   assert(!message.includes('/world/act/characterEncounter/characters'), 'encounter replay should not persist character mirrors');
   assert(!message.includes('queuedRequestId'), 'encounter replay should not persist derived request ids');
   assert(!message.includes('"path": "/world/act",'), 'encounter replay should not replace the whole ACT subtree');
-  assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.v, 2, 'encounter replay should store v2 compact state');
+  assert(!Object.prototype.hasOwnProperty.call(sandbox.__messageVars[17].stat_data.world.act.characterEncounter, 'v'), 'encounter replay should not store a version marker');
   assertEqual(sandbox.__messageVars[17].stat_data.world.act.characterEncounter.active.COTA.state, 'queued', 'encounter active ledger should replay COTA status');
 }
 
@@ -617,7 +621,6 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
     phase_slots: [null, null, null, null],
     reserve: { combat: 1, rest: 1, asset: 1, vision: 1 },
     characterEncounter: {
-      v: 2,
       active: {
         COTA: {
           kind: 'meet',
@@ -700,10 +703,13 @@ async function testDashboardActCommitWritesOnlyChangedActPointers() {
       floorKey: 'message:13'
     },
     characterEncounter: {
-      meta: { version: 2, lastFirstMeetNodeIndex: 0, lastSignalNodeIndex: 0 },
-      queue: [],
-      characters: {
-        COTA: { status: 'queued', queuedRequestId: 'debug-only', placedNodeId: '' }
+      active: {
+        COTA: {
+          kind: 'meet',
+          state: 'queued',
+          from: 1,
+          priority: 999
+        }
       }
     }
   };

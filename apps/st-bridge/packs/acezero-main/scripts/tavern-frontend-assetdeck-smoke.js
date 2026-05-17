@@ -57,41 +57,18 @@ sandbox.__vars = {
   },
   world: {
     assetDeck: {
-      version: 1,
-      general_slots_unlocked: 4,
-      void_slots_unlocked: 2,
-      active_general_cards: [
-        {
-          instanceId: 'asset_skill_minor_wish_l1:init',
-          cardId: 'asset_skill_minor_wish_l1',
-          rarity: 'bronze',
-          kind: 'skill',
-          system: 'moirai',
-          skillKey: 'minor_wish',
-          level: 1,
-          targetTags: ['RINO'],
-          gameTags: ['texas-holdem'],
-          slotTags: ['general'],
-          modifiers: [{ type: 'skill_level', key: 'minor_wish', value: 1 }]
-        }
-      ],
-      active_void_cards: [
-        {
-          instanceId: 'asset_skill_insulation_l1:init_void',
-          cardId: 'asset_skill_insulation_l1',
-          rarity: 'bronze',
-          kind: 'skill',
-          system: 'void',
-          skillKey: 'insulation',
-          level: 1,
-          targetTags: ['KAZU'],
-          gameTags: ['texas-holdem'],
-          slotTags: ['void'],
-          modifiers: [{ type: 'skill_level', key: 'insulation', value: 1 }]
-        }
-      ],
-      pending_offer: { id: 'offer-should-not-enter-battle-config' },
-      history: [{ kind: 'history-should-not-enter-battle-config' }]
+      slots: { general: 4, void: 2 },
+      bag: {
+        general: [{ id: 'asset_skill_minor_wish_l1', lv: 1 }],
+        void: [{ id: 'asset_skill_insulation_l1', lv: 1 }]
+      },
+      offer: {
+        floor: 'message:frontend',
+        id: 'offer:low:frontend',
+        pool: 'low',
+        settled: false,
+        choices: [{ id: 'asset_mana_max_bronze', lv: 1 }]
+      }
     }
   }
 };
@@ -133,16 +110,18 @@ setTimeout(() => {
 
     assert(config.assetDeck, 'ACE0_FRONTEND config should include assetDeck');
     assertDeepEqual(
-      config.assetDeck.active_general_cards.map((card) => card.cardId),
+      config.assetDeck.bag.general.map((card) => card.id),
       ['asset_skill_minor_wish_l1'],
-      'ACE0_FRONTEND assetDeck should carry active general cards'
+      'ACE0_FRONTEND assetDeck should carry compact general card refs'
     );
     assertDeepEqual(
-      config.assetDeck.active_void_cards.map((card) => card.cardId),
+      config.assetDeck.bag.void.map((card) => card.id),
       ['asset_skill_insulation_l1'],
-      'ACE0_FRONTEND assetDeck should carry active void cards'
+      'ACE0_FRONTEND assetDeck should carry compact void card refs'
     );
-    assert(!Object.prototype.hasOwnProperty.call(config.assetDeck, 'pending_offer'), 'Battle config should not carry pending offer state');
+    assertEqual(config.assetDeck.slots.general, 4, 'ACE0_FRONTEND assetDeck should carry general slot count');
+    assertEqual(config.assetDeck.slots.void, 2, 'ACE0_FRONTEND assetDeck should carry void slot count');
+    assert(!Object.prototype.hasOwnProperty.call(config.assetDeck, 'offer'), 'Battle config should not carry offer state');
     assert(!Object.prototype.hasOwnProperty.call(config.assetDeck, 'history'), 'Battle config should not carry AssetDeck history');
 
     const act = sandbox.ACE0Modules.act;

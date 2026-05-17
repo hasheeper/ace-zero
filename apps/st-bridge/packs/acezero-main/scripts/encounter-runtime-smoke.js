@@ -16,6 +16,32 @@ const {
 const { act } = loadActSandbox();
 const config = getChapterConfig(act);
 
+function activeEncounterList(actState) {
+  return Object.entries(actState?.characterEncounter?.active || {})
+    .map(([charKey, entry]) => ({ charKey, ...(entry || {}) }));
+}
+
+function toPlacedMarker(placed) {
+  if (!placed) return null;
+  const kind = placed.kind === 'signal' ? 'signal' : 'meet';
+  return {
+    charKey: placed.charKey,
+    type: kind === 'signal' ? 'pre_signal' : 'first_meet',
+    targetNodeId: placed.node || '',
+    targetNodeIndex: Math.max(0, Math.round(Number(placed.nodeIndex) || 0)),
+    targetPhaseIndex: Number.isFinite(Number(placed.phase)) ? Math.max(0, Math.min(3, Math.round(Number(placed.phase)))) : (kind === 'signal' ? 0 : 1)
+  };
+}
+
+function assertNoLegacyEncounterState(encounter, message) {
+  const json = JSON.stringify(encounter || {});
+  assert(!json.includes('"queue"'), `${message}: should not persist queue`);
+  assert(!json.includes('"characters"'), `${message}: should not persist character mirrors`);
+  assert(!json.includes('queuedRequestId'), `${message}: should not persist request mirrors`);
+  assert(!json.includes('placedNodeId'), `${message}: should not persist placement mirrors`);
+  assert(!json.includes('"score"'), `${message}: should not persist score`);
+}
+
 function testGeneratedChapterExpandedTo24Nodes() {
   assertEqual(config.totalNodes, 24, 'Generated chapter should expose 24 total nodes');
   assertEqual(config.meta.totalNodes, 24, 'Generated chapter metadata should expose 24 total nodes');
@@ -58,14 +84,12 @@ function testFinalNodeCannotReceiveEncounter() {
   route[22] = node23.id;
   const state = createActStateAt(act, 23, route, {
     characterEncounter: {
-      v: 2,
       active: {
         SIA: {
           kind: 'meet',
           state: 'queued',
           from: 23,
-          priority: 999,
-          score: 999
+          priority: 999
         }
       }
     }
@@ -76,7 +100,7 @@ function testFinalNodeCannotReceiveEncounter() {
   assertEqual(placedResult.reason, 'no_candidate', 'Final-only target layer should produce no candidate');
 }
 
-function testEncounterQueuePrefersHighestSpentScore() {
+function testEncounterQueuePrefersHighestPriority() {
   const state = createActStateAt(act, 7, [
     'node1-entry',
     'node2-floor-high',
@@ -94,9 +118,9 @@ function testEncounterQueuePrefersHighestSpentScore() {
     limit: 3,
     place: false
   });
-  assert(queuedResult.queued.length >= 2, 'Multiple eligible encounters should queue for priority ordering smoke');
-  assertEqual(queuedResult.queued[0].charKey, 'TRIXIE', 'Highest spent-score sequence should queue first');
-  assert(queuedResult.queued[0].spentScore >= queuedResult.queued[1].spentScore, 'Queued encounters should be sorted by spentScore first');
+  assert(queuedResult.created.length >= 2, 'Multiple eligible encounters should queue for priority ordering smoke');
+  assert(queuedResult.created[0].priority >= queuedResult.created[1].priority, 'Queued encounters should be sorted by priority');
+  assertNoLegacyEncounterState(queuedResult.actState.characterEncounter, 'Priority queue smoke');
 }
 
 function testVisionBonusDecaysAcrossNodeAdvance() {
@@ -131,12 +155,12 @@ function testQueuePlaceConsumeFirstMeet() {
     limit: 1,
     place: false
   });
-  assertEqual(queuedResult.queued.length, 1, 'One eligible encounter should be queued');
-  assertEqual(queuedResult.queued[0].charKey, 'COTA', 'The first queued casino encounter should be COTA');
-  assertEqual(queuedResult.placed, null, 'Default enqueue with place:false should not place immediately');
+  assertEqual(queuedResult.created.length, 1, 'One eligible encounter should be queued');
+  assertEqual(queuedResult.created[0].charKey, 'COTA', 'The first queued casino encounter should be COTA');
+  assertEqual(queuedResult.placed || null, null, 'Default enqueue with place:false should not place immediately');
 
   const placedResult = act.placeNextCharacterEncounter(queuedResult.actState, config, { context });
-  const placed = placedResult.placed;
+  const placed = toPlacedMarker(placedResult.placed);
   assert(placed, 'Queued encounter should be placed');
   assertEqual(placed.charKey, 'COTA', 'Placed encounter should match queued character');
   assertEqual(placed.targetPhaseIndex, 1, 'Formal first-meet should always target phase 2');
@@ -144,6 +168,13 @@ function testQueuePlaceConsumeFirstMeet() {
   assert(['node05-a-route', 'node06-a-route'].includes(placed.targetNodeId), 'Encounter should stay on the planned player path');
   const nodeFirstMeetMap = act.getCharacterEncounterNodeFirstMeetMap(placedResult.actState, placed.targetNodeId);
   assertEqual(nodeFirstMeetMap.COTA.targetPhaseIndex, 1, 'Node-level first-meet map should expose phase 2');
+  const snapshot = act.createFrontendSnapshot({ actState: placedResult.actState });
+  const marker = snapshot.encounterMarkers.find((item) => item.charKey === 'COTA');
+  assert(marker, 'Frontend snapshot should derive an encounter marker from compact active ledger');
+  assertEqual(marker.type, 'first_meet', 'Compact meet should map to first_meet marker type');
+  assertEqual(marker.nodeId, placed.targetNodeId, 'Encounter marker should keep the placed node id');
+  assertEqual(marker.phaseIndex, placed.targetPhaseIndex, 'Encounter marker should keep the placed phase index');
+  assertNoLegacyEncounterState(snapshot.actState.characterEncounter, 'Frontend snapshot');
 
   const wrongPhase = (placed.targetPhaseIndex + 1) % 4;
   const missed = act.consumeCharacterEncounterForNode(placedResult.actState, placed.targetNodeId, {
@@ -163,13 +194,20 @@ function testQueuePlaceConsumeFirstMeet() {
   });
   assert(consumedResult.consumed, 'Encounter should consume on the target phase');
   assertEqual(consumedResult.consumed.charKey, 'COTA', 'Consumed encounter should be COTA');
-  assert(!consumedResult.actState.characterEncounter.queue, 'Canonical encounter state should not persist queue');
-  assert(!consumedResult.actState.characterEncounter.characters, 'Canonical encounter state should not persist character mirrors');
+  assertNoLegacyEncounterState(consumedResult.actState.characterEncounter, 'Consumed first meet');
   assert(consumedResult.actState.characterEncounter.met.COTA, 'COTA should be recorded in compact met ledger');
   assertEqual(consumedResult.actState.characterEncounter.met.COTA.phase, placed.targetPhaseIndex, 'First-meet should record the phase it was introduced on');
+  assertEqual(consumedResult.heroCastPatch.COTA.introduced, true, 'First-meet consume should emit hero.cast introduced patch');
 
   const afterIntroduced = act.evaluateCharacterEncounterEligibility(consumedResult.actState, hero, context);
   assert(!afterIntroduced.eligible.some((item) => item.charKey === 'COTA'), 'Introduced COTA should not become eligible again');
+  const duplicateCota = act.enqueueEligibleCharacterEncounters(consumedResult.actState, hero, {
+    context,
+    config,
+    limit: 1,
+    place: false
+  });
+  assert(!duplicateCota.created.some((item) => item.charKey === 'COTA'), 'Met COTA should not be queued again');
 }
 
 function testForceSpecificCharacterAndQueuedSequence() {
@@ -186,8 +224,9 @@ function testForceSpecificCharacterAndQueuedSequence() {
   const forcedSia = act.debugForceCharacterEncounter(queuedCota, 'SIA', config, { context });
   assert(forcedSia.applied, 'Debug FORCE should apply for SIA');
   assert(forcedSia.placed, 'Debug FORCE should place SIA when the next node is open');
-  assertEqual(forcedSia.placed.charKey, 'SIA', 'FORCE should place the clicked character, not an older queued character');
-  assertEqual(forcedSia.placed.targetPhaseIndex, 1, 'Debug FORCE first-meet should always target phase 2');
+  const placedSia = toPlacedMarker(forcedSia.placed);
+  assertEqual(placedSia.charKey, 'SIA', 'FORCE should place the clicked character, not an older queued character');
+  assertEqual(placedSia.targetPhaseIndex, 1, 'Debug FORCE first-meet should always target phase 2');
   const cotaQueue = firstActiveQueueItem(forcedSia.actState, (item) => item.charKey === 'COTA');
   assertEqual(cotaQueue.status, 'queued', 'Older queued COTA should remain queued');
 
@@ -204,7 +243,7 @@ function testFirstMeetPacing() {
   const hero = createHero();
   const base = createActStateAt(act, 4, currentRouteToNode4A());
   const placedResult = act.debugForceCharacterEncounter(base, 'COTA', config, { context });
-  const placed = placedResult.placed;
+  const placed = toPlacedMarker(placedResult.placed);
   const consumedResult = act.consumeCharacterEncounterForNode({
     ...placedResult.actState,
     nodeIndex: 5,
@@ -233,10 +272,11 @@ function testFirstMeetPacing() {
   };
   const ruleAddSia = act.placeNextCharacterEncounter(afterCooldown, config, { context });
   assert(ruleAddSia.placed, 'Scheduler should place the next first-meet after one node of spacing');
-  assertEqual(ruleAddSia.placed.charKey, queuedNext.charKey, 'The next scheduled request should preserve its character');
-  assert(ruleAddSia.placed.targetNodeIndex > 6 && ruleAddSia.placed.targetNodeIndex <= 8, 'Next first-meet should target a near future path node after cooldown');
+  const placedNext = toPlacedMarker(ruleAddSia.placed);
+  assertEqual(placedNext.charKey, queuedNext.charKey, 'The next scheduled request should preserve its character');
+  assert(placedNext.targetNodeIndex > 6 && placedNext.targetNodeIndex <= 8, 'Next first-meet should target a near future path node after cooldown');
   const sameNodeConsume = act.consumeCharacterEncounterForNode(ruleAddSia.actState, placed.targetNodeId, {
-    phaseIndex: ruleAddSia.placed.targetPhaseIndex
+    phaseIndex: placedNext.targetPhaseIndex
   });
   assertEqual(sameNodeConsume.consumed, null, 'Newly placed encounter should not trigger on the current node');
 }
@@ -268,7 +308,6 @@ function testPreSignalThenFirstMeet() {
   const state = createActStateAt(act, 9, longRoute, {
     resourceSpent: { combat: 20, rest: 20, asset: 20, vision: 20 },
     characterEncounter: {
-      v: 2,
       met: {
         SIA: {},
         TRIXIE: {},
@@ -293,28 +332,31 @@ function testPreSignalThenFirstMeet() {
     requestType: 'pre_signal'
   });
   assert(placedResult.placed, 'VV pre-signal should place');
+  const placedSignal = toPlacedMarker(placedResult.placed);
   const consumedResult = act.consumeCharacterEncounterForNode({
     ...placedResult.actState,
-    nodeIndex: placedResult.placed.targetNodeIndex,
-    route_history: [...longRoute, placedResult.placed.targetNodeId]
-  }, placedResult.placed.targetNodeId, {
-    phaseIndex: placedResult.placed.targetPhaseIndex
+    nodeIndex: placedSignal.targetNodeIndex,
+    route_history: [...longRoute, placedSignal.targetNodeId]
+  }, placedSignal.targetNodeId, {
+    phaseIndex: placedSignal.targetPhaseIndex
   });
   assert(consumedResult.consumed, 'VV pre-signal should consume');
-  assertEqual(consumedResult.consumed.type, 'pre_signal', 'Consumed VV event should be pre_signal');
+  assertEqual(consumedResult.consumed.kind, 'signal', 'Consumed VV event should be pre_signal');
   assert(consumedResult.actState.characterEncounter.signaled.VV, 'VV should remember preSignalDone in compact signaled ledger');
   assert(!consumedResult.actState.characterEncounter.met?.VV, 'pre_signal should not unlock firstMeetDone');
-  assertEqual(consumedResult.actState.characterEncounter.signaled.VV.node, placedResult.placed.targetNodeId, 'pre_signal should record its source node');
-  assertEqual(consumedResult.actState.characterEncounter.signaled.VV.phase, placedResult.placed.targetPhaseIndex, 'pre_signal should record its source phase');
+  assertEqual(consumedResult.actState.characterEncounter.signaled.VV.node, placedSignal.targetNodeId, 'pre_signal should record its source node');
+  assertEqual(consumedResult.actState.characterEncounter.signaled.VV.phase, placedSignal.targetPhaseIndex, 'pre_signal should record its source phase');
   assert(consumedResult.placed, 'pre_signal should immediately place the first_meet follow-up');
-  assertEqual(consumedResult.placed.type, 'first_meet', 'VV follow-up request should be first_meet');
-  assertEqual(consumedResult.placed.targetNodeIndex, placedResult.placed.targetNodeIndex + 1, 'first_meet follow-up should target the next node after pre_signal');
-  assertEqual(consumedResult.placed.targetPhaseIndex, 1, 'pre_signal follow-up first-meet should always target phase 2');
+  const followUp = toPlacedMarker(consumedResult.placed);
+  assertEqual(followUp.type, 'first_meet', 'VV follow-up request should be first_meet');
+  assertEqual(followUp.targetNodeIndex, placedSignal.targetNodeIndex + 1, 'first_meet follow-up should target the next node after pre_signal');
+  assertEqual(followUp.targetPhaseIndex, 1, 'pre_signal follow-up first-meet should always target phase 2');
+  assertNoLegacyEncounterState(consumedResult.actState.characterEncounter, 'Consumed pre-signal');
 }
 
 testGeneratedChapterExpandedTo24Nodes();
 testFinalNodeCannotReceiveEncounter();
-testEncounterQueuePrefersHighestSpentScore();
+testEncounterQueuePrefersHighestPriority();
 testVisionBonusDecaysAcrossNodeAdvance();
 testQueuePlaceConsumeFirstMeet();
 testForceSpecificCharacterAndQueuedSequence();

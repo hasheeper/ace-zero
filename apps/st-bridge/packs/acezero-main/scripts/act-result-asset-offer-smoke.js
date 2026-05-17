@@ -60,7 +60,6 @@ async function main() {
           null
         ],
         resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 },
-        pendingAssetDeckCommands: [],
         resolutionHistory: []
       })
     }
@@ -68,7 +67,7 @@ async function main() {
 
   const { runtime } = createTavernRuntime(tavernFactory, sandbox, { eraVars });
   const before = runtime.createActRuntimeSnapshot(eraVars);
-  const resolved = await runtime.resolvePendingActAdvance(eraVars);
+  const resolved = await runtime.resolvePendingActAdvance(eraVars, { floorKey: 'message:asset-result' });
   const after = runtime.createActRuntimeSnapshot(resolved.eraVars);
   const resultRuntime = sandbox.ACE0TavernResultRuntime.create({
     constants: { ACT_RESOURCE_KEYS: ['combat', 'rest', 'asset', 'vision'], ACT_PHASE_LABELS: ['一段', '二段', '三段', '四段'] },
@@ -87,6 +86,7 @@ async function main() {
   assertEqual(payload.assetOffer.protocol, 'ace0.assetOffer.v1', 'asset offer protocol should be stable');
   assertEqual(payload.assetOffer.pool, 'low', 'asset I should expose low pool in ACT_RESULT');
   assertEqual(payload.assetOffer.choices.length, 3, 'ACT_RESULT should expose three card choices');
+  assert(!Object.prototype.hasOwnProperty.call(resolved.eraVars.world.assetDeck.offer, 'lv'), 'Offer state should not store lv');
   assert(payload.assetOffer.choices.every(card => card.name && card.cardId), 'card choices should include display names and ids');
   assert(payload.assetOffer.choices.every(card => card.effectText && card.rarity), 'card choices should include effect text and rarity');
   assert(payload.assetOffer.choices.every(card => Array.isArray(card.statusTags)), 'card choices should include status tags');

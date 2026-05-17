@@ -1,8 +1,9 @@
 /**
  * ACEZERO ASSET DECK RUNTIME
  *
- * Pure long-term AssetDeck rules. No UI, no Texas table runtime, no ACT node
- * mutation. Commands return normalized state plus a small result envelope.
+ * Canonical MVU state is intentionally small:
+ * { slots, bag, offer } where cards are only { id, lv }.
+ * All display/effect data is hydrated from the static catalog at runtime.
  */
 (function initAceZeroAssetDeckRuntime(global) {
   'use strict';
@@ -17,9 +18,6 @@
         unlockCosts: [1, 1, 2, 2],
         offerSize: 3,
         poolCosts: { low: 1, mid: 2, high: 3 },
-        refreshCosts: { low: 0, mid: 0, high: 1 },
-        freeRefreshByPool: { low: 1, mid: 1, high: 0 },
-        maxRefreshByPool: { low: 1, mid: 1, high: 1 },
         poolRarityWeights: {
           low: { bronze: 65, silver: 25, gold: 10, rainbow: 0 },
           mid: { bronze: 35, silver: 35, gold: 25, rainbow: 5 },
@@ -29,27 +27,21 @@
       };
       const catalog = Array.isArray(data.ASSET_CARD_CATALOG) ? data.ASSET_CARD_CATALOG : [];
       const deps = options.deps || {};
-      const {
-        deepClone = (value) => (value == null ? value : JSON.parse(JSON.stringify(value))),
-        now = () => Date.now()
-      } = deps;
+      const { deepClone = (value) => (value == null ? value : JSON.parse(JSON.stringify(value))) } = deps;
 
-      const CARD_ID_SET = new Set(catalog.map(card => normalizeId(card.id)).filter(Boolean));
+      const CARD_BY_ID = new Map(catalog.map(card => [normalizeId(card.id), card]).filter(([id]) => id));
       const RARITY_VALUES = ['bronze', 'silver', 'gold', 'rainbow'];
       const KIND_VALUES = ['numeric', 'passive', 'skill', 'upgrade', 'god'];
       const SLOT_TYPES = ['general', 'void'];
       const POOL_VALUES = ['low', 'mid', 'high'];
-      const HISTORY_LIMIT = 24;
 
       function normalizeId(value, fallback = '') {
-        const normalized = typeof value === 'string' ? value.trim() : '';
+        const normalized = value == null ? '' : String(value).trim();
         return normalized || fallback;
       }
 
-      function normalizePositiveInt(value, fallback = 0) {
-        if (value == null || value === '') return fallback;
-        const numeric = Math.round(Number(value) || 0);
-        return numeric > 0 ? numeric : fallback;
+      function normalizeKey(value, fallback = '') {
+        return normalizeId(value, fallback).toLowerCase();
       }
 
       function normalizeNonNegativeInt(value, fallback = 0) {
@@ -58,9 +50,18 @@
         return numeric >= 0 ? numeric : fallback;
       }
 
+      function normalizePositiveInt(value, fallback = 1) {
+        const numeric = normalizeNonNegativeInt(value, fallback);
+        return numeric > 0 ? numeric : fallback;
+      }
+
       function normalizeEnum(value, allowed, fallback) {
-        const normalized = normalizeId(value, fallback).toLowerCase();
+        const normalized = normalizeKey(value, fallback);
         return allowed.includes(normalized) ? normalized : fallback;
+      }
+
+      function normalizeCardLevel(value, fallback = 1) {
+        return Math.max(1, Math.min(4, normalizePositiveInt(value, fallback)));
       }
 
       function normalizeStringList(value, { lower = false, upper = false } = {}) {
@@ -76,411 +77,258 @@
         return out;
       }
 
-      function compactHistoryEvent(event) {
-        const raw = event && typeof event === 'object' && !Array.isArray(event) ? event : {};
-        const out = {};
-        const kind = normalizeId(raw.kind || raw.type, '');
-        const status = normalizeId(raw.status, '');
-        const cardId = normalizeId(raw.cardId, '');
-        const removedCardId = normalizeId(raw.removedCardId, '');
-        const requestId = normalizeId(raw.requestId, '');
-        const pool = normalizeId(raw.pool, '');
-        const slotType = normalizeId(raw.slotType, '');
-        const skillKey = normalizeSkillKey(raw.skillKey);
-        if (kind) out.kind = kind;
-        if (status) out.status = status;
-        if (cardId) out.cardId = cardId;
-        if (removedCardId) out.removedCardId = removedCardId;
-        if (requestId) out.requestId = requestId;
-        if (pool) out.pool = pool;
-        if (slotType) out.slotType = slotType;
-        if (skillKey) out.skillKey = skillKey;
-        ['amount', 'cost', 'free', 'general_slots_unlocked', 'fromLevel', 'toLevel'].forEach(key => {
-          if (raw[key] != null && raw[key] !== '') out[key] = raw[key];
-        });
-        if (raw.at != null && raw.at !== '') out.at = normalizeNonNegativeInt(raw.at, 0);
-        return out;
-      }
-
       function getCatalogCard(cardId) {
-        const normalized = normalizeId(cardId, '');
-        return catalog.find(card => normalizeId(card.id, '') === normalized) || null;
-      }
-
-      function normalizeSkillKey(value) {
-        return normalizeId(value, '').toLowerCase();
+        return CARD_BY_ID.get(normalizeId(cardId, '')) || null;
       }
 
       function inferSkillKeyFromModifiers(modifiers) {
         const list = Array.isArray(modifiers) ? modifiers : [];
         const skillModifier = list.find(item => item && typeof item === 'object' && /^skill_/.test(normalizeId(item.type, '')));
-        return normalizeSkillKey(skillModifier?.key);
+        return normalizeKey(skillModifier?.key, '');
       }
 
       function getCardSkillKey(card) {
-        if (!card || normalizeId(card.kind, '').toLowerCase() !== 'skill') return '';
-        return normalizeSkillKey(card.skillKey || inferSkillKeyFromModifiers(card.modifiers));
+        if (!card || normalizeKey(card.kind) !== 'skill') return '';
+        return normalizeKey(card.skillKey || inferSkillKeyFromModifiers(card.modifiers), '');
       }
 
-      function getUpgradeModifier(card) {
-        const list = Array.isArray(card?.modifiers) ? card.modifiers : [];
-        return list.find(item => item && typeof item === 'object' && normalizeId(item.type || item.kind, '').toLowerCase() === 'skill_upgrade') || null;
+      function findSkillCatalogCard(skillKey, level) {
+        const normalizedSkillKey = normalizeKey(skillKey, '');
+        const normalizedLevel = normalizeCardLevel(level, 1);
+        return catalog.find(card => (
+          normalizeKey(card.kind) === 'skill'
+          && getCardSkillKey(card) === normalizedSkillKey
+          && normalizeCardLevel(card.level, 1) === normalizedLevel
+        )) || null;
       }
 
-      function getUpgradeMaxFromLevel(card) {
-        const modifier = getUpgradeModifier(card);
-        if (!modifier) return 0;
-        return Math.max(0, Math.min(3, normalizeNonNegativeInt(modifier.maxFromLevel ?? modifier.maxLevel, 0)));
-      }
-
-      function isUpgradeCard(card) {
-        return normalizeId(card?.kind, '').toLowerCase() === 'upgrade' || !!getUpgradeModifier(card);
-      }
-
-      function createCardInstance(card, source = 'runtime', extras = {}) {
-        const base = card && typeof card === 'object' ? card : {};
-        const cardId = normalizeId(base.id || base.cardId, '');
-        const nowValue = normalizeNonNegativeInt(now(), 0);
-        return normalizeAssetCardInstance({
-          instanceId: `${cardId || 'asset_card'}:${source}:${nowValue}`,
-          cardId,
-          rarity: base.rarity,
-          kind: base.kind,
-          system: base.system,
-          skillKey: base.skillKey,
-          level: base.level,
-          targetTags: base.targetTags,
-          gameTags: base.gameTags,
-          slotTags: base.slotTags,
-          modifiers: base.modifiers,
-          source,
-          addedAt: nowValue,
-          ...extras
-        });
-      }
-
-      function normalizeAssetCardInstance(value) {
-        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-        const cardId = normalizeId(source.cardId || source.id, '');
-        const catalogCard = getCatalogCard(cardId);
-        const slotTags = normalizeStringList(source.slotTags || catalogCard?.slotTags, { lower: true })
-          .filter(tag => SLOT_TYPES.includes(tag));
-        const normalized = {
-          instanceId: normalizeId(source.instanceId, ''),
-          cardId,
-          rarity: normalizeEnum(source.rarity || catalogCard?.rarity, RARITY_VALUES, 'bronze'),
-          kind: normalizeEnum(source.kind || catalogCard?.kind, KIND_VALUES, 'numeric'),
-          system: normalizeId(source.system || catalogCard?.system, '').toLowerCase(),
-          skillKey: normalizeSkillKey(source.skillKey || catalogCard?.skillKey || inferSkillKeyFromModifiers(source.modifiers || catalogCard?.modifiers)),
-          level: Math.max(0, Math.min(4, normalizeNonNegativeInt(source.level ?? catalogCard?.level, 0))),
-          targetTags: normalizeStringList(source.targetTags || catalogCard?.targetTags, { upper: false }),
-          gameTags: normalizeStringList(source.gameTags || catalogCard?.gameTags, { lower: true }),
-          slotTags: slotTags.length ? slotTags : ['general'],
-          unique: Boolean(source.unique ?? catalogCard?.unique),
-          consumable: Boolean(source.consumable ?? catalogCard?.consumable),
-          modifiers: Array.isArray(source.modifiers || catalogCard?.modifiers)
-            ? deepClone(source.modifiers || catalogCard.modifiers)
-            : [],
-          source: normalizeId(source.source, 'runtime'),
-          addedAt: normalizeNonNegativeInt(source.addedAt, 0)
-        };
-        const upgradeTargetSkillKey = normalizeSkillKey(source.upgradeTargetSkillKey || source.upgradeTarget || source.targetSkillKey);
-        if (upgradeTargetSkillKey) normalized.upgradeTargetSkillKey = upgradeTargetSkillKey;
-        if (!normalized.instanceId) {
-          normalized.instanceId = `${normalized.cardId || 'asset_card'}:${normalized.addedAt || 0}`;
+      function canonicalizeCardRef(refInput) {
+        const source = refInput && typeof refInput === 'object' && !Array.isArray(refInput) ? refInput : {};
+        const rawId = normalizeId(source.id || source.cardId, '');
+        const catalogCard = getCatalogCard(rawId);
+        if (!catalogCard) return null;
+        const level = normalizeCardLevel(source.lv ?? source.level ?? catalogCard.level, catalogCard.level || 1);
+        if (normalizeKey(catalogCard.kind) === 'skill') {
+          const skillCard = findSkillCatalogCard(getCardSkillKey(catalogCard), level);
+          if (skillCard) return { id: normalizeId(skillCard.id), lv: normalizeCardLevel(skillCard.level, level) };
         }
-        return normalized;
+        return { id: rawId, lv: level };
       }
 
-      function normalizePendingOffer(value) {
-        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-        if (!source) return null;
-        const pool = normalizeEnum(source.pool, POOL_VALUES, 'low');
-        const choices = Array.isArray(source.choices)
-          ? source.choices.map(normalizeAssetCardInstance).filter(card => isKnownCard(card.cardId))
-          : [];
-        if (!choices.length) return null;
+      function hydrateCardRef(refInput) {
+        const ref = canonicalizeCardRef(refInput);
+        if (!ref) return null;
+        const catalogCard = getCatalogCard(ref.id);
+        if (!catalogCard) return null;
         return {
-          id: normalizeId(source.id, `offer:${pool}`),
-          pool,
-          cost: normalizeNonNegativeInt(source.cost, config.poolCosts[pool] || 0),
-          refreshCount: normalizeNonNegativeInt(source.refreshCount, 0),
-          freeRefreshUsed: normalizeNonNegativeInt(source.freeRefreshUsed, 0),
-          choices: choices.slice(0, config.offerSize),
-          createdAt: normalizeNonNegativeInt(source.createdAt, 0)
-        };
-      }
-
-      function normalizePendingOfferQueue(value) {
-        const source = Array.isArray(value) ? value : [];
-        return source
-          .map(normalizePendingOffer)
-          .filter(Boolean)
-          .slice(0, 12);
-      }
-
-      function normalizePendingReplace(value) {
-        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-        if (!source) return null;
-        const card = normalizeAssetCardInstance(source.card || source.candidate);
-        if (!isKnownCard(card.cardId)) return null;
-        const allowedSlots = normalizeStringList(source.allowedSlots, { lower: true })
-          .filter(slot => SLOT_TYPES.includes(slot) && canCardUseSlot(card, slot));
-        return {
-          card,
-          allowedSlots: allowedSlots.length ? allowedSlots : getAllowedSlotsForCard(card),
-          reason: normalizeId(source.reason, 'slot_full'),
-          confirm_destroy: source.confirm_destroy === true,
-          confirm_target: source.confirm_target && typeof source.confirm_target === 'object' && !Array.isArray(source.confirm_target)
-            ? deepClone(source.confirm_target)
-            : null
+          ...deepClone(catalogCard),
+          id: ref.id,
+          cardId: ref.id,
+          lv: ref.lv,
+          level: ref.lv
         };
       }
 
       function compactCardRef(cardInput) {
-        const card = normalizeAssetCardInstance(cardInput);
-        if (!isKnownCard(card.cardId)) return null;
-        return {
-          instanceId: card.instanceId,
-          cardId: card.cardId,
-          level: card.level,
-          source: card.source,
-          addedAt: card.addedAt,
-          ...(card.upgradeTargetSkillKey ? { upgradeTargetSkillKey: card.upgradeTargetSkillKey } : {})
-        };
+        const source = cardInput && typeof cardInput === 'object' && !Array.isArray(cardInput) ? cardInput : {};
+        return canonicalizeCardRef({
+          id: source.id || source.cardId,
+          lv: source.lv ?? source.level
+        });
       }
 
-      function compactPendingOffer(offerInput) {
-        const offer = normalizePendingOffer(offerInput);
-        if (!offer) return null;
-        const choices = offer.choices.map(compactCardRef).filter(Boolean);
-        if (!choices.length) return null;
-        return {
-          id: offer.id,
-          pool: offer.pool,
-          cost: offer.cost,
-          refreshCount: offer.refreshCount,
-          freeRefreshUsed: offer.freeRefreshUsed,
-          choices,
-          createdAt: offer.createdAt
-        };
-      }
-
-      function compactPendingReplace(replaceInput) {
-        const pending = normalizePendingReplace(replaceInput);
-        if (!pending) return null;
-        const card = compactCardRef(pending.card);
-        if (!card) return null;
-        return {
-          card,
-          allowedSlots: pending.allowedSlots,
-          reason: pending.reason,
-          confirm_destroy: pending.confirm_destroy,
-          confirm_target: pending.confirm_target
-        };
-      }
-
-      function compactAssetDeckState(value) {
-        const state = normalizeAssetDeckState(value);
-        return {
-          version: state.version,
-          general_slots_unlocked: state.general_slots_unlocked,
-          void_slots_unlocked: state.void_slots_unlocked,
-          active_general_cards: state.active_general_cards.map(compactCardRef).filter(Boolean),
-          active_void_cards: state.active_void_cards.map(compactCardRef).filter(Boolean),
-          pending_offer: compactPendingOffer(state.pending_offer),
-          pending_offer_queue: state.pending_offer_queue.map(compactPendingOffer).filter(Boolean),
-          pending_replace: compactPendingReplace(state.pending_replace),
-          history: Array.isArray(state.history) ? state.history.slice(-HISTORY_LIMIT).map(compactHistoryEvent) : []
-        };
-      }
-
-      function makeDefaultAssetDeckState() {
-        return {
-          version: 1,
-          general_slots_unlocked: config.initialGeneralSlots,
-          void_slots_unlocked: config.voidSlots,
-          active_general_cards: [],
-          active_void_cards: [],
-          pending_offer: null,
-          pending_offer_queue: [],
-          pending_replace: null,
-          history: []
-        };
-      }
-
-      function isKnownCard(cardId) {
-        return CARD_ID_SET.has(normalizeId(cardId, ''));
-      }
-
-      function canCardUseSlot(card, slotType) {
+      function canCardUseSlot(cardInput, slotType) {
+        const card = hydrateCardRef(cardInput) || cardInput || {};
         const normalizedSlot = normalizeEnum(slotType, SLOT_TYPES, 'general');
-        const slotTags = normalizeStringList(card?.slotTags, { lower: true });
-        return normalizedSlot === 'general'
-          ? slotTags.includes('general')
-          : slotTags.includes('void');
+        const slotTags = normalizeStringList(card.slotTags, { lower: true });
+        return slotTags.includes(normalizedSlot);
       }
 
-      function getAllowedSlotsForCard(card) {
-        return SLOT_TYPES.filter(slotType => canCardUseSlot(card, slotType));
+      function getAllowedSlotsForCard(cardInput) {
+        return SLOT_TYPES.filter(slotType => canCardUseSlot(cardInput, slotType));
       }
 
-      function isProtectedCard(card) {
-        const rarity = normalizeEnum(card?.rarity, RARITY_VALUES, 'bronze');
-        const kind = normalizeEnum(card?.kind, KIND_VALUES, 'numeric');
-        return rarity === 'rainbow' || kind === 'god' || card?.unique === true;
+      function normalizeSlots(value) {
+        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        return {
+          general: Math.max(
+            config.initialGeneralSlots,
+            Math.min(config.maxGeneralSlots, normalizePositiveInt(source.general, config.initialGeneralSlots))
+          ),
+          void: Math.max(0, Math.min(config.voidSlots, normalizeNonNegativeInt(source.void, config.voidSlots)))
+        };
       }
 
-      function getUniqueCardKey(card) {
-        if (!card || !isProtectedCard(card)) return '';
-        return normalizeId(card.cardId || card.id, '');
+      function isProtectedCard(cardInput) {
+        const card = hydrateCardRef(cardInput) || cardInput || {};
+        const rarity = normalizeEnum(card.rarity, RARITY_VALUES, 'bronze');
+        const kind = normalizeEnum(card.kind, KIND_VALUES, 'numeric');
+        return rarity === 'rainbow' || kind === 'god' || card.unique === true;
       }
 
-      function normalizeCardList(list, slotType, limit) {
-        const seenInstances = new Set();
-        return (Array.isArray(list) ? list : [])
-          .map(normalizeAssetCardInstance)
-          .filter(card => isKnownCard(card.cardId) && canCardUseSlot(card, slotType))
-          .filter(card => {
-            if (seenInstances.has(card.instanceId)) return false;
-            seenInstances.add(card.instanceId);
-            return true;
-          })
-          .slice(0, limit);
+      function getUniqueCardKey(cardInput) {
+        const card = hydrateCardRef(cardInput) || cardInput || {};
+        if (!isProtectedCard(card)) return '';
+        return normalizeId(card.id || card.cardId, '');
       }
 
-      function removeDuplicateUniqueCards(generalCards, voidCards) {
-        const seenUniqueKeys = new Set();
-        function filterList(list) {
-          return list.filter(card => {
-            const uniqueKey = getUniqueCardKey(card);
-            if (!uniqueKey) return true;
-            if (seenUniqueKeys.has(uniqueKey)) return false;
-            seenUniqueKeys.add(uniqueKey);
+      function normalizeBagList(list, slotType, limit) {
+        const seenUnique = new Set();
+        const out = [];
+        (Array.isArray(list) ? list : []).forEach((item) => {
+          const ref = canonicalizeCardRef(item);
+          if (!ref) return;
+          const card = hydrateCardRef(ref);
+          if (!card || !canCardUseSlot(card, slotType)) return;
+          const uniqueKey = getUniqueCardKey(card);
+          if (uniqueKey && seenUnique.has(uniqueKey)) return;
+          if (uniqueKey) seenUnique.add(uniqueKey);
+          out.push(ref);
+        });
+        return out.slice(0, limit);
+      }
+
+      function normalizeBag(value, slots) {
+        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        const general = normalizeBagList(source.general, 'general', slots.general);
+        const voidCards = normalizeBagList(source.void, 'void', slots.void);
+        const seenProtected = new Set();
+        function filterProtected(list) {
+          return list.filter((ref) => {
+            const key = getUniqueCardKey(ref);
+            if (!key) return true;
+            if (seenProtected.has(key)) return false;
+            seenProtected.add(key);
             return true;
           });
         }
         return {
-          general: filterList(generalCards),
-          void: filterList(voidCards)
+          general: filterProtected(general),
+          void: filterProtected(voidCards)
+        };
+      }
+
+      function normalizeOffer(value) {
+        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+        if (!source) return null;
+        const pool = normalizeEnum(source.pool, POOL_VALUES, 'low');
+        const choices = (Array.isArray(source.choices) ? source.choices : [])
+          .map(canonicalizeCardRef)
+          .filter(Boolean)
+          .slice(0, config.offerSize);
+        if (!choices.length) return null;
+        const out = {
+          floor: normalizeId(source.floor || source.floorKey, ''),
+          id: normalizeId(source.id, `offer:${pool}`),
+          pool,
+          settled: source.settled === true,
+          choices
+        };
+        const reroll = (Array.isArray(source.reroll) ? source.reroll : [])
+          .map(canonicalizeCardRef)
+          .filter(Boolean)
+          .slice(0, config.offerSize);
+        if (!out.settled && reroll.length) out.reroll = reroll;
+        return out;
+      }
+
+      function makeDefaultAssetDeckState() {
+        return {
+          slots: {
+            general: config.initialGeneralSlots,
+            void: config.voidSlots
+          },
+          bag: {
+            general: [],
+            void: []
+          },
+          offer: null
         };
       }
 
       function normalizeAssetDeckState(value) {
-        const base = makeDefaultAssetDeckState();
         const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-        const generalSlotsUnlocked = Math.max(
-          config.initialGeneralSlots,
-          Math.min(config.maxGeneralSlots, normalizePositiveInt(source.general_slots_unlocked, base.general_slots_unlocked))
-        );
-        const rawVoidSlots = source.void_slots_unlocked ?? source.voidSlotsUnlocked;
-        const voidSlotsUnlocked = rawVoidSlots == null
-          ? base.void_slots_unlocked
-          : Math.max(0, Math.min(config.voidSlots, normalizeNonNegativeInt(rawVoidSlots, base.void_slots_unlocked)));
-        const normalizedGeneralCards = normalizeCardList(source.active_general_cards || source.activeGeneralCards, 'general', generalSlotsUnlocked);
-        const normalizedVoidCards = normalizeCardList(source.active_void_cards || source.activeVoidCards, 'void', voidSlotsUnlocked);
-        const uniqueFilteredCards = removeDuplicateUniqueCards(normalizedGeneralCards, normalizedVoidCards);
+        const base = makeDefaultAssetDeckState();
+        const slots = normalizeSlots(source.slots || {});
+        const bag = normalizeBag(source.bag || {}, slots);
         return {
-          version: Math.max(1, normalizePositiveInt(source.version, base.version)),
-          general_slots_unlocked: generalSlotsUnlocked,
-          void_slots_unlocked: voidSlotsUnlocked,
-          active_general_cards: uniqueFilteredCards.general,
-          active_void_cards: uniqueFilteredCards.void,
-          pending_offer: normalizePendingOffer(source.pending_offer || source.pendingOffer),
-          pending_offer_queue: normalizePendingOfferQueue(source.pending_offer_queue || source.pendingOfferQueue),
-          pending_replace: normalizePendingReplace(source.pending_replace || source.pendingReplace),
-          history: Array.isArray(source.history) ? source.history.slice(-HISTORY_LIMIT).map(compactHistoryEvent) : []
+          slots: slots || base.slots,
+          bag: bag || base.bag,
+          offer: normalizeOffer(source.offer)
         };
       }
 
-      function promoteNextPendingOffer(assetDeck) {
-        const queue = normalizePendingOfferQueue(assetDeck.pending_offer_queue);
-        assetDeck.pending_offer = queue.shift() || null;
-        assetDeck.pending_offer_queue = queue;
-        return assetDeck.pending_offer;
+      function compactAssetDeckState(value) {
+        return normalizeAssetDeckState(value);
       }
 
-      function clearCurrentPendingOffer(assetDeck) {
-        assetDeck.pending_offer = null;
-        promoteNextPendingOffer(assetDeck);
-      }
-
-      function enqueueOrActivatePendingOffer(assetDeck, offer) {
-        const normalizedOffer = normalizePendingOffer(offer);
-        if (!normalizedOffer) return null;
-        if (assetDeck.pending_offer) {
-          assetDeck.pending_offer_queue = [
-            ...normalizePendingOfferQueue(assetDeck.pending_offer_queue),
-            normalizedOffer
-          ].slice(0, 12);
-        } else {
-          assetDeck.pending_offer = normalizedOffer;
-        }
-        return normalizedOffer;
-      }
-
-      function getUnlockCost(assetDeck) {
-        const unlocked = normalizeAssetDeckState(assetDeck).general_slots_unlocked;
-        if (unlocked >= config.maxGeneralSlots) return null;
-        const index = Math.max(0, unlocked - config.initialGeneralSlots);
-        return normalizeNonNegativeInt(config.unlockCosts[index], 1);
-      }
-
-      function getActiveCardRefs(assetDeck) {
+      function getActiveCardRefs(assetDeckInput) {
+        const assetDeck = normalizeAssetDeckState(assetDeckInput);
         return [
-          ...assetDeck.active_general_cards.map((card, index) => ({ card, slotType: 'general', index, listKey: 'active_general_cards' })),
-          ...assetDeck.active_void_cards.map((card, index) => ({ card, slotType: 'void', index, listKey: 'active_void_cards' }))
-        ];
+          ...assetDeck.bag.general.map((ref, index) => ({ ref, card: hydrateCardRef(ref), slotType: 'general', index })),
+          ...assetDeck.bag.void.map((ref, index) => ({ ref, card: hydrateCardRef(ref), slotType: 'void', index }))
+        ].filter(item => item.card);
       }
 
       function findActiveSkillRef(assetDeck, skillKey) {
-        const normalizedSkillKey = normalizeSkillKey(skillKey);
+        const normalizedSkillKey = normalizeKey(skillKey, '');
         if (!normalizedSkillKey) return null;
-        return getActiveCardRefs(assetDeck)
-          .find(ref => getCardSkillKey(ref.card) === normalizedSkillKey) || null;
+        return getActiveCardRefs(assetDeck).find(ref => getCardSkillKey(ref.card) === normalizedSkillKey) || null;
+      }
+
+      function getUpgradeModifier(card) {
+        const list = Array.isArray(card?.modifiers) ? card.modifiers : [];
+        return list.find(item => item && typeof item === 'object' && normalizeKey(item.type || item.kind) === 'skill_upgrade') || null;
+      }
+
+      function isUpgradeCard(card) {
+        return normalizeKey(card?.kind) === 'upgrade' || !!getUpgradeModifier(card);
+      }
+
+      function getUpgradeMaxFromLevel(card) {
+        const modifier = getUpgradeModifier(card);
+        return modifier ? Math.max(0, Math.min(3, normalizeNonNegativeInt(modifier.maxFromLevel ?? modifier.maxLevel, 0))) : 0;
       }
 
       function getUpgradeableSkillRefs(assetDeck, upgradeCard) {
         const maxFromLevel = getUpgradeMaxFromLevel(upgradeCard);
         if (!maxFromLevel) return [];
-        return getActiveCardRefs(assetDeck)
-          .filter(ref => {
-            const skillKey = getCardSkillKey(ref.card);
-            if (!skillKey) return false;
-            const level = Math.max(0, normalizeNonNegativeInt(ref.card.level, 0));
-            return level >= 1 && level <= maxFromLevel && level < 4;
-          });
+        return getActiveCardRefs(assetDeck).filter(ref => {
+          const skillKey = getCardSkillKey(ref.card);
+          const level = normalizeCardLevel(ref.card.level, 1);
+          return skillKey && level >= 1 && level <= maxFromLevel && level < 4;
+        });
       }
 
       function findActiveUniqueRef(assetDeck, card) {
         const uniqueKey = getUniqueCardKey(card);
         if (!uniqueKey) return null;
-        return getActiveCardRefs(assetDeck)
-          .find(ref => getUniqueCardKey(ref.card) === uniqueKey) || null;
+        return getActiveCardRefs(assetDeck).find(ref => getUniqueCardKey(ref.card) === uniqueKey) || null;
       }
 
-      function isSkillCardOfferEligible(assetDeck, card) {
-        const skillKey = getCardSkillKey(card);
+      function isSkillCardOfferEligible(assetDeck, catalogCard) {
+        const skillKey = getCardSkillKey(catalogCard);
         if (!skillKey) return true;
         const active = findActiveSkillRef(assetDeck, skillKey);
         if (!active) return true;
-        const activeLevel = Math.max(0, normalizeNonNegativeInt(active.card.level, 0));
-        const candidateLevel = Math.max(0, normalizeNonNegativeInt(card.level, 0));
+        const activeLevel = normalizeCardLevel(active.card.level, 1);
+        const candidateLevel = normalizeCardLevel(catalogCard.level, 1);
         if (activeLevel >= 4) return false;
         return candidateLevel >= activeLevel;
       }
 
-      function isUpgradeCardOfferEligible(assetDeck, card) {
-        if (!isUpgradeCard(card)) return true;
-        return getUpgradeableSkillRefs(assetDeck, card).length > 0;
+      function isUpgradeCardOfferEligible(assetDeck, catalogCard) {
+        if (!isUpgradeCard(catalogCard)) return true;
+        return getUpgradeableSkillRefs(assetDeck, catalogCard).length > 0;
       }
 
-      function getEligibleCatalogCards(assetDeck, pool, avoidCardIds = []) {
+      function getEligibleCatalogCards(assetDeckInput, pool, avoidCardIds = []) {
+        const assetDeck = normalizeAssetDeckState(assetDeckInput);
         const avoided = new Set(avoidCardIds.map(id => normalizeId(id, '')).filter(Boolean));
         return catalog
           .filter(card => Array.isArray(card.pools) && card.pools.includes(pool))
           .filter(card => !avoided.has(normalizeId(card.id, '')))
-          .filter(card => !findActiveUniqueRef(assetDeck, createCardInstance(card, 'eligibility')))
+          .filter(card => !findActiveUniqueRef(assetDeck, card))
           .filter(card => isSkillCardOfferEligible(assetDeck, card))
           .filter(card => isUpgradeCardOfferEligible(assetDeck, card));
       }
@@ -521,12 +369,13 @@
         return entries[entries.length - 1].rarity;
       }
 
-      function createOfferChoices(pool, seed, avoidCardIds = [], assetDeckInput = null) {
+      function createOfferChoices(poolInput, seedInput, avoidCardIds = [], assetDeckInput = null) {
+        const pool = normalizeEnum(poolInput, POOL_VALUES, 'low');
         const assetDeck = normalizeAssetDeckState(assetDeckInput);
         const candidates = getEligibleCatalogCards(assetDeck, pool, avoidCardIds);
-        const random = mulberry32(hashStringToSeed(seed));
+        const random = mulberry32(hashStringToSeed(seedInput));
         const selected = [];
-        const selectedIds = new Set();
+        const selectedIds = new Set(avoidCardIds.map(id => normalizeId(id, '')).filter(Boolean));
 
         for (let index = 0; index < config.offerSize; index += 1) {
           const rarity = pickWeightedRarity(pool, random);
@@ -538,115 +387,27 @@
           const bucket = rarityCandidates.length ? rarityCandidates : fallbackCandidates;
           if (!bucket.length) break;
           const picked = bucket[Math.floor(random() * bucket.length)] || bucket[0];
-          const extras = {};
-          if (isUpgradeCard(picked)) {
-            const upgradeTargets = getUpgradeableSkillRefs(assetDeck, picked);
-            const target = upgradeTargets[Math.floor(random() * upgradeTargets.length)] || upgradeTargets[0];
-            if (!target) continue;
-            extras.upgradeTargetSkillKey = getCardSkillKey(target.card);
-          }
-          selected.push(createCardInstance(picked, `offer:${pool}`, extras));
-          selectedIds.add(normalizeId(picked.id, ''));
+          const ref = compactCardRef({ id: picked.id, lv: picked.level });
+          if (!ref) continue;
+          selected.push(ref);
+          selectedIds.add(ref.id);
         }
 
         return selected;
       }
 
-      function findSkillCatalogCard(skillKey, level) {
-        const normalizedSkillKey = normalizeSkillKey(skillKey);
-        const normalizedLevel = Math.max(1, Math.min(4, normalizeNonNegativeInt(level, 1)));
-        return catalog.find(card => (
-          normalizeId(card.kind, '').toLowerCase() === 'skill'
-          && normalizeSkillKey(card.skillKey || inferSkillKeyFromModifiers(card.modifiers)) === normalizedSkillKey
-          && Math.max(0, normalizeNonNegativeInt(card.level, 0)) === normalizedLevel
-        )) || null;
-      }
-
-      function createUpgradedSkillCard(existingCard, candidateCard, nextLevel, source = 'skill_upgrade') {
-        const skillKey = getCardSkillKey(candidateCard) || getCardSkillKey(existingCard);
-        const catalogCard = findSkillCatalogCard(skillKey, nextLevel);
-        const base = catalogCard || {
-          ...candidateCard,
-          level: nextLevel,
-          modifiers: Array.isArray(candidateCard.modifiers)
-            ? candidateCard.modifiers.map(modifier => {
-                if (!modifier || typeof modifier !== 'object' || !/^skill_/.test(normalizeId(modifier.type, ''))) return modifier;
-                return { ...modifier, value: nextLevel };
-              })
-            : []
-        };
-        return {
-          ...createCardInstance(base, source),
-          instanceId: existingCard.instanceId,
-          addedAt: existingCard.addedAt || candidateCard.addedAt || normalizeNonNegativeInt(now(), 0)
-        };
-      }
-
-      function resolveSkillCardSelection(assetDeck, card) {
-        const skillKey = getCardSkillKey(card);
-        if (!skillKey) return null;
-        const active = findActiveSkillRef(assetDeck, skillKey);
-        if (!active) return null;
-
-        const activeLevel = Math.max(0, normalizeNonNegativeInt(active.card.level, 0));
-        const candidateLevel = Math.max(0, normalizeNonNegativeInt(card.level, 0));
-        if (activeLevel >= 4) {
-          clearCurrentPendingOffer(assetDeck);
-          assetDeck.pending_replace = null;
-          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, skillKey, status: 'skill_max_ignored' });
-          return result(assetDeck, true, 'skill_max_ignored', { card: active.card, consumed: card });
-        }
-        if (candidateLevel < activeLevel) {
-          clearCurrentPendingOffer(assetDeck);
-          assetDeck.pending_replace = null;
-          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, skillKey, status: 'skill_lower_ignored' });
-          return result(assetDeck, true, 'skill_lower_ignored', { card: active.card, consumed: card });
-        }
-
-        const nextLevel = candidateLevel === activeLevel
-          ? Math.min(4, activeLevel + 1)
-          : Math.min(4, candidateLevel);
-        const upgraded = createUpgradedSkillCard(active.card, card, nextLevel, candidateLevel === activeLevel ? 'skill_merge' : 'skill_replace');
-        assetDeck[active.listKey][active.index] = upgraded;
-        clearCurrentPendingOffer(assetDeck);
-        assetDeck.pending_replace = null;
-        pushHistory(assetDeck, {
-          kind: 'choose_card',
-          cardId: card.cardId,
-          skillKey,
-          fromLevel: activeLevel,
-          toLevel: nextLevel,
-          status: candidateLevel === activeLevel ? 'skill_merged' : 'skill_upgraded'
-        });
-        return result(assetDeck, true, candidateLevel === activeLevel ? 'skill_merged' : 'skill_upgraded', {
-          card: upgraded,
-          consumed: card,
-          fromLevel: activeLevel,
-          toLevel: nextLevel
-        });
-      }
-
-      function pushHistory(assetDeck, event) {
-        assetDeck.history = [
-          ...assetDeck.history,
-          {
-            at: normalizeNonNegativeInt(now(), 0),
-            ...compactHistoryEvent(event)
-          }
-        ].slice(-HISTORY_LIMIT);
+      function getUnlockCost(assetDeckInput) {
+        const assetDeck = normalizeAssetDeckState(assetDeckInput);
+        if (assetDeck.slots.general >= config.maxGeneralSlots) return null;
+        const index = Math.max(0, assetDeck.slots.general - config.initialGeneralSlots);
+        return normalizeNonNegativeInt(config.unlockCosts[index], 1);
       }
 
       function createAssetPointContext(options = {}) {
-        const initial = normalizeNonNegativeInt(
-          options.assetPoints ?? options.points,
-          0
-        );
+        const initial = normalizeNonNegativeInt(options.assetPoints ?? options.points, 0);
         let current = initial;
         return {
           get value() { return current; },
-          grant(amount) {
-            current += normalizeNonNegativeInt(amount, 0);
-          },
           spend(cost) {
             const normalizedCost = normalizeNonNegativeInt(cost, 0);
             if (current < normalizedCost) return false;
@@ -672,252 +433,215 @@
         };
       }
 
-      function resolveUpgradeCardSelection(assetDeck, card) {
-        if (!isUpgradeCard(card)) return null;
-        const skillKey = normalizeSkillKey(card.upgradeTargetSkillKey);
-        const active = findActiveSkillRef(assetDeck, skillKey);
-        const maxFromLevel = getUpgradeMaxFromLevel(card);
-        if (!skillKey || !active || !maxFromLevel) {
-          clearCurrentPendingOffer(assetDeck);
-          assetDeck.pending_replace = null;
-          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, skillKey, status: 'skill_upgrade_invalid' });
-          return result(assetDeck, true, 'skill_upgrade_invalid', { consumed: card });
-        }
-
-        const activeLevel = Math.max(0, normalizeNonNegativeInt(active.card.level, 0));
-        if (activeLevel < 1 || activeLevel > maxFromLevel || activeLevel >= 4) {
-          clearCurrentPendingOffer(assetDeck);
-          assetDeck.pending_replace = null;
-          pushHistory(assetDeck, {
-            kind: 'choose_card',
-            cardId: card.cardId,
-            skillKey,
-            fromLevel: activeLevel,
-            status: 'skill_upgrade_ineligible'
+      function settleOffer(assetDeck) {
+        if (assetDeck.offer) {
+          assetDeck.offer = normalizeOffer({
+            ...assetDeck.offer,
+            settled: true,
+            reroll: []
           });
-          return result(assetDeck, true, 'skill_upgrade_ineligible', { card: active.card, consumed: card });
+        }
+      }
+
+      function replaceRefInBag(assetDeck, refInfo, nextRef) {
+        const list = assetDeck.bag[refInfo.slotType] || [];
+        list[refInfo.index] = nextRef;
+        assetDeck.bag[refInfo.slotType] = list;
+      }
+
+      function resolveSkillCardSelection(assetDeck, cardRef, card) {
+        const skillKey = getCardSkillKey(card);
+        if (!skillKey) return null;
+        const active = findActiveSkillRef(assetDeck, skillKey);
+        if (!active) return null;
+
+        const activeLevel = normalizeCardLevel(active.card.level, 1);
+        const candidateLevel = normalizeCardLevel(card.level, 1);
+        if (activeLevel >= 4 || candidateLevel < activeLevel) {
+          settleOffer(assetDeck);
+          return result(assetDeck, true, activeLevel >= 4 ? 'skill_max_ignored' : 'skill_lower_ignored', {
+            card: active.ref,
+            consumed: cardRef
+          });
         }
 
-        const nextLevel = Math.min(4, activeLevel + 1);
-        const upgraded = createUpgradedSkillCard(active.card, active.card, nextLevel, 'skill_upgrade');
-        assetDeck[active.listKey][active.index] = upgraded;
-        clearCurrentPendingOffer(assetDeck);
-        assetDeck.pending_replace = null;
-        pushHistory(assetDeck, {
-          kind: 'choose_card',
-          cardId: card.cardId,
-          skillKey,
-          fromLevel: activeLevel,
-          toLevel: nextLevel,
-          status: 'skill_upgrade_consumed'
-        });
-        return result(assetDeck, true, 'skill_upgrade_consumed', {
-          card: upgraded,
-          consumed: card,
+        const nextLevel = candidateLevel === activeLevel ? Math.min(4, activeLevel + 1) : Math.min(4, candidateLevel);
+        const nextCard = findSkillCatalogCard(skillKey, nextLevel) || card;
+        const nextRef = compactCardRef({ id: nextCard.id || card.id, lv: nextLevel });
+        replaceRefInBag(assetDeck, active, nextRef);
+        settleOffer(assetDeck);
+        return result(assetDeck, true, candidateLevel === activeLevel ? 'skill_merged' : 'skill_upgraded', {
+          card: nextRef,
+          consumed: cardRef,
           fromLevel: activeLevel,
           toLevel: nextLevel
         });
       }
 
-      function chooseOfferCard(assetDeck, payload) {
-        const offer = assetDeck.pending_offer;
-        if (!offer) return result(assetDeck, false, 'no_pending_offer');
-        const requestedId = normalizeId(payload.choiceId || payload.cardId, '');
+      function resolveUpgradeCardSelection(assetDeck, cardRef, card) {
+        if (!isUpgradeCard(card)) return null;
+        const target = getUpgradeableSkillRefs(assetDeck, card)[0] || null;
+        if (!target) {
+          settleOffer(assetDeck);
+          return result(assetDeck, true, 'skill_upgrade_invalid', { consumed: cardRef });
+        }
+        const activeLevel = normalizeCardLevel(target.card.level, 1);
+        const nextLevel = Math.min(4, activeLevel + 1);
+        const nextCard = findSkillCatalogCard(getCardSkillKey(target.card), nextLevel) || target.card;
+        const nextRef = compactCardRef({ id: nextCard.id || target.ref.id, lv: nextLevel });
+        replaceRefInBag(assetDeck, target, nextRef);
+        settleOffer(assetDeck);
+        return result(assetDeck, true, 'skill_upgrade_consumed', {
+          card: nextRef,
+          consumed: cardRef,
+          fromLevel: activeLevel,
+          toLevel: nextLevel
+        });
+      }
+
+      function chooseOfferCard(assetDeckInput, payloadInput) {
+        const assetDeck = normalizeAssetDeckState(assetDeckInput);
+        const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput) ? payloadInput : {};
+        const offer = assetDeck.offer;
+        if (!offer) return result(assetDeck, false, 'no_offer');
+        if (offer.settled) return result(assetDeck, false, 'offer_settled');
+
+        const requestedId = normalizeId(payload.choiceId || payload.cardId || payload.id, '');
         const requestedIndex = Number.isFinite(Number(payload.choiceIndex)) ? Math.round(Number(payload.choiceIndex)) : -1;
-        const card = offer.choices.find(choice => choice.instanceId === requestedId || choice.cardId === requestedId)
-          || offer.choices[requestedIndex]
-          || null;
-        if (!card) return result(assetDeck, false, 'invalid_choice');
+        const cardRef = offer.choices.find(choice => choice.id === requestedId) || offer.choices[requestedIndex] || null;
+        const card = hydrateCardRef(cardRef);
+        if (!cardRef || !card) return result(assetDeck, false, 'invalid_choice');
 
         const activeUnique = findActiveUniqueRef(assetDeck, card);
         if (activeUnique) {
-          clearCurrentPendingOffer(assetDeck);
-          assetDeck.pending_replace = null;
-          pushHistory(assetDeck, {
-            kind: 'choose_card',
-            cardId: card.cardId,
-            status: 'unique_already_active'
-          });
-          return result(assetDeck, true, 'unique_already_active', { card: activeUnique.card, consumed: card });
+          settleOffer(assetDeck);
+          return result(assetDeck, true, 'unique_already_active', { card: activeUnique.ref, consumed: cardRef });
         }
 
-        const upgradeResult = resolveUpgradeCardSelection(assetDeck, card);
+        const upgradeResult = resolveUpgradeCardSelection(assetDeck, cardRef, card);
         if (upgradeResult) return upgradeResult;
 
-        const skillResult = resolveSkillCardSelection(assetDeck, card);
+        const skillResult = resolveSkillCardSelection(assetDeck, cardRef, card);
         if (skillResult) return skillResult;
 
         const allowedSlots = getAllowedSlotsForCard(card);
         const preferredSlot = normalizeEnum(payload.slotType, SLOT_TYPES, allowedSlots[0] || 'general');
         let slotType = allowedSlots.includes(preferredSlot) ? preferredSlot : allowedSlots[0];
-        if (
-          slotType === 'void' &&
-          allowedSlots.includes('general') &&
-          assetDeck.active_void_cards.length >= assetDeck.void_slots_unlocked
-        ) {
+        if (slotType === 'void' && allowedSlots.includes('general') && assetDeck.bag.void.length >= assetDeck.slots.void) {
           slotType = 'general';
         }
         if (!slotType) return result(assetDeck, false, 'invalid_slot');
 
-        const targetListKey = slotType === 'void' ? 'active_void_cards' : 'active_general_cards';
-        const targetLimit = slotType === 'void' ? assetDeck.void_slots_unlocked : assetDeck.general_slots_unlocked;
-        if (assetDeck[targetListKey].length >= targetLimit) {
-          assetDeck.pending_replace = {
-            card,
-            allowedSlots,
-            reason: 'slot_full',
-            confirm_destroy: false
-          };
-          clearCurrentPendingOffer(assetDeck);
-          pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, status: 'pending_replace' });
-          return result(assetDeck, true, 'pending_replace', { card });
+        const list = assetDeck.bag[slotType] || [];
+        const limit = assetDeck.slots[slotType] || 0;
+        const hasRoom = list.length < limit;
+        const targetIndex = Number.isFinite(Number(payload.targetIndex ?? payload.replaceIndex))
+          ? Math.max(0, Math.round(Number(payload.targetIndex ?? payload.replaceIndex)))
+          : -1;
+
+        if (!hasRoom && targetIndex < 0) {
+          return result(assetDeck, false, 'needs_replace', { card: cardRef, allowedSlots });
+        }
+        if (!hasRoom && !list[targetIndex]) {
+          return result(assetDeck, false, 'invalid_target', { card: cardRef, allowedSlots });
+        }
+        if (!hasRoom) {
+          const removed = hydrateCardRef(list[targetIndex]);
+          if (isProtectedCard(removed) && payload.confirmDestroy !== true && payload.confirm_destroy !== true) {
+            return result(assetDeck, false, 'requires_destroy_confirm', {
+              card: cardRef,
+              removed: list[targetIndex],
+              slotType,
+              targetIndex
+            });
+          }
+          list[targetIndex] = cardRef;
+          assetDeck.bag[slotType] = list;
+          settleOffer(assetDeck);
+          return result(assetDeck, true, 'replaced', { card: cardRef, removed, slotType, targetIndex });
         }
 
-        assetDeck[targetListKey] = [...assetDeck[targetListKey], card];
-        clearCurrentPendingOffer(assetDeck);
-        assetDeck.pending_replace = null;
-        pushHistory(assetDeck, { kind: 'choose_card', cardId: card.cardId, slotType, status: 'equipped' });
-        return result(assetDeck, true, 'equipped', { card, slotType });
+        assetDeck.bag[slotType] = [...list, cardRef];
+        settleOffer(assetDeck);
+        return result(assetDeck, true, 'equipped', { card: cardRef, slotType });
       }
 
-      function replaceCard(assetDeck, payload) {
-        const pending = assetDeck.pending_replace;
-        if (!pending) return result(assetDeck, false, 'no_pending_replace');
-        const slotType = normalizeEnum(payload.slotType, SLOT_TYPES, pending.allowedSlots[0] || 'general');
-        if (!pending.allowedSlots.includes(slotType)) return result(assetDeck, false, 'invalid_slot');
-        const targetListKey = slotType === 'void' ? 'active_void_cards' : 'active_general_cards';
-        const targetIndex = Math.max(0, Math.round(Number(payload.targetIndex) || 0));
-        if (!assetDeck[targetListKey][targetIndex]) return result(assetDeck, false, 'invalid_target');
-        const removed = assetDeck[targetListKey][targetIndex];
-        if (isProtectedCard(removed) && payload.confirmDestroy !== true && payload.confirm_destroy !== true) {
-          assetDeck.pending_replace = {
-            ...pending,
-            confirm_destroy: true,
-            confirm_target: {
-              slotType,
-              targetIndex,
-              removedCardId: removed.cardId
-            }
-          };
-          pushHistory(assetDeck, {
-            kind: 'replace_card',
-            cardId: pending.card.cardId,
-            removedCardId: removed.cardId,
-            slotType,
-            status: 'requires_destroy_confirm'
-          });
-          return result(assetDeck, false, 'requires_destroy_confirm', {
-            card: pending.card,
-            removed,
-            slotType,
-            targetIndex
-          });
+      function openOffer(assetDeckInput, payloadInput, assetPointContext, options = {}) {
+        const assetDeck = normalizeAssetDeckState(assetDeckInput);
+        const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput) ? payloadInput : {};
+        const pool = normalizeEnum(payload.pool, POOL_VALUES, 'low');
+        const floor = normalizeId(payload.floor || payload.floorKey || options.floorKey, '');
+        if (assetDeck.offer && assetDeck.offer.floor === floor && assetDeck.offer.pool === pool) {
+          return result(assetDeck, true, assetDeck.offer.settled ? 'offer_already_settled' : 'offer_already_open', { offer: assetDeck.offer }, assetPointContext);
         }
-        assetDeck[targetListKey][targetIndex] = pending.card;
-        assetDeck.pending_replace = null;
-        if (!assetDeck.pending_offer) promoteNextPendingOffer(assetDeck);
-        pushHistory(assetDeck, {
-          kind: 'replace_card',
-          cardId: pending.card.cardId,
-          removedCardId: removed.cardId,
-          slotType
+
+        const cost = normalizeNonNegativeInt(payload.cost, config.poolCosts[pool] || 0);
+        if (!assetPointContext.spend(cost)) return result(assetDeck, false, 'not_enough_asset', { cost }, assetPointContext);
+        const seed = normalizeId(payload.seed || options.seed, `asset:${floor || 'current'}:${pool}`);
+        const choices = createOfferChoices(pool, seed, [], assetDeck);
+        if (!choices.length) return result(assetDeck, false, 'empty_pool', { pool }, assetPointContext);
+        const reroll = createOfferChoices(pool, `${seed}:reroll`, choices.map(choice => choice.id), assetDeck);
+        assetDeck.offer = normalizeOffer({
+          floor,
+          id: normalizeId(payload.id, `offer:${pool}:${hashStringToSeed(seed)}`),
+          pool,
+          settled: false,
+          choices,
+          reroll
         });
-        return result(assetDeck, true, 'replaced', { card: pending.card, removed, slotType, targetIndex });
+        return result(assetDeck, true, 'offer_opened', { offer: assetDeck.offer }, assetPointContext);
+      }
+
+      function rerollOffer(assetDeckInput) {
+        const assetDeck = normalizeAssetDeckState(assetDeckInput);
+        if (!assetDeck.offer) return result(assetDeck, false, 'no_offer');
+        if (assetDeck.offer.settled) return result(assetDeck, false, 'offer_settled');
+        if (!Array.isArray(assetDeck.offer.reroll) || !assetDeck.offer.reroll.length) {
+          return result(assetDeck, false, 'no_reroll');
+        }
+        assetDeck.offer = normalizeOffer({
+          ...assetDeck.offer,
+          choices: assetDeck.offer.reroll,
+          reroll: []
+        });
+        return result(assetDeck, true, 'offer_rerolled', { offer: assetDeck.offer });
+      }
+
+      function clearOffer(assetDeckInput, payloadInput) {
+        const assetDeck = normalizeAssetDeckState(assetDeckInput);
+        const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput) ? payloadInput : {};
+        const floor = normalizeId(payload.floor || payload.floorKey, '');
+        if (!floor || !assetDeck.offer || assetDeck.offer.floor === floor) {
+          assetDeck.offer = null;
+        }
+        return result(assetDeck, true, 'offer_cleared');
       }
 
       function applyAssetDeckCommand(assetDeckInput, commandInput, options = {}) {
         const assetDeck = normalizeAssetDeckState(assetDeckInput);
+        const command = commandInput && typeof commandInput === 'object' && !Array.isArray(commandInput) ? commandInput : {};
+        const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
+          ? command.payload
+          : command;
+        const kind = normalizeKey(command.kind || command.type, '');
         const assetPointContext = createAssetPointContext(options);
-        const command = commandInput && typeof commandInput === 'object' ? commandInput : {};
-        const payload = command.payload && typeof command.payload === 'object' ? command.payload : {};
-        const kind = normalizeId(command.kind || command.type, '').toLowerCase();
         if (!kind) return result(assetDeck, false, 'missing_command', {}, assetPointContext);
 
-        if (kind === 'grant_asset') {
-          const amount = normalizeNonNegativeInt(payload.amount, 0);
-          assetPointContext.grant(amount);
-          const requestId = normalizeId(payload.requestId || command.requestId, '');
-          pushHistory(assetDeck, {
-            kind,
-            amount,
-            ...(requestId ? { requestId } : {})
-          });
-          return result(assetDeck, true, 'asset_granted', { amount }, assetPointContext);
-        }
+        if (kind === 'open_offer') return openOffer(assetDeck, payload, assetPointContext, options);
+        if (kind === 'choose_card') return chooseOfferCard(assetDeck, payload);
+        if (kind === 'reroll_offer' || kind === 'refresh_offer') return rerollOffer(assetDeck);
+        if (kind === 'clear_offer') return clearOffer(assetDeck, payload);
 
         if (kind === 'unlock_slot') {
           const cost = getUnlockCost(assetDeck);
           if (cost == null) return result(assetDeck, false, 'slot_cap_reached', {}, assetPointContext);
           if (!assetPointContext.spend(cost)) return result(assetDeck, false, 'not_enough_asset', { cost }, assetPointContext);
-          assetDeck.general_slots_unlocked += 1;
-          pushHistory(assetDeck, { kind, cost, general_slots_unlocked: assetDeck.general_slots_unlocked });
+          assetDeck.slots.general = Math.min(config.maxGeneralSlots, assetDeck.slots.general + 1);
           return result(assetDeck, true, 'slot_unlocked', { cost }, assetPointContext);
         }
 
-        if (kind === 'open_offer') {
-          const pool = normalizeEnum(payload.pool, POOL_VALUES, 'low');
-          const cost = normalizeNonNegativeInt(payload.cost, config.poolCosts[pool] || 0);
-          if (!assetPointContext.spend(cost)) return result(assetDeck, false, 'not_enough_asset', { cost }, assetPointContext);
-          const seed = normalizeId(payload.seed || options.seed, `asset:${pool}:${assetDeck.history.length}`);
-          const choices = createOfferChoices(pool, seed, [], assetDeck);
-          if (!choices.length) {
-            assetPointContext.grant(cost);
-            return result(assetDeck, false, 'empty_pool', { pool }, assetPointContext);
-          }
-          const offer = {
-            id: `offer:${pool}:${hashStringToSeed(seed)}`,
-            pool,
-            cost,
-            refreshCount: 0,
-            freeRefreshUsed: 0,
-            choices,
-            createdAt: normalizeNonNegativeInt(now(), 0)
-          };
-          enqueueOrActivatePendingOffer(assetDeck, offer);
-          assetDeck.pending_replace = null;
-          const requestId = normalizeId(payload.requestId || command.requestId, '');
-          pushHistory(assetDeck, {
-            kind,
-            pool,
-            cost,
-            ...(requestId ? { requestId } : {})
-          });
-          return result(assetDeck, true, 'offer_opened', { offer }, assetPointContext);
-        }
-
-        if (kind === 'refresh_offer') {
-          const offer = assetDeck.pending_offer;
-          if (!offer) return result(assetDeck, false, 'no_pending_offer', {}, assetPointContext);
-          const maxRefresh = normalizeNonNegativeInt(config.maxRefreshByPool[offer.pool], 1);
-          if (offer.refreshCount >= maxRefresh) return result(assetDeck, false, 'refresh_cap_reached', { maxRefresh }, assetPointContext);
-          const freeLimit = normalizeNonNegativeInt(config.freeRefreshByPool[offer.pool], 0);
-          const free = offer.freeRefreshUsed < freeLimit;
-          const cost = free ? 0 : normalizeNonNegativeInt(config.refreshCosts[offer.pool], 0);
-          if (!assetPointContext.spend(cost)) return result(assetDeck, false, 'not_enough_asset', { cost }, assetPointContext);
-          const seed = normalizeId(payload.seed || options.seed, `${offer.id}:refresh:${offer.refreshCount + 1}`);
-          const choices = createOfferChoices(offer.pool, seed, offer.choices.map(card => card.cardId), assetDeck);
-          if (!choices.length) {
-            assetPointContext.grant(cost);
-            return result(assetDeck, false, 'empty_pool', { pool: offer.pool }, assetPointContext);
-          }
-          assetDeck.pending_offer = {
-            ...offer,
-            refreshCount: offer.refreshCount + 1,
-            freeRefreshUsed: offer.freeRefreshUsed + (free ? 1 : 0),
-            choices
-          };
-          pushHistory(assetDeck, { kind, pool: offer.pool, cost, free });
-          return result(assetDeck, true, 'offer_refreshed', { offer: assetDeck.pending_offer, cost, free }, assetPointContext);
-        }
-
-        if (kind === 'choose_card') return chooseOfferCard(assetDeck, payload);
-        if (kind === 'replace_card') return replaceCard(assetDeck, payload);
-
-        if (kind === 'debug_reset') {
-          return result(makeDefaultAssetDeckState(), true, 'debug_reset');
-        }
-
-        return result(assetDeck, false, 'unknown_command');
+        if (kind === 'debug_reset') return result(makeDefaultAssetDeckState(), true, 'debug_reset', {}, assetPointContext);
+        return result(assetDeck, false, 'unknown_command', {}, assetPointContext);
       }
 
       return {
@@ -926,9 +650,9 @@
         makeDefaultAssetDeckState,
         normalizeAssetDeckState,
         compactAssetDeckState,
-        normalizeAssetCardInstance,
-        normalizePendingOffer,
-        normalizePendingReplace,
+        normalizeAssetCardInstance: hydrateCardRef,
+        hydrateCardRef,
+        compactCardRef,
         canCardUseSlot,
         getAllowedSlotsForCard,
         getUnlockCost,

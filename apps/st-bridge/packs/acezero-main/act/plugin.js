@@ -23,10 +23,6 @@
   const SHARED_CAMPAIGN_SEED = 'ACEZERO-SHARD-SEED-V24';
   const NON_PLAYER_CHARACTER_KEYS = ['RINO', 'SIA', 'POPPY', 'VV', 'TRIXIE', 'COTA', 'EULALIA', 'KAKO', 'KUZUHA'];
   const ENCOUNTER_CHARACTER_KEYS = ['SIA', 'TRIXIE', 'POPPY', 'COTA', 'VV', 'KUZUHA', 'KAKO', 'EULALIA'];
-  const ENCOUNTER_CHARACTER_STATUS_VALUES = ['locked', 'eligible', 'queued', 'pre_signal', 'first_meet', 'introduced'];
-  const ENCOUNTER_QUEUE_STATUS_VALUES = ['queued', 'placed', 'triggered', 'expired', 'cancelled'];
-  const ENCOUNTER_QUEUE_TYPE_VALUES = ['first_meet', 'pre_signal'];
-  const ENCOUNTER_TERMINAL_QUEUE_STATUSES = ['triggered', 'expired', 'cancelled'];
 
 
 
@@ -144,11 +140,7 @@
         constants: {
           DEFAULT_WORLD_ACT,
           ACT_RESOURCE_KEYS,
-          ENCOUNTER_CHARACTER_KEYS,
-          ENCOUNTER_CHARACTER_STATUS_VALUES,
-          ENCOUNTER_QUEUE_STATUS_VALUES,
-          ENCOUNTER_QUEUE_TYPE_VALUES,
-          ENCOUNTER_TERMINAL_QUEUE_STATUSES
+          ENCOUNTER_CHARACTER_KEYS
         },
         deps: {
           deepClone,
@@ -167,13 +159,7 @@
       })
     : null;
 
-  function normalizeEncounterCharacterStatus(value) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterCharacterStatus(value); }
-  function normalizeEncounterQueueStatus(value) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterQueueStatus(value); }
-  function normalizeEncounterQueueType(value) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterQueueType(value); }
-  function createDefaultEncounterCharacterState(charKey) { return ACT_ENCOUNTER_RUNTIME.createDefaultEncounterCharacterState(charKey); }
-  function normalizeEncounterReasonCodes(value) { return ACT_ENCOUNTER_RUNTIME.normalizeEncounterReasonCodes(value); }
   function normalizeCharacterEncounterState(value) { return ACT_ENCOUNTER_RUNTIME.normalizeCharacterEncounterState(value); }
-  function expandCharacterEncounterState(value) { return ACT_ENCOUNTER_RUNTIME.expandCharacterEncounterState(value); }
   function getActiveEncounterCharacterKeys(characterEncounterInput) { return ACT_ENCOUNTER_RUNTIME.getActiveEncounterCharacterKeys(characterEncounterInput); }
   function getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId); }
   function getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId); }
@@ -184,7 +170,6 @@
   function isEncounterCharacterIntroduced(actStateInput, heroStateInput, charKeyInput, contextInput = {}) { return ACT_ENCOUNTER_RUNTIME.isEncounterCharacterIntroduced(actStateInput, heroStateInput, charKeyInput, contextInput); }
   function hasActiveEncounterForCharacter(encounterInput, charKeyInput) { return ACT_ENCOUNTER_RUNTIME.hasActiveEncounterForCharacter(encounterInput, charKeyInput); }
   function evaluateCharacterEncounterEligibility(actStateInput, heroStateInput = {}, contextInput = {}) { return ACT_ENCOUNTER_RUNTIME.evaluateCharacterEncounterEligibility(actStateInput, heroStateInput, contextInput); }
-  function buildEncounterRequestId(actStateInput, charKey, type, fallbackIndex = 0) { return ACT_ENCOUNTER_RUNTIME.buildEncounterRequestId(actStateInput, charKey, type, fallbackIndex); }
   function findEncounterPlacementCandidates(actStateInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.findEncounterPlacementCandidates(actStateInput, configInput, options); }
   function pickEncounterTargetPhaseIndex(actStateInput, requestInput, targetInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.pickEncounterTargetPhaseIndex(actStateInput, requestInput, targetInput, options); }
   function placeNextCharacterEncounter(actStateInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.placeNextCharacterEncounter(actStateInput, configInput, options); }
@@ -509,7 +494,6 @@
       resourceSpent: normalizeCountMap(raw.resourceSpent, false),
       characterEncounter: normalizeCharacterEncounterState(raw.characterEncounter),
       pendingResolutions: normalizePendingResolutions(raw.pendingResolutions),
-      pendingAssetDeckCommands: normalizePendingAssetDeckCommands(raw.pendingAssetDeckCommands, raw.pendingResolutions),
       resolutionHistory: normalizeResolutionHistory(raw.resolutionHistory),
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(raw.narrativeTension) || 0)))
     };
@@ -603,7 +587,6 @@
       resourceSpent: normalizeCountMap(source.resourceSpent, false),
       characterEncounter: normalizeCharacterEncounterState(source.characterEncounter),
       pendingResolutions: normalizePendingResolutions(source.pendingResolutions),
-      pendingAssetDeckCommands: normalizePendingAssetDeckCommands(source.pendingAssetDeckCommands, source.pendingResolutions),
       resolutionHistory: normalizeResolutionHistory(source.resolutionHistory),
       narrativeTension: Math.max(0, Math.min(100, Math.round(Number(source.narrativeTension) || base.narrativeTension || 0)))
     };
@@ -769,80 +752,6 @@
       .filter((item) => item.type === 'combat');
   }
 
-  function createAssetDeckCommandFromLegacyResolution(item) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-    if (normalizeActResourceKey(item.type, '') !== 'asset') return null;
-    const level = Math.max(1, Math.min(3, Math.round(Number(item.level) || 1)));
-    const sources = Array.isArray(item.sources) ? deepClone(item.sources) : [];
-    return {
-      id: `${normalizeTrimmedString(item.id, 'legacy-asset-resolution')}:asset_deck`,
-      protocol: 'ace0.assetDeckCommand.v1',
-      type: 'asset_deck',
-      level,
-      nodeId: normalizeTrimmedString(item.nodeId, ''),
-      nodeIndex: Math.max(1, Math.round(Number(item.nodeIndex) || 1)),
-      phaseIndex: Math.max(0, Math.min(3, Math.round(Number(item.phaseIndex) || 0))),
-      status: normalizeTrimmedString(item.status, 'pending') || 'pending',
-      sources,
-      command: {
-        kind: 'grant_asset',
-        payload: {
-          amount: level,
-          source: {
-            type: 'legacy_act_asset_resolution',
-            nodeId: normalizeTrimmedString(item.nodeId, ''),
-            nodeIndex: Math.max(1, Math.round(Number(item.nodeIndex) || 1)),
-            phaseIndex: Math.max(0, Math.min(3, Math.round(Number(item.phaseIndex) || 0))),
-            level,
-            sources
-          }
-        }
-      },
-      summary: `Legacy ACT Asset reward +${level}`
-    };
-  }
-
-  function normalizePendingAssetDeckCommands(value, legacyResolutions = []) {
-    const list = Array.isArray(value) ? value : [];
-    const legacy = Array.isArray(legacyResolutions)
-      ? legacyResolutions.map(createAssetDeckCommandFromLegacyResolution).filter(Boolean)
-      : [];
-    const normalized = [...list, ...legacy]
-      .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
-      .map((item) => {
-        const command = item.command && typeof item.command === 'object' && !Array.isArray(item.command)
-          ? deepClone(item.command)
-          : {};
-        const payload = command.payload && typeof command.payload === 'object' && !Array.isArray(command.payload)
-          ? command.payload
-          : {};
-        const kind = normalizeTrimmedString(command.kind || command.type, 'grant_asset');
-        return {
-          ...deepClone(item),
-          id: normalizeTrimmedString(item.id, ''),
-          protocol: normalizeTrimmedString(item.protocol, 'ace0.assetDeckCommand.v1'),
-          type: 'asset_deck',
-          level: Math.max(1, Math.min(3, Math.round(Number(item.level) || Number(payload.amount) || 1))),
-          status: normalizeTrimmedString(item.status, 'pending') || 'pending',
-          command: {
-            ...command,
-            kind,
-            payload: {
-              ...deepClone(payload),
-              amount: Math.max(0, Math.round(Number(payload.amount) || Number(item.level) || 0))
-            }
-          }
-        };
-      })
-      .filter((item) => item.id && ['grant_asset', 'open_offer'].includes(item.command.kind));
-    const seen = new Set();
-    return normalized.filter((item) => {
-      if (seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-  }
-
   function normalizeResolutionResultStatus(value) {
     const status = normalizeTrimmedString(value, 'resolved').toLowerCase();
     return ['resolved', 'failed', 'cancelled'].includes(status) ? status : 'resolved';
@@ -853,26 +762,12 @@
     return list
       .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
       .map((item) => {
-        const rawType = normalizeTrimmedString(item.type, '');
-        if (item.protocol === 'ace0.assetOfferClear.v1' || rawType === 'asset_offer_clear') {
-          const clearKey = normalizeTrimmedString(item.clearKey || item.offerId, '');
-          if (!clearKey) return null;
-          return {
-            id: normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
-            protocol: 'ace0.assetOfferClear.v1',
-            type: 'asset_offer_clear',
-            status: normalizeResolutionResultStatus(item.status),
-            clearKey,
-            offerId: normalizeTrimmedString(item.offerId, clearKey),
-            outcome: normalizeTrimmedString(item.outcome, '')
-          };
-        }
-        const type = normalizeActResourceKey(rawType, '');
-        if (type !== 'combat' && type !== 'asset') return null;
+        const type = normalizeActResourceKey(item.type, '');
+        if (type !== 'combat') return null;
         const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
         const compact = {
           id: normalizeTrimmedString(item.id, ''),
-          protocol: normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+          protocol: normalizeTrimmedString(item.protocol, ''),
           type,
           level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
           nodeId: normalizeTrimmedString(item.nodeId, ''),
@@ -1186,79 +1081,42 @@
     actState.pendingResolutions.push(request);
   }
 
-  function appendPendingAssetDeckCommand(actState, token, amount, phaseIndex) {
+  function getTransientAssetDeckEvents(actState) {
+    if (!actState || typeof actState !== 'object') return [];
+    if (!Object.prototype.hasOwnProperty.call(actState, '__assetDeckEvents')) {
+      Object.defineProperty(actState, '__assetDeckEvents', {
+        value: [],
+        enumerable: false,
+        configurable: true,
+        writable: true
+      });
+    }
+    return Array.isArray(actState.__assetDeckEvents) ? actState.__assetDeckEvents : [];
+  }
+
+  function appendAssetDeckOfferEvent(actState, token, amount, phaseIndex) {
     const key = normalizeActResourceKey(token.key, '');
     if (key !== 'asset') return;
-    actState.pendingAssetDeckCommands = normalizePendingAssetDeckCommands(actState.pendingAssetDeckCommands);
     const nodeId = getCurrentActNodeId(actState);
     const sources = Array.isArray(token.sources) ? deepClone(token.sources) : [token.source === 'reserve' ? 'reserve' : 'limited'];
     const nodeIndex = Math.max(1, Math.round(Number(actState.nodeIndex) || 1));
-    const request = {
-      id: `${actState.id}:${nodeId}:${phaseIndex}:asset_deck:grant_asset:${amount}:${actState.resourceSpent.asset || 0}`,
-      protocol: 'ace0.assetDeckCommand.v1',
-      type: 'asset_deck',
-      level: amount,
-      nodeId,
-      nodeIndex,
-      phaseIndex,
-      status: 'pending',
-      sources,
-      command: {
-        kind: 'grant_asset',
-        payload: {
-          amount,
-          source: {
-            type: 'act_asset_token',
-            actId: actState.id,
-            nodeId,
-            nodeIndex,
-            phaseIndex,
-            level: amount,
-            sources
-          }
-        }
-      },
-      summary: `ACT Deck point reward +${amount}`
-    };
-    actState.pendingAssetDeckCommands.push(request);
     const pool = amount >= 3 ? 'high' : amount >= 2 ? 'mid' : 'low';
     const phaseNo = Math.max(1, Math.min(4, Math.round(Number(phaseIndex) || 0) + 1));
-    actState.pendingAssetDeckCommands.push({
-      id: `${actState.id}:${nodeId}:${phaseIndex}:asset_deck:open_offer:${pool}:${actState.resourceSpent.asset || 0}`,
-      protocol: 'ace0.assetDeckCommand.v1',
-      type: 'asset_deck',
-      level: amount,
+    getTransientAssetDeckEvents(actState).push({
+      id: `${actState.id}:${nodeId}:${phaseIndex}:asset_offer:${pool}:${actState.resourceSpent.asset || 0}`,
+      type: 'asset_offer',
+      amount,
+      pool,
       nodeId,
       nodeIndex,
       phaseIndex,
-      status: 'pending',
       sources,
-      command: {
-        kind: 'open_offer',
-        payload: {
-          pool,
-          seed: `${actState.seed || DEFAULT_WORLD_ACT.seed}:asset-offer:${actState.id}:${nodeId}:${nodeIndex}:phase${phaseNo}:${amount}`,
-          source: {
-            type: 'act_asset_token_offer',
-            actId: actState.id,
-            nodeId,
-            nodeIndex,
-            phaseIndex,
-            level: amount,
-            pool,
-            sources
-          }
-        }
-      },
-      summary: `ACT Deck point opened ${pool.toUpperCase()} offer`
+      seed: `${actState.seed || DEFAULT_WORLD_ACT.seed}:asset-offer:${actState.id}:${nodeId}:${nodeIndex}:phase${phaseNo}:${amount}`
     });
   }
 
-  function getPendingAssetDeckCommands(actStateInput) {
-    const actState = normalizeActState(actStateInput);
-    return normalizePendingAssetDeckCommands(actState.pendingAssetDeckCommands)
-      .filter((request) => request.status === 'pending')
-      .map((request) => deepClone(request));
+  function getAssetDeckEvents(actStateInput) {
+    return getTransientAssetDeckEvents(actStateInput).map((event) => deepClone(event));
   }
 
   function getPendingExternalResolutionRequests(actStateInput, filters = {}) {
@@ -1380,7 +1238,7 @@
       return;
     }
     if (key === 'asset') {
-      appendPendingAssetDeckCommand(actState, token, amount, phaseIndex);
+      appendAssetDeckOfferEvent(actState, token, amount, phaseIndex);
       return;
     }
     appendPendingResolution(actState, token, amount, phaseIndex);
@@ -1431,6 +1289,12 @@
     const encounterResult = consumeCharacterEncounterForNode(actState, currentNodeId, { phaseIndex });
     if (encounterResult?.consumed && encounterResult.actState) {
       Object.assign(actState, encounterResult.actState);
+      if (encounterResult.heroCastPatch && typeof encounterResult.heroCastPatch === 'object') {
+        heroState.cast = {
+          ...(heroState.cast && typeof heroState.cast === 'object' ? heroState.cast : {}),
+          ...encounterResult.heroCastPatch
+        };
+      }
     }
     executeActTokenEffect(actState, heroState, config, token, phaseIndex);
     autoQueueCharacterEncountersForCurrentNode(actState, heroState, config, contextInput);
@@ -1486,6 +1350,7 @@
       actState,
       heroState,
       changed: true,
+      assetDeckEvents: getAssetDeckEvents(actState),
       worldTime: deriveWorldTimeFromAct(actState)
     };
   }
@@ -1559,13 +1424,11 @@
 	      }
 	    }
 
-    const encounterState = expandCharacterEncounterState(act.characterEncounter);
-    Object.entries(encounterState.characters).forEach(([charKey, encounterChar]) => {
+    const encounterState = normalizeCharacterEncounterState(act.characterEncounter);
+    Object.keys(encounterState.met || {}).forEach((charKey) => {
       if (!states[charKey]) return;
-      if (encounterChar.status === 'introduced' || encounterChar.status === 'first_meet' || encounterChar.firstMeetDone) {
-        states[charKey].activated = true;
-        states[charKey].introduced = true;
-      }
+      states[charKey].activated = true;
+      states[charKey].introduced = true;
     });
 
     // 首见帧来源只允许来自 characterEncounter 运行时状态。
@@ -1701,7 +1564,6 @@
     getDefaultActState,
     normalizeActState,
     normalizeCharacterEncounterState,
-    expandCharacterEncounterState,
     getCharacterEncounterNodeFirstMeetMap,
     evaluateCharacterEncounterEligibility,
     enqueueEligibleCharacterEncounters,
@@ -1724,7 +1586,7 @@
     resolveActNodeTransition,
     consumeSingleActPhase,
     getPendingExternalResolutionRequests,
-    getPendingAssetDeckCommands,
+    getAssetDeckEvents,
     applyExternalResolutionResult,
     applyExternalResolutionResults,
     deriveWorldTimeFromAct,

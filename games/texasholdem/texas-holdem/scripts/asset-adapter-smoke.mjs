@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(root, '../../..');
+const assetDataPath = path.join(repoRoot, 'apps/st-bridge/packs/acezero-main/asset/data.js');
 const adapterPath = path.join(root, 'core/runtime/assets/asset-deck-adapter.js');
 const skillSystemPath = path.join(root, 'core/skill-system.js');
 const skillSystemDir = path.dirname(skillSystemPath);
@@ -17,37 +19,55 @@ sandbox.__aceSkillSystemLoad = (relativePath) => {
   vm.runInContext(fs.readFileSync(fullPath, 'utf8'), sandbox, { filename: fullPath });
 };
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(assetDataPath, 'utf8'), sandbox, { filename: assetDataPath });
 vm.runInContext(fs.readFileSync(adapterPath, 'utf8'), sandbox, { filename: adapterPath });
 vm.runInContext(fs.readFileSync(skillSystemPath, 'utf8'), sandbox, { filename: skillSystemPath });
 
 const adapter = sandbox.AssetDeckAdapter;
 assert.ok(adapter, 'AssetDeckAdapter should be exported');
 
-const assetDeck = {
-  active_general_cards: [
-    {
-      cardId: 'asset_skill_minor_wish_l2',
-      skillKey: 'minor_wish',
-      gameTags: ['texas-holdem'],
-      modifiers: [
-        { type: 'skill_level', key: 'minor_wish', value: 2 },
-        { type: 'skill_cost_flat', key: 'minor_wish', value: -3 }
-      ]
-    },
-    {
-      cardId: 'asset_rainbow_contract',
-      gameTags: ['any'],
-      modifiers: [{ type: 'all_force_power_bonus', value: 0.08 }]
+function makeAssetDeck({ general = [], void: voidCards = [] }) {
+  const catalog = sandbox.ACE0AssetDeckData.ASSET_CARD_CATALOG;
+  const ensureCatalogCard = (card) => {
+    const id = card.id || card.cardId;
+    if (!id) return null;
+    if (card.modifiers && !catalog.some(item => item.id === id)) {
+      catalog.push({
+        id,
+        name: card.name || id,
+        rarity: card.rarity || 'bronze',
+        kind: card.kind || 'numeric',
+        scope: card.scope,
+        system: card.system,
+        skillKey: card.skillKey,
+        level: card.level,
+        targetTags: card.targetTags || ['team'],
+        gameTags: card.gameTags || ['any'],
+        slotTags: card.slotTags || ['general'],
+        effectText: card.effectText || '',
+        statusTags: card.statusTags || [],
+        modifiers: card.modifiers
+      });
     }
+    return { id, lv: Math.max(1, Math.round(Number(card.lv || card.level) || 1)) };
+  };
+  return {
+    slots: { general: 4, void: 2 },
+    bag: {
+      general: general.map(ensureCatalogCard).filter(Boolean),
+      void: voidCards.map(ensureCatalogCard).filter(Boolean)
+    }
+  };
+}
+
+const assetDeck = makeAssetDeck({
+  general: [
+    { id: 'asset_skill_minor_wish_l2', level: 2 },
+    { id: 'asset_mana_reduce_gold', level: 3 },
+    { id: 'asset_rainbow_contract', level: 4 }
   ],
-  active_void_cards: [
-    {
-      cardId: 'asset_void_battery',
-      gameTags: ['texas-holdem'],
-      modifiers: [{ type: 'mana_max_flat', value: 10 }]
-    }
-  ]
-};
+  void: [{ id: 'asset_mana_max_gold', level: 3 }]
+});
 
 const compiled = adapter.compile({ assetDeck, gameId: 'texas-holdem' });
 assert.equal(compiled.skillLevelBySkill.minor_wish, 2, 'Skill level cards should compile');
@@ -77,18 +97,9 @@ assert.equal(existingVanguardConfig.hero.vanguardSkills.minor_wish, 2, 'Existing
 
 const grantCompiled = adapter.compile({
   gameId: 'texas-holdem',
-  assetDeck: {
-    active_general_cards: [
-      {
-        cardId: 'asset_grant_minor_wish',
-        skillKey: 'minor_wish',
-        system: 'moirai',
-        targetTags: ['RINO'],
-        gameTags: ['texas-holdem'],
-        modifiers: [{ type: 'skill_level', key: 'minor_wish', value: 2 }]
-      }
-    ]
-  }
+  assetDeck: makeAssetDeck({
+    general: [{ id: 'asset_skill_minor_wish_l2', level: 2 }]
+  })
 });
 const grantConfig = adapter.applySkillLevelsToConfig({
   hero: {
@@ -103,16 +114,14 @@ assert.equal(grantConfig.hero.rearguardSkills.minor_wish, 2, 'Asset skill card s
 
 const unknownCompiled = adapter.compile({
   gameId: 'texas-holdem',
-  assetDeck: {
-    active_general_cards: [
-      {
-        cardId: 'asset_unknown_skill',
-        skillKey: 'definitely_missing_skill',
-        gameTags: ['texas-holdem'],
-        modifiers: [{ type: 'skill_level', key: 'definitely_missing_skill', value: 2 }]
-      }
-    ]
-  }
+  assetDeck: makeAssetDeck({
+    general: [{
+      id: 'asset_unknown_skill',
+      skillKey: 'definitely_missing_skill',
+      gameTags: ['texas-holdem'],
+      modifiers: [{ type: 'skill_level', key: 'definitely_missing_skill', value: 2 }]
+    }]
+  })
 });
 const unknownConfig = adapter.applySkillLevelsToConfig({
   hero: {
@@ -136,44 +145,44 @@ const cost = adapter.resolveSkillCost(compiled, {
   system: 'moirai'
 }, 20);
 assert.equal(cost.finalCost, 17, 'Flat skill-cost modifier should affect final cost');
-assert.equal(cost.sources[0].cardId, 'asset_skill_minor_wish_l2', 'Cost modifier should expose source card');
+assert.equal(cost.sources[0].cardId, 'asset_mana_reduce_gold', 'Cost modifier should expose source card');
 
 const zeroCostCompiled = adapter.compile({
   gameId: 'texas-holdem',
-  assetDeck: {
-    active_general_cards: [
+  assetDeck: makeAssetDeck({
+    general: [
       { cardId: 'asset_zero_flat', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_flat', value: -12 }] },
       { cardId: 'asset_zero_pct', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: -0.5 }] }
     ]
-  }
+  })
 });
 const zeroCost = adapter.resolveSkillCost(zeroCostCompiled, { ownerId: 0, skillKey: 'minor_wish', system: 'moirai' }, 10);
 assert.equal(zeroCost.finalCost, 0, 'Flat reduction can make a skill free before percent modifiers');
 
 const pctCapCompiled = adapter.compile({
   gameId: 'texas-holdem',
-  assetDeck: {
-    active_general_cards: [
+  assetDeck: makeAssetDeck({
+    general: [
       { cardId: 'asset_pct_reduce_a', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: -0.5 }] },
       { cardId: 'asset_pct_reduce_b', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: -0.5 }] },
       { cardId: 'asset_pct_increase', gameTags: ['texas-holdem'], modifiers: [{ type: 'skill_cost_pct', value: 0.5 }] }
     ]
-  }
+  })
 });
 const pctCapCost = adapter.resolveSkillCost(pctCapCompiled, { ownerId: 0, skillKey: 'hex', system: 'chaos' }, 30);
 assert.equal(pctCapCost.finalCost, 25, 'Percent reductions cap at 66% while increases remain uncapped');
 
 const riskCompiled = adapter.compile({
   gameId: 'texas-holdem',
-  assetDeck: {
-    active_general_cards: [
+  assetDeck: makeAssetDeck({
+    general: [
       {
         cardId: 'asset_risk_fixed',
         gameTags: ['texas-holdem'],
         modifiers: [{ type: 'risk_reward_roll', costPctMin: -0.1, costPctMax: -0.1, effectPctMin: 0.2, effectPctMax: 0.2 }]
       }
     ]
-  }
+  })
 });
 const riskCost = adapter.resolveSkillCost(riskCompiled, { ownerId: 0, skillKey: 'hex', system: 'chaos' }, 20, { consumeAssetRisk: true, random: () => 0.5 });
 assert.equal(riskCost.finalCost, 18, 'Risk/reward cost roll should apply only when consumed');
@@ -181,7 +190,7 @@ const riskForce = adapter.enhanceForcePower(riskCompiled, { ownerId: 0, skillKey
 assert.equal(riskForce.power, 60, 'Risk/reward effect roll should apply to the activated force');
 
 const mana = adapter.resolveManaMax(compiled, 0, 100);
-assert.equal(mana.max, 110, 'Mana max modifier should affect max mana');
+assert.equal(mana.max, 112, 'Mana max modifier should affect max mana');
 const enemyMana = adapter.resolveManaMax(compiled, 2, 100);
 assert.equal(enemyMana.max, 100, 'Player Asset mana max modifier should not affect enemy mana by default');
 
@@ -191,8 +200,8 @@ const force = adapter.enhanceForcePower(compiled, {
   system: 'moirai',
   power: 50
 });
-assert.equal(force.power, 54, 'Global force power bonus should affect force power');
-assert.equal(force._assetBonus.sources[0].cardId, 'asset_rainbow_contract', 'Force modifier should expose source card');
+assert.equal(force.power, 52.9, 'Global force power bonus should stack with the equipped reducer card');
+assert.equal(force._assetBonus.sources.some(source => source.cardId === 'asset_rainbow_contract'), true, 'Force modifier should expose source card');
 
 const enemyForce = adapter.enhanceForcePower(compiled, {
   ownerId: 2,
@@ -204,8 +213,8 @@ assert.equal(enemyForce.power, 50, 'Player Asset force bonus should not buff ene
 
 const tableCompiled = adapter.compile({
   gameId: 'texas-holdem',
-  assetDeck: {
-    active_general_cards: [
+  assetDeck: makeAssetDeck({
+    general: [
       {
         cardId: 'asset_table_force_bonus',
         scope: 'table',
@@ -213,7 +222,7 @@ const tableCompiled = adapter.compile({
         modifiers: [{ type: 'all_force_power_bonus', value: 0.08 }]
       }
     ]
-  }
+  })
 });
 const tableEnemyForce = adapter.enhanceForcePower(tableCompiled, {
   ownerId: 2,
@@ -225,8 +234,8 @@ assert.equal(tableEnemyForce.power, 54, 'Explicit table-scoped Asset force bonus
 
 const passiveCompiled = adapter.compile({
   gameId: 'texas-holdem',
-  assetDeck: {
-    active_general_cards: [
+  assetDeck: makeAssetDeck({
+    general: [
       {
         cardId: 'asset_passive_street_mana_test',
         gameTags: ['texas-holdem'],
@@ -248,7 +257,7 @@ const passiveCompiled = adapter.compile({
         modifiers: [{ type: 'once_per_hand_fortune_flat', value: 9 }]
       }
     ]
-  }
+  })
 });
 assert.equal(passiveCompiled.passiveTriggers.length, 4, 'Passive Asset modifiers should compile into passive triggers');
 
@@ -305,7 +314,7 @@ ss.onLog = () => {};
 ss.registerFromConfig(config, { heroId: 0, seats: {} });
 const registeredMinorWish = ss.getPlayerSkills(0).find(skill => skill.skillKey === 'minor_wish');
 assert.equal(registeredMinorWish.level, 2, 'SkillSystem should receive asset-upgraded skill level through config');
-assert.equal(ss.getMana(0).max, 110, 'SkillSystem should receive asset mana max modifier');
+assert.equal(ss.getMana(0).max, 112, 'SkillSystem should receive asset mana max modifier');
 
 const grantSkillSystem = new sandbox.SkillSystem();
 grantSkillSystem.onLog = () => {};

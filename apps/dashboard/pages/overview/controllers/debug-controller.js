@@ -158,13 +158,13 @@
                 place: true,
                 distance: 1
             });
-            const queued = Array.isArray(result?.queued) ? result.queued : [];
+            const created = Array.isArray(result?.created) ? result.created : [];
             const placed = result?.placed || null;
             const blockedCount = Array.isArray(result?.evaluated?.blocked) ? result.evaluated.blocked.length : 0;
             if (placed) {
-                syncState.statusText = `RULE ADD: ${placed.charKey}@${placed.targetNodeId || 'PATH'}`;
-            } else if (queued.length) {
-                syncState.statusText = `RULE ADD QUEUED: ${queued.map((item) => item.charKey).join('/')}`;
+                syncState.statusText = `RULE ADD: ${placed.charKey}@${placed.node || 'PATH'}`;
+            } else if (created.length) {
+                syncState.statusText = `RULE ADD QUEUED: ${created.map((item) => item.charKey).join('/')}`;
             } else {
                 syncState.statusText = `RULE ADD NONE (${blockedCount} BLOCKED)`;
             }
@@ -194,28 +194,13 @@
             const encounter = actState.characterEncounter && typeof actState.characterEncounter === 'object'
                 ? deepCloneValue(actState.characterEncounter)
                 : {};
-            const characters = encounter.characters && typeof encounter.characters === 'object'
-                ? deepCloneValue(encounter.characters)
-                : {};
-            Object.entries(characters).forEach(([charKey, state]) => {
-                if (!state || typeof state !== 'object') return;
-                if (state.firstMeetDone === true || state.status === 'introduced') return;
-                characters[charKey] = {
-                    ...state,
-                    status: 'locked',
-                    queuedRequestId: '',
-                    placedNodeId: '',
-                    reasonCodes: []
-                };
-            });
-            actState.characterEncounter = {
-                ...encounter,
-                queue: Array.isArray(encounter.queue)
-                    ? encounter.queue.filter((item) => ['triggered', 'expired', 'cancelled'].includes(item?.status))
-                    : [],
-                characters
-            };
-            syncState.statusText = 'ENCOUNTER QUEUE CLEARED';
+            const nextEncounter = {};
+            if (encounter.met && typeof encounter.met === 'object') nextEncounter.met = deepCloneValue(encounter.met);
+            if (encounter.signaled && typeof encounter.signaled === 'object') nextEncounter.signaled = deepCloneValue(encounter.signaled);
+            const lastMeet = Math.max(0, Math.round(Number(encounter.lastMeet) || 0));
+            if (lastMeet > 0) nextEncounter.lastMeet = lastMeet;
+            actState.characterEncounter = nextEncounter;
+            syncState.statusText = 'ENCOUNTER ACTIVE CLEARED';
             return actState;
         });
     }

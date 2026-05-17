@@ -4,238 +4,99 @@ const {
   assert,
   assertEqual,
   loadActSandbox,
-  loadAssetSandbox,
   getChapterConfig,
   createHero
 } = require('./smoke-utils');
 
-function testActAssetTokenCreatesAssetDeckCommand() {
-  const { act } = loadActSandbox();
-  const config = getChapterConfig(act);
-  const actState = {
-    ...act.getDefaultActState(),
-    nodeIndex: 1,
-    route_history: ['node1-entry'],
-    stage: 'executing',
-    phase_index: 1,
-    phase_slots: [
-      null,
-      { key: 'asset', amount: 2, source: 'limited', sources: ['limited', 'reserve'] },
-      null,
-      null
-    ],
-    pendingResolutions: [],
-    pendingAssetDeckCommands: [],
-    resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 }
-  };
-  const hero = createHero();
-
-  act.consumeSingleActPhase(actState, hero, config, {});
-
-  assertEqual(actState.resourceSpent.asset, 2, 'Asset token should still count as ACT resource spent');
-  assertEqual(actState.pendingResolutions.length, 0, 'Asset token should not create external pending resolution');
-  assertEqual(actState.pendingAssetDeckCommands.length, 2, 'Asset token should create grant + offer AssetDeck commands');
-
-  const pending = actState.pendingAssetDeckCommands[0];
-  assertEqual(pending.protocol, 'ace0.assetDeckCommand.v1', 'Asset command should use formal protocol');
-  assertEqual(pending.command.kind, 'grant_asset', 'Asset phase should grant points before opening a pool');
-  assertEqual(pending.command.payload.amount, 2, 'Asset command should carry token level as amount');
-  assertEqual(pending.command.payload.source.type, 'act_asset_token', 'Asset command should preserve ACT source');
-  assertEqual(pending.command.payload.source.nodeId, 'node1-entry', 'Asset command should record node id');
-  assertEqual(actState.pendingAssetDeckCommands[1].command.kind, 'open_offer', 'Asset phase should open a pool after grant');
-  assertEqual(actState.pendingAssetDeckCommands[1].command.payload.pool, 'mid', 'Asset II should open mid pool');
-  assert(actState.pendingAssetDeckCommands[1].command.payload.seed.includes(':phase2:'), 'Offer seed should bind to one-based phase number');
-
-  const apiPending = act.getPendingAssetDeckCommands(actState);
-  assertEqual(apiPending.length, 2, 'ACT API should expose pending AssetDeck commands');
-  assertEqual(apiPending[0].id, pending.id, 'ACT API should return the same command id');
-}
-
-function testHighAssetTokenOpensOfferCommand() {
-  const { act } = loadActSandbox();
-  const config = getChapterConfig(act);
-  const actState = {
-    ...act.getDefaultActState(),
-    nodeIndex: 1,
-    route_history: ['node1-entry'],
-    stage: 'executing',
-    phase_index: 0,
-    phase_slots: [
-      { key: 'asset', amount: 3, source: 'limited', sources: ['limited', 'limited', 'reserve'] },
-      null,
-      null,
-      null
-    ],
-    pendingResolutions: [],
-    pendingAssetDeckCommands: [],
-    resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 }
-  };
-
-  act.consumeSingleActPhase(actState, createHero(), config, {});
-
-  assertEqual(actState.pendingResolutions.length, 0, 'High asset token should not use external resolutions');
-  assertEqual(actState.pendingAssetDeckCommands.length, 2, 'High asset token should create grant + offer commands');
-  assertEqual(actState.pendingAssetDeckCommands[0].command.kind, 'grant_asset', 'Grant should be queued before offer');
-  assertEqual(actState.pendingAssetDeckCommands[1].command.kind, 'open_offer', 'High asset token should open an offer');
-  assertEqual(actState.pendingAssetDeckCommands[1].command.payload.pool, 'high', 'High asset token should open high pool');
-  assert(actState.pendingAssetDeckCommands[1].command.payload.seed.includes(':phase1:'), 'High offer seed should bind to phase 1');
-}
-
-function testLowAssetTokenOpensLowOfferCommand() {
-  const { act } = loadActSandbox();
-  const config = getChapterConfig(act);
-  const actState = {
-    ...act.getDefaultActState(),
-    nodeIndex: 1,
-    route_history: ['node1-entry'],
-    stage: 'executing',
-    phase_index: 0,
-    phase_slots: [
-      { key: 'asset', amount: 1, source: 'limited', sources: ['limited'] },
-      null,
-      null,
-      null
-    ],
-    pendingResolutions: [],
-    pendingAssetDeckCommands: [],
-    resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 }
-  };
-
-  act.consumeSingleActPhase(actState, createHero(), config, {});
-
-  assertEqual(actState.pendingAssetDeckCommands.length, 2, 'Low asset token should create grant + offer commands');
-  assertEqual(actState.pendingAssetDeckCommands[1].command.kind, 'open_offer', 'Low asset token should open an offer');
-  assertEqual(actState.pendingAssetDeckCommands[1].command.payload.pool, 'low', 'Asset I should open low pool');
-}
-
-function testAssetOfferSeedsDifferByPhase() {
-  const { act } = loadActSandbox();
-  const config = getChapterConfig(act);
-  const buildState = (phaseIndex) => ({
+function buildAssetPhaseState(act, amount, phaseIndex = 0) {
+  return {
     ...act.getDefaultActState(),
     nodeIndex: 1,
     route_history: ['node1-entry'],
     stage: 'executing',
     phase_index: phaseIndex,
+    phasePlanLock: {
+      nodeId: 'node1-entry',
+      nodeIndex: 1,
+      locked: true,
+      confirmedPhaseIndex: phaseIndex,
+      floorKey: `message:asset-command:${phaseIndex}`
+    },
     phase_slots: [null, null, null, null].map((slot, index) => (
-      index === phaseIndex ? { key: 'asset', amount: 1, source: 'limited', sources: ['limited'] } : slot
+      index === phaseIndex ? { key: 'asset', amount, source: 'limited', sources: Array.from({ length: amount }, () => 'limited') } : slot
     )),
     pendingResolutions: [],
-    pendingAssetDeckCommands: [],
     resourceSpent: { combat: 0, rest: 0, asset: 0, vision: 0 }
-  });
-  const phase1 = buildState(0);
-  const phase2 = buildState(1);
-
-  act.consumeSingleActPhase(phase1, createHero(), config, {});
-  act.consumeSingleActPhase(phase2, createHero(), config, {});
-
-  const seed1 = phase1.pendingAssetDeckCommands[1].command.payload.seed;
-  const seed2 = phase2.pendingAssetDeckCommands[1].command.payload.seed;
-  assert(seed1.includes(':phase1:'), 'Phase 1 offer should use phase1 seed');
-  assert(seed2.includes(':phase2:'), 'Phase 2 offer should use phase2 seed');
-  assert(seed1 !== seed2, 'Same node offers from different phases should not reuse the same seed');
+  };
 }
 
-function testAssetDeckGrantHistoryKeepsActSource() {
-  const { assetDeck } = loadAssetSandbox();
-  const result = assetDeck.applyAssetDeckCommand(assetDeck.makeDefaultAssetDeckState(), {
-    kind: 'grant_asset',
-    payload: {
-      amount: 2,
-      requestId: 'act-command-1',
-      source: {
-        type: 'act_asset_token',
-        nodeId: 'node1-entry',
-        phaseIndex: 1
-      }
-    }
-  }, { assetPoints: 0 });
-
-  assertEqual(result.ok, true, 'grant_asset should apply');
-  assertEqual(result.assetPoints, 2, 'grant_asset should add reserve asset points');
-  const lastHistory = result.assetDeck.history[result.assetDeck.history.length - 1];
-  assert(lastHistory, 'grant_asset should append history');
-  assertEqual(lastHistory.requestId, 'act-command-1', 'AssetDeck history should keep request id');
-  assert(!('source' in lastHistory), 'AssetDeck history should not retain ACT source payload');
-}
-
-function testAssetDeckOpenOfferHistoryKeepsActSource() {
-  const { assetDeck } = loadAssetSandbox();
-  const granted = assetDeck.applyAssetDeckCommand(assetDeck.makeDefaultAssetDeckState(), {
-    kind: 'grant_asset',
-    payload: { amount: 3 }
-  }, { assetPoints: 0 });
-  let state = granted.assetDeck;
-  const result = assetDeck.applyAssetDeckCommand(state, {
-    kind: 'open_offer',
-    payload: {
-      pool: 'high',
-      seed: 'act-offer-source',
-      requestId: 'act-offer-1',
-      source: {
-        type: 'act_asset_token_offer',
-        nodeId: 'node1-entry',
-        phaseIndex: 0
-      }
-    }
-  }, { assetPoints: granted.assetPoints });
-
-  assertEqual(result.ok, true, 'open_offer should apply after grant');
-  assertEqual(result.assetPoints, 0, 'High offer should consume the granted three asset points');
-  assertEqual(result.assetDeck.pending_offer.pool, 'high', 'open_offer should create high pending offer');
-  const lastHistory = result.assetDeck.history[result.assetDeck.history.length - 1];
-  assertEqual(lastHistory.requestId, 'act-offer-1', 'open_offer history should keep request id');
-  assert(!('source' in lastHistory), 'open_offer history should not retain ACT source payload');
-}
-
-function testActResolutionHistoryKeepsStableWindow() {
+function testAssetTokenCreatesTransientEvent() {
   const { act } = loadActSandbox();
-  const history = Array.from({ length: 70 }, (_, index) => ({
-    id: `history-${index}`,
-    protocol: 'ace0.assetDeckCommand.v1',
-    type: 'asset',
-    level: 1,
-    nodeId: 'node1-entry',
-    nodeIndex: 1,
-    phaseIndex: 0,
-    status: 'resolved',
-    outcome: 'asset_granted'
-  }));
-  const normalized = act.normalizeActState({
-    ...act.getDefaultActState(),
-    resolutionHistory: history
-  });
-  assertEqual(normalized.resolutionHistory.length, 64, 'ACT resolutionHistory should keep a stable 64-entry window');
-  assertEqual(normalized.resolutionHistory[0].id, 'history-6', 'ACT resolutionHistory should keep the newest 64 entries');
-  assertEqual(normalized.resolutionHistory[63].id, 'history-69', 'ACT resolutionHistory should keep the latest entry');
+  const config = getChapterConfig(act);
+  const actState = buildAssetPhaseState(act, 2, 1);
+
+  act.consumeSingleActPhase(actState, createHero(), config, {});
+
+  assertEqual(actState.resourceSpent.asset, 2, 'Asset token should count as ACT resource spent');
+  assertEqual(actState.pendingResolutions.length, 0, 'Asset token should not create external pending resolution');
+  assert(!Object.prototype.hasOwnProperty.call(actState, 'pendingAssetDeckCommands'), 'Asset token should not persist AssetDeck commands');
+  const events = act.getAssetDeckEvents(actState);
+  assertEqual(events.length, 1, 'Asset token should emit one transient AssetDeck event');
+  assertEqual(events[0].type, 'asset_offer', 'Transient event should be an asset offer');
+  assertEqual(events[0].amount, 2, 'Transient event should carry token amount');
+  assertEqual(events[0].pool, 'mid', 'Asset II should open mid pool');
+  assert(events[0].seed.includes(':phase2:'), 'Offer seed should bind to one-based phase number');
 }
 
-testActAssetTokenCreatesAssetDeckCommand();
-testHighAssetTokenOpensOfferCommand();
-testLowAssetTokenOpensLowOfferCommand();
-testAssetOfferSeedsDifferByPhase();
-{
+function testPoolsAndSeedsByPhase() {
+  const { act } = loadActSandbox();
+  const config = getChapterConfig(act);
+  const low = buildAssetPhaseState(act, 1, 0);
+  const high = buildAssetPhaseState(act, 3, 2);
+
+  act.consumeSingleActPhase(low, createHero(), config, {});
+  act.consumeSingleActPhase(high, createHero(), config, {});
+
+  const lowEvent = act.getAssetDeckEvents(low)[0];
+  const highEvent = act.getAssetDeckEvents(high)[0];
+  assertEqual(lowEvent.pool, 'low', 'Asset I should open low pool');
+  assertEqual(highEvent.pool, 'high', 'Asset III should open high pool');
+  assert(lowEvent.seed.includes(':phase1:'), 'Phase 1 offer should use phase1 seed');
+  assert(highEvent.seed.includes(':phase3:'), 'Phase 3 offer should use phase3 seed');
+  assert(lowEvent.seed !== highEvent.seed, 'Offers from different phases should not reuse seed');
+}
+
+function testResolvePendingAdvanceReturnsTransientEvents() {
+  const { act } = loadActSandbox();
+  const config = getChapterConfig(act);
+  const actState = buildAssetPhaseState(act, 1, 0);
+  actState.phase_advance = 1;
+
+  const resolved = act.resolvePendingAdvanceState(actState, createHero(), config, {});
+  assertEqual(resolved.changed, true, 'Phase advance should resolve');
+  assertEqual(resolved.assetDeckEvents.length, 1, 'Phase advance should return transient AssetDeck event');
+  assertEqual(resolved.assetDeckEvents[0].pool, 'low', 'Returned transient event should preserve pool');
+  assert(!Object.prototype.hasOwnProperty.call(resolved.actState, 'pendingAssetDeckCommands'), 'Resolved ACT state should not persist AssetDeck commands');
+}
+
+function testAssetPendingDoesNotMigrateToCommands() {
   const { act } = loadActSandbox();
   const normalized = act.normalizeActState({
     ...act.getDefaultActState(),
     pendingResolutions: [{
-      id: 'legacy-asset-1',
+      id: 'old-asset-pending',
       type: 'asset',
       level: 3,
-      nodeId: 'node4-mid',
-      nodeIndex: 4,
-      phaseIndex: 2,
-      status: 'pending',
-      sources: ['limited']
+      status: 'pending'
     }]
   });
-  assertEqual(normalized.pendingResolutions.length, 0, 'Legacy asset pending should leave external resolutions');
-  assertEqual(normalized.pendingAssetDeckCommands.length, 1, 'Legacy asset pending should migrate to AssetDeck command');
-  assertEqual(normalized.pendingAssetDeckCommands[0].command.payload.amount, 3, 'Migrated command should keep asset level');
+  assertEqual(normalized.pendingResolutions.length, 0, 'Legacy asset pending should be discarded');
+  assert(!Object.prototype.hasOwnProperty.call(normalized, 'pendingAssetDeckCommands'), 'Legacy asset pending should not migrate to command storage');
 }
-testAssetDeckGrantHistoryKeepsActSource();
-testAssetDeckOpenOfferHistoryKeepsActSource();
-testActResolutionHistoryKeepsStableWindow();
+
+testAssetTokenCreatesTransientEvent();
+testPoolsAndSeedsByPhase();
+testResolvePendingAdvanceReturnsTransientEvents();
+testAssetPendingDoesNotMigrateToCommands();
 
 console.log('[act-asset-command-smoke] all checks passed');

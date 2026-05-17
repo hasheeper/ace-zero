@@ -39,8 +39,6 @@ const WORLD_LAYERS = ['THE_COURT', 'THE_EXCHANGE', 'THE_STREET', 'THE_RUST'];
 const ASSET_DECK_INITIAL_GENERAL_SLOTS = 4;
 const ASSET_DECK_MAX_GENERAL_SLOTS = 8;
 const ASSET_DECK_VOID_SLOTS = 2;
-const ASSET_DECK_RARITIES = ['bronze', 'silver', 'gold', 'rainbow'];
-const ASSET_DECK_KINDS = ['numeric', 'passive', 'skill', 'god'];
 const ASSET_DECK_SLOT_TYPES = ['general', 'void'];
 const ASSET_DECK_CARD_SLOT_TAGS = {
   asset_bootstrap_credit: ['general'],
@@ -170,15 +168,15 @@ function makeDefaultWorldLocation() {
 
 function makeDefaultAssetDeckState() {
   return {
-    version: 1,
-    general_slots_unlocked: ASSET_DECK_INITIAL_GENERAL_SLOTS,
-    void_slots_unlocked: ASSET_DECK_VOID_SLOTS,
-    active_general_cards: [],
-    active_void_cards: [],
-    pending_offer: null,
-    pending_offer_queue: [],
-    pending_replace: null,
-    history: []
+    slots: {
+      general: ASSET_DECK_INITIAL_GENERAL_SLOTS,
+      void: ASSET_DECK_VOID_SLOTS
+    },
+    bag: {
+      general: [],
+      void: []
+    },
+    offer: null
   };
 }
 
@@ -195,99 +193,50 @@ function normalizeAssetDeckSlotTags(value, cardId) {
 
 function canAssetDeckCardUseSlot(card, slotType) {
   const normalizedSlot = normalizeLowerEnumValue(slotType, ASSET_DECK_SLOT_TYPES, 'general');
-  const slotTags = normalizeAssetDeckSlotTags(card?.slotTags, card?.cardId);
+  const slotTags = normalizeAssetDeckSlotTags(card?.slotTags, card?.id);
   return slotTags.includes(normalizedSlot);
 }
 
-function normalizeAssetDeckCardInstance(value) {
+function normalizeAssetDeckCardRef(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const cardId = normalizeTrimmedString(source.cardId || source.id, '');
-  const addedAt = Math.max(0, Math.round(Number(source.addedAt) || 0));
-  const full = {
-    instanceId: normalizeTrimmedString(source.instanceId, `${cardId || 'asset_card'}:${addedAt}`),
-    cardId,
-    rarity: normalizeLowerEnumValue(source.rarity, ASSET_DECK_RARITIES, 'bronze'),
-    kind: normalizeLowerEnumValue(source.kind, ASSET_DECK_KINDS, 'numeric'),
-    system: normalizeTrimmedString(source.system, '').toLowerCase(),
-    skillKey: normalizeTrimmedString(source.skillKey, '').toLowerCase(),
-    level: Math.max(0, Math.min(4, Math.round(Number(source.level) || 0))),
-    targetTags: normalizeStringList(source.targetTags, {}),
-    gameTags: normalizeStringList(source.gameTags, { lower: true }),
-    slotTags: normalizeAssetDeckSlotTags(source.slotTags, cardId),
-    unique: source.unique === true,
-    modifiers: Array.isArray(source.modifiers) ? source.modifiers : [],
-    source: normalizeTrimmedString(source.source, 'runtime'),
-    addedAt
-  };
-  if (!isKnownAssetDeckCard(full.cardId)) return null;
+  const cardId = normalizeTrimmedString(source.id, '');
+  if (!isKnownAssetDeckCard(cardId)) return null;
   return {
-    instanceId: full.instanceId,
-    cardId: full.cardId,
-    level: full.level,
-    source: full.source,
-    addedAt: full.addedAt
+    id: cardId,
+    lv: Math.max(1, Math.min(4, Math.round(Number(source.lv) || 1)))
   };
 }
 
 function normalizeAssetDeckCardList(value, slotType, limit) {
-  const seen = new Set();
   return (Array.isArray(value) ? value : [])
-    .map(item => normalizeAssetDeckCardInstance(item))
+    .map(item => normalizeAssetDeckCardRef(item))
     .filter(Boolean)
     .filter(card => canAssetDeckCardUseSlot(card, slotType))
-    .filter(card => {
-      if (seen.has(card.instanceId)) return false;
-      seen.add(card.instanceId);
-      return true;
-    })
     .slice(0, limit);
 }
 
-function normalizeAssetDeckPendingOffer(value) {
+function normalizeAssetDeckOffer(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
   if (!source) return null;
   const pool = normalizeLowerEnumValue(source.pool, ['low', 'mid', 'high'], 'low');
   const choices = (Array.isArray(source.choices) ? source.choices : [])
-    .map(item => normalizeAssetDeckCardInstance(item))
+    .map(item => normalizeAssetDeckCardRef(item))
     .filter(Boolean)
     .slice(0, 3);
   if (!choices.length) return null;
-  return {
+  const offer = {
+    floor: normalizeTrimmedString(source.floor || source.floorKey, ''),
     id: normalizeTrimmedString(source.id, `offer:${pool}`),
     pool,
-    cost: Math.max(0, Math.round(Number(source.cost) || 0)),
-    refreshCount: Math.max(0, Math.round(Number(source.refreshCount) || 0)),
-    freeRefreshUsed: Math.max(0, Math.round(Number(source.freeRefreshUsed) || 0)),
-    choices,
-    createdAt: Math.max(0, Math.round(Number(source.createdAt) || 0))
+    settled: source.settled === true,
+    choices
   };
-}
-
-function normalizeAssetDeckPendingOfferQueue(value) {
-  return (Array.isArray(value) ? value : [])
-    .map(item => normalizeAssetDeckPendingOffer(item))
+  const reroll = (Array.isArray(source.reroll) ? source.reroll : [])
+    .map(item => normalizeAssetDeckCardRef(item))
     .filter(Boolean)
-    .slice(0, 12);
-}
-
-function normalizeAssetDeckPendingReplace(value) {
-  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-  if (!source) return null;
-  const card = normalizeAssetDeckCardInstance(source.card || source.candidate);
-  if (!card) return null;
-  const allowedSlots = normalizeStringList(source.allowedSlots, { lower: true })
-    .filter(slot => ASSET_DECK_SLOT_TYPES.includes(slot) && canAssetDeckCardUseSlot(card, slot));
-  return {
-    card,
-    allowedSlots: allowedSlots.length
-      ? allowedSlots
-      : ASSET_DECK_SLOT_TYPES.filter(slot => canAssetDeckCardUseSlot(card, slot)),
-    reason: normalizeTrimmedString(source.reason, 'slot_full'),
-    confirm_destroy: source.confirm_destroy === true,
-    confirm_target: source.confirm_target && typeof source.confirm_target === 'object' && !Array.isArray(source.confirm_target)
-      ? source.confirm_target
-      : null
-  };
+    .slice(0, 3);
+  if (!offer.settled && reroll.length) offer.reroll = reroll;
+  return offer;
 }
 
 const RELATIONSHIP_SCORE = z.coerce
@@ -488,7 +437,6 @@ function normalizeEncounterActiveEntry(value, rawCharKey = '') {
   const from = Math.max(0, Math.round(Number(value.from) || 0));
   const until = Math.max(0, Math.round(Number(value.until) || 0));
   const priority = Math.round(Number(value.priority) || 0);
-  const score = Math.max(0, Math.round(Number(value.score) || 0));
   const entry = { kind, state };
   if (node) entry.node = node;
   if (nodeIndex > 0) entry.nodeIndex = nodeIndex;
@@ -496,7 +444,6 @@ function normalizeEncounterActiveEntry(value, rawCharKey = '') {
   if (from > 0) entry.from = from;
   if (until > 0) entry.until = until;
   if (priority !== 0) entry.priority = priority;
-  if (score > 0) entry.score = score;
   return { charKey, entry };
 }
 
@@ -523,7 +470,6 @@ function putEncounterFact(target, bucket, charKey, fact) {
 
 function normalizeCharacterEncounterState(value) {
   const source = isPlainObject(value) ? value : {};
-  if (source.v !== 2) return {};
 
   const compact = {};
   const lastMeet = Math.max(0, Math.round(Number(source.lastMeet) || 0));
@@ -560,7 +506,7 @@ function normalizeCharacterEncounterState(value) {
     || (compact.met && Object.keys(compact.met).length)
     || (compact.signaled && Object.keys(compact.signaled).length);
   if (!hasData) return {};
-  const out = { v: 2 };
+  const out = {};
   if (compact.active && Object.keys(compact.active).length) out.active = compact.active;
   if (compact.met && Object.keys(compact.met).length) out.met = compact.met;
   if (compact.signaled && Object.keys(compact.signaled).length) out.signaled = compact.signaled;
@@ -573,27 +519,12 @@ function normalizeActResolutionHistory(value) {
   return list
     .filter(item => item && typeof item === 'object' && !Array.isArray(item))
     .map(item => {
-      const rawType = normalizeTrimmedString(item.type, '');
-      if (item.protocol === 'ace0.assetOfferClear.v1' || rawType === 'asset_offer_clear') {
-        const clearKey = normalizeTrimmedString(item.clearKey || item.offerId, '');
-        if (!clearKey) return null;
-        return {
-          id: normalizeTrimmedString(item.id, `asset-offer-clear:${clearKey}`),
-          protocol: 'ace0.assetOfferClear.v1',
-          type: 'asset_offer_clear',
-          status: normalizeTrimmedString(item.status, 'resolved') || 'resolved',
-          clearKey,
-          offerId: normalizeTrimmedString(item.offerId, clearKey),
-          outcome: normalizeTrimmedString(item.outcome, '')
-        };
-      }
-
-      const type = normalizeActResourceKey(rawType, '');
-      if (type !== 'combat' && type !== 'asset') return null;
+      const type = normalizeActResourceKey(item.type, '');
+      if (type !== 'combat') return null;
       const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload) ? item.payload : {};
       const compact = {
         id: normalizeTrimmedString(item.id, ''),
-        protocol: normalizeTrimmedString(item.protocol, type === 'asset' ? 'ace0.assetDeckCommand.v1' : ''),
+        protocol: normalizeTrimmedString(item.protocol, ''),
         type,
         level: Math.max(1, Math.min(3, Math.round(Number(item.level) || 1))),
         nodeId: normalizeTrimmedString(item.nodeId, ''),
@@ -610,34 +541,6 @@ function normalizeActResolutionHistory(value) {
     })
     .filter(Boolean)
     .slice(-64);
-}
-
-function normalizeAssetDeckHistory(value) {
-  const list = Array.isArray(value) ? value : [];
-  return list
-    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
-    .map(item => {
-      const out = {};
-      const kind = normalizeTrimmedString(item.kind || item.type, '');
-      const status = normalizeTrimmedString(item.status, '');
-      const cardId = normalizeTrimmedString(item.cardId, '');
-      const requestId = normalizeTrimmedString(item.requestId, '');
-      const pool = normalizeTrimmedString(item.pool, '');
-      const slotType = normalizeTrimmedString(item.slotType, '').toLowerCase();
-      if (kind) out.kind = kind;
-      if (status) out.status = status;
-      if (cardId) out.cardId = cardId;
-      if (requestId) out.requestId = requestId;
-      if (pool) out.pool = pool;
-      if (slotType) out.slotType = slotType;
-      ['amount', 'cost', 'free', 'fromLevel', 'toLevel'].forEach(key => {
-        if (item[key] != null && item[key] !== '') out[key] = item[key];
-      });
-      if (item.at != null && item.at !== '') out.at = Math.max(0, Math.round(Number(item.at) || 0));
-      return Object.keys(out).length ? out : null;
-    })
-    .filter(Boolean)
-    .slice(-24);
 }
 
 function normalizeActResourceCounts(value, options = {}) {
@@ -708,7 +611,6 @@ function makeDefaultActState() {
     resourceSpent: makeDefaultActResourceCounts(0),
     characterEncounter: {},
     pendingResolutions: [],
-    pendingAssetDeckCommands: [],
     resolutionHistory: [],
     narrativeTension: 0,
     pendingTransitionTarget: '',
@@ -859,7 +761,6 @@ const WorldActSchema = z.object({
   resourceSpent: ActResourceCountsSchema,
   characterEncounter: z.record(z.string(), z.any()).default({}).transform(v => normalizeCharacterEncounterState(v)),
   pendingResolutions: z.array(z.any()).default([]),
-  pendingAssetDeckCommands: z.array(z.any()).default([]),
   resolutionHistory: z.array(z.any()).default([]),
   // 情节张力（0-100）——服务于 prompt 软节奏提示，不流出给 LLM
   narrativeTension: z.coerce.number().transform(v => Math.max(0, Math.min(100, Math.round(v)))).default(0),
@@ -927,9 +828,6 @@ const WorldActSchema = z.object({
   act.pendingResolutions = Array.isArray(act.pendingResolutions)
     ? act.pendingResolutions.filter(item => item && typeof item === 'object' && !Array.isArray(item))
     : [];
-  act.pendingAssetDeckCommands = Array.isArray(act.pendingAssetDeckCommands)
-    ? act.pendingAssetDeckCommands.filter(item => item && typeof item === 'object' && !Array.isArray(item))
-    : [];
   act.resolutionHistory = normalizeActResolutionHistory(act.resolutionHistory);
   act.pendingTransitionTarget = normalizeTrimmedString(act.pendingTransitionTarget, '');
   act.transitionRequestTarget = normalizeTrimmedString(act.transitionRequestTarget, '');
@@ -942,24 +840,30 @@ const WorldAssetDeckSchema = z.record(z.string(), z.any())
   .default(makeDefaultAssetDeckState())
   .transform(value => {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    const generalSlotsUnlocked = Math.max(
+    const slotsSource = source.slots && typeof source.slots === 'object' && !Array.isArray(source.slots)
+      ? source.slots
+      : {};
+    const generalSlots = Math.max(
       ASSET_DECK_INITIAL_GENERAL_SLOTS,
-      Math.min(ASSET_DECK_MAX_GENERAL_SLOTS, Math.round(Number(source.general_slots_unlocked ?? source.generalSlotsUnlocked) || ASSET_DECK_INITIAL_GENERAL_SLOTS))
+      Math.min(ASSET_DECK_MAX_GENERAL_SLOTS, Math.round(Number(slotsSource.general) || ASSET_DECK_INITIAL_GENERAL_SLOTS))
     );
-    const rawVoidSlots = source.void_slots_unlocked ?? source.voidSlotsUnlocked;
-    const voidSlotsUnlocked = rawVoidSlots == null
+    const rawVoidSlots = slotsSource.void;
+    const voidSlots = rawVoidSlots == null
       ? ASSET_DECK_VOID_SLOTS
       : Math.max(0, Math.min(ASSET_DECK_VOID_SLOTS, Math.round(Number(rawVoidSlots) || 0)));
+    const bagSource = source.bag && typeof source.bag === 'object' && !Array.isArray(source.bag)
+      ? source.bag
+      : {};
     return {
-      version: Math.max(1, Math.round(Number(source.version) || 1)),
-      general_slots_unlocked: generalSlotsUnlocked,
-      void_slots_unlocked: voidSlotsUnlocked,
-      active_general_cards: normalizeAssetDeckCardList(source.active_general_cards || source.activeGeneralCards, 'general', generalSlotsUnlocked),
-      active_void_cards: normalizeAssetDeckCardList(source.active_void_cards || source.activeVoidCards, 'void', voidSlotsUnlocked),
-      pending_offer: normalizeAssetDeckPendingOffer(source.pending_offer || source.pendingOffer),
-      pending_offer_queue: normalizeAssetDeckPendingOfferQueue(source.pending_offer_queue || source.pendingOfferQueue),
-      pending_replace: normalizeAssetDeckPendingReplace(source.pending_replace || source.pendingReplace),
-      history: normalizeAssetDeckHistory(source.history)
+      slots: {
+        general: generalSlots,
+        void: voidSlots
+      },
+      bag: {
+        general: normalizeAssetDeckCardList(bagSource.general, 'general', generalSlots),
+        void: normalizeAssetDeckCardList(bagSource.void, 'void', voidSlots)
+      },
+      offer: normalizeAssetDeckOffer(source.offer)
     };
   });
 

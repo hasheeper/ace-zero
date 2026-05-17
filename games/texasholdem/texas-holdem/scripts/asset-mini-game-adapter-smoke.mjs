@@ -6,18 +6,55 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(root, '../../..');
+const assetDataPath = path.join(repoRoot, 'apps/st-bridge/packs/acezero-main/asset/data.js');
 const adapterPath = path.join(root, 'core/runtime/assets/asset-deck-adapter.js');
 
 const sandbox = { console };
 sandbox.global = sandbox;
 vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(assetDataPath, 'utf8'), sandbox, { filename: assetDataPath });
 vm.runInContext(fs.readFileSync(adapterPath, 'utf8'), sandbox, { filename: adapterPath });
 
 const adapter = sandbox.AssetDeckAdapter;
 assert.ok(adapter, 'AssetDeckAdapter should be exported');
 
-const assetDeck = {
-  active_general_cards: [
+function makeAssetDeck({ general = [], void: voidCards = [] }) {
+  const catalog = sandbox.ACE0AssetDeckData.ASSET_CARD_CATALOG;
+  const ensureCatalogCard = (card) => {
+    const id = card.id || card.cardId;
+    if (!id) return null;
+    if (card.modifiers && !catalog.some(item => item.id === id)) {
+      catalog.push({
+        id,
+        name: card.name || id,
+        rarity: card.rarity || 'bronze',
+        kind: card.kind || 'numeric',
+        scope: card.scope,
+        system: card.system,
+        skillKey: card.skillKey,
+        level: card.level,
+        targetTags: card.targetTags || ['team'],
+        gameTags: card.gameTags || ['any'],
+        slotTags: card.slotTags || ['general'],
+        effectText: card.effectText || '',
+        statusTags: card.statusTags || [],
+        modifiers: card.modifiers
+      });
+    }
+    return { id, lv: Math.max(1, Math.round(Number(card.lv || card.level) || 1)) };
+  };
+  return {
+    slots: { general: 4, void: 2 },
+    bag: {
+      general: general.map(ensureCatalogCard).filter(Boolean),
+      void: voidCards.map(ensureCatalogCard).filter(Boolean)
+    }
+  };
+}
+
+const assetDeck = makeAssetDeck({
+  general: [
     {
       cardId: 'asset_texas_only',
       gameTags: ['texas-holdem'],
@@ -62,8 +99,8 @@ const assetDeck = {
       modifiers: [{ type: 'odds_pct', key: 'tie', value: 0.08 }]
     }
   ],
-  active_void_cards: []
-};
+  void: []
+});
 
 const blackjack = adapter.compile({ gameId: 'blackjack', assetDeck });
 assert.equal(adapter.resolveSkillCost(blackjack, { skillKey: 'lucky_hit', system: 'moirai' }, 20).finalCost, 17, 'Blackjack cost card should reduce mini-game skill cost');
