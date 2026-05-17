@@ -1781,10 +1781,7 @@
    * 生成前：读取 MVU 变量 → 注入 hero 状态摘要到 AI 上下文
    */
   async function handleGenerationBefore(options = {}) {
-    if (options.dryRun === true) {
-      console.log(`${PLUGIN_NAME} dryRun 生成前注入跳过`);
-      return;
-    }
+    const isDryRun = options.dryRun === true;
 
     try {
       try {
@@ -1820,7 +1817,9 @@
 
       const syncedState = await synchronizeActCharacterState(baseEraVars, { persist: false });
       const eraVars = syncedState.eraVars;
-      pendingActBaselineSnapshot = createActRuntimeSnapshot(eraVars, syncedState.derived);
+      if (!isDryRun) {
+        pendingActBaselineSnapshot = createActRuntimeSnapshot(eraVars, syncedState.derived);
+      }
       const heroSummary = buildHeroSummary(eraVars);
       const relationState = buildRelationshipStateSummary(eraVars);
       const worldContext = buildWorldContextSummary(eraVars);
@@ -1885,12 +1884,12 @@
 
       injectPrompts(normalizedPrompts);
       const hasPendingTransitionPrompt = normalizedPrompts.some((prompt) => prompt.id === ACT_TRANSITION_INJECT_ID);
-      if (hasPendingTransitionPrompt) {
+      if (hasPendingTransitionPrompt && !isDryRun) {
         if (eraVars?.world?.act && typeof eraVars.world.act === 'object') {
           eraVars.world.act.pendingTransitionPrompt = '';
         }
       }
-      console.log(`${PLUGIN_NAME} world/location/hero/relationship/character docs 已注入 AI 上下文`);
+      console.log(`${PLUGIN_NAME} world/location/hero/relationship/character docs 已注入 AI 上下文${isDryRun ? ' (dryRun)' : ''}`);
     } catch (e) {
       console.error(`${PLUGIN_NAME} 注入失败:`, e);
     }

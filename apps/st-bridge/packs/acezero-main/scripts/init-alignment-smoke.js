@@ -42,8 +42,8 @@ assertDeepEqual(
 );
 
 const initText = fs.readFileSync(path.join(REPO_ROOT, 'st/init/initvar.txt'), 'utf8');
-assert(initText.includes('cardId: asset_skill_minor_wish_l1'), 'initvar should start with Minor Wish I in general slots');
-assert(initText.includes('cardId: asset_skill_insulation_l1'), 'initvar should start with Insulation I in void slots');
+assert(initText.includes('id: asset_skill_minor_wish_l1'), 'initvar should start with Minor Wish I in general slots');
+assert(initText.includes('id: asset_skill_insulation_l1'), 'initvar should start with Insulation I in void slots');
 assert(!initText.includes('static_field'), 'initvar should not contain removed static_field');
 
 const schemaText = fs.readFileSync(path.join(PACK_ROOT, 'schema/acezero-schema.js'), 'utf8');

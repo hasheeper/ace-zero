@@ -172,7 +172,10 @@ ${inPartySection}
 
   function buildWorldContextSummary(eraVars) {
     const location = getWorldLocation(eraVars);
-    const meta = LOCATION_LAYER_META[location.layer] || LOCATION_LAYER_META.THE_STREET;
+    const meta = LOCATION_LAYER_META[location.layer] || LOCATION_LAYER_META.THE_STREET || {
+      label: location.layer || 'UNKNOWN',
+      english: location.layer || 'Unknown'
+    };
     const siteLine = location.site ? location.site : '（未指定具体场所）';
     const clock = getWorldClock(eraVars);
 
@@ -186,7 +189,7 @@ ${inPartySection}
 
   function buildLocationDocSummary(eraVars) {
     const location = getWorldLocation(eraVars);
-    const meta = LOCATION_LAYER_META[location.layer] || LOCATION_LAYER_META.THE_STREET;
+    const meta = LOCATION_LAYER_META[location.layer] || LOCATION_LAYER_META.THE_STREET || {};
     return typeof meta.fullDoc === 'string' ? meta.fullDoc.trim() : '';
   }
 

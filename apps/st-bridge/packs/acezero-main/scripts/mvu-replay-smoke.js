@@ -179,6 +179,55 @@ async function testMissingBaseDoesNotCreateDefaultAct() {
   assert(!sandbox.__messageVars[24].stat_data, 'missing MVU base should not synthesize stat_data');
 }
 
+async function testDryRunStillInjectsPromptContext() {
+  const sandbox = makePluginSandbox();
+  const act = sandbox.ACE0Modules.act;
+  sandbox.__currentMessageId = 25;
+  const injectedPrompts = [];
+  sandbox.injectPrompts = (prompts) => {
+    injectedPrompts.push(...(Array.isArray(prompts) ? prompts : [prompts]));
+  };
+  sandbox.__messages[25] = {
+    message_id: 25,
+    role: 'assistant',
+    message: 'prompt preview floor'
+  };
+  sandbox.__messageVars[25] = {
+    initialized_lorebooks: {},
+    stat_data: {
+      hero: createHero({
+        funds: 12,
+        debt: 0,
+        majorDebt: 395000000,
+        cast: {
+          RINO: { activated: true, introduced: true, present: true, inParty: true },
+          COTA: { activated: true, introduced: false, present: false, inParty: false }
+        },
+        roster: {
+          KAZU: { level: 3, mana: 0, maxMana: 0 },
+          RINO: { level: 5, mana: 100, maxMana: 100 },
+          COTA: { level: 4, mana: 100, maxMana: 100 }
+        }
+      }),
+      world: {
+        current_time: { day: 1, phase: 'MORNING' },
+        location: { layer: 'THE_EXCHANGE', site: '中市短住点' },
+        clockPressure: 0,
+        act: createActStateAt(act, 1, ['node1-entry'])
+      }
+    },
+    schema: 'smoke'
+  };
+
+  await sandbox.__handlers.GENERATION_AFTER_COMMANDS(null, {}, true);
+
+  const joinedContent = injectedPrompts.map((prompt) => prompt?.content || '').join('\n\n');
+  assert(injectedPrompts.length > 0, 'dryRun generation should still inject prompt context for worldbook preview');
+  assert(joinedContent.includes('<ace0_hero_state>'), 'dryRun prompt context should include hero state');
+  assert(joinedContent.includes('NOT INTRODUCED(introduced=false, forbidden_to_appear=true)'), 'dryRun prompt context should keep not-introduced hard constraint');
+  assert(joinedContent.includes('COTA'), 'dryRun prompt context should include compact cast status');
+}
+
 async function testPhaseAdvanceWritesReplayAndReplaysActAdvance() {
   const sandbox = makePluginSandbox();
   const act = sandbox.ACE0Modules.act;
@@ -797,6 +846,7 @@ async function testActResultMissingActBaseDoesNotCreateActReplay() {
 
 async function main() {
   await testMissingBaseDoesNotCreateDefaultAct();
+  await testDryRunStillInjectsPromptContext();
   await testActResultMissingActBaseDoesNotCreateActReplay();
   await testFloorProgressWritesOnlyLeafPatches();
   await testPublicApisPersistThroughReplayOnly();
