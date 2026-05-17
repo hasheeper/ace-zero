@@ -1054,7 +1054,7 @@
         requestId,
         code: 'floor_key_mismatch',
         error: 'Stale AssetDeck command rejected: floorKey mismatch.',
-        assetDeck: cloneJsonData(commandResult.assetDeck, null)
+        assetDeck: cloneJsonData(currentAssetDeck, null)
       };
     }
     const replayPaths = DASHBOARD_ASSET_COMMAND_REPLAY_PATHS;
@@ -1086,7 +1086,7 @@
         requestId,
         code: replayResult?.reason || 'mvu_replay_unavailable',
         error: 'MVU replay bridge is unavailable. MVU state was not updated.',
-        assetDeck: cloneJsonData(commandResult.assetDeck, null)
+        assetDeck: cloneJsonData(currentAssetDeck, null)
       };
     }
 
@@ -1487,7 +1487,7 @@
           console.warn('[ACE0 Dashboard] 执行 AssetDeck command 失败:', result.error || result.code);
         }
         postDashboardAssetDeckCommandResult(result);
-        if (result.ok) {
+        if (result.ok || result.assetDeck) {
           postDashboardData('ACE0_DASHBOARD_REFRESH');
         }
         return;

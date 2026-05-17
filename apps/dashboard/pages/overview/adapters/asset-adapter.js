@@ -460,21 +460,22 @@
         const resolver = assetCommandState.resolver;
         assetCommandState.resolver = null;
 
-        if (resultPayload?.ok) {
-            if (resultPayload.assetDeck && typeof resultPayload.assetDeck === 'object') {
-                const currentPayload = adapterState.lastPayload || buildInitialDebugPayload();
-                const currentWorld = extractWorldPayload(currentPayload) || {};
-                const nextPayload = buildNormalizedDashboardPayload({
-                    ...(currentPayload || {}),
-                    world: {
-                        ...deepCloneValue(currentWorld),
-                        assetDeck: deepCloneValue(resultPayload.assetDeck)
-                    }
-                });
-                if (nextPayload) {
-                    applyActStateFromPayload(nextPayload);
+        if (resultPayload?.assetDeck && typeof resultPayload.assetDeck === 'object') {
+            const currentPayload = adapterState.lastPayload || buildInitialDebugPayload();
+            const currentWorld = extractWorldPayload(currentPayload) || {};
+            const nextPayload = buildNormalizedDashboardPayload({
+                ...(currentPayload || {}),
+                world: {
+                    ...deepCloneValue(currentWorld),
+                    assetDeck: deepCloneValue(resultPayload.assetDeck)
                 }
+            });
+            if (nextPayload) {
+                applyActStateFromPayload(nextPayload);
             }
+        }
+
+        if (resultPayload?.ok) {
             syncState.dirty = false;
             syncState.statusText = resultPayload.code ? `ASSET: ${String(resultPayload.code).toUpperCase()}` : getCommitIdleStatusText();
             syncState.errorText = '';

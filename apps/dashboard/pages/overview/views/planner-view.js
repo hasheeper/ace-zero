@@ -264,11 +264,18 @@
         return Math.max(0, Math.round(Number(appState.resources.assets) || 0));
     }
 
+    function isAssetOfferActive(assetSummary) {
+        const offer = assetSummary?.pending?.offer;
+        return !!(offer && offer.settled !== true);
+    }
+
     function buildAssetPoolCardMarkup(meta, assetSummary, plannedAsset) {
         const points = getDisplayAssetPoints();
         const isActive = plannedAsset.maxAmount >= meta.level;
+        const activeOffer = isAssetOfferActive(assetSummary);
+        const hasSettledOffer = assetSummary?.pending?.offer?.settled === true;
         const canOpen = isActive && points >= meta.cost && !assetSummary?.pending?.offer;
-        const stateText = !isActive ? 'LOCKED' : (points >= meta.cost ? 'READY' : `NEED ${meta.cost}`);
+        const stateText = !isActive ? 'LOCKED' : (hasSettledOffer ? 'SETTLED' : (activeOffer ? 'OPEN' : (points >= meta.cost ? 'READY' : `NEED ${meta.cost}`)));
         return `
             <button class="asset-pool-card pool-${meta.pool}${isActive ? ' is-lit' : ''}${canOpen ? ' is-ready' : ''}" type="button" data-asset-action="open-offer" data-pool="${meta.pool}"${canOpen ? '' : ' disabled'}>
                 <span>${escapePartyHtml(meta.code)}</span>
@@ -607,6 +614,7 @@
 
     function buildAssetOfferOverlayMarkup(assetSummary) {
         const pendingOffer = assetSummary.pending?.offer;
+        if (!pendingOffer || pendingOffer.settled === true) return '';
         const queuedOffers = Array.isArray(assetSummary.pending?.offerQueue) ? assetSummary.pending.offerQueue : [];
         const queueText = queuedOffers.length ? ` · QUEUE ${queuedOffers.length}` : '';
         const offerMarkup = pendingOffer?.choices?.length
@@ -702,6 +710,11 @@
     function buildAssetResourcePageMarkup() {
         const assetSummary = getCurrentAssetDeckSummary();
         const pendingOffer = assetSummary.pending?.offer;
+        const activeOffer = pendingOffer && pendingOffer.settled !== true ? pendingOffer : null;
+        const detailText = activeOffer
+            ? '牌面已展开，等待选择。'
+            : (pendingOffer?.settled === true ? '本轮契约已结算。' : '点亮牌池后，会展开本轮契约。');
+        const nextStepText = activeOffer ? 'CHOOSE CARD' : (pendingOffer?.settled === true ? 'SETTLED' : 'OPEN POOL');
         const offerOverlayMarkup = buildAssetOfferOverlayMarkup(assetSummary);
         const warehouseOverlayMarkup = buildAssetWarehouseOverlayMarkup(assetSummary);
         return `
@@ -728,8 +741,8 @@
                 <aside class="detail-panel">
                     <div class="detail-icon">A</div>
                     <div class="detail-title">契约牌池</div>
-                    <div class="detail-text">${pendingOffer ? '牌面已展开，等待选择。' : '点亮牌池后，会展开本轮契约。'}</div>
-                    <div class="detail-box"><span>NEXT STEP</span><strong>${pendingOffer ? 'CHOOSE CARD' : 'OPEN POOL'}</strong></div>
+                    <div class="detail-text">${detailText}</div>
+                    <div class="detail-box"><span>NEXT STEP</span><strong>${nextStepText}</strong></div>
                     <button class="action-btn" type="button" data-asset-action="open-warehouse">OPEN WAREHOUSE</button>
                 </aside>
                 ${warehouseOverlayMarkup}
