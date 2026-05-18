@@ -48,6 +48,7 @@
     const PLAN_LAYOUT_NARROW_WIDTH = 760;
     let plannerLayoutResizeBound = false;
     let plannerLayoutSyncScheduled = false;
+    let plannerLayoutSignalWidth = 0;
 
     function isCurrentPhasePlanLocked() {
         return typeof isPhasePlanConfirmedForCurrentNode === 'function' && isPhasePlanConfirmedForCurrentNode();
@@ -111,6 +112,14 @@
         );
     }
 
+    function getPlannerResizeSignalWidth() {
+        return Math.max(
+            0,
+            document.documentElement?.clientWidth || 0,
+            global.innerWidth || 0
+        );
+    }
+
     function getPlannerLayoutMode(drawer) {
         const drawerWidth = getPlannerViewportWidth(drawer);
         if (drawerWidth > 0 && drawerWidth < PLAN_LAYOUT_NARROW_WIDTH) return 'narrow';
@@ -135,8 +144,12 @@
         global.addEventListener('resize', requestPlannerLayoutChromeSync, { passive: true });
     }
 
-    function requestPlannerLayoutChromeSync() {
+    function requestPlannerLayoutChromeSync(options = {}) {
         if (!isOverviewPageActive()) return;
+        const force = options === true || options.force === true;
+        const nextSignalWidth = getPlannerResizeSignalWidth();
+        if (!force && plannerLayoutSignalWidth > 0 && Math.abs(nextSignalWidth - plannerLayoutSignalWidth) < 1) return;
+        plannerLayoutSignalWidth = nextSignalWidth;
         if (plannerLayoutSyncScheduled) return;
         if (!global || typeof global.requestAnimationFrame !== 'function') {
             syncPlannerLayoutChrome();
@@ -153,6 +166,7 @@
         if (!isOverviewPageActive()) return;
         const drawer = document.getElementById('drawer');
         if (!drawer) return;
+        plannerLayoutSignalWidth = getPlannerResizeSignalWidth();
         const mode = getPlannerLayoutMode(drawer);
         if (drawer.dataset.planLayout === mode) {
             bindPlannerLayoutResize();
@@ -907,7 +921,7 @@
             </section>
         `;
         bindPlannerLayoutResize();
-        requestPlannerLayoutChromeSync();
+        requestPlannerLayoutChromeSync({ force: true });
     }
 
     function buildPhaseVisionPromptMarkup() {

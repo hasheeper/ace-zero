@@ -56,25 +56,33 @@
         }
 
         body.is-home-page {
+            --dashboard-overview-vh: 100vh;
             overflow: hidden;
         }
+
+        @supports (height: 100svh) {
+            body.is-home-page {
+                --dashboard-overview-vh: 100svh;
+            }
+        }
+
         body.is-home-page .dashboard-pages {
             width: 100%;
-            height: 100vh;
-            min-height: 100vh;
+            height: var(--dashboard-overview-vh, 100vh);
+            min-height: var(--dashboard-overview-vh, 100vh);
         }
         #dashboard-page-overview.is-active {
             display: flex;
             width: 100%;
-            height: 100vh;
-            min-height: 100vh;
+            height: var(--dashboard-overview-vh, 100vh);
+            min-height: var(--dashboard-overview-vh, 100vh);
         }
         #dashboard-page-overview .terminal-container {
             flex: 1;
         }
 
         .terminal-container {
-            width: 100%; max-width: 100%; height: 100vh;
+            width: 100%; max-width: 100%; height: var(--dashboard-overview-vh, 100vh);
             background: var(--bg-panel); border: 1px solid var(--border-panel);
             display: flex; flex-direction: column; position: relative;
             box-shadow: 0 30px 80px rgba(0, 0, 0, 0.95), inset 0 0 30px rgba(207, 181, 59, 0.05);
@@ -4570,6 +4578,40 @@
         .drawer.plan-layout-narrow .cmd-card {
             min-height: 98px;
             padding: 16px 18px;
+        }
+        @media (hover: none), (pointer: coarse), (max-width: 760px) {
+            .drawer .planner-hub {
+                transition: opacity 0.16s ease, transform 0.16s ease;
+            }
+            .drawer .aux-container {
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+                transition: border-color 0.16s ease, box-shadow 0.16s ease;
+            }
+            .drawer .view {
+                animation: none;
+            }
+            .phase-svg-layer .th-active-aura {
+                animation: none;
+                filter: none;
+                opacity: 0.12;
+            }
+            body.is-allocating .seg-future .th-flow,
+            body.is-allocating .seg-active .th-flow {
+                animation: none;
+                opacity: 0.34;
+                stroke-dasharray: none;
+            }
+            body.is-allocating .phase-node.future .phase-core.drop-zone:not(.is-locked):not(.has-fixed) {
+                animation: none;
+                box-shadow: 0 0 10px rgba(207, 181, 59, 0.12), inset 0 0 10px rgba(207,181,59,0.06);
+            }
+            .phase-bottom-bar,
+            .toggle-planner-btn,
+            .planner-commit-btn {
+                -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+            }
         }
         .tint-choice {
             --tint: var(--rest);
