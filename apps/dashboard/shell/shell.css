@@ -1674,6 +1674,13 @@ input[type="range"].bgm-slider::-webkit-slider-thumb:hover {
   box-shadow: 0 0 18px rgba(212, 175, 55, 0.12);
 }
 
+@media (hover: none), (max-width: 1340px) {
+  .dashboard-page-nav {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 html.is-overview-page,
 body.is-overview-page {
   scroll-snap-type: none !important;

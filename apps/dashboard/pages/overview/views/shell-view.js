@@ -25,6 +25,13 @@
     const TOPBAR_TWO_ROW_WIDTH = 1180;
     const TOPBAR_THREE_ROW_WIDTH = 760;
     let topbarResizeObserver = null;
+    let topbarLayoutSyncScheduled = false;
+
+    function isOverviewPageActive() {
+        const bodyClassList = global.document?.body?.classList;
+        if (!bodyClassList || typeof bodyClassList.contains !== 'function') return true;
+        return bodyClassList.contains('is-overview-page');
+    }
 
     function getTopbarLayoutModeForWidth(width) {
         if (width > 0 && width < TOPBAR_THREE_ROW_WIDTH) return 'three';
@@ -33,6 +40,7 @@
     }
 
     function syncTopbarLayoutChrome() {
+        if (!isOverviewPageActive()) return;
         const sysTopbar = document.getElementById('sysTopbar');
         if (!sysTopbar) return;
         const width = sysTopbar.getBoundingClientRect?.().width || 0;
@@ -41,9 +49,23 @@
         sysTopbar.classList.toggle('topbar-layout-two', mode === 'two');
         sysTopbar.classList.toggle('topbar-layout-three', mode === 'three');
         if (!topbarResizeObserver && typeof ResizeObserver === 'function') {
-            topbarResizeObserver = new ResizeObserver(() => syncTopbarLayoutChrome());
+            topbarResizeObserver = new ResizeObserver(() => requestTopbarLayoutChromeSync());
             topbarResizeObserver.observe(sysTopbar);
         }
+    }
+
+    function requestTopbarLayoutChromeSync() {
+        if (!isOverviewPageActive()) return;
+        if (topbarLayoutSyncScheduled) return;
+        if (typeof global.requestAnimationFrame !== 'function') {
+            syncTopbarLayoutChrome();
+            return;
+        }
+        topbarLayoutSyncScheduled = true;
+        global.requestAnimationFrame(() => {
+            topbarLayoutSyncScheduled = false;
+            syncTopbarLayoutChrome();
+        });
     }
 
     function renderTopbar() {
@@ -103,6 +125,7 @@
     const SIDE_PANEL_NARROW_WIDTH = 900;
     let sidePanelResizeObserver = null;
     let sidePanelResizeBound = false;
+    let sidePanelChromeSyncScheduled = false;
 
     function getSidePanelLayoutModeForWidth(width) {
         if (width > 0 && width < SIDE_PANEL_NARROW_WIDTH) return 'narrow';
@@ -186,6 +209,7 @@
     }
 
     function syncSidePanelChrome() {
+        if (!isOverviewPageActive()) return;
         syncSidePanelLayoutState();
         ensureSidePanelLayoutObserver();
         const mainLayout = document.querySelector('.main-layout');
@@ -237,13 +261,27 @@
         const mainLayout = document.querySelector('.main-layout');
         if (!mainLayout) return;
         if (!sidePanelResizeObserver && typeof ResizeObserver === 'function') {
-            sidePanelResizeObserver = new ResizeObserver(() => syncSidePanelChrome());
+            sidePanelResizeObserver = new ResizeObserver(() => requestSidePanelChromeSync());
             sidePanelResizeObserver.observe(mainLayout);
         }
         if (!sidePanelResizeBound && typeof window !== 'undefined') {
             sidePanelResizeBound = true;
-            window.addEventListener('resize', syncSidePanelChrome, { passive: true });
+            window.addEventListener('resize', requestSidePanelChromeSync, { passive: true });
         }
+    }
+
+    function requestSidePanelChromeSync() {
+        if (!isOverviewPageActive()) return;
+        if (sidePanelChromeSyncScheduled) return;
+        if (typeof global.requestAnimationFrame !== 'function') {
+            syncSidePanelChrome();
+            return;
+        }
+        sidePanelChromeSyncScheduled = true;
+        global.requestAnimationFrame(() => {
+            sidePanelChromeSyncScheduled = false;
+            syncSidePanelChrome();
+        });
     }
 
     function getSidebarChapterTitle(chapterId, fallbackIndex = 0) {

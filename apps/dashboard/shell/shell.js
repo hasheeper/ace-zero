@@ -26,7 +26,7 @@ const kazuWatermark = document.getElementById('kazu-watermark');
 const kazuTerminalPanel = document.getElementById('kazu-terminal-panel');
 const kazuLedgerPanel = document.getElementById('kazu-ledger-panel');
 const dashboardBridge = window.ACE0DashboardBridge || {};
-const dossierPageApi = window.ACE0DashboardDossierPage || {};
+let dossierPageApi = window.ACE0DashboardDossierPage || {};
 const expansionPageApi = window.ACE0DashboardExpansionPage || {};
 const dashboardUtils = window.ACE0DashboardUtils || {};
 const normalizeMetricDefaults = dashboardUtils.normalizeMetricDefaults || function normalizeMetricDefaultsFallback(metric) {
@@ -152,6 +152,15 @@ let dashboardExtensions = typeof expansionPageApi.getBuiltinTabs === 'function'
   ? expansionPageApi.getBuiltinTabs()
   : [];
 let dashboardAssetSummary = null;
+let dossierPageInitialized = false;
+let dossierPageAssetPromise = null;
+let dashboardPageSwitchToken = 0;
+let lastOverviewActiveNotified = null;
+
+const DASHBOARD_LAZY_ASSETS = {
+  dossierStyle: './pages/dossier/style.css',
+  dossierScript: './pages/dossier/index.js'
+};
 
 const DASHBOARD_MESSAGE_TYPES = dashboardBridge.MESSAGE_TYPES || {
   init: 'ACE0_DASHBOARD_INIT',
@@ -163,6 +172,70 @@ const DASHBOARD_MESSAGE_TYPES = dashboardBridge.MESSAGE_TYPES || {
   assetCommand: 'ACE0_DASHBOARD_ASSET_DECK_COMMAND',
   assetCommandResult: 'ACE0_DASHBOARD_ASSET_DECK_COMMAND_RESULT'
 };
+
+function hasLazyAsset(selector) {
+  return Boolean(document.querySelector(selector));
+}
+
+function loadStylesheetOnce(href) {
+  if (!href) return Promise.resolve();
+  const selector = `link[href="${href}"], link[data-dashboard-lazy-href="${href}"]`;
+  if (hasLazyAsset(selector)) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.dataset.dashboardLazyHref = href;
+    link.addEventListener('load', () => resolve(), { once: true });
+    link.addEventListener('error', () => reject(new Error(`Unable to load stylesheet: ${href}`)), { once: true });
+    document.head.appendChild(link);
+  });
+}
+
+function loadScriptOnce(src, globalKey) {
+  if (!src) return Promise.resolve();
+  if (globalKey && window[globalKey]) return Promise.resolve();
+  const selector = `script[src="${src}"], script[data-dashboard-lazy-src="${src}"]`;
+  if (hasLazyAsset(selector)) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.dataset.dashboardLazySrc = src;
+    script.addEventListener('load', () => resolve(), { once: true });
+    script.addEventListener('error', () => reject(new Error(`Unable to load script: ${src}`)), { once: true });
+    document.head.appendChild(script);
+  });
+}
+
+function refreshDossierPageApi() {
+  dossierPageApi = window.ACE0DashboardDossierPage || dossierPageApi || {};
+  return dossierPageApi;
+}
+
+function ensureDossierPageModule() {
+  refreshDossierPageApi();
+  if (typeof dossierPageApi.activateCharacter === 'function') return Promise.resolve(dossierPageApi);
+  if (!dossierPageAssetPromise) {
+    dossierPageAssetPromise = Promise.all([
+      loadStylesheetOnce(DASHBOARD_LAZY_ASSETS.dossierStyle),
+      loadScriptOnce(DASHBOARD_LAZY_ASSETS.dossierScript, 'ACE0DashboardDossierPage')
+    ])
+      .then(() => {
+        const api = refreshDossierPageApi();
+        if (typeof api.activateCharacter !== 'function') {
+          throw new Error('ACE0DashboardDossierPage failed to install');
+        }
+        return api;
+      })
+      .catch((error) => {
+        dossierPageAssetPromise = null;
+        throw error;
+      });
+  }
+  return dossierPageAssetPromise;
+}
 
 const HERO_CODE_TO_DASHBOARD_KEY = {
   KAZU: 'kazu',
@@ -456,21 +529,30 @@ function applyMvuHero(hero, world = null) {
   syncOverviewNodesFromCharacters();
   renderOverviewPage();
   bindOverviewJumpNodes();
-  renderRosterDock();
   try { window.__acezeroHomeRefreshIntel?.(); } catch (_) {}
 
-  const fallbackKey = Object.keys(characters).find((key) => !checkIsUnintroduced(key)) || 'rino';
-  const nextKey = characters[currentCharacterKey] ? currentCharacterKey : fallbackKey;
-  activateCharacter(nextKey, { centerDock: true, dockBehavior: 'auto' });
+  if (dossierPageInitialized && currentDashboardPage === 'dossier') refreshDossierPageContent({ dockBehavior: 'auto' });
 }
 
 function refreshDossierFromSharedCharacters() {
   syncOverviewNodesFromCharacters();
-  renderRosterDock();
   try { window.__acezeroHomeRefreshIntel?.(); } catch (_) {}
+  if (!dossierPageInitialized || currentDashboardPage !== 'dossier') return;
+  refreshDossierPageContent({ dockBehavior: 'auto' });
+}
+
+function refreshDossierPageContent(options = {}) {
+  if (!dossierPageInitialized) return;
+  renderRosterDock();
   const fallbackKey = Object.keys(characters).find((key) => !checkIsUnintroduced(key)) || 'rino';
-  const nextKey = characters[currentCharacterKey] ? currentCharacterKey : fallbackKey;
-  activateCharacter(nextKey, { centerDock: true, dockBehavior: 'auto' });
+  const requestedKey = normalizeDashboardKey(options.characterKey);
+  const nextKey = characters[requestedKey]
+    ? requestedKey
+    : (characters[currentCharacterKey] ? currentCharacterKey : fallbackKey);
+  activateCharacter(nextKey, {
+    centerDock: true,
+    dockBehavior: options.dockBehavior || 'auto'
+  });
 }
 
 function extractHeroFromPayload(payload) {
@@ -586,9 +668,12 @@ function handleHostPayloadMessage({ messageType, hostPayload }) {
   dashboardExtensions = typeof expansionPageApi.extractExtensionsFromPayload === 'function'
     ? expansionPageApi.extractExtensionsFromPayload(hostPayload)
     : dashboardExtensions;
-  renderExpansionPage();
-  attachExpansionFrameActCommitBridge();
-  postExpansionFrameData(messageType === DASHBOARD_MESSAGE_TYPES.init ? 'ACE0_ACT_INIT' : 'ACE0_ACT_REFRESH');
+  syncDashboardPageUI();
+  if (currentDashboardPage === 'expansion') {
+    renderExpansionPage();
+    attachExpansionFrameActCommitBridge();
+    postExpansionFrameData(messageType === DASHBOARD_MESSAGE_TYPES.init ? 'ACE0_ACT_INIT' : 'ACE0_ACT_REFRESH');
+  }
 }
 
 window.addEventListener('acezero:dashboard-characters-synced', () => {
@@ -1356,14 +1441,19 @@ function syncDashboardPageUI() {
   const isDossier = currentDashboardPage === 'dossier';
   const isExpansion = currentDashboardPage === 'expansion';
 
+  window.__acezeroDashboardCurrentPage = currentDashboardPage;
   document.documentElement.classList.toggle('is-overview-page', isOverview);
   document.body.classList.toggle('is-overview-page', isOverview);
   document.documentElement.classList.toggle('is-home-page', isOverview);
   document.body.classList.toggle('is-home-page', isOverview);
   document.documentElement.classList.toggle('is-expansion-page', isExpansion);
   document.body.classList.toggle('is-expansion-page', isExpansion);
+  if (!isOverview) {
+    document.body.classList.remove('mode-debug', 'mode-host', 'is-allocating', 'is-planning-phase');
+  }
 
-  if (typeof window.__acezeroHomePageActive === 'function') {
+  if (typeof window.__acezeroHomePageActive === 'function' && lastOverviewActiveNotified !== isOverview) {
+    lastOverviewActiveNotified = isOverview;
     window.__acezeroHomePageActive(isOverview);
   }
 
@@ -1407,10 +1497,21 @@ function syncBgmWidgetCollapsedState() {
   }
 }
 
-function setDashboardPage(pageKey, options = {}) {
+async function setDashboardPage(pageKey, options = {}) {
   const nextPage = pageKey === 'dossier'
     ? 'dossier'
     : (pageKey === 'expansion' ? 'expansion' : 'overview');
+  const switchToken = ++dashboardPageSwitchToken;
+  if (nextPage === 'dossier') {
+    try {
+      await ensureDossierPageModule();
+    } catch (error) {
+      console.warn('[ACE0 Dashboard] Dossier page failed to load:', error);
+      return;
+    }
+    if (switchToken !== dashboardPageSwitchToken) return;
+    ensureDossierPageInitialized();
+  }
   currentDashboardPage = nextPage;
   syncDashboardPageUI();
 
@@ -1428,13 +1529,13 @@ function setDashboardPage(pageKey, options = {}) {
   }
 
   syncBgmWidgetCollapsedState();
-
-  if (options.characterKey) {
-    activateCharacter(options.characterKey, { centerDock: true, dockBehavior: options.dockBehavior || 'smooth' });
-  }
+  refreshDossierPageContent({
+    characterKey: options.characterKey,
+    dockBehavior: options.dockBehavior || 'auto'
+  });
 
   requestAnimationFrame(() => {
-    syncDepthEffect();
+    refreshDossierDepthEffects();
     syncBgmWidgetCollapsedState();
     centerRosterByKey(currentCharacterKey, options.dockBehavior || 'auto');
   });
@@ -1465,7 +1566,6 @@ function initializeDashboardPages() {
   }
 
   renderOverviewPage();
-  renderExpansionPage();
   bindOverviewJumpNodes();
   syncDashboardPageUI();
 }
@@ -1493,6 +1593,18 @@ function renderRosterDock() {
   if (typeof dossierPageApi.renderRosterDock === 'function') {
     return dossierPageApi.renderRosterDock(getDossierPageContext());
   }
+}
+
+function ensureDossierPageInitialized() {
+  refreshDossierPageApi();
+  if (dossierPageInitialized) return;
+  dossierPageInitialized = true;
+}
+
+function refreshDossierDepthEffects() {
+  if (!dossierPageInitialized || currentDashboardPage !== 'dossier') return;
+  syncDepthEffect();
+  syncBgmWidgetCollapsedState();
 }
 
 
@@ -2006,9 +2118,10 @@ function initializeBgmWidget() {
   resetBgmToIdle();
 }
 
-window.addEventListener('scroll', syncDepthEffect, { passive: true });
+window.addEventListener('scroll', refreshDossierDepthEffects, { passive: true });
 window.addEventListener('message', handleDashboardHostMessage);
 window.addEventListener('resize', () => {
+  if (!dossierPageInitialized || currentDashboardPage !== 'dossier') return;
   if (!isSheetLayout() && lockedLogId) {
     lockedLogId = null;
     updateCardLockState();
@@ -2017,22 +2130,21 @@ window.addEventListener('resize', () => {
 
   updateRosterArrowsState();
   centerRosterByKey(currentCharacterKey, 'auto');
-  syncDepthEffect();
+  refreshDossierDepthEffects();
 });
 
-renderRosterDock();
 initializeBgmWidget();
 initializeDashboardPages();
-activateCharacter(getCurrentCharacter()?.key || 'rino', { centerDock: true, dockBehavior: 'auto' });
 setDashboardPage('overview');
-syncDepthEffect();
 notifyDashboardReady();
 
 window.addEventListener('load', () => {
   window.focus();
   document.body.click();
-  centerRosterByKey(currentCharacterKey, 'auto');
-  syncDepthEffect();
+  if (dossierPageInitialized && currentDashboardPage === 'dossier') {
+    centerRosterByKey(currentCharacterKey, 'auto');
+    refreshDossierDepthEffects();
+  }
   notifyDashboardReady();
 });
 
@@ -2045,6 +2157,13 @@ window.addEventListener('load', () => {
   let lastScrollY = window.scrollY || window.pageYOffset;
 
   window.addEventListener('scroll', () => {
+    if (currentDashboardPage !== 'dossier') {
+      widgetEl.classList.add('hide-on-scroll');
+      if (bgmUI.panel) bgmUI.panel.classList.remove('active');
+      widgetEl.classList.remove('expanded');
+      return;
+    }
+
     if (typeof isSheetLayout === 'function' && !isSheetLayout()) {
       widgetEl.classList.remove('hide-on-scroll');
       if (bgmUI.panel) bgmUI.panel.classList.remove('active');

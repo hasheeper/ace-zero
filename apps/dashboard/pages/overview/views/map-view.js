@@ -10,6 +10,8 @@
     const GRID_LINE_PADDING_BOTTOM = 110;
     const GRID_LINE_FOCUS_OVERSHOOT = 48;
     const LAYER_BOTTOM_PADDING_Y = GRID_LINE_PADDING_BOTTOM + GRID_LINE_FOCUS_OVERSHOOT + 32;
+    const MIN_CAMERA_SCALE = 0.2;
+    const MAX_CAMERA_SCALE = 2.0;
 
     const THEMES = Object.freeze({
         dead: Object.freeze([{ class: 'th-dead', isStatic: true }]),
@@ -196,6 +198,9 @@
         let isDragging = false;
         let startMouseX = 0;
         let startMouseY = 0;
+        const activePointers = new Map();
+        let activePointerDrag = null;
+        let activePinch = null;
         let lastTransform = '';
 
         function invalidateNodeCenterCache() {
@@ -226,6 +231,100 @@
                 lastTransform = nextTransform;
                 layer.style.transform = nextTransform;
             }
+        }
+
+        function clampCameraScale(value) {
+            return Math.max(MIN_CAMERA_SCALE, Math.min(MAX_CAMERA_SCALE, value));
+        }
+
+        function getViewportLocalPoint(clientX, clientY) {
+            const viewport = getViewport();
+            const rect = viewport?.getBoundingClientRect?.() || { left: 0, top: 0 };
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function zoomAtPoint(point, nextScale) {
+            const clampedScale = clampCameraScale(nextScale);
+            if (!Number.isFinite(clampedScale) || clampedScale <= 0 || clampedScale === scale) return;
+            const scaleRatio = clampedScale / scale;
+            panX = point.x - (point.x - panX) * scaleRatio;
+            panY = point.y - (point.y - panY) * scaleRatio;
+            scale = clampedScale;
+            updateTransform();
+        }
+
+        function getPointerDistance(a, b) {
+            const dx = a.clientX - b.clientX;
+            const dy = a.clientY - b.clientY;
+            return Math.sqrt((dx * dx) + (dy * dy));
+        }
+
+        function getPointerCenter(a, b) {
+            return getViewportLocalPoint(
+                (a.clientX + b.clientX) / 2,
+                (a.clientY + b.clientY) / 2
+            );
+        }
+
+        function resetPointerGesture() {
+            isDragging = false;
+            activePointerDrag = null;
+            activePinch = null;
+            activePointers.clear();
+        }
+
+        function beginPointerDrag(pointer) {
+            activePointerDrag = {
+                pointerId: pointer.pointerId,
+                startClientX: pointer.clientX,
+                startClientY: pointer.clientY,
+                startPanX: panX,
+                startPanY: panY
+            };
+            activePinch = null;
+            isDragging = true;
+        }
+
+        function beginPinchGesture() {
+            const pointers = Array.from(activePointers.values());
+            if (pointers.length < 2) return;
+            const first = pointers[0];
+            const second = pointers[1];
+            const distance = getPointerDistance(first, second);
+            if (!Number.isFinite(distance) || distance <= 0) return;
+            const center = getPointerCenter(first, second);
+            activePinch = {
+                startDistance: distance,
+                startScale: scale,
+                contentX: (center.x - panX) / scale,
+                contentY: (center.y - panY) / scale
+            };
+            activePointerDrag = null;
+            isDragging = false;
+        }
+
+        function updatePinchGesture() {
+            if (!activePinch || activePointers.size < 2) return;
+            const pointers = Array.from(activePointers.values());
+            const first = pointers[0];
+            const second = pointers[1];
+            const distance = getPointerDistance(first, second);
+            if (!Number.isFinite(distance) || distance <= 0) return;
+            const center = getPointerCenter(first, second);
+            scale = clampCameraScale(activePinch.startScale * (distance / activePinch.startDistance));
+            panX = center.x - (activePinch.contentX * scale);
+            panY = center.y - (activePinch.contentY * scale);
+            updateTransform();
+        }
+
+        function updatePointerDrag(pointer) {
+            if (!activePointerDrag || activePointerDrag.pointerId !== pointer.pointerId) return;
+            panX = activePointerDrag.startPanX + (pointer.clientX - activePointerDrag.startClientX);
+            panY = activePointerDrag.startPanY + (pointer.clientY - activePointerDrag.startClientY);
+            updateTransform();
         }
 
         function syncViewportSize() {
@@ -482,7 +581,7 @@
             const widthScale = safeWidth / Math.max(fitMetrics.width, 1);
             const heightScale = safeHeight / Math.max(fitMetrics.height, 1);
             const fittedScale = Math.min(widthScale, heightScale, 1) * LAYER_FIT_SHRINK;
-            scale = Math.max(0.32, fittedScale);
+            scale = Math.max(0.32, clampCameraScale(fittedScale));
         }
 
         function getControlledNodesFromActState(actState) {
@@ -799,6 +898,7 @@
             centerViewportOnCurrentFocus();
 
             global.addEventListener('resize', () => {
+                if (!active) return;
                 syncViewportSize();
                 applyAutoMacroLayout();
                 syncLayerSize();
@@ -808,31 +908,121 @@
 
             const viewport = getViewport();
             if (viewport) {
-                viewport.addEventListener('mousedown', (event) => {
-                    if (event.target.closest('.az-node')) return;
-                    isDragging = true;
-                    startMouseX = event.clientX - panX;
-                    startMouseY = event.clientY - panY;
-                });
+                if (global.PointerEvent) {
+                    viewport.addEventListener('pointerdown', (event) => {
+                        if (event.button != null && event.button !== 0) return;
+                        if (event.target.closest('.az-node')) return;
+                        event.preventDefault();
+                        activePointers.set(event.pointerId, {
+                            pointerId: event.pointerId,
+                            clientX: event.clientX,
+                            clientY: event.clientY
+                        });
+                        try { viewport.setPointerCapture(event.pointerId); } catch (_) {}
+                        if (activePointers.size >= 2) beginPinchGesture();
+                        else beginPointerDrag(activePointers.get(event.pointerId));
+                    }, { passive: false });
+
+                    viewport.addEventListener('pointermove', (event) => {
+                        if (!activePointers.has(event.pointerId)) return;
+                        event.preventDefault();
+                        activePointers.set(event.pointerId, {
+                            pointerId: event.pointerId,
+                            clientX: event.clientX,
+                            clientY: event.clientY
+                        });
+                        if (activePointers.size >= 2) {
+                            updatePinchGesture();
+                            return;
+                        }
+                        updatePointerDrag(activePointers.get(event.pointerId));
+                    }, { passive: false });
+
+                    const finishPointer = (event) => {
+                        if (!activePointers.has(event.pointerId)) return;
+                        activePointers.delete(event.pointerId);
+                        try { viewport.releasePointerCapture(event.pointerId); } catch (_) {}
+                        if (activePointers.size >= 2) {
+                            beginPinchGesture();
+                            return;
+                        }
+                        if (activePointers.size === 1) {
+                            beginPointerDrag(Array.from(activePointers.values())[0]);
+                            return;
+                        }
+                        resetPointerGesture();
+                    };
+
+                    viewport.addEventListener('pointerup', finishPointer);
+                    viewport.addEventListener('pointercancel', finishPointer);
+                    viewport.addEventListener('pointerleave', finishPointer);
+                } else {
+                    viewport.addEventListener('mousedown', (event) => {
+                        if (event.target.closest('.az-node')) return;
+                        isDragging = true;
+                        startMouseX = event.clientX - panX;
+                        startMouseY = event.clientY - panY;
+                    });
+
+                    const syncTouches = (event) => {
+                        activePointers.clear();
+                        Array.from(event.touches || []).forEach((touch) => {
+                            activePointers.set(touch.identifier, {
+                                pointerId: touch.identifier,
+                                clientX: touch.clientX,
+                                clientY: touch.clientY
+                            });
+                        });
+                    };
+
+                    viewport.addEventListener('touchstart', (event) => {
+                        if ((event.touches || []).length === 1 && event.target.closest('.az-node')) return;
+                        event.preventDefault();
+                        syncTouches(event);
+                        if (activePointers.size >= 2) beginPinchGesture();
+                        else if (activePointers.size === 1) beginPointerDrag(Array.from(activePointers.values())[0]);
+                    }, { passive: false });
+
+                    viewport.addEventListener('touchmove', (event) => {
+                        if (!activePointers.size) return;
+                        event.preventDefault();
+                        syncTouches(event);
+                        if (activePointers.size >= 2) {
+                            updatePinchGesture();
+                            return;
+                        }
+                        if (activePointers.size === 1) updatePointerDrag(Array.from(activePointers.values())[0]);
+                    }, { passive: false });
+
+                    const finishTouch = (event) => {
+                        if (!activePointers.size) return;
+                        event.preventDefault();
+                        syncTouches(event);
+                        if (activePointers.size >= 2) {
+                            beginPinchGesture();
+                            return;
+                        }
+                        if (activePointers.size === 1) {
+                            beginPointerDrag(Array.from(activePointers.values())[0]);
+                            return;
+                        }
+                        resetPointerGesture();
+                    };
+
+                    viewport.addEventListener('touchend', finishTouch, { passive: false });
+                    viewport.addEventListener('touchcancel', finishTouch, { passive: false });
+                }
 
                 viewport.addEventListener('wheel', (event) => {
                     event.preventDefault();
-                    const rect = viewport.getBoundingClientRect();
-                    const mouseX = event.clientX - rect.left;
-                    const mouseY = event.clientY - rect.top;
                     const zoomFactor = -event.deltaY * 0.001;
-                    let newScale = scale * Math.exp(zoomFactor);
-                    newScale = Math.max(0.2, Math.min(newScale, 2.0));
-                    const scaleRatio = newScale / scale;
-                    panX = mouseX - (mouseX - panX) * scaleRatio;
-                    panY = mouseY - (mouseY - panY) * scaleRatio;
-                    scale = newScale;
-                    updateTransform();
+                    zoomAtPoint(getViewportLocalPoint(event.clientX, event.clientY), scale * Math.exp(zoomFactor));
                 }, { passive: false });
             }
 
             global.addEventListener('mouseup', () => { isDragging = false; });
             global.addEventListener('mousemove', (event) => {
+                if (global.PointerEvent) return;
                 if (!isDragging) return;
                 panX = event.clientX - startMouseX;
                 panY = event.clientY - startMouseY;
@@ -860,6 +1050,7 @@
             if (active === normalized) return;
             active = normalized;
             if (normalized) ensureDrawLoop();
+            else resetPointerGesture();
         }
 
         function ensureDrawLoop() {

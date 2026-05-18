@@ -2797,10 +2797,12 @@ function createExecutionRuntimeContext() {
     }
 
     function syncPlannerModeState() {
-        document.body.classList.toggle('mode-debug', isOverviewDebugMode());
-        document.body.classList.toggle('mode-host', !isOverviewDebugMode());
-        document.body.classList.toggle('is-allocating', appState.drawerOpen);
-        document.body.classList.toggle('is-planning-phase', isPlanningPhase());
+        const isOverviewActive = typeof document.body.classList.contains !== 'function'
+            || document.body.classList.contains('is-overview-page');
+        document.body.classList.toggle('mode-debug', isOverviewActive && isOverviewDebugMode());
+        document.body.classList.toggle('mode-host', isOverviewActive && !isOverviewDebugMode());
+        document.body.classList.toggle('is-allocating', isOverviewActive && appState.drawerOpen);
+        document.body.classList.toggle('is-planning-phase', isOverviewActive && isPlanningPhase());
     }
 
     function refreshPlannerUI() {
@@ -2814,6 +2816,11 @@ function createExecutionRuntimeContext() {
         syncPhaseBarDOM();
         bindPlannerEvents();
         syncPlannerModeState();
+    }
+
+    function refreshPlannerAllocationUI() {
+        renderTopbar();
+        refreshPlannerUI();
     }
 
     function syncPlannerOpenState() {
@@ -2844,6 +2851,7 @@ function createExecutionRuntimeContext() {
             getSelectedRestSlotToken,
             markActStateDirty,
             refreshAllUI,
+            refreshPlannerAllocationUI,
             refreshPlannerUI,
             openRestTintPopup,
             getTotalInventoryCount
@@ -3229,14 +3237,19 @@ function createExecutionRuntimeContext() {
         syncPlannerOpenState();
     });
 
-    layer.addEventListener('pointerdown', (e) => {
+    function handleMapNodeActivation(e) {
         const node = e.target.closest('.az-node');
         if (!node) return;
         if (!isRouteSelectionActive()) return;
         e.preventDefault();
         e.stopPropagation();
         chooseNextRoute(node.id);
-    });
+    }
+
+    layer.addEventListener('pointerdown', handleMapNodeActivation);
+    if (!window.PointerEvent) {
+        layer.addEventListener('click', handleMapNodeActivation);
+    }
 
     document.addEventListener('click', (e) => {
         const keepActionSelector = [
@@ -3426,5 +3439,11 @@ function createExecutionRuntimeContext() {
     window.__acezeroHomePageActive = function acezeroHomePageActive(isActive) {
         if (overviewMapView) {
             overviewMapView.setActive(isActive);
+        }
+        syncPlannerModeState();
+        if (isActive) {
+            refreshPlannerUI();
+            syncSidePanelChrome();
+            updateMapUI();
         }
     };

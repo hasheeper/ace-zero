@@ -46,10 +46,7 @@
 
     const PLAN_LAYOUT_WIDE_WIDTH = 1080;
     const PLAN_LAYOUT_NARROW_WIDTH = 760;
-    const PLAN_LAYOUT_MIN_HEIGHT = 260;
-    let plannerLayoutResizeObserver = null;
-    let observedPlannerDrawer = null;
-    let observedPlannerAux = null;
+    let plannerLayoutResizeBound = false;
     let plannerLayoutSyncScheduled = false;
 
     function isCurrentPhasePlanLocked() {
@@ -105,57 +102,67 @@
         if (element.innerHTML !== markup) element.innerHTML = markup;
     }
 
-    function getPlannerLayoutMode(drawer, auxContainer) {
-        const drawerWidth = Math.max(0, drawer?.getBoundingClientRect?.().width || 0);
-        const isExpanded = drawer?.classList?.contains('is-expanded') === true;
-        const auxHeight = isExpanded
-            ? Math.max(0, auxContainer?.getBoundingClientRect?.().height || 0)
-            : Number.POSITIVE_INFINITY;
-        if ((drawerWidth > 0 && drawerWidth < PLAN_LAYOUT_NARROW_WIDTH) || auxHeight < PLAN_LAYOUT_MIN_HEIGHT) return 'narrow';
+    function getPlannerViewportWidth(drawer) {
+        return Math.max(
+            0,
+            drawer?.getBoundingClientRect?.().width || 0,
+            document.documentElement?.clientWidth || 0,
+            global.innerWidth || 0
+        );
+    }
+
+    function getPlannerLayoutMode(drawer) {
+        const drawerWidth = getPlannerViewportWidth(drawer);
+        if (drawerWidth > 0 && drawerWidth < PLAN_LAYOUT_NARROW_WIDTH) return 'narrow';
         if (drawerWidth > 0 && drawerWidth < PLAN_LAYOUT_WIDE_WIDTH) return 'mid';
         return 'wide';
     }
 
-    function observePlannerLayout(drawer, auxContainer) {
-        if (typeof ResizeObserver !== 'function' || !drawer || !auxContainer) return;
-        if (!plannerLayoutResizeObserver) {
-            plannerLayoutResizeObserver = new ResizeObserver(() => requestPlannerLayoutChromeSync());
-        }
-        if (observedPlannerDrawer === drawer && observedPlannerAux === auxContainer) return;
-        plannerLayoutResizeObserver.disconnect();
-        plannerLayoutResizeObserver.observe(drawer);
-        plannerLayoutResizeObserver.observe(auxContainer);
-        observedPlannerDrawer = drawer;
-        observedPlannerAux = auxContainer;
+    function getPlannerLayoutClass(mode = getPlannerLayoutMode()) {
+        return `plan-layout-${mode}`;
+    }
+
+    function isOverviewPageActive() {
+        const bodyClassList = global.document?.body?.classList;
+        if (!bodyClassList || typeof bodyClassList.contains !== 'function') return true;
+        return bodyClassList.contains('is-overview-page');
+    }
+
+    function bindPlannerLayoutResize() {
+        if (plannerLayoutResizeBound) return;
+        if (!global || typeof global.addEventListener !== 'function') return;
+        plannerLayoutResizeBound = true;
+        global.addEventListener('resize', requestPlannerLayoutChromeSync, { passive: true });
     }
 
     function requestPlannerLayoutChromeSync() {
+        if (!isOverviewPageActive()) return;
         if (plannerLayoutSyncScheduled) return;
-        if (typeof requestAnimationFrame !== 'function') {
+        if (!global || typeof global.requestAnimationFrame !== 'function') {
             syncPlannerLayoutChrome();
             return;
         }
         plannerLayoutSyncScheduled = true;
-        requestAnimationFrame(() => {
+        global.requestAnimationFrame(() => {
             plannerLayoutSyncScheduled = false;
             syncPlannerLayoutChrome();
         });
     }
 
     function syncPlannerLayoutChrome() {
+        if (!isOverviewPageActive()) return;
         const drawer = document.getElementById('drawer');
         if (!drawer) return;
-        const auxContainer = drawer.querySelector('.aux-container');
-        const mode = getPlannerLayoutMode(drawer, auxContainer);
+        const mode = getPlannerLayoutMode(drawer);
         if (drawer.dataset.planLayout === mode) {
-            observePlannerLayout(drawer, auxContainer);
+            bindPlannerLayoutResize();
             return;
         }
         drawer.classList.toggle('plan-layout-wide', mode === 'wide');
         drawer.classList.toggle('plan-layout-mid', mode === 'mid');
         drawer.classList.toggle('plan-layout-narrow', mode === 'narrow');
         drawer.dataset.planLayout = mode;
-        observePlannerLayout(drawer, auxContainer);
+        bindPlannerLayoutResize();
     }
 
     function buildAssetCardViewModel(card) {
@@ -825,6 +832,38 @@
         `;
     }
 
+    function buildPlannerResourceViewMarkup(activePage) {
+        if (activePage === 'combat') {
+            return `
+                <section class="view theme-combat is-active" data-view="combat">
+                    ${buildCombatResourcePageMarkup()}
+                </section>
+            `;
+        }
+        if (activePage === 'rest') {
+            return `
+                <section class="view theme-rest is-active" data-view="rest">
+                    ${buildRestResourcePageMarkup()}
+                </section>
+            `;
+        }
+        if (activePage === 'asset') {
+            return `
+                <section class="view theme-asset is-active" data-view="asset">
+                    ${buildAssetResourcePageMarkup()}
+                </section>
+            `;
+        }
+        if (activePage === 'vision') {
+            return `
+                <section class="view theme-vision is-active" data-view="vision">
+                    ${buildVisionResourcePageMarkup()}
+                </section>
+            `;
+        }
+        return '';
+    }
+
     function renderPlannerDrawer() {
         const plannerDrawerMount = document.getElementById('plannerDrawerMount');
         if (!plannerDrawerMount) return;
@@ -846,24 +885,14 @@
         const drawerTheme = activeResourcePage || 'asset';
         const drawerOpenClass = appState.drawerOpen ? ' is-hub-open' : '';
         const drawerExpandedClass = appState.drawerOpen && activeResourcePage ? ' is-expanded' : '';
-        const assetDeckHash = buildPlannerAssetHash();
-        const resourceHash = buildPlannerResourceHash(activePage);
+        const assetDeckHash = activePage === 'asset' ? buildPlannerAssetHash() : '';
+        const resourceHash = activeResourcePage && activePage !== 'asset' ? buildPlannerResourceHash(activePage) : '';
         const editMode = normalizePlannerEditMode(appState.plannerEditMode);
+        const initialLayoutMode = getPlannerLayoutMode();
         plannerDrawerMount.innerHTML = `
-            <section class="drawer theme-${drawerTheme}${drawerOpenClass}${drawerExpandedClass}${readonlyClass}" id="drawer" data-active-tab="${activeResourcePage}" data-planner-page="${activePage}" data-edit-mode="${editMode}" data-asset-page="${activePage === 'asset' ? 'deck' : activePage}" data-asset-hash="${escapePartyHtml(assetDeckHash)}" data-resource-hash="${escapePartyHtml(resourceHash)}">
+            <section class="drawer theme-${drawerTheme}${drawerOpenClass}${drawerExpandedClass}${readonlyClass} ${getPlannerLayoutClass(initialLayoutMode)}" id="drawer" data-active-tab="${activeResourcePage}" data-planner-page="${activePage}" data-edit-mode="${editMode}" data-asset-page="${activePage === 'asset' ? 'deck' : activePage}" data-plan-layout="${initialLayoutMode}" data-asset-hash="${escapePartyHtml(assetDeckHash)}" data-resource-hash="${escapePartyHtml(resourceHash)}">
                 <div class="aux-container">
-                    <section class="view theme-combat ${activePage === 'combat' ? 'is-active' : ''}" data-view="combat">
-                        ${buildCombatResourcePageMarkup()}
-                    </section>
-                    <section class="view theme-rest ${activePage === 'rest' ? 'is-active' : ''}" data-view="rest">
-                        ${buildRestResourcePageMarkup()}
-                    </section>
-                    <section class="view theme-asset ${activePage === 'asset' ? 'is-active' : ''}" data-view="asset">
-                        ${buildAssetResourcePageMarkup()}
-                    </section>
-                    <section class="view theme-vision ${activePage === 'vision' ? 'is-active' : ''}" data-view="vision">
-                        ${buildVisionResourcePageMarkup()}
-                    </section>
+                    ${buildPlannerResourceViewMarkup(activePage)}
                 </div>
                 <header class="planner-hub">
                     <div class="hub-title">
@@ -877,7 +906,8 @@
                 </header>
             </section>
         `;
-        syncPlannerLayoutChrome();
+        bindPlannerLayoutResize();
+        requestPlannerLayoutChromeSync();
     }
 
     function buildPhaseVisionPromptMarkup() {
@@ -968,6 +998,9 @@ ${phaseSegments}
         if (drawer.dataset.assetPage !== (activePage === 'asset' ? 'deck' : activePage)) return true;
         if (activePage === 'asset' && drawer.dataset.assetHash !== buildPlannerAssetHash()) return true;
         if (activePage !== 'asset' && activePage !== 'planner' && drawer.dataset.resourceHash !== buildPlannerResourceHash(activePage)) return true;
+        const activeView = drawer.querySelector('.view.is-active');
+        if (activeResourcePage && activeView?.dataset.view !== activeResourcePage) return true;
+        if (!activeResourcePage && drawer.querySelector('.view')) return true;
         const renderedCount = inventory.querySelectorAll('.token-dispenser').length;
         return renderedCount !== appData.planner.inventory.length;
     }
@@ -1009,13 +1042,14 @@ ${phaseSegments}
             const subEl = document.getElementById(`sub_${item.key}`);
             if (!tokenEl || !countEl) return;
             const total = getTotalInventoryCount(item.key);
-            tokenEl.className = `token-dispenser type-${item.key}`;
-            tokenEl.classList.toggle('is-empty', total <= 0 && !tokenEl.dataset.plannerTab);
-            tokenEl.classList.toggle('is-active', activePage === item.key);
-            tokenEl.classList.toggle('is-selected', selectionState.source === 'inventory' && selectionState.type === item.key);
-            tokenEl.classList.toggle('is-plan-locked', planLocked);
             const planned = getPlannedResourceState(item.key);
-            tokenEl.classList.toggle('is-planned', planned.amount > 0);
+            const tokenClasses = ['token-dispenser', `type-${item.key}`];
+            if (total <= 0 && !tokenEl.dataset.plannerTab) tokenClasses.push('is-empty');
+            if (activePage === item.key) tokenClasses.push('is-active');
+            if (selectionState.source === 'inventory' && selectionState.type === item.key) tokenClasses.push('is-selected');
+            if (planLocked) tokenClasses.push('is-plan-locked');
+            if (planned.amount > 0) tokenClasses.push('is-planned');
+            setClassNameIfChanged(tokenEl, tokenClasses.join(' '));
             setDatasetIfChanged(tokenEl, 'plannedAmount', planned.amount);
             setTextContentIfChanged(countEl, `×${total}`);
             if (subEl) setTextContentIfChanged(subEl, '');
@@ -1027,7 +1061,7 @@ ${phaseSegments}
         });
 
         syncRestControlPanelDOM();
-        syncPlannerLayoutChrome();
+        requestPlannerLayoutChromeSync();
     }
 
     function getSelectedRestSlotToken() {

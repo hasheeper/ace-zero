@@ -16,6 +16,7 @@
             getSelectedRestSlotToken,
             markActStateDirty,
             refreshAllUI,
+            refreshPlannerAllocationUI = refreshAllUI,
             refreshPlannerUI,
             openRestTintPopup,
             getTotalInventoryCount
@@ -113,7 +114,7 @@
             token.tintSource = nextSource;
         }
         markActStateDirty();
-        refreshAllUI();
+        refreshPlannerAllocationUI();
         return true;
     }
 
@@ -139,7 +140,7 @@
                     selectInventoryToken(selectionState.type);
                 }
             }
-            refreshAllUI();
+            refreshPlannerAllocationUI();
             return;
         }
         const token = consumeInventoryToken(selectionState.type);
@@ -156,7 +157,7 @@
                 selectInventoryToken(token.type);
             }
         }
-        refreshAllUI();
+        refreshPlannerAllocationUI();
     }
 
     function moveOrSwapSlotSelection(targetSlotId) {
@@ -167,7 +168,7 @@
         const sourceToken = appState.phaseSlots[sourceSlotId];
         if (!sourceToken) {
             resetSelection();
-            refreshAllUI();
+            refreshPlannerAllocationUI();
             return;
         }
 
@@ -176,7 +177,7 @@
         appState.phaseSlots[sourceSlotId] = targetToken || null;
         markActStateDirty();
         selectSlotToken(targetSlotId);
-        refreshAllUI();
+        refreshPlannerAllocationUI();
     }
 
     function returnSelectedSlotTokenToInventory() {
@@ -191,7 +192,7 @@
         appState.phaseSlots[selectionState.slotId] = null;
         markActStateDirty();
         resetSelection();
-        refreshAllUI();
+        refreshPlannerAllocationUI();
     }
 
     function removeOnePointFromPhaseSlot(slotId) {
@@ -218,7 +219,7 @@
         selectionState.slotId = null;
         appState.restTintPopupSlotId = '';
         markActStateDirty();
-        refreshAllUI();
+        refreshPlannerAllocationUI();
         return true;
     }
 
