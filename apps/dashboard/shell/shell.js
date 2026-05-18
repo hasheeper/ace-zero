@@ -494,15 +494,16 @@ function applyMvuHero(hero, world = null) {
     const relationNode = heroCode ? (hero?.relationship?.[heroCode] || null) : null;
     const encounterState = heroCode ? getEncounterDashboardStateFromWorld(world, heroCode) : null;
 
+    // `hero.cast` is the canonical MVU presence state; encounter data only fills older payloads.
     character.dashboardState = {
       ...defaults.dashboardState,
+      ...(encounterState || {}),
       ...(castNode && typeof castNode === 'object' ? {
         activated: true,
         introduced: castNode.introduced === true,
         present: castNode.present === true,
         inParty: castNode.inParty === true
-      } : {}),
-      ...(encounterState || {})
+      } : {})
     };
 
     character.level = rosterNode?.level != null ? Math.max(0, Math.round(Number(rosterNode.level) || 0)) : defaults.level;

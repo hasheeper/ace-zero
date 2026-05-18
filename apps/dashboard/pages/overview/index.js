@@ -910,15 +910,16 @@ function createExecutionRuntimeContext() {
             const heroCode = DASHBOARD_HERO_CODE_BY_KEY[key] || key.toUpperCase();
             const castNode = cast[heroCode] && typeof cast[heroCode] === 'object' ? cast[heroCode] : null;
             const encounterState = getEncounterDashboardStateFromPayload(payload, heroCode);
+            // `hero.cast` is the canonical MVU presence state; encounter data only fills older payloads.
             character.dashboardState = {
                 ...getDefaultDashboardCharacterState(key),
+                ...(encounterState || {}),
                 ...(castNode ? {
                     activated: true,
                     introduced: castNode.introduced === true,
                     present: castNode.present === true,
                     inParty: castNode.inParty === true
-                } : {}),
-                ...(encounterState || {})
+                } : {})
             };
         });
     }
