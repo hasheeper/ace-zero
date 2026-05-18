@@ -72,6 +72,18 @@
         return normalizeEncounterPhase(entry?.phase, kind === 'meet' ? FIRST_MEET_PHASE_INDEX : 0);
       }
 
+      function getCurrentEncounterNodeId(actStateInput, currentNodeIdInput = '') {
+        const actState = normalizeActState(actStateInput);
+        const currentNodeIndex = Math.max(1, Math.round(Number(actState.nodeIndex) || 1));
+        return normalizeTrimmedString(
+          currentNodeIdInput
+            || actState.route_history[currentNodeIndex - 1]
+            || actState.route_history[actState.route_history.length - 1]
+            || getCurrentActNodeId(actState),
+          ''
+        );
+      }
+
       function normalizeEncounterFactEntry(value) {
         const source = value === true ? {} : (isPlainEncounterObject(value) ? value : {});
         const out = {};
@@ -180,11 +192,6 @@
         return compactEncounterLedger(compact);
       }
 
-      function setCharacterEncounterState(act, encounter) {
-        act.characterEncounter = normalizeCharacterEncounterState(encounter);
-        return act.characterEncounter;
-      }
-
       function getActiveEncounterEntries(characterEncounterInput, filterFn = null) {
         const encounter = normalizeCharacterEncounterState(characterEncounterInput);
         return Object.entries(encounter.active || {})
@@ -214,65 +221,6 @@
         ]));
       }
 
-      function getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId) {
-        const actState = normalizeActState(actStateInput);
-        const nodeId = normalizeTrimmedString(currentNodeId, '');
-        const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(actState.phase_index) || 0)));
-        const hints = {};
-        getActiveEncounterEntries(actState.characterEncounter, ({ entry }) => (
-          normalizeEncounterKind(entry.kind) === 'meet'
-          && entry.state === 'placed'
-          && normalizeTrimmedString(entry.node, '') === nodeId
-          && getEntryPhase(entry) === phaseIndex
-        )).forEach(({ charKey }) => {
-          const hint = normalizeTrimmedString(ENCOUNTER_RULES[charKey]?.firstMeetHint, '');
-          if (hint) hints[charKey] = hint;
-        });
-        return hints;
-      }
-
-      function getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId) {
-        const actState = normalizeActState(actStateInput);
-        const nodeId = normalizeTrimmedString(currentNodeId, '');
-        const hints = {};
-        getActiveEncounterEntries(actState.characterEncounter, ({ entry }) => (
-          normalizeEncounterKind(entry.kind) === 'meet'
-          && entry.state === 'placed'
-          && normalizeTrimmedString(entry.node, '') === nodeId
-        )).forEach(({ charKey, entry }) => {
-          hints[charKey] = {
-            charKey,
-            hint: normalizeTrimmedString(ENCOUNTER_RULES[charKey]?.firstMeetHint, ''),
-            targetPhaseIndex: getEntryPhase(entry)
-          };
-        });
-        return hints;
-      }
-
-      function getCharacterEncounterPreSignalMap(actStateInput, currentNodeId) {
-        const actState = normalizeActState(actStateInput);
-        const encounter = normalizeCharacterEncounterState(actState.characterEncounter);
-        const nodeId = normalizeTrimmedString(currentNodeId, '');
-        const phaseIndex = Math.max(0, Math.min(4, Math.round(Number(actState.phase_index) || 0)));
-        const hints = {};
-        Object.entries(encounter.signaled || {}).forEach(([charKey, fact]) => {
-          const signalPhaseIndex = normalizeEncounterPhase(fact?.phase, -1);
-          const signalNodeIndex = Math.max(0, Math.round(Number(fact?.nodeIndex) || 0));
-          const signalNodeId = normalizeTrimmedString(fact?.node, '');
-          const sameNodeNextPhase = (!signalNodeId || signalNodeId === nodeId)
-            && signalPhaseIndex >= 0
-            && phaseIndex === Math.min(4, signalPhaseIndex + 1);
-          const nextNodeAfterFinalPhase = signalPhaseIndex === 3
-            && signalNodeIndex > 0
-            && Math.max(1, Math.round(Number(actState.nodeIndex) || 1)) === signalNodeIndex + 1
-            && phaseIndex === 0;
-          if (!sameNodeNextPhase && !nextNodeAfterFinalPhase) return;
-          const hint = normalizeTrimmedString(ENCOUNTER_RULES[charKey]?.preSignalHint, '');
-          if (hint) hints[charKey] = hint;
-        });
-        return hints;
-      }
-
       function calculateEncounterSpentScore(actStateInput, weightsInput) {
         const spent = normalizeCountMap(actStateInput?.resourceSpent, false);
         const weights = weightsInput && typeof weightsInput === 'object' ? weightsInput : {};
@@ -290,6 +238,73 @@
         const rightFrom = Math.max(0, Math.round(Number(right?.from) || 0));
         if (leftFrom !== rightFrom) return leftFrom - rightFrom;
         return ENCOUNTER_CHARACTER_KEYS.indexOf(left?.charKey) - ENCOUNTER_CHARACTER_KEYS.indexOf(right?.charKey);
+      }
+
+      function compareEncounterMarkerPriority(left, right) {
+        const leftPlacedRank = left?.encounterState === 'placed' ? 2 : 1;
+        const rightPlacedRank = right?.encounterState === 'placed' ? 2 : 1;
+        if (leftPlacedRank !== rightPlacedRank) return rightPlacedRank - leftPlacedRank;
+        return compareEncounterPriority(left, right);
+      }
+
+      function getEncounterTriggerScore(entry) {
+        return Math.round(Number(entry?.priority) || 0);
+      }
+
+      function getEncounterFromIndex(entry) {
+        return Math.max(0, Math.round(Number(entry?.from) || 0));
+      }
+
+      function getCharacterSortIndex(charKeyInput) {
+        const charKey = normalizeTrimmedString(charKeyInput, '').toUpperCase();
+        const index = ENCOUNTER_CHARACTER_KEYS.indexOf(charKey);
+        return index >= 0 ? index : ENCOUNTER_CHARACTER_KEYS.length;
+      }
+
+      function compareQueuedEncounter(left, right) {
+        const leftScore = getEncounterTriggerScore(left?.entry || left);
+        const rightScore = getEncounterTriggerScore(right?.entry || right);
+        if (leftScore !== rightScore) return rightScore - leftScore;
+        const leftFrom = getEncounterFromIndex(left?.entry || left);
+        const rightFrom = getEncounterFromIndex(right?.entry || right);
+        if (leftFrom !== rightFrom) return leftFrom - rightFrom;
+        return getCharacterSortIndex(left?.charKey) - getCharacterSortIndex(right?.charKey);
+      }
+
+      function getSignaledEncounterLock(encounterInput) {
+        const encounter = normalizeCharacterEncounterState(encounterInput);
+        return Object.keys(encounter.signaled || {})
+          .map((charKey) => normalizeTrimmedString(charKey, '').toUpperCase())
+          .filter((charKey) => ENCOUNTER_CHARACTER_KEYS.includes(charKey) && !hasMetEncounter(encounter, charKey))
+          .map((charKey) => ({ charKey, fact: normalizeEncounterFactEntry(encounter.signaled[charKey]) }))
+          .sort((left, right) => {
+            const leftNodeIndex = Math.max(0, Math.round(Number(left.fact?.nodeIndex) || 0));
+            const rightNodeIndex = Math.max(0, Math.round(Number(right.fact?.nodeIndex) || 0));
+            if (leftNodeIndex !== rightNodeIndex) return leftNodeIndex - rightNodeIndex;
+            const leftPhase = normalizeEncounterPhase(left.fact?.phase, 0);
+            const rightPhase = normalizeEncounterPhase(right.fact?.phase, 0);
+            if (leftPhase !== rightPhase) return leftPhase - rightPhase;
+            return getCharacterSortIndex(left.charKey) - getCharacterSortIndex(right.charKey);
+          })[0] || null;
+      }
+
+      function hasFirstMeetOnNode(encounterInput, nodeIdInput, nodeIndexInput) {
+        const encounter = normalizeCharacterEncounterState(encounterInput);
+        const nodeId = normalizeTrimmedString(nodeIdInput, '');
+        const nodeIndex = Math.max(1, Math.round(Number(nodeIndexInput) || 1));
+        if (Math.max(0, Math.round(Number(encounter.lastMeet) || 0)) === nodeIndex) return true;
+        if (Object.values(encounter.met || {}).some((fact) => {
+          const factNodeIndex = Math.max(0, Math.round(Number(fact?.nodeIndex) || 0));
+          const factNodeId = normalizeTrimmedString(fact?.node, '');
+          return factNodeIndex === nodeIndex || (nodeId && factNodeId === nodeId);
+        })) return true;
+        return Object.values(encounter.active || {}).some((entry) => {
+          if (normalizeEncounterKind(entry?.kind) !== 'meet') return false;
+          if (normalizeEncounterActiveState(entry?.state) !== 'placed') return false;
+          const entryNodeIndex = Math.max(0, Math.round(Number(entry?.nodeIndex) || 0));
+          const entryNodeId = normalizeTrimmedString(entry?.node, '');
+          return entryNodeIndex === nodeIndex || (nodeId && entryNodeId === nodeId);
+        });
       }
 
       function getEncounterFinalNodeIndex(configInput) {
@@ -485,9 +500,10 @@
           if (hasActiveEncounterForCharacter(encounter, charKey)) reasons.push('active_or_done');
           if (Number(rule?.minNodeIndex) > 0 && act.nodeIndex < Number(rule.minNodeIndex)) reasons.push('node_index');
           if (Number(rule?.minFunds) > 0 && funds < Number(rule.minFunds)) reasons.push('funds');
-          if (rule?.requiredGeo) {
+          const requiredGeo = normalizeEncounterGeoList(rule?.requiredGeo);
+          if (requiredGeo.length) {
             if (!geo) reasons.push('missing_geo');
-            else if (geo !== normalizeTrimmedString(rule.requiredGeo, '').toUpperCase()) reasons.push('geo');
+            else if (!requiredGeo.includes(geo)) reasons.push('geo');
           }
           const optionalGeo = normalizeEncounterGeoList(rule?.optionalGeo);
           const geoScore = optionalGeo.length && optionalGeo.includes(geo) ? 6 : 0;
@@ -547,7 +563,8 @@
               funds,
               minFunds: Math.max(0, Math.round(Number(rule?.minFunds) || 0)),
               geo,
-              requiredGeo: normalizeTrimmedString(rule?.requiredGeo, '').toUpperCase(),
+              requiredGeo: requiredGeo.join('|'),
+              requiredGeoList: requiredGeo,
               optionalGeo,
               tags,
               requiredTags,
@@ -662,32 +679,137 @@
         return Math.floor(mulberry32(hashStringToSeed(seed))() * 4);
       }
 
-      function placeNextCharacterEncounter(actStateInput, configInput, options = {}) {
+      function getRouteNodeIndex(actStateInput, nodeIdInput, fallback = 0) {
+        const act = normalizeActState(actStateInput);
+        const nodeId = normalizeTrimmedString(nodeIdInput, '');
+        const index = nodeId ? act.route_history.indexOf(nodeId) : -1;
+        if (index >= 0) return index + 1;
+        return Math.max(0, Math.round(Number(fallback) || 0));
+      }
+
+      function createEncounterMarker(actStateInput, charKeyInput, entryInput, fallbackNodeId = '') {
+        const act = normalizeActState(actStateInput);
+        const charKey = normalizeTrimmedString(charKeyInput, '').toUpperCase();
+        const entry = entryInput && typeof entryInput === 'object' ? entryInput : {};
+        const nodeId = normalizeTrimmedString(entry.node || fallbackNodeId, '');
+        if (!nodeId || !ENCOUNTER_CHARACTER_KEYS.includes(charKey)) return null;
+        const nodeIndex = Math.max(0, Math.round(Number(entry.nodeIndex) || 0))
+          || getRouteNodeIndex(act, nodeId, act.nodeIndex);
+        return {
+          charKey,
+          type: encounterKindToUiType(entry.kind),
+          status: 'placed',
+          nodeId,
+          nodeIndex,
+          phaseIndex: getEntryPhase(entry),
+          label: charKey,
+          encounterState: normalizeEncounterActiveState(entry.state),
+          priority: getEncounterTriggerScore(entry),
+          triggerScore: getEncounterTriggerScore(entry),
+          from: getEncounterFromIndex(entry)
+        };
+      }
+
+      function markerToPublic(marker) {
+        if (!marker) return null;
+        const { priority, from, triggerScore, ...publicMarker } = marker;
+        return publicMarker;
+      }
+
+      function resolveEncounterNodeState(actStateInput, nodeIdInput) {
         const act = normalizeActState(actStateInput);
         const encounter = normalizeCharacterEncounterState(act.characterEncounter);
-        const currentNodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
+        const nodeId = normalizeTrimmedString(nodeIdInput || getCurrentActNodeId(act), '');
+        const signaledLock = getSignaledEncounterLock(encounter);
+        const placedEntries = getActiveEncounterEntries(encounter, ({ entry }) => (
+          normalizeEncounterActiveState(entry.state) === 'placed'
+          && normalizeTrimmedString(entry.node, '') === nodeId
+        ));
+        const preSignals = placedEntries
+          .filter(({ entry }) => normalizeEncounterKind(entry.kind) === 'signal')
+          .map(({ charKey, entry }) => createEncounterMarker(act, charKey, entry, nodeId))
+          .filter(Boolean)
+          .sort((left, right) => (
+            left.phaseIndex - right.phaseIndex
+            || compareEncounterMarkerPriority(left, right)
+          ));
+        const firstMeetCandidates = placedEntries
+          .filter(({ entry }) => normalizeEncounterKind(entry.kind) === 'meet')
+          .filter(({ charKey }) => !signaledLock || charKey === signaledLock.charKey)
+          .map(({ charKey, entry }) => createEncounterMarker(act, charKey, entry, nodeId))
+          .filter(Boolean);
+        firstMeetCandidates.sort((left, right) => {
+          if (signaledLock?.charKey) {
+            const leftLocked = left.charKey === signaledLock.charKey ? 1 : 0;
+            const rightLocked = right.charKey === signaledLock.charKey ? 1 : 0;
+            if (leftLocked !== rightLocked) return rightLocked - leftLocked;
+          }
+          return compareEncounterMarkerPriority(left, right);
+        });
+        return {
+          nodeId,
+          nodeIndex: getRouteNodeIndex(act, nodeId, act.nodeIndex),
+          firstMeet: firstMeetCandidates[0] || null,
+          preSignals,
+          signaledLock
+        };
+      }
+
+      function getQueuedEncounterEntries(encounterInput, options = {}) {
+        const encounter = normalizeCharacterEncounterState(encounterInput);
         const requestedCharKey = normalizeTrimmedString(options.charKey || options.requestCharKey || options.forceCharKey, '').toUpperCase();
         const requestedKind = options.kind || options.requestKind || options.type || options.requestType
           ? uiTypeToEncounterKind(options.kind || options.requestKind || options.type || options.requestType)
           : '';
-        const hasPlaced = Object.values(encounter.active || {}).some((entry) => entry?.state === 'placed' && normalizeTrimmedString(entry.node, ''));
-        if (hasPlaced) {
-          act.characterEncounter = encounter;
-          return { actState: act, placed: null, reason: 'active_placement' };
+        const signaledLock = options.honorSignaledLock === false ? null : getSignaledEncounterLock(encounter);
+        if (signaledLock && requestedCharKey && requestedCharKey !== signaledLock.charKey) {
+          return { entries: [], signaledLock, reason: 'signaled_lock' };
         }
+        const entries = getActiveEncounterEntries(encounter, ({ charKey, entry }) => {
+          if (normalizeEncounterActiveState(entry.state) !== 'queued') return false;
+          if (signaledLock && charKey !== signaledLock.charKey) return false;
+          if (signaledLock && normalizeEncounterKind(entry.kind) !== 'meet') return false;
+          if (requestedCharKey && charKey !== requestedCharKey) return false;
+          if (requestedKind && normalizeEncounterKind(entry.kind) !== requestedKind) return false;
+          return true;
+        }).sort(compareQueuedEncounter);
+        return {
+          entries,
+          signaledLock,
+          reason: entries.length ? '' : (signaledLock ? 'signaled_lock' : 'empty_active')
+        };
+      }
 
-        const activeEntries = getActiveEncounterEntries(encounter, ({ charKey, entry }) => (
-          entry.state === 'queued'
-          && (!requestedCharKey || charKey === requestedCharKey)
-          && (!requestedKind || normalizeEncounterKind(entry.kind) === requestedKind)
-        )).sort((left, right) => compareEncounterPriority(
-          { ...left.entry, charKey: left.charKey },
-          { ...right.entry, charKey: right.charKey }
-        ));
-        const selected = activeEntries[0] || null;
+      function ensureSignaledFollowUpMeet(encounterInput, actStateInput, signaledLockInput) {
+        const encounter = normalizeCharacterEncounterState(encounterInput);
+        const act = normalizeActState(actStateInput);
+        const charKey = normalizeTrimmedString(signaledLockInput?.charKey, '').toUpperCase();
+        if (!ENCOUNTER_CHARACTER_KEYS.includes(charKey) || hasMetEncounter(encounter, charKey)) return encounter;
+        const activeEntry = encounter.active?.[charKey] || null;
+        if (activeEntry && normalizeEncounterKind(activeEntry.kind) === 'meet') return encounter;
+        if (activeEntry && normalizeEncounterKind(activeEntry.kind) === 'signal') return encounter;
+        const rule = ENCOUNTER_RULES[charKey] || {};
+        if (!encounter.active) encounter.active = {};
+        encounter.active[charKey] = createActiveEncounterEntry(
+          act,
+          charKey,
+          'meet',
+          Math.max(999, Math.round(Number(rule.priority) || 0) + 50)
+        );
+        return normalizeCharacterEncounterState(encounter);
+      }
+
+      function placeNextCharacterEncounter(actStateInput, configInput, options = {}) {
+        const act = normalizeActState(actStateInput);
+        let encounter = normalizeCharacterEncounterState(act.characterEncounter);
+        const currentNodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
+        const signaledLock = getSignaledEncounterLock(encounter);
+        if (signaledLock) encounter = ensureSignaledFollowUpMeet(encounter, act, signaledLock);
+        const queued = getQueuedEncounterEntries(encounter, options);
+        const selected = queued.entries[0] || null;
         if (!selected) {
           act.characterEncounter = encounter;
-          return { actState: act, placed: null, reason: 'empty_active' };
+          return { actState: act, placed: null, reason: queued.reason || 'empty_active' };
         }
         if (
           options.ignoreCooldown !== true
@@ -735,14 +857,10 @@
 
       function placeQueuedCharacterEncounterOnNode(actStateInput, nodeIdInput, configInput, options = {}) {
         const act = normalizeActState(actStateInput);
-        const encounter = normalizeCharacterEncounterState(act.characterEncounter);
+        let encounter = normalizeCharacterEncounterState(act.characterEncounter);
         const config = configInput || getChapter(act.id);
         const nodeId = normalizeTrimmedString(nodeIdInput || getCurrentActNodeId(act), '');
         const currentNodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
-        const requestedCharKey = normalizeTrimmedString(options.charKey || options.requestCharKey || options.forceCharKey, '').toUpperCase();
-        const requestedKind = options.kind || options.requestKind || options.type || options.requestType
-          ? uiTypeToEncounterKind(options.kind || options.requestKind || options.type || options.requestType)
-          : '';
         if (!nodeId) {
           act.characterEncounter = encounter;
           return { actState: act, placed: null, reason: 'missing_node' };
@@ -751,25 +869,20 @@
           act.characterEncounter = encounter;
           return { actState: act, placed: null, reason: 'final_node' };
         }
-        const hasPlaced = Object.values(encounter.active || {}).some((entry) => entry?.state === 'placed' && normalizeTrimmedString(entry.node, ''));
-        if (hasPlaced) {
+        const nodeRuntime = getNodeRuntime(config, nodeId);
+        const targetNodeIndex = Math.max(1, Math.round(Number(nodeRuntime?.nodeIndex) || currentNodeIndex));
+        if (hasFirstMeetOnNode(encounter, nodeId, targetNodeIndex)) {
           act.characterEncounter = encounter;
-          return { actState: act, placed: null, reason: 'active_placement' };
+          return { actState: act, placed: null, reason: 'node_first_meet' };
         }
 
-        const activeEntries = getActiveEncounterEntries(encounter, ({ charKey, entry }) => (
-          entry.state === 'queued'
-          && (!requestedCharKey || charKey === requestedCharKey)
-          && (!requestedKind || normalizeEncounterKind(entry.kind) === requestedKind)
-          && (options.onlyOverdue !== true || Math.max(0, Math.round(Number(entry.from) || 0)) < currentNodeIndex)
-        )).sort((left, right) => compareEncounterPriority(
-          { ...left.entry, charKey: left.charKey },
-          { ...right.entry, charKey: right.charKey }
-        ));
-        const selected = activeEntries[0] || null;
+        const signaledLock = getSignaledEncounterLock(encounter);
+        if (signaledLock) encounter = ensureSignaledFollowUpMeet(encounter, act, signaledLock);
+        const queued = getQueuedEncounterEntries(encounter, options);
+        const selected = queued.entries[0] || null;
         if (!selected) {
           act.characterEncounter = encounter;
-          return { actState: act, placed: null, reason: 'empty_active' };
+          return { actState: act, placed: null, reason: queued.reason || 'empty_active' };
         }
         if (
           options.ignoreCooldown !== true
@@ -781,8 +894,6 @@
           return { actState: act, placed: null, reason: 'cooldown' };
         }
 
-        const nodeRuntime = getNodeRuntime(config, nodeId);
-        const targetNodeIndex = Math.max(1, Math.round(Number(nodeRuntime?.nodeIndex) || currentNodeIndex));
         const phase = Number.isFinite(Number(options.targetPhaseIndex))
           ? Math.max(0, Math.min(3, Math.round(Number(options.targetPhaseIndex) || 0)))
           : getEntryPhase(selected.entry);
@@ -856,6 +967,21 @@
         const evaluated = options.eligibility || evaluateCharacterEncounterEligibility({ ...act, characterEncounter: encounter }, heroStateInput, options.context || {});
         const limit = Math.max(1, Math.round(Number(options.limit) || 1));
         const created = [];
+        if (getSignaledEncounterLock(encounter)) {
+          act.characterEncounter = encounter;
+          if (options.schedule === true) {
+            const placedResult = placeNextCharacterEncounter(act, options.config || getChapter(act.id), options);
+            return {
+              actState: placedResult.actState,
+              created,
+              active: deepClone(placedResult.actState.characterEncounter?.active || {}),
+              placed: placedResult.placed || null,
+              reason: placedResult.reason || 'signaled_lock',
+              evaluated
+            };
+          }
+          return { actState: act, created, active: deepClone(act.characterEncounter.active || {}), evaluated, reason: 'signaled_lock' };
+        }
         evaluated.eligible.forEach((candidate) => {
           if (created.length >= limit) return;
           if (hasActiveEncounter(encounter, candidate.charKey) || hasMetEncounter(encounter, candidate.charKey)) return;
@@ -872,7 +998,7 @@
           created.push({ charKey: candidate.charKey, ...entry });
         });
         act.characterEncounter = normalizeCharacterEncounterState(encounter);
-        if (options.place !== true) {
+        if (options.schedule !== true) {
           return { actState: act, created, active: deepClone(act.characterEncounter.active || {}), evaluated };
         }
         const placedResult = placeNextCharacterEncounter(act, options.config || getChapter(act.id), options);
@@ -880,7 +1006,7 @@
           actState: placedResult.actState,
           created,
           active: deepClone(placedResult.actState.characterEncounter?.active || {}),
-          placed: placedResult.placed,
+          placed: placedResult.placed || null,
           reason: placedResult.reason || null,
           evaluated
         };
@@ -893,11 +1019,21 @@
         const phaseIndex = Number.isFinite(Number(options.phaseIndex))
           ? Math.max(0, Math.min(3, Math.round(Number(options.phaseIndex) || 0)))
           : null;
-        const selected = getActiveEncounterEntries(encounter, ({ entry }) => (
-          entry.state === 'placed'
-          && normalizeTrimmedString(entry.node, '') === nodeId
-          && (phaseIndex === null || getEntryPhase(entry) === phaseIndex)
-        ))[0] || null;
+        const resolved = resolveEncounterNodeState({ ...act, characterEncounter: encounter }, nodeId);
+        const markers = [
+          resolved.firstMeet,
+          ...resolved.preSignals
+        ].filter(Boolean).filter((marker) => (
+          phaseIndex === null || Math.max(0, Math.min(3, Math.round(Number(marker.phaseIndex) || 0))) === phaseIndex
+        )).sort((left, right) => (
+          left.phaseIndex - right.phaseIndex
+          || (left.type === 'first_meet' ? 0 : 1) - (right.type === 'first_meet' ? 0 : 1)
+          || getCharacterSortIndex(left.charKey) - getCharacterSortIndex(right.charKey)
+        ));
+        const marker = markers[0] || null;
+        const selected = marker && encounter.active?.[marker.charKey]
+          ? { charKey: marker.charKey, entry: encounter.active[marker.charKey] }
+          : null;
         if (!selected) {
           act.characterEncounter = encounter;
           return { actState: act, consumed: null };
@@ -970,8 +1106,7 @@
         const enqueueResult = enqueueEligibleCharacterEncounters(workingAct, heroStateInput, {
           context: contextInput,
           config,
-          limit: ENCOUNTER_CHARACTER_KEYS.length,
-          place: false
+          limit: ENCOUNTER_CHARACTER_KEYS.length
         });
         return {
           actState: enqueueResult.actState,
@@ -998,11 +1133,31 @@
           act.characterEncounter = encounter;
           return { actState: act, applied: false, reason: 'already_met' };
         }
+        const signaledLock = getSignaledEncounterLock(encounter);
+        if (signaledLock && signaledLock.charKey !== charKey) {
+          act.characterEncounter = encounter;
+          return { actState: act, applied: false, reason: 'signaled_lock' };
+        }
         if (!hasActiveEncounter(encounter, charKey)) {
           if (!encounter.active) encounter.active = {};
           encounter.active[charKey] = createActiveEncounterEntry(act, charKey, 'meet', 999);
         }
         act.characterEncounter = normalizeCharacterEncounterState(encounter);
+        const existingPlacedMeet = getActiveEncounterEntries(act.characterEncounter, ({ entry }) => (
+          normalizeEncounterKind(entry.kind) === 'meet'
+          && normalizeEncounterActiveState(entry.state) === 'placed'
+          && normalizeTrimmedString(entry.node, '')
+        ))[0] || null;
+        if (existingPlacedMeet && existingPlacedMeet.charKey !== charKey) {
+          const active = act.characterEncounter?.active?.[charKey] || null;
+          return {
+            actState: act,
+            applied: Boolean(active),
+            active,
+            placed: null,
+            reason: 'active_placement'
+          };
+        }
         const placedResult = placeNextCharacterEncounter(act, config, {
           ...options,
           distance: Math.max(1, Math.round(Number(options.distance) || 1)),
@@ -1022,34 +1177,49 @@
 
       function buildEncounterMarkersForSnapshot(actStateInput) {
         const act = normalizeActState(actStateInput);
-        const currentNodeIndex = Math.max(1, Math.round(Number(act.nodeIndex) || 1));
-        const currentNodeId = normalizeTrimmedString(
-          act.route_history[currentNodeIndex - 1] || act.route_history[act.route_history.length - 1] || '',
-          ''
-        );
-        return getActiveEncounterEntries(act.characterEncounter, ({ entry }) => (
-          normalizeTrimmedString(entry.node, '')
-          || (entry.state === 'queued' && currentNodeId && Math.max(0, Math.round(Number(entry.from) || 0)) < currentNodeIndex)
-        )).map(({ charKey, entry }) => {
-          const targetNodeId = normalizeTrimmedString(entry.node, '');
-          const targetNodeIndex = Math.max(0, Math.round(Number(entry.nodeIndex) || 0));
-          const isOverdueQueuedTarget = entry.state === 'queued'
-            && targetNodeId
-            && targetNodeIndex > 0
-            && targetNodeIndex <= currentNodeIndex
-            && targetNodeId !== currentNodeId;
-          const nodeId = targetNodeId && !isOverdueQueuedTarget ? targetNodeId : currentNodeId;
+        const nodeIds = Array.from(new Set(
+          getActiveEncounterEntries(act.characterEncounter, ({ entry }) => (
+            normalizeEncounterActiveState(entry.state) === 'placed'
+            && normalizeTrimmedString(entry.node, '')
+          )).map(({ entry }) => normalizeTrimmedString(entry.node, ''))
+        ));
+        const markers = [];
+        nodeIds.forEach((nodeId) => {
+          const resolved = resolveEncounterNodeState(act, nodeId);
+          if (resolved.firstMeet) markers.push(resolved.firstMeet);
+          resolved.preSignals.forEach((marker) => markers.push(marker));
+        });
+        return markers
+          .sort((left, right) => (
+            left.nodeIndex - right.nodeIndex
+            || left.phaseIndex - right.phaseIndex
+            || String(left.type).localeCompare(String(right.type))
+            || String(left.charKey).localeCompare(String(right.charKey))
+          ))
+          .map(markerToPublic);
+      }
+
+      function getCharacterEncounterNodeMarkers(actStateInput, currentNodeId) {
+        const act = normalizeActState(actStateInput);
+        const nodeId = getCurrentEncounterNodeId(act, currentNodeId);
+        const resolved = resolveEncounterNodeState(act, nodeId);
+        return [
+          resolved.firstMeet,
+          ...resolved.preSignals
+        ].filter(Boolean).sort((left, right) => (
+          left.phaseIndex - right.phaseIndex
+          || String(left.type).localeCompare(String(right.type))
+          || String(left.charKey).localeCompare(String(right.charKey))
+        )).map((marker) => {
+          const publicMarker = markerToPublic(marker);
+          const rule = ENCOUNTER_RULES[publicMarker.charKey] || {};
+          const hint = publicMarker.type === 'pre_signal'
+            ? normalizeTrimmedString(rule.preSignalHint, '')
+            : normalizeTrimmedString(rule.firstMeetHint, '');
           return {
-            charKey,
-            type: encounterKindToUiType(entry.kind),
-            status: 'placed',
-            nodeId,
-            nodeIndex: targetNodeId && !isOverdueQueuedTarget
-              ? Math.max(0, Math.round(Number(entry.nodeIndex) || 0))
-              : currentNodeIndex,
-            phaseIndex: getEntryPhase(entry),
-            label: charKey,
-            encounterState: entry.state === 'placed' ? 'placed' : 'queued'
+            ...publicMarker,
+            hint,
+            targetPhaseIndex: publicMarker.phaseIndex
           };
         });
       }
@@ -1058,9 +1228,7 @@
         normalizeEncounterKind,
         normalizeCharacterEncounterState,
         getActiveEncounterCharacterKeys,
-        getCharacterEncounterFirstMeetMap,
-        getCharacterEncounterNodeFirstMeetMap,
-        getCharacterEncounterPreSignalMap,
+        getCharacterEncounterNodeMarkers,
         calculateEncounterSpentScore,
         getEncounterRuntimeGeo,
         collectEncounterRuntimeTags,
@@ -1069,8 +1237,6 @@
         evaluateCharacterEncounterEligibility,
         findEncounterPlacementCandidates,
         pickEncounterTargetPhaseIndex,
-        placeNextCharacterEncounter,
-        placeQueuedCharacterEncounterOnNode,
         enqueueEligibleCharacterEncounters,
         consumeCharacterEncounterForNode,
         updateCharacterEncountersForNodeEntry,

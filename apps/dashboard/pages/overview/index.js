@@ -880,6 +880,29 @@ function createExecutionRuntimeContext() {
             };
         }
 
+        const snapshot = extractFrontendSnapshot(payload);
+        const snapshotMarkers = Array.isArray(snapshot?.encounterMarkers) ? snapshot.encounterMarkers : null;
+        const activeMarker = (snapshotMarkers || []).find((marker) => {
+            const markerChar = typeof marker?.charKey === 'string' ? marker.charKey.trim().toUpperCase() : '';
+            const markerType = typeof marker?.type === 'string' ? marker.type.trim().toLowerCase() : '';
+            const markerStatus = typeof marker?.status === 'string' ? marker.status.trim().toLowerCase() : '';
+            const markerNode = typeof marker?.nodeId === 'string' ? marker.nodeId : '';
+            return markerChar === code
+                && markerType === 'first_meet'
+                && markerStatus === 'placed'
+                && markerNode
+                && markerNode === currentNodeId;
+        });
+        if (activeMarker) {
+            return {
+                activated: true,
+                introduced: true,
+                present: true,
+                inParty: false
+            };
+        }
+        if (snapshotMarkers) return null;
+
         const active = encounter.active && typeof encounter.active === 'object' ? encounter.active[code] : null;
         const kind = typeof active?.kind === 'string' ? active.kind.trim().toLowerCase() : '';
         const state = typeof active?.state === 'string' ? active.state.trim().toLowerCase() : '';

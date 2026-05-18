@@ -926,14 +926,24 @@
         return isSignal ? 'SIGNAL' : 'PLACED';
     }
 
-    function getEncounterPanelActiveEntries(encounter) {
-        const active = encounter?.active && typeof encounter.active === 'object' ? encounter.active : {};
-        return Object.entries(active)
-            .map(([charKey, entry]) => ({
-                charKey,
-                entry: entry && typeof entry === 'object' ? entry : {}
-            }))
-            .filter(({ charKey }) => Boolean(charKey));
+    function getEncounterPanelSnapshotMarkers() {
+        const markers = Array.isArray(appData.runtime?.frontendSnapshot?.encounterMarkers)
+            ? appData.runtime.frontendSnapshot.encounterMarkers
+            : [];
+        return markers
+            .filter((marker) => marker && marker.status === 'placed' && marker.nodeId)
+            .sort((left, right) => (
+                Math.max(0, Math.round(Number(left.nodeIndex) || 0)) - Math.max(0, Math.round(Number(right.nodeIndex) || 0))
+                || Math.max(0, Math.round(Number(left.phaseIndex) || 0)) - Math.max(0, Math.round(Number(right.phaseIndex) || 0))
+                || String(left.type || '').localeCompare(String(right.type || ''))
+                || String(left.charKey || '').localeCompare(String(right.charKey || ''))
+            ));
+    }
+
+    function getEncounterPanelMarkerTypeLabel(marker, short = false) {
+        const isSignal = marker?.type === 'pre_signal';
+        if (short) return isSignal ? 'SIG' : 'MEET';
+        return isSignal ? 'SIGNAL' : 'PLACED';
     }
 
     function getEncounterDebugState(charKey, encounter, eligibilityMap) {
@@ -1058,22 +1068,19 @@
         const encounter = actState.characterEncounter && typeof actState.characterEncounter === 'object'
             ? actState.characterEncounter
             : {};
-        const activeEntries = getEncounterPanelActiveEntries(encounter);
-        const placed = activeEntries.filter(({ entry }) => normalizeEncounterPanelState(entry.state) === 'placed');
+        const snapshotMarkers = getEncounterPanelSnapshotMarkers();
         const introduced = Object.keys(encounter.met && typeof encounter.met === 'object' ? encounter.met : {});
-        const activeLabel = placed.length
-            ? placed.map(({ charKey, entry }) => {
-                const phaseIndex = getEncounterPanelPhaseIndex(entry);
-                const typeLabel = getEncounterPanelTypeLabel(entry, true);
-                const nodeId = typeof entry.node === 'string' ? entry.node : '';
-                return `${typeLabel}:${charKey}@${getRouteOptionLabel(nodeId) || nodeId || 'NODE'}·${getPhaseRomanLabel(phaseIndex)}`;
+        const activeLabel = snapshotMarkers.length
+            ? snapshotMarkers.map((marker) => {
+                const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(marker.phaseIndex) || 0)));
+                const typeLabel = getEncounterPanelMarkerTypeLabel(marker, true);
+                const nodeId = typeof marker.nodeId === 'string' ? marker.nodeId : '';
+                return `${typeLabel}:${marker.charKey}@${getRouteOptionLabel(nodeId) || nodeId || 'NODE'}·${getPhaseRomanLabel(phaseIndex)}`;
             }).join(' / ')
-            : activeEntries.length
-                ? activeEntries.map(({ charKey, entry }) => `${getEncounterPanelTypeLabel(entry, true)}:${charKey}:${normalizeEncounterPanelState(entry.state).toUpperCase()}`).join(' / ')
-                : 'EMPTY';
+            : 'EMPTY';
         return `
             <div class="encounter-act-panel">
-                <div class="vision-task-row${placed.length ? ' is-ready' : ''}">
+                <div class="vision-task-row${snapshotMarkers.length ? ' is-ready' : ''}">
                     <span>ENCOUNTER</span>
                     <strong>${activeLabel}</strong>
                 </div>

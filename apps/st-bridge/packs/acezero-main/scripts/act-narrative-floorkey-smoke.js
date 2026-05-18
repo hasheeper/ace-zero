@@ -44,13 +44,9 @@ const derived = {
   act: actState,
   config: act.getChapter(actState.id),
   currentNodeId: 'node1-entry',
-  encounterNodeFirstMeetHints: {
-    COTA: {
-      charKey: 'COTA',
-      hint: 'COTA 首次在主角视野里出现。',
-      targetPhaseIndex: 1
-    }
-  }
+  encounterNodeMarkers: [
+    { charKey: 'COTA', type: 'first_meet', phaseIndex: 1, encounterState: 'placed' }
+  ]
 };
 
 const confirmed = act.buildPhasePlanConfirmedPromptContent(derived, 'message:7');
@@ -59,6 +55,7 @@ assert(confirmed.includes('[已确认行动]'), 'confirmed XML should list the w
 assert(confirmed.includes('一段 - 包间对话与身份确认 / 与Rino的私下交底｜自然推进'), 'confirmed XML should include phase 1 action');
 assert(confirmed.includes('行动-combat｜二级·精英战'), 'confirmed XML should include combat level label');
 assert(confirmed.includes('二段 - 迎接生客｜行动-combat｜二级·精英战'), 'confirmed XML should not duplicate action labels from phase event text');
+assert(confirmed.includes('二段 - 迎接生客｜行动-combat｜二级·精英战｜人物首见-COTA'), 'confirmed XML should include first-meet markers in the whole node plan');
 assert(!confirmed.includes('迎接生客 / 行动-combat｜行动-combat'), 'confirmed XML should strip duplicated action event text');
 assert(confirmed.includes('三段 - 上桌博弈｜行动-rest｜一级·休整'), 'confirmed XML should include phase 3 action without duplicated event text');
 assert(confirmed.includes('本楼确认的是本节点四段行动'), 'confirmed XML should strongly bind the confirmed node plan');
@@ -71,12 +68,23 @@ assert(staleConfirmed === '', 'mismatched floor should not inject confirmed XML'
 const narrative = act.buildNarrativePromptContentFromDerived(derived);
 assert(narrative.includes('token="combat"'), 'node-locked plan should expose current token attr');
 assert(narrative.includes('行动-combat｜二级·精英战'), 'node-locked narrative should include action label');
-assert(narrative.includes('本轮演绎: 二段 - 迎接生客｜行动-combat｜二级·精英战｜人物首见-COTA'), 'current section should include action and first-meet labels without duplicated event text');
+assert(narrative.includes('本轮要求演绎: 二段 - 迎接生客｜行动-combat｜二级·精英战｜人物首见-COTA'), 'current section should include action and first-meet labels without duplicated event text');
 
 const nodeEntryNarrative = act.buildNarrativePromptContentFromDerived({
   ...derived,
   act: { ...actState, phase_index: 0 }
 });
 assert(nodeEntryNarrative.includes('未来准备: 二段 - 迎接生客｜行动-combat｜二级·精英战｜人物首见-COTA'), 'node entry narrative should preview phase 2 first-meet from phase 1');
+
+const markerPreferredNarrative = act.buildNarrativePromptContentFromDerived({
+  ...derived,
+  encounterNodeMarkers: [
+    { charKey: 'TRIXIE', type: 'first_meet', phaseIndex: 1, encounterState: 'queued' },
+    { charKey: 'KAKO', type: 'pre_signal', phaseIndex: 2, encounterState: 'placed' }
+  ]
+});
+assert(markerPreferredNarrative.includes('本轮要求演绎: 二段 - 迎接生客｜行动-combat｜二级·精英战｜人物首见-TRIXIE'), 'new encounter markers should be the authoritative first-meet source');
+assert(!markerPreferredNarrative.includes('人物首见-POPPY'), 'unmarked queued first meets should not be merged into narrative output');
+assert(markerPreferredNarrative.includes('未来准备: 三段 - 上桌博弈｜行动-rest｜一级·休整｜人物预兆-KAKO'), 'pre-signal markers should still surface alongside first-meet gating');
 
 console.log('[act-narrative-floorkey-smoke] all checks passed');

@@ -141,7 +141,8 @@
         const actModule = getActModuleApi();
         if (
             !actModule
-            || typeof actModule.enqueueEligibleCharacterEncounters !== 'function'
+            || typeof actModule.evaluateCharacterEncounterEligibility !== 'function'
+            || typeof actModule.debugForceCharacterEncounter !== 'function'
             || typeof actModule.getChapter !== 'function'
         ) {
             return false;
@@ -150,20 +151,20 @@
         const hero = extractHeroPayload(currentPayload) || { funds: appState.resources.funds, assets: appState.resources.assets };
         return updateActStatePayloadAndCommit((actState) => {
             const config = actModule.getChapter(actState.id || getCurrentChapterId());
-            const result = actModule.enqueueEligibleCharacterEncounters(actState, hero, {
-                context: getDebugEncounterContext(),
-                config,
-                limit: 1,
-                place: true,
-                distance: 1
-            });
-            const created = Array.isArray(result?.created) ? result.created : [];
+            const context = getDebugEncounterContext();
+            const evaluated = actModule.evaluateCharacterEncounterEligibility(actState, hero, context);
+            const selected = Array.isArray(evaluated?.eligible) ? evaluated.eligible[0] : null;
+            const result = selected?.charKey
+                ? actModule.debugForceCharacterEncounter(actState, selected.charKey, config, { context, distance: 1 })
+                : null;
             const placed = result?.placed || null;
-            const blockedCount = Array.isArray(result?.evaluated?.blocked) ? result.evaluated.blocked.length : 0;
+            const blockedCount = Array.isArray(evaluated?.blocked) ? evaluated.blocked.length : 0;
             if (placed) {
                 syncState.statusText = `RULE ADD: ${placed.charKey}@${placed.node || 'PATH'}`;
-            } else if (created.length) {
-                syncState.statusText = `RULE ADD QUEUED: ${created.map((item) => item.charKey).join('/')}`;
+            } else if (selected?.charKey && result?.active) {
+                syncState.statusText = `RULE ADD QUEUED: ${selected.charKey}`;
+            } else if (selected?.charKey) {
+                syncState.statusText = `RULE ADD SKIP: ${result?.reason || selected.charKey}`;
             } else {
                 syncState.statusText = `RULE ADD NONE (${blockedCount} BLOCKED)`;
             }

@@ -676,35 +676,37 @@
     return null;
   }
 
-  function getCurrentActNodeId(act) {
-    const routeHistory = Array.isArray(act?.route_history) ? act.route_history : [];
-    const nodeIndex = Math.max(1, Math.round(Number(act?.nodeIndex) || 1));
-    return normalizeTrimmedString(routeHistory[nodeIndex - 1] || routeHistory[routeHistory.length - 1], '');
-  }
-
   function getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState = null) {
     const derived = derivedActState || deriveActCharacterStates(eraVars);
-    if (derived?.encounterFirstMeetHints && typeof derived.encounterFirstMeetHints === 'object') {
-      const normalizedHints = {};
-      Object.entries(derived.encounterFirstMeetHints).forEach(([rawKey, rawHint]) => {
-        const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
-        const hint = normalizeTrimmedString(rawHint, '');
-        if (charKey && hint) normalizedHints[charKey] = hint;
-      });
-      if (Object.keys(normalizedHints).length) return normalizedHints;
-    }
     const act = derived?.act || getWorldActState(eraVars);
-    const currentNodeId = normalizeTrimmedString(derived?.currentNodeId, '') || getCurrentActNodeId(act);
+    const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
     const hints = {};
-    const moduleResult = runActModuleMethod('getCharacterEncounterFirstMeetMap', act, currentNodeId);
-    if (moduleResult.ok && moduleResult.value && typeof moduleResult.value === 'object') {
-      Object.entries(moduleResult.value).forEach(([rawKey, rawHint]) => {
-        const charKey = normalizeTrimmedString(rawKey, '').toUpperCase();
-        const hint = normalizeTrimmedString(rawHint, '');
+    const markers = Array.isArray(derived?.encounterNodeMarkers) ? derived.encounterNodeMarkers : [];
+    markers
+      .filter((marker) => marker?.type === 'first_meet')
+      .filter((marker) => Math.max(0, Math.min(3, Math.round(Number(marker.phaseIndex) || 0))) === phaseIndex)
+      .forEach((marker) => {
+        const charKey = normalizeTrimmedString(marker.charKey, '').toUpperCase();
+        const hint = normalizeTrimmedString(marker.hint, '');
         if (charKey && hint) hints[charKey] = hint;
       });
-    }
+    return hints;
+  }
 
+  function getActivePreSignalHintsForCurrentPhase(eraVars, derivedActState = null) {
+    const derived = derivedActState || deriveActCharacterStates(eraVars);
+    const act = derived?.act || getWorldActState(eraVars);
+    const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(act?.phase_index) || 0)));
+    const hints = {};
+    const markers = Array.isArray(derived?.encounterNodeMarkers) ? derived.encounterNodeMarkers : [];
+    markers
+      .filter((marker) => marker?.type === 'pre_signal')
+      .filter((marker) => Math.max(0, Math.min(3, Math.round(Number(marker.phaseIndex) || 0))) === phaseIndex)
+      .forEach((marker) => {
+        const charKey = normalizeTrimmedString(marker.charKey, '').toUpperCase();
+        const hint = normalizeTrimmedString(marker.hint, '');
+        if (charKey && hint) hints[charKey] = hint;
+      });
     return hints;
   }
 
@@ -719,12 +721,13 @@
 
     const beforeEncounter = JSON.stringify(act.characterEncounter || {});
     const encounterContext = buildEncounterContextFromEraVars(eraVars);
-    // Host auto mode only discovers newly eligible encounters. ACT owns placement at node boundaries.
+    // Host auto mode discovers eligible encounters and schedules one future placement; it never backfills current or past nodes.
     const result = runActModuleMethod('enqueueEligibleCharacterEncounters', act, hero, {
       context: encounterContext,
       config,
       limit: 8,
-      place: false
+      schedule: true,
+      distance: 2
     });
     if (!result.ok || !result.value?.actState) return { eraVars, changed: false };
 
@@ -749,7 +752,7 @@
       changed: true,
       created: result.value.created || [],
       active: result.value.active || {},
-      placed: null
+      placed: result.value.placed || null
     };
   }
 
@@ -774,11 +777,12 @@
       : false;
 
     if (!modulePatchResult.ok) {
+      const activeFirstMeetHints = getActiveFirstMeetHintsForCurrentPhase(workingEraVars, derived);
       for (const charKey of derived.managedCharacters) {
         const currentNode = getCastNode(hero, charKey);
         const desiredNode = derived.states[charKey];
-        const activeFirstMeet = typeof derived.encounterFirstMeetHints?.[charKey] === 'string'
-          && !!derived.encounterFirstMeetHints[charKey].trim();
+        const activeFirstMeet = typeof activeFirstMeetHints[charKey] === 'string'
+          && !!activeFirstMeetHints[charKey].trim();
         const nextActivated = currentNode.activated === true || desiredNode.activated === true || activeFirstMeet;
         const nextIntroduced = currentNode.introduced === true || desiredNode.introduced === true || activeFirstMeet;
         const nextNode = {
@@ -974,7 +978,7 @@
     ].filter(line => line !== '').join('\n');
   }
 
-  function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) {
+  function buildActNarrativePrompts(eraVars, derivedActState = null) {
     const derived = derivedActState || deriveActCharacterStates(eraVars);
     if (!derived) return [];
     const { act, config, currentNodeId } = derived;
@@ -1037,9 +1041,7 @@
       }
     }
 
-    const signalHints = derived?.encounterPreSignalHints && typeof derived.encounterPreSignalHints === 'object'
-      ? derived.encounterPreSignalHints
-      : (preSignalHints && typeof preSignalHints === 'object' ? preSignalHints : {});
+    const signalHints = getActivePreSignalHintsForCurrentPhase(eraVars, derived);
     if (Object.keys(signalHints).length > 0) {
       const preSignalModule = runActModuleMethod('buildPreSignalPromptContent', signalHints);
       const preSignalContent = preSignalModule.ok && typeof preSignalModule.value === 'string'

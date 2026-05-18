@@ -38,11 +38,11 @@ const ENCOUNTER_RULES = {
       category: 'geo',
       minNodeIndex: 1,
       minFunds: 51,
-      requiredGeo: 'THE_RUST',
+      requiredGeo: ['THE_RUST', 'THE_STREET'],
       laneWeights: ['mid_low', 'low', 'mid_high', 'high'],
       priority: 40,
       rarity: 1,
-      debugLabel: 'POPPY / rust contact',
+      debugLabel: 'POPPY / lower-layer contact',
       firstMeetHint: 'POPPY 首次在主角视野里出现。她属于底层生态，不是旧识；她的出现应像玩家踩进了她的活动范围。'
     },
     COTA: {

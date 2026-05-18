@@ -53,6 +53,25 @@ function testRuleRequirements() {
   }));
   assert(hasEligible(rustWithFunds, 'POPPY'), 'POPPY should pass in THE_RUST with enough funds');
 
+  const streetWithFunds = act.evaluateCharacterEncounterEligibility(node4State, createHero({ funds: 9999 }), createContext({
+    geo: 'THE_STREET',
+    layer: 'THE_STREET',
+    locationLayer: 'THE_STREET',
+    location: { layer: 'THE_STREET', site: 'street_hideout', tags: [] },
+    tags: [],
+    funds: 9999
+  }));
+  assert(hasEligible(streetWithFunds, 'POPPY'), 'POPPY should pass in THE_STREET with enough funds');
+
+  const exchangeWithFunds = act.evaluateCharacterEncounterEligibility(node4State, createHero({ funds: 9999 }), createContext({
+    geo: 'THE_EXCHANGE',
+    layer: 'THE_EXCHANGE',
+    locationLayer: 'THE_EXCHANGE',
+    funds: 9999
+  }));
+  assert(!hasEligible(exchangeWithFunds, 'POPPY'), 'POPPY should still block outside lower layers');
+  assert(blockedReason(exchangeWithFunds, 'POPPY', 'geo'), 'POPPY should report geo requirement failure outside lower layers');
+
   const node7State = createActStateAt(act, 7, [
     'node1-entry',
     'node2-floor-high',

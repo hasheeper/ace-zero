@@ -323,24 +323,24 @@ ${phaseLines.join('\n')}
     return Array.isArray(act?.phase_slots) ? act.phase_slots[index] || null : null;
   }
 
-  function getEncounterFirstMeetMarker(nodeFirstMeetHints, targetPhaseIndex) {
-    const source = nodeFirstMeetHints && typeof nodeFirstMeetHints === 'object' && !Array.isArray(nodeFirstMeetHints)
-      ? nodeFirstMeetHints
-      : {};
-    const keys = Object.entries(source)
-      .filter(([, value]) => {
-        const itemPhaseIndex = value && typeof value === 'object'
-          ? Math.max(0, Math.min(3, Math.round(Number(value.targetPhaseIndex) || 0)))
-          : 1;
-        return itemPhaseIndex === targetPhaseIndex;
-      })
-      .map(([rawKey, value]) => normalizeTrimmedString(value?.charKey || rawKey, '').toUpperCase())
-      .filter(Boolean)
-      .sort();
-    return keys.length ? `人物首见-${keys.join('/')}` : '';
+  function getEncounterPhaseMarker(encounterNodeMarkers, targetPhaseIndex) {
+    const markers = Array.isArray(encounterNodeMarkers) ? encounterNodeMarkers : [];
+    const grouped = markers
+      .filter((marker) => Math.max(0, Math.min(3, Math.round(Number(marker?.phaseIndex) || 0))) === targetPhaseIndex)
+      .reduce((acc, marker) => {
+        const type = marker?.type === 'pre_signal' ? 'pre_signal' : 'first_meet';
+        const charKey = normalizeTrimmedString(marker?.charKey, '').toUpperCase();
+        if (charKey && !acc[type].includes(charKey)) acc[type].push(charKey);
+        return acc;
+      }, { first_meet: [], pre_signal: [] });
+
+    const parts = [];
+    if (grouped.first_meet.length) parts.push(`人物首见-${grouped.first_meet.sort().join('/')}`);
+    if (grouped.pre_signal.length) parts.push(`人物预兆-${grouped.pre_signal.sort().join('/')}`);
+    return parts.join('｜');
   }
 
-  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, nodeFirstMeetHints = {}) {
+  function buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, encounterNodeMarkers = []) {
     const eventTree = act?.eventTree && typeof act.eventTree === 'object' ? act.eventTree : {};
     const nodeGoals = eventTree.nodeGoals && typeof eventTree.nodeGoals === 'object' ? eventTree.nodeGoals : {};
     const currentGoal = normalizeTrimmedString(nodeGoals.current?.goal, '');
@@ -365,12 +365,12 @@ ${phaseLines.join('\n')}
       const event = normalizePhaseEventText(item?.event);
       const slot = getEffectivePhaseSlot(act, index, currentNodeId);
       const action = formatPhaseAction(slot);
-      const firstMeetMarker = getEncounterFirstMeetMarker(nodeFirstMeetHints, index);
+      const encounterMarker = getEncounterPhaseMarker(encounterNodeMarkers, index);
       const detail = `${ACT_PHASE_LABELS[index]} - ${goal}${event ? ` / ${event}` : ''}`;
       const line = `${label}: ${detail}｜${action}`;
-      phaseLines.push(firstMeetMarker ? `${line}｜${firstMeetMarker}` : line);
+      phaseLines.push(encounterMarker ? `${line}｜${encounterMarker}` : line);
       if (index === phaseIndex) {
-        currentPhaseAction = `${detail}｜${action}${firstMeetMarker ? `｜${firstMeetMarker}` : ''}`;
+        currentPhaseAction = `${detail}｜${action}${encounterMarker ? `｜${encounterMarker}` : ''}`;
       }
     }
     if (!hasCurrentWindow) {
@@ -393,14 +393,16 @@ ${phaseLines.join('\n')}
     return [nodeLines.join('\n'), phaseLines.join('\n'), currentLines.join('\n'), decisionLines.join('\n')].join('\n\n');
   }
 
-  function buildConfirmedPlanActionLines(act, eventTree) {
+  function buildConfirmedPlanActionLines(act, eventTree, encounterNodeMarkers = []) {
     return [0, 1, 2, 3].map((index) => {
       const item = getPhaseWindowItem(eventTree, index);
       const goal = normalizeTrimmedString(item?.goal, '') || '未规划';
       const event = normalizePhaseEventText(item?.event);
       const slot = Array.isArray(act?.phase_slots) ? act.phase_slots[index] : null;
+      const encounterMarker = getEncounterPhaseMarker(encounterNodeMarkers, index);
       const detail = `${ACT_PHASE_LABELS[index] || `${index + 1}段`} - ${goal}${event ? ` / ${event}` : ''}`;
-      return `${detail}｜${formatPhaseAction(slot)}`;
+      const line = `${detail}｜${formatPhaseAction(slot)}`;
+      return encounterMarker ? `${line}｜${encounterMarker}` : line;
     });
   }
 
@@ -434,7 +436,8 @@ ${phaseLines.join('\n')}
       const item = getPhaseWindowItem(eventTree, index);
       return !normalizeTrimmedString(item?.goal, '');
     });
-    const actionLines = buildConfirmedPlanActionLines(act, eventTree);
+    const encounterNodeMarkers = Array.isArray(derivedState.encounterNodeMarkers) ? derivedState.encounterNodeMarkers : [];
+    const actionLines = buildConfirmedPlanActionLines(act, eventTree, encounterNodeMarkers);
     return [
       '<ace0_phase_plan_confirmed>',
       '确认了本节点行动编排。',
@@ -453,7 +456,7 @@ ${phaseLines.join('\n')}
     if (!derivedState) return '';
 
     const { act, config, currentNodeId } = derivedState;
-    const nodeFirstMeetHints = derivedState.encounterNodeFirstMeetHints || {};
+    const encounterNodeMarkers = Array.isArray(derivedState.encounterNodeMarkers) ? derivedState.encounterNodeMarkers : [];
     const narrative = config && config.narrative;
     if (!narrative) return '';
 
@@ -503,7 +506,7 @@ ${phaseLines.join('\n')}
       } else if (resolved?.kind === 'flavor') {
         sections.push(renderFateFlavor(resolved.flavorText, phaseIndex, resolved.slotKey));
       }
-      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, nodeFirstMeetHints));
+      sections.push(buildEventTreeSection(act, config, currentNodeId, phaseIndex, currentSlot, encounterNodeMarkers));
     }
 
     if (!sections.length) return '';

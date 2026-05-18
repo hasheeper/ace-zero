@@ -1686,14 +1686,9 @@
   function deriveActCharacterStates(eraVars) { return ACT_RUNTIME.deriveActCharacterStates(eraVars); }
   async function synchronizeActCharacterState(eraVars, options = {}) { return await ACT_RUNTIME.synchronizeActCharacterState(eraVars, options); }
   function buildActStateSummary(eraVars, derivedActState = null) { return ACT_RUNTIME.buildActStateSummary(eraVars, derivedActState); }
-  function buildActNarrativePrompts(eraVars, derivedActState = null, firstMeetHints = null, preSignalHints = null) { return ACT_RUNTIME.buildActNarrativePrompts(eraVars, derivedActState, firstMeetHints, preSignalHints); }
+  function buildActNarrativePrompts(eraVars, derivedActState = null) { return ACT_RUNTIME.buildActNarrativePrompts(eraVars, derivedActState); }
   function resolveAce0CombatConfig(eraVars, derivedActState = null) { return ACT_RUNTIME.resolveAce0CombatConfig(eraVars, derivedActState); }
 
-  function getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState = null) {
-    return ACT_RUNTIME && typeof ACT_RUNTIME.getActiveFirstMeetHintsForCurrentPhase === 'function'
-      ? ACT_RUNTIME.getActiveFirstMeetHintsForCurrentPhase(eraVars, derivedActState)
-      : {};
-  }
   function normalizeActSnapshotCounts(raw) { return ACT_RUNTIME.normalizeActSnapshotCounts(raw); }
   function getHeroResourceSnapshot(eraVars) { return ACT_RUNTIME.getHeroResourceSnapshot(eraVars); }
   function getHeroCastStateSnapshot(eraVars, managedCharacters, states) { return ACT_RUNTIME.getHeroCastStateSnapshot(eraVars, managedCharacters, states); }
@@ -1872,18 +1867,15 @@
       const relationState = buildRelationshipStateSummary(eraVars);
       const worldContext = buildWorldContextSummary(eraVars);
       const locationDoc = buildLocationDocSummary(eraVars);
-      const activeFirstMeetHintsForTurn = getActiveFirstMeetHintsForCurrentPhase(eraVars, syncedState.derived);
-      const nodeFirstMeetKeysForTurn = Object.keys(
-        syncedState.derived?.encounterNodeFirstMeetHints && typeof syncedState.derived.encounterNodeFirstMeetHints === 'object'
-          ? syncedState.derived.encounterNodeFirstMeetHints
-          : {}
-      );
-      const preSignalHintsForTurn = syncedState.derived?.encounterPreSignalHints && typeof syncedState.derived.encounterPreSignalHints === 'object'
-        ? syncedState.derived.encounterPreSignalHints
-        : {};
+      const nodeFirstMeetKeysForTurn = Array.from(new Set(
+        (Array.isArray(syncedState.derived?.encounterNodeMarkers) ? syncedState.derived.encounterNodeMarkers : [])
+          .filter((marker) => marker?.type === 'first_meet')
+          .map((marker) => String(marker.charKey || '').trim().toUpperCase())
+          .filter(Boolean)
+      ));
 
       const charDocPrompts = await buildCharacterPromptInjections(eraVars, nodeFirstMeetKeysForTurn);
-      const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived, activeFirstMeetHintsForTurn, preSignalHintsForTurn);
+      const actNarrativePrompts = buildActNarrativePrompts(eraVars, syncedState.derived);
       const expansionPrompts = buildExpansionPromptInjections(eraVars);
       const prompts = [];
       const primaryContextContent = [

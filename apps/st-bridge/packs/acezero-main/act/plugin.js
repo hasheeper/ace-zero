@@ -161,9 +161,7 @@
 
   function normalizeCharacterEncounterState(value) { return ACT_ENCOUNTER_RUNTIME.normalizeCharacterEncounterState(value); }
   function getActiveEncounterCharacterKeys(characterEncounterInput) { return ACT_ENCOUNTER_RUNTIME.getActiveEncounterCharacterKeys(characterEncounterInput); }
-  function getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterFirstMeetMap(actStateInput, currentNodeId); }
-  function getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterNodeFirstMeetMap(actStateInput, currentNodeId); }
-  function getCharacterEncounterPreSignalMap(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterPreSignalMap(actStateInput, currentNodeId); }
+  function getCharacterEncounterNodeMarkers(actStateInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.getCharacterEncounterNodeMarkers(actStateInput, currentNodeId); }
   function calculateEncounterSpentScore(actStateInput, weightsInput) { return ACT_ENCOUNTER_RUNTIME.calculateEncounterSpentScore(actStateInput, weightsInput); }
   function getEncounterRuntimeGeo(contextInput) { return ACT_ENCOUNTER_RUNTIME.getEncounterRuntimeGeo(contextInput); }
   function collectEncounterRuntimeTags(contextInput, configInput, currentNodeId) { return ACT_ENCOUNTER_RUNTIME.collectEncounterRuntimeTags(contextInput, configInput, currentNodeId); }
@@ -172,8 +170,6 @@
   function evaluateCharacterEncounterEligibility(actStateInput, heroStateInput = {}, contextInput = {}) { return ACT_ENCOUNTER_RUNTIME.evaluateCharacterEncounterEligibility(actStateInput, heroStateInput, contextInput); }
   function findEncounterPlacementCandidates(actStateInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.findEncounterPlacementCandidates(actStateInput, configInput, options); }
   function pickEncounterTargetPhaseIndex(actStateInput, requestInput, targetInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.pickEncounterTargetPhaseIndex(actStateInput, requestInput, targetInput, options); }
-  function placeNextCharacterEncounter(actStateInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.placeNextCharacterEncounter(actStateInput, configInput, options); }
-  function placeQueuedCharacterEncounterOnNode(actStateInput, nodeIdInput, configInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.placeQueuedCharacterEncounterOnNode(actStateInput, nodeIdInput, configInput, options); }
   function enqueueEligibleCharacterEncounters(actStateInput, heroStateInput = {}, options = {}) { return ACT_ENCOUNTER_RUNTIME.enqueueEligibleCharacterEncounters(actStateInput, heroStateInput, options); }
   function consumeCharacterEncounterForNode(actStateInput, nodeIdInput, options = {}) { return ACT_ENCOUNTER_RUNTIME.consumeCharacterEncounterForNode(actStateInput, nodeIdInput, options); }
   function updateCharacterEncountersForNodeEntry(actStateInput, heroStateInput = {}, configInput = null, contextInput = {}) { return ACT_ENCOUNTER_RUNTIME.updateCharacterEncountersForNodeEntry(actStateInput, heroStateInput, configInput, contextInput); }
@@ -184,19 +180,13 @@
     const enqueueResult = enqueueEligibleCharacterEncounters(actState, heroState, {
       context: contextInput,
       config,
-      limit: ENCOUNTER_CHARACTER_KEYS.length,
-      place: false
+      limit: ENCOUNTER_CHARACTER_KEYS.length
     });
     if (enqueueResult?.actState) Object.assign(actState, enqueueResult.actState);
-    const placedResult = placeNextCharacterEncounter(actState, config, {
-      context: contextInput,
-      distance: 1
-    });
-    if (placedResult?.actState) Object.assign(actState, placedResult.actState);
     return {
       created: enqueueResult?.created || [],
-      placed: placedResult?.placed || null,
-      reason: placedResult?.reason || null
+      placed: null,
+      reason: enqueueResult?.reason || null
     };
   }
 
@@ -1268,12 +1258,13 @@
   }
 
   function autoQueueCharacterEncountersForCurrentNode(actState, heroState, config, contextInput = {}) {
-    // Phase advances may make a character eligible, but placement stays node-boundary controlled.
+    // Phase advances may make a character eligible; scheduling only targets future nodes.
     const enqueueResult = enqueueEligibleCharacterEncounters(actState, heroState, {
       context: contextInput,
       config,
       limit: ENCOUNTER_CHARACTER_KEYS.length,
-      place: false
+      schedule: true,
+      distance: 2
     });
     if (enqueueResult?.actState) Object.assign(actState, enqueueResult.actState);
     return enqueueResult;
@@ -1296,10 +1287,6 @@
     }
 
     const currentNodeId = getCurrentActNodeId(actState);
-    const nodeEntryPlacement = placeQueuedCharacterEncounterOnNode(actState, currentNodeId, config, { onlyOverdue: true });
-    if (nodeEntryPlacement?.placed && nodeEntryPlacement.actState) {
-      Object.assign(actState, nodeEntryPlacement.actState);
-    }
     const visionReplacement = getVisionReplacementForPhase(actState, currentNodeId, phaseIndex);
     const token = Array.isArray(actState.phase_slots) && actState.phase_slots[phaseIndex]
       ? actState.phase_slots[phaseIndex]
@@ -1435,13 +1422,13 @@
       }
     });
 
-	    for (const charKey of managedCharacters) {
-	      states[charKey].present = currentNodeEffects.present.includes(charKey);
-	      if (states[charKey].present) {
-	        states[charKey].activated = true;
-	        states[charKey].introduced = true;
-	      }
-	    }
+    for (const charKey of managedCharacters) {
+      states[charKey].present = currentNodeEffects.present.includes(charKey);
+      if (states[charKey].present) {
+        states[charKey].activated = true;
+        states[charKey].introduced = true;
+      }
+    }
 
     const encounterState = normalizeCharacterEncounterState(act.characterEncounter);
     Object.keys(encounterState.met || {}).forEach((charKey) => {
@@ -1450,11 +1437,7 @@
       states[charKey].introduced = true;
     });
 
-    // 首见帧来源只允许来自 characterEncounter 运行时状态。
-    // 真正是否首见，仍在 createCharacterCastPatch 里比对 currentCast 旧态。
-    const encounterFirstMeetHints = getCharacterEncounterFirstMeetMap(act, currentNodeId);
-    const encounterNodeFirstMeetHints = getCharacterEncounterNodeFirstMeetMap(act, currentNodeId);
-    const encounterPreSignalHints = getCharacterEncounterPreSignalMap(act, currentNodeId);
+    const encounterNodeMarkers = getCharacterEncounterNodeMarkers(act, currentNodeId);
 
     return {
       act,
@@ -1464,10 +1447,24 @@
       currentNodeId,
       currentNodeEffects,
       states,
-      encounterFirstMeetHints,
-      encounterNodeFirstMeetHints,
-      encounterPreSignalHints
+      encounterNodeMarkers
     };
+  }
+
+  function getCurrentPhaseFirstMeetHintsFromMarkers(derivedState) {
+    if (!derivedState) return {};
+    const phaseIndex = Math.max(0, Math.min(3, Math.round(Number(derivedState.act?.phase_index) || 0)));
+    const hints = {};
+    const markers = Array.isArray(derivedState.encounterNodeMarkers) ? derivedState.encounterNodeMarkers : [];
+    markers
+      .filter((marker) => marker?.type === 'first_meet')
+      .filter((marker) => Math.max(0, Math.min(3, Math.round(Number(marker.phaseIndex) || 0))) === phaseIndex)
+      .forEach((marker) => {
+        const charKey = normalizeTrimmedString(marker.charKey, '').toUpperCase();
+        const hint = normalizeTrimmedString(marker.hint, '');
+        if (charKey && hint) hints[charKey] = hint;
+      });
+    return hints;
   }
 
   function createCharacterCastPatch(currentCastInput, derivedState) {
@@ -1478,14 +1475,15 @@
     const currentCast = currentCastInput && typeof currentCastInput === 'object' ? currentCastInput : {};
     const castPatch = {};
     let changed = false;
+    const encounterHints = getCurrentPhaseFirstMeetHintsFromMarkers(derivedState);
 
     for (const charKey of derivedState.managedCharacters) {
       const currentNode = currentCast[charKey] && typeof currentCast[charKey] === 'object'
         ? currentCast[charKey]
         : {};
       const desiredNode = derivedState.states[charKey];
-      const activeFirstMeet = typeof derivedState.encounterFirstMeetHints?.[charKey] === 'string'
-        && !!derivedState.encounterFirstMeetHints[charKey].trim();
+      const activeFirstMeet = typeof encounterHints[charKey] === 'string'
+        && !!encounterHints[charKey].trim();
       const nextActivated = currentNode.activated === true || desiredNode.activated === true || activeFirstMeet;
       const nextIntroduced = currentNode.introduced === true || desiredNode.introduced === true || activeFirstMeet;
       const nextNode = {
@@ -1508,7 +1506,6 @@
 
     // 首见帧检测：旧态 introduced=false 且 本轮即将设为 true 且 章节提供了文案。
     const firstMeetHints = {};
-    const encounterHints = derivedState.encounterFirstMeetHints || {};
     for (const charKey of derivedState.managedCharacters) {
       const currentNode = currentCast[charKey] && typeof currentCast[charKey] === 'object'
         ? currentCast[charKey]
@@ -1583,11 +1580,9 @@
     getDefaultActState,
     normalizeActState,
     normalizeCharacterEncounterState,
-    getCharacterEncounterNodeFirstMeetMap,
+    getCharacterEncounterNodeMarkers,
     evaluateCharacterEncounterEligibility,
     enqueueEligibleCharacterEncounters,
-    placeNextCharacterEncounter,
-    placeQueuedCharacterEncounterOnNode,
     consumeCharacterEncounterForNode,
     updateCharacterEncountersForNodeEntry,
     debugForceCharacterEncounter,
