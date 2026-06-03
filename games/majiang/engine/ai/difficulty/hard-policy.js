@@ -75,6 +75,31 @@
       minPressureHandValue: 28,
       rejectFlatCallsUnderPressure: true
     },
+    route: {
+      enableClosedRouteValueRebalance: false,
+      closedRouteMaxXiangting: 2,
+      closedRouteMinRemainingTiles: 24,
+      closedRouteOverrideMinMargin: 35,
+      directTenpaiCallAlwaysAllow: true,
+      pressureDisablesClosedRouteOverride: true,
+      weights: {
+        callShantenImprove: 45,
+        callDirectTenpai: 90,
+        callLiveUkeireDelta: 2,
+        callLiveTingpaiDelta: 5,
+        callHardEvDelta: 0.12,
+        callContextualHandValue: 1,
+        callYakuhai: 18,
+        passClosedBase: 18,
+        passRemainingTile: 0.5,
+        passLiveUkeire: 0.7,
+        passLiveTingpai: 1.8,
+        passWaitQuality: 1.4,
+        passContextualHandValue: 1,
+        passRiichiPotential: 1,
+        lostClosedRouteBase: 18
+      }
+    },
     discard: {
       enableHardEv: true,
       enableNoPressureShapeReview: true,

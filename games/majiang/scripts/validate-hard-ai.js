@@ -356,7 +356,8 @@ function evaluateRightReaction(config, discardTileCode, difficulty, options = {}
   const rightActions = collectRightReactionActions(runtime);
   const decision = callEvaluatorApi.evaluateCalls(runtime, 'right', rightActions, {
     difficulty,
-    profile: 'default'
+    profile: 'default',
+    ...(options.policy ? { policy: options.policy } : {})
   });
 
   return {
@@ -2838,6 +2839,234 @@ function runHardVsNormalComparisonSmoke(cwd) {
   };
 }
 
+function createClosedRouteValuePolicy(routeOverrides = {}, policyId = 'hard-experimental') {
+  const policy = hardPolicyApi.createHardPolicy();
+  policy.id = policyId;
+  policy.route = {
+    ...(policy.route || {}),
+    enableClosedRouteValueRebalance: true,
+    ...routeOverrides
+  };
+  return policy;
+}
+
+function createClosedRouteValueRuntime(remaining = 34) {
+  return {
+    getWallState() {
+      return {
+        remaining,
+        liveWallRemaining: remaining
+      };
+    },
+    getSeatIndex() {
+      return 0;
+    },
+    topology: {
+      activeSeats: ['bottom', 'right', 'top', 'left']
+    },
+    riichiState: {
+      bottom: { declared: false },
+      right: { declared: false },
+      top: { declared: false },
+      left: { declared: false }
+    }
+  };
+}
+
+function evaluateClosedRouteValueFixture(overrides = {}) {
+  const currentMetrics = {
+    xiangting: 1,
+    tingpaiCount: 0,
+    ukeireCount: 20,
+    handValueEstimate: 32,
+    ...(overrides.currentMetrics || {})
+  };
+  const nextMetrics = {
+    xiangting: 1,
+    tingpaiCount: 0,
+    ukeireCount: 20,
+    handValueEstimate: 8,
+    ...(overrides.nextMetrics || {})
+  };
+  const hardCallMetrics = {
+    riichiPressure: 0,
+    isYakuhaiPeng: false,
+    closedHandBefore: true,
+    currentLiveUkeireCount: 20,
+    nextLiveUkeireCount: 20,
+    liveUkeireDelta: 0,
+    currentLiveTingpaiCount: 5,
+    nextLiveTingpaiCount: 5,
+    liveTingpaiDelta: 0,
+    currentWaitQualityScore: 12,
+    nextWaitQualityScore: 8,
+    waitQualityDelta: -4,
+    currentHardEvScore: 120,
+    nextHardEvScore: 120,
+    hardEvDelta: 0,
+    currentContextualHandValueEstimate: 40,
+    nextContextualHandValueEstimate: 8,
+    contextualHandValueDelta: -32,
+    ...(overrides.hardCallMetrics || {})
+  };
+  const action = overrides.action || {
+    type: 'call',
+    payload: {
+      callType: 'chi',
+      tileCode: 'm3',
+      meldString: 'm123-'
+    }
+  };
+  return callEvaluatorApi.evaluateClosedRouteValueReview(
+    createClosedRouteValueRuntime(overrides.remaining || 34),
+    'right',
+    currentMetrics,
+    nextMetrics,
+    action,
+    createClosedRouteValuePolicy(overrides.route || {}, overrides.policyId || 'hard-experimental'),
+    hardCallMetrics
+  );
+}
+
+function runClosedRouteValuePassOverrideSmoke() {
+  const review = evaluateClosedRouteValueFixture();
+  assert(review.enabled === true, `expected route rebalance enabled, got ${JSON.stringify(review)}`);
+  assert(review.active === true, `expected active route review, got ${JSON.stringify(review)}`);
+  assert(review.override === true && review.allowed === false, `expected pass override, got ${JSON.stringify(review)}`);
+  assert(review.reason === 'hard-call-closed-route-value-pass', `unexpected reason: ${review.reason}`);
+  assert(review.margin >= review.minMargin, `expected margin to exceed threshold, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-closed-route-value-pass-override-smoke',
+    snapshot: {
+      reason: review.reason,
+      margin: review.margin,
+      callOpenRouteScore: review.callOpenRouteScore,
+      passClosedRouteScore: review.passClosedRouteScore
+    }
+  };
+}
+
+function runClosedRouteDirectTenpaiAllowSmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    nextMetrics: {
+      xiangting: 0,
+      tingpaiCount: 6,
+      ukeireCount: 18,
+      handValueEstimate: 24
+    },
+    hardCallMetrics: {
+      nextLiveTingpaiCount: 6,
+      liveTingpaiDelta: 1,
+      nextContextualHandValueEstimate: 24
+    }
+  });
+  assert(review.directTenpai === true, `expected direct tenpai call, got ${JSON.stringify(review)}`);
+  assert(review.override === false && review.allowed === true, `expected direct tenpai to remain allowed, got ${JSON.stringify(review)}`);
+  assert(review.reason === 'hard-call-closed-route-direct-tenpai-allowed', `unexpected reason: ${review.reason}`);
+  return {
+    name: 'hard-closed-route-direct-tenpai-allow-smoke',
+    snapshot: {
+      reason: review.reason,
+      directTenpai: review.directTenpai,
+      margin: review.margin
+    }
+  };
+}
+
+function runClosedRoutePressureRegressionSmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    hardCallMetrics: {
+      riichiPressure: 1
+    }
+  });
+  assert(review.override === false && review.allowed === true, `expected pressure to disable route override, got ${JSON.stringify(review)}`);
+  assert(review.reason === 'hard-call-closed-route-pressure-present', `unexpected reason: ${review.reason}`);
+  return {
+    name: 'hard-closed-route-pressure-regression-smoke',
+    snapshot: {
+      reason: review.reason,
+      riichiPressure: review.riichiPressure,
+      margin: review.margin
+    }
+  };
+}
+
+function runClosedRouteOpenHandRegressionSmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    hardCallMetrics: {
+      closedHandBefore: false
+    }
+  });
+  assert(review.override === false && review.allowed === true, `expected open hand to disable route override, got ${JSON.stringify(review)}`);
+  assert(review.reason === 'hard-call-closed-route-open-hand', `unexpected reason: ${review.reason}`);
+  return {
+    name: 'hard-closed-route-open-hand-regression-smoke',
+    snapshot: {
+      reason: review.reason,
+      closedHandBefore: review.closedHandBefore,
+      margin: review.margin
+    }
+  };
+}
+
+function runClosedRouteHighValueCallAllowSmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    action: {
+      type: 'call',
+      payload: {
+        callType: 'peng',
+        tileCode: 'z5',
+        meldString: 'z555='
+      }
+    },
+    nextMetrics: {
+      handValueEstimate: 260
+    },
+    hardCallMetrics: {
+      isYakuhaiPeng: true,
+      liveUkeireDelta: 18,
+      liveTingpaiDelta: 4,
+      hardEvDelta: 900,
+      nextContextualHandValueEstimate: 260
+    }
+  });
+  assert(review.active === true, `expected active route review, got ${JSON.stringify(review)}`);
+  assert(review.override === false && review.allowed === true, `expected high-value open route to remain allowed, got ${JSON.stringify(review)}`);
+  assert(review.reason === 'hard-call-closed-route-value-call', `unexpected reason: ${review.reason}`);
+  assert(review.callOpenRouteScore > review.passClosedRouteScore, `expected open route score to win, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-closed-route-high-value-call-allow-smoke',
+    snapshot: {
+      reason: review.reason,
+      callOpenRouteScore: review.callOpenRouteScore,
+      passClosedRouteScore: review.passClosedRouteScore,
+      margin: review.margin
+    }
+  };
+}
+
+function runClosedRouteBalancedPolicySmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    policyId: 'hard-balanced',
+    route: {
+      closedRouteMaxXiangting: 1,
+      closedRouteOverrideMinMargin: 90
+    }
+  });
+  assert(review.enabled === true, `expected balanced policy to enable route review, got ${JSON.stringify(review)}`);
+  assert(review.active === true, `expected balanced policy route review to be active, got ${JSON.stringify(review)}`);
+  assert(review.override === true, `expected balanced policy to override this high-margin fixture, got ${JSON.stringify(review)}`);
+  assert(review.minMargin === 90, `expected balanced margin threshold, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-closed-route-balanced-policy-smoke',
+    snapshot: {
+      reason: review.reason,
+      minMargin: review.minMargin,
+      margin: review.margin
+    }
+  };
+}
+
 function main() {
   const cwd = path.resolve(__dirname, '..');
   const results = [
@@ -2888,6 +3117,12 @@ function main() {
     runRoundContextRiichiSmoke(cwd),
     runYakuhaiSpeedCallSmoke(cwd),
     runUnsafeFlatCallSmoke(cwd),
+    runClosedRouteValuePassOverrideSmoke(),
+    runClosedRouteDirectTenpaiAllowSmoke(),
+    runClosedRoutePressureRegressionSmoke(),
+    runClosedRouteOpenHandRegressionSmoke(),
+    runClosedRouteHighValueCallAllowSmoke(),
+    runClosedRouteBalancedPolicySmoke(),
     runHardVsNormalComparisonSmoke(cwd)
   ];
 

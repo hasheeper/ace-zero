@@ -193,8 +193,45 @@ function validateFreshMortalPrimarySelection() {
   assert(noRiichiDiagnostics.mortalSeverity.level !== 'unknown', `expected no-riichi severity to be known, got ${JSON.stringify(noRiichiDiagnostics.mortalSeverity)}`);
 }
 
+function validateHardPersonalityTargetVariants() {
+  const aggressive = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-aggressive'
+  ]));
+  const defensive = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-defensive'
+  ]));
+  const balanced = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-balanced'
+  ]));
+  const heavy = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-heavy'
+  ]));
+
+  assert(aggressive.id === 'hard-aggressive' && aggressive.policy && aggressive.policy.id === 'hard-aggressive', `expected aggressive target policy, got ${JSON.stringify(aggressive)}`);
+  assert(defensive.id === 'hard-defensive' && defensive.policy && defensive.policy.id === 'hard-defensive', `expected defensive target policy, got ${JSON.stringify(defensive)}`);
+  assert(balanced.id === 'hard-balanced' && balanced.policy && balanced.policy.id === 'hard-balanced', `expected balanced target policy, got ${JSON.stringify(balanced)}`);
+  assert(heavy.id === 'hard-heavy' && heavy.policy && heavy.policy.id === 'hard-heavy', `expected heavy target policy, got ${JSON.stringify(heavy)}`);
+  assert(aggressive.policy.discard.enableNoPressureShapeReview === false, `expected aggressive/pure shape gate off, got ${JSON.stringify(aggressive.policy.discard)}`);
+  assert(defensive.policy.defense.enableLowDangerTiebreak === true, `expected defensive tuned defense gate, got ${JSON.stringify(defensive.policy.defense)}`);
+  assert(balanced.policy.route.enableClosedRouteValueRebalance === true, `expected balanced route scoring, got ${JSON.stringify(balanced.policy.route)}`);
+  assert(balanced.policy.route.closedRouteMaxXiangting < heavy.policy.route.closedRouteMaxXiangting, `expected balanced route range to be narrower than heavy, got ${JSON.stringify({ balanced: balanced.policy.route, heavy: heavy.policy.route })}`);
+  assert(heavy.policy.route.enableClosedRouteValueRebalance === true, `expected heavy route scoring, got ${JSON.stringify(heavy.policy.route)}`);
+
+  console.log('[PASS] hard-vs-mortal-personality-target-variant-smoke');
+  console.log(`  snapshot=${JSON.stringify({
+    variants: [aggressive.id, defensive.id, balanced.id, heavy.id],
+    balancedRouteMargin: balanced.policy.route.closedRouteOverrideMinMargin,
+    heavyRouteEnabled: heavy.policy.route.enableClosedRouteValueRebalance
+  })}`);
+}
+
 function main() {
   validateFreshMortalPrimarySelection();
+  validateHardPersonalityTargetVariants();
 
   const args = benchmarkApi.parseArgs(['--smoke']);
   const report = benchmarkApi.buildBenchmarkReport(args);

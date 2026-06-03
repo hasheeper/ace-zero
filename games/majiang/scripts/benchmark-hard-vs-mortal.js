@@ -213,7 +213,7 @@ function printHelp() {
   console.log('Options:');
   console.log('  --smoke                         Use smoke Mortal config and one sample per target seat.');
   console.log('  --out <path>                    Write the JSON report to a file instead of only stdout.');
-  console.log('  --target-variant <name>         easy|normal|hard|hard-pure|hard-tuned|hard-experimental. Default: target difficulty.');
+  console.log('  --target-variant <name>         easy|normal|hard|hard-aggressive|hard-defensive|hard-balanced|hard-heavy|hard-pure|hard-tuned|hard-experimental. Default: target difficulty.');
   console.log('  --experimental-overlays <a,b>   Overlays for hard-experimental only.');
   console.log('  --target-difficulty <name>      Difficulty for the evaluated seat. Default: hard.');
   console.log('  --opponent-difficulty <name>    Difficulty for the other three seats. Default: normal.');
@@ -238,9 +238,9 @@ function resolveTargetVariant(args = {}) {
       policy: null
     };
   }
-  if (requested === 'hard-pure' || requested === 'hard-tuned' || requested === 'hard-experimental') {
-    const presets = arenaApi.createVariantPresets();
-    const preset = presets[requested];
+  const presets = arenaApi.createVariantPresets();
+  const preset = presets[requested];
+  if (preset && preset.difficulty === 'hard') {
     const policy = preset && typeof preset.createPolicy === 'function'
       ? preset.createPolicy({
           experimentalOverlays: requested === 'hard-experimental'
@@ -1618,6 +1618,7 @@ function buildBenchmarkReport(args, options = {}) {
     targetPolicyPatch: resolvedArgs.targetPolicy
       ? {
           id: resolvedArgs.targetPolicy.id || resolvedArgs.targetVariant,
+          personality: resolvedArgs.targetPolicy.personality || null,
           discard: resolvedArgs.targetPolicy.discard ? {
             enableNoPressureShapeReview: Boolean(resolvedArgs.targetPolicy.discard.enableNoPressureShapeReview),
             shapeStrongOverrideEnabled: Boolean(resolvedArgs.targetPolicy.discard.shapeStrongOverrideEnabled),
@@ -1630,6 +1631,18 @@ function buildBenchmarkReport(args, options = {}) {
           } : null,
           riichi: resolvedArgs.targetPolicy.riichi ? {
             allowNoPressureThinRiichi: Boolean(resolvedArgs.targetPolicy.riichi.allowNoPressureThinRiichi)
+          } : null,
+          call: resolvedArgs.targetPolicy.call ? {
+            enableHardCallReview: Boolean(resolvedArgs.targetPolicy.call.enableHardCallReview),
+            allowYakuhaiPeng: Boolean(resolvedArgs.targetPolicy.call.allowYakuhaiPeng),
+            allowShantenImprovement: Boolean(resolvedArgs.targetPolicy.call.allowShantenImprovement),
+            allowFlatSpeedUp: Boolean(resolvedArgs.targetPolicy.call.allowFlatSpeedUp)
+          } : null,
+          route: resolvedArgs.targetPolicy.route ? {
+            enableClosedRouteValueRebalance: Boolean(resolvedArgs.targetPolicy.route.enableClosedRouteValueRebalance),
+            closedRouteMaxXiangting: resolvedArgs.targetPolicy.route.closedRouteMaxXiangting,
+            closedRouteMinRemainingTiles: resolvedArgs.targetPolicy.route.closedRouteMinRemainingTiles,
+            closedRouteOverrideMinMargin: resolvedArgs.targetPolicy.route.closedRouteOverrideMinMargin
           } : null,
           experimentalOverlay: resolvedArgs.targetPolicy.experimentalOverlay ? {
             enabled: Boolean(resolvedArgs.targetPolicy.experimentalOverlay.enabled),

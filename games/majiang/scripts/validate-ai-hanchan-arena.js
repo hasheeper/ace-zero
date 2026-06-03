@@ -42,8 +42,25 @@ function validateMixedSmoke() {
     assert(Number.isFinite(stats.nonRiichiWinRate), `expected non-riichi win rate for ${variantId}`);
     assert(Number.isFinite(stats.tsumoShareOfWins), `expected tsumo share for ${variantId}`);
     assert(Number.isFinite(stats.callRoundRate), `expected call round rate for ${variantId}`);
+    assert(Number.isFinite(stats.chiCallPerRound), `expected chi call rate for ${variantId}`);
+    assert(Number.isFinite(stats.pengCallPerRound), `expected peng call rate for ${variantId}`);
+    assert(Number.isFinite(stats.closedCallPerRound), `expected closed call rate for ${variantId}`);
+    assert(Number.isFinite(stats.flatCallPerRound), `expected flat call rate for ${variantId}`);
+    assert(Number.isFinite(stats.shantenImproveCallPerRound), `expected shanten-improve call rate for ${variantId}`);
+    assert(Number.isFinite(stats.yakuhaiPengCallPerRound), `expected yakuhai peng call rate for ${variantId}`);
+    assert(Number.isFinite(stats.riichiOpportunityPerRound), `expected riichi opportunity rate for ${variantId}`);
+    assert(Number.isFinite(stats.riichiOpportunityTakeRate), `expected riichi opportunity take rate for ${variantId}`);
+    assert(Number.isFinite(stats.closedRouteReviewPerRound), `expected closed route review rate for ${variantId}`);
+    assert(Number.isFinite(stats.closedRouteOverridePerRound), `expected closed route override rate for ${variantId}`);
+    assert(Number.isFinite(stats.averageCallOpenRouteScore), `expected average call route score for ${variantId}`);
+    assert(Number.isFinite(stats.averagePassClosedRouteScore), `expected average pass route score for ${variantId}`);
+    assert(Number.isFinite(stats.closedRouteMarginAverage), `expected closed route margin average for ${variantId}`);
     assert(Number.isFinite(stats.dealInPaymentRatePerRound), `expected deal-in payment rate for ${variantId}`);
     assert(stats.recordPanel && typeof stats.recordPanel === 'object', `expected record panel for ${variantId}`);
+    assert(Object.prototype.hasOwnProperty.call(stats.recordPanel, 'chiCallsPerRound'), `expected call diagnostics panel for ${variantId}`);
+    assert(Object.prototype.hasOwnProperty.call(stats.recordPanel, 'riichiOpportunityPerRound'), `expected riichi opportunity panel for ${variantId}`);
+    assert(Object.prototype.hasOwnProperty.call(stats.recordPanel, 'closedRouteReviewPerRound'), `expected closed route review panel for ${variantId}`);
+    assert(Object.prototype.hasOwnProperty.call(stats.recordPanel, 'averageCallOpenRouteScore'), `expected closed route score panel for ${variantId}`);
     assert(stats.uncertainty && typeof stats.uncertainty === 'object', `expected uncertainty for ${variantId}`);
     assert(Number.isFinite(stats.averageWinTurn), `expected average win turn for ${variantId}`);
     assert(Number.isFinite(stats.averageWinPoints), `expected average win points for ${variantId}`);
@@ -80,10 +97,15 @@ function validateAnalyzerSmoke() {
   const text = arenaAnalyzer.analyzeReport(report, { section: 'mixed', json: false });
   assert(typeof text === 'string' && text.includes('nonRiichiWin='), 'expected analyzer text to include record panel fields');
   assert(text.includes('drawTenpai='), 'expected analyzer text to include draw tenpai');
+  assert(text.includes('chi/R='), 'expected analyzer text to include call diagnostics');
+  assert(text.includes('riichiOpp/R='), 'expected analyzer text to include riichi opportunity diagnostics');
+  assert(text.includes('closedRouteReview/R='), 'expected analyzer text to include closed route diagnostics');
 
   const json = arenaAnalyzer.analyzeReport(report, { section: 'mixed', json: true });
   assert(json && json.variants && json.variants.easy, 'expected analyzer JSON for easy variant');
   assert(Object.prototype.hasOwnProperty.call(json.variants.easy, 'tsumoRate'), 'expected tsumo rate in analyzer JSON');
+  assert(Object.prototype.hasOwnProperty.call(json.variants.easy, 'chiCallsPerRound'), 'expected chi call rate in analyzer JSON');
+  assert(Object.prototype.hasOwnProperty.call(json.variants.easy, 'closedRouteReviewPerRound'), 'expected closed route review rate in analyzer JSON');
 
   console.log('[PASS] ai-hanchan-arena-analyzer-smoke');
   console.log(`  snapshot=${JSON.stringify({
@@ -124,6 +146,45 @@ function validateRepeatedVariantLineup() {
   })}`);
 }
 
+function validateHardPersonalityPresets() {
+  const variants = arenaApi.resolveVariants([
+    'hard-aggressive',
+    'hard-defensive',
+    'hard-balanced',
+    'hard-heavy'
+  ]);
+  const byId = variants.reduce((result, variant) => {
+    result[variant.id] = variant;
+    return result;
+  }, {});
+  assert(byId['hard-aggressive'] && byId['hard-aggressive'].policy, `expected hard-aggressive policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-defensive'] && byId['hard-defensive'].policy, `expected hard-defensive policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-balanced'] && byId['hard-balanced'].policy, `expected hard-balanced policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-heavy'] && byId['hard-heavy'].policy, `expected hard-heavy policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-aggressive'].policy.id === 'hard-aggressive', `expected aggressive policy id, got ${byId['hard-aggressive'].policy.id}`);
+  assert(byId['hard-defensive'].policy.id === 'hard-defensive', `expected defensive policy id, got ${byId['hard-defensive'].policy.id}`);
+  assert(byId['hard-balanced'].policy.id === 'hard-balanced', `expected balanced policy id, got ${byId['hard-balanced'].policy.id}`);
+  assert(byId['hard-heavy'].policy.id === 'hard-heavy', `expected heavy policy id, got ${byId['hard-heavy'].policy.id}`);
+  assert(byId['hard-aggressive'].policy.personality === 'aggressive', `expected aggressive personality, got ${JSON.stringify(byId['hard-aggressive'].policy)}`);
+  assert(byId['hard-defensive'].policy.personality === 'defensive', `expected defensive personality, got ${JSON.stringify(byId['hard-defensive'].policy)}`);
+  assert(byId['hard-balanced'].policy.personality === 'balanced', `expected balanced personality, got ${JSON.stringify(byId['hard-balanced'].policy)}`);
+  assert(byId['hard-heavy'].policy.personality === 'heavy', `expected heavy personality, got ${JSON.stringify(byId['hard-heavy'].policy)}`);
+  assert(byId['hard-aggressive'].policy.discard.enableNoPressureShapeReview === false, 'expected aggressive to use pure speed policy shape gate off');
+  assert(byId['hard-defensive'].policy.defense.enableLowDangerTiebreak === true, 'expected defensive to keep tuned defense gate');
+  assert(byId['hard-balanced'].policy.route.enableClosedRouteValueRebalance === true, 'expected balanced to enable closed route value scoring');
+  assert(byId['hard-balanced'].policy.route.closedRouteMaxXiangting < byId['hard-heavy'].policy.route.closedRouteMaxXiangting, 'expected balanced to review a narrower route range than heavy');
+  assert(byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin > byId['hard-heavy'].policy.route.closedRouteOverrideMinMargin, 'expected balanced to use stricter override margin than heavy');
+  assert(byId['hard-heavy'].policy.route.enableClosedRouteValueRebalance === true, 'expected heavy to enable closed route value scoring');
+
+  console.log('[PASS] ai-hanchan-arena-hard-personality-presets-smoke');
+  console.log(`  snapshot=${JSON.stringify({
+    variants: variants.map((variant) => variant.id),
+    policies: variants.map((variant) => variant.policy.id),
+    balancedRouteMargin: byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin,
+    heavyRouteEnabled: byId['hard-heavy'].policy.route.enableClosedRouteValueRebalance
+  })}`);
+}
+
 function validateMirrorStructure() {
   const args = arenaApi.parseArgs([
     '--mode',
@@ -160,6 +221,7 @@ function main() {
   validateMixedSmoke();
   validateAnalyzerSmoke();
   validateRepeatedVariantLineup();
+  validateHardPersonalityPresets();
   validateMirrorStructure();
 }
 
@@ -170,5 +232,6 @@ if (require.main === module) {
 module.exports = {
   validateMixedSmoke,
   validateRepeatedVariantLineup,
+  validateHardPersonalityPresets,
   validateMirrorStructure
 };

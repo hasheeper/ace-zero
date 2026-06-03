@@ -154,7 +154,13 @@ function summarizePolicyEquivalence(options = {}) {
     ['defense', 'enableEqualSafeBackstep'],
     ['defense', 'equalSafeBackstepMinPressure'],
     ['defense', 'equalSafeBackstepMaxXiangtingLoss'],
-    ['riichi', 'allowNoPressureThinRiichi']
+    ['riichi', 'allowNoPressureThinRiichi'],
+    ['route', 'enableClosedRouteValueRebalance'],
+    ['route', 'closedRouteMaxXiangting'],
+    ['route', 'closedRouteMinRemainingTiles'],
+    ['route', 'closedRouteOverrideMinMargin'],
+    ['route', 'directTenpaiCallAlwaysAllow'],
+    ['route', 'pressureDisablesClosedRouteOverride']
   ];
   const differences = keys
     .map(([section, key]) => ({

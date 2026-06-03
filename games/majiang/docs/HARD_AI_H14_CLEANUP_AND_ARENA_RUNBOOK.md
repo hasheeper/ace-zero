@@ -179,3 +179,82 @@ node games/majiang/scripts/analyze-hard-ai-tuned-vs-pure-arena.js \
 - `tuned-better`：优先进入 P7B，从路线复盘里挑 `likely-bad-route` 建 fixture。
 - `tuned-speed-loss-suspect` 或 `tuned-defense-gain-not-monetized`：优先进入 P7A，做 shape/defense/riichi tuning gate 消融。
 - `inconclusive`：继续扩样本或换 seed，不改正式 hard。
+
+## H15 Rejected Call-Suppression Experiments
+
+H15/H15b 证明了一件重要的事：当前 hard 的“副露多、立直少”不能靠直接压副露解决。两条 call-suppression overlay 都已从 active experimental runtime 移除，之后不再跑 1000 半庄确认。
+
+Rejected:
+
+- `closed-riichi-route-call-discipline-v1`: v1 能压低副露并提高立直率，但过度挡掉降向听/推进型副露，导致 `hule`、`drawTenpai` 和 `avgRank` 恶化。
+- `closed-route-low-value-call-filter-v2`: v2 更窄，但 175/200 scout 中相对 `hard-tuned` 仍退步，且没有真正降低 `calls/R` 或提高 `riichi`。
+
+保留的 arena 观测字段：
+
+- `chi/R`
+- `peng/R`
+- `closedCall/R`
+- `flatCall/R`
+- `improveCall/R`
+- `yakuhai/R`
+- `riichiOpp/R`
+- `riichiOppTake`
+
+当前结论：
+
+- 不再新增“少鸣” overlay。
+- 下一步如果继续处理风格病，应先做门清路线打点/立直阈值复盘，而不是拦截 call。
+- `hard-tuned` 仍是正式 baseline；`hard-experimental` 继续通过显式 overlay 做 defense/tile-choice/closed-route value 实验。
+
+## H15c Closed Route Value Rebalance
+
+H15c 是新的 active experimental 方向，但仍不改变正式 `hard-tuned`。
+
+Overlay:
+
+- `closed-route-value-rebalance-v1`
+
+After the first H15c scout looked promising, this route is also exposed as the standalone personality `hard-heavy`, with `hard-balanced` added as the milder route-value version. The older `hard-experimental --experimental-overlays closed-route-value-rebalance-v1` command remains useful for gate comparisons, but future tuning should prefer the four names:
+
+- `hard-aggressive`: speed / legacy pure
+- `hard-defensive`: safety / legacy tuned
+- `hard-balanced`: all-around / mild closed route scoring
+- `hard-heavy`: value / closed riichi route scoring
+
+核心差异：
+
+- 不再直接追求少鸣。
+- 对每个可接受 call 计算 `callOpenRouteScore` 和 `passClosedRouteScore`。
+- 只有门清、无压力、早中巡、`xiangting <= 2` 且 `passClosedRouteScore - callOpenRouteScore` 超过阈值时，才在 `hard-experimental` 覆盖为 pass。
+- 直接进听 call、已副露、有立直压力、晚巡、开放路线价值明显更高的 call 不覆盖。
+
+新增 arena 观测字段：
+
+- `closedRouteReview/R`
+- `closedRouteOverride/R`
+- `callRouteScore`
+- `passRouteScore`
+- `routeMargin`
+
+200 半庄 scout:
+
+```bash
+node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
+  --mode mixed \
+  --variants hard-pure,hard-pure,hard-tuned,hard-experimental \
+  --experimental-overlays closed-route-value-rebalance-v1 \
+  --matches 200 \
+  --checkpoint-interval 25 \
+  --progress \
+  --stdout summary \
+  --out /tmp/h15c-closed-route-value-arena-200.json
+```
+
+H15c 是否继续，不看 `calls/R` 单项，优先看：
+
+- `avgRank` 是否不劣于 `hard-tuned` 超过 `0.02`
+- 四位率是否不升 `2pp`
+- 放铳率是否不升 `0.5pp`
+- `hule` / `drawTenpai` 不明显下降
+- `riichi` 或 `riichiOppTake` 有提升
+- 平均打点不下降

@@ -171,6 +171,45 @@
     return getYakuhaiTileCodes(runtime, seatKey).includes(tileCode);
   }
 
+  function isClosedHand(shoupai) {
+    return Boolean(shoupai && Array.isArray(shoupai._fulou) && shoupai._fulou.length === 0);
+  }
+
+  function getRemainingTiles(runtime) {
+    const wallState = runtime && typeof runtime.getWallState === 'function'
+      ? runtime.getWallState()
+      : null;
+    const remaining = Number(wallState && wallState.remaining);
+    return Number.isFinite(remaining) ? remaining : 0;
+  }
+
+  function numberFromPolicy(source, key, fallback) {
+    const value = Number(source && source[key]);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function isHardFamilyPolicyId(policyId) {
+    return policyId === 'hard'
+      || policyId === 'hard-pure'
+      || policyId === 'hard-aggressive'
+      || policyId === 'hard-tuned'
+      || policyId === 'hard-defensive'
+      || policyId === 'hard-balanced'
+      || policyId === 'hard-heavy'
+      || policyId === 'hard-experimental'
+      || policyId === 'hell';
+  }
+
+  function shouldUseHardCallRules(policy = {}, callPolicy = null) {
+    const resolvedCallPolicy = callPolicy && typeof callPolicy === 'object'
+      ? callPolicy
+      : policy && policy.call && typeof policy.call === 'object'
+      ? policy.call
+      : {};
+    const policyId = typeof policy.id === 'string' ? policy.id : '';
+    return resolvedCallPolicy.enableHardCallReview !== false && isHardFamilyPolicyId(policyId);
+  }
+
   function evaluateHardCallHand(adapter, runtime, seatKey, shoupai, handValueEstimate, policy = {}, hardContext = null) {
     const api = getHardEvApi();
     if (!api || typeof api.evaluateHardDiscardMetrics !== 'function') return null;
@@ -221,6 +260,8 @@
     const nextLiveUkeire = Number(nextHard && nextHard.liveUkeireCount || 0) || 0;
     const currentLiveTingpai = Number(currentHard && currentHard.liveTingpaiCount || 0) || 0;
     const nextLiveTingpai = Number(nextHard && nextHard.liveTingpaiCount || 0) || 0;
+    const currentWaitQuality = Number(currentHard && currentHard.waitQualityScore || 0) || 0;
+    const nextWaitQuality = Number(nextHard && nextHard.waitQualityScore || 0) || 0;
     const currentHardEvScore = Number(currentHard && currentHard.hardEvScore || 0) || 0;
     const nextHardEvScore = Number(nextHard && nextHard.hardEvScore || 0) || 0;
     const currentHandValue = Number(currentMetrics && currentMetrics.handValueEstimate || 0) || 0;
@@ -239,6 +280,9 @@
     return {
       riichiPressure: countRiichiOpponents(runtime, seatKey),
       isYakuhaiPeng: isYakuhaiPeng(runtime, seatKey, action),
+      closedHandBefore: isClosedHand(currentShoupai),
+      currentXiangting: Number(currentMetrics && currentMetrics.xiangting),
+      nextXiangting: Number(nextMetrics && nextMetrics.xiangting),
       hardContext,
       currentLiveUkeireCount: currentLiveUkeire,
       nextLiveUkeireCount: nextLiveUkeire,
@@ -246,6 +290,9 @@
       currentLiveTingpaiCount: currentLiveTingpai,
       nextLiveTingpaiCount: nextLiveTingpai,
       liveTingpaiDelta: nextLiveTingpai - currentLiveTingpai,
+      currentWaitQualityScore: currentWaitQuality,
+      nextWaitQualityScore: nextWaitQuality,
+      waitQualityDelta: nextWaitQuality - currentWaitQuality,
       currentHardEvScore,
       nextHardEvScore,
       hardEvDelta: nextHardEvScore - currentHardEvScore,
@@ -255,6 +302,163 @@
       contextualHandValueDelta: nextContextualHandValue - currentContextualHandValue,
       currentBestWaitType: currentHard && currentHard.bestWaitType ? currentHard.bestWaitType : null,
       nextBestWaitType: nextHard && nextHard.bestWaitType ? nextHard.bestWaitType : null
+    };
+  }
+
+  const DEFAULT_ROUTE_WEIGHTS = Object.freeze({
+    callShantenImprove: 45,
+    callDirectTenpai: 90,
+    callLiveUkeireDelta: 2,
+    callLiveTingpaiDelta: 5,
+    callHardEvDelta: 0.12,
+    callContextualHandValue: 1,
+    callYakuhai: 18,
+    passClosedBase: 18,
+    passRemainingTile: 0.5,
+    passLiveUkeire: 0.7,
+    passLiveTingpai: 1.8,
+    passWaitQuality: 1.4,
+    passContextualHandValue: 1,
+    passRiichiPotential: 1,
+    lostClosedRouteBase: 18
+  });
+
+  function resolveRouteWeights(routePolicy = {}) {
+    const source = routePolicy && routePolicy.weights && typeof routePolicy.weights === 'object'
+      ? routePolicy.weights
+      : {};
+    return Object.keys(DEFAULT_ROUTE_WEIGHTS).reduce((weights, key) => {
+      weights[key] = numberFromPolicy(source, key, DEFAULT_ROUTE_WEIGHTS[key]);
+      return weights;
+    }, {});
+  }
+
+  function estimateClosedRiichiPotential(currentXiangting, hardCallMetrics = {}, weights = DEFAULT_ROUTE_WEIGHTS) {
+    const liveTingpai = Number(hardCallMetrics.currentLiveTingpaiCount || 0) || 0;
+    const waitQuality = Number(hardCallMetrics.currentWaitQualityScore || 0) || 0;
+    const contextualHandValue = Number(hardCallMetrics.currentContextualHandValueEstimate || 0) || 0;
+    const shanten = Number(currentXiangting);
+    const shantenBase = shanten <= 0 ? 60 : shanten === 1 ? 42 : shanten === 2 ? 24 : 0;
+    return (
+      shantenBase
+      + liveTingpai * 1.2
+      + waitQuality * 0.8
+      + contextualHandValue * 0.25
+    ) * Number(weights.passRiichiPotential || 0);
+  }
+
+  function evaluateClosedRouteValueReview(runtime, seatKey, currentMetrics, nextMetrics, action, policy = {}, hardCallMetrics = null) {
+    const routePolicy = policy && policy.route && typeof policy.route === 'object'
+      ? policy.route
+      : {};
+    const policyId = typeof policy.id === 'string' ? policy.id : '';
+    const enabled = routePolicy.enableClosedRouteValueRebalance === true
+      && (policyId === 'hard-experimental' || policyId === 'hard-balanced' || policyId === 'hard-heavy');
+    const currentXiangting = Number(currentMetrics && currentMetrics.xiangting);
+    const nextXiangting = Number(nextMetrics && nextMetrics.xiangting);
+    const remainingTiles = getRemainingTiles(runtime);
+    const riichiPressure = hardCallMetrics
+      ? Number(hardCallMetrics.riichiPressure || 0) || 0
+      : countRiichiOpponents(runtime, seatKey);
+    const closedHandBefore = hardCallMetrics && Object.prototype.hasOwnProperty.call(hardCallMetrics, 'closedHandBefore')
+      ? Boolean(hardCallMetrics.closedHandBefore)
+      : true;
+    const isYakuhai = hardCallMetrics
+      ? Boolean(hardCallMetrics.isYakuhaiPeng)
+      : isYakuhaiPeng(runtime, seatKey, action);
+    const minRemainingTiles = numberFromPolicy(routePolicy, 'closedRouteMinRemainingTiles', 24);
+    const maxXiangting = numberFromPolicy(routePolicy, 'closedRouteMaxXiangting', 2);
+    const minMargin = numberFromPolicy(routePolicy, 'closedRouteOverrideMinMargin', 35);
+    const weights = resolveRouteWeights(routePolicy);
+    const shantenImprovesBy = Number.isFinite(currentXiangting) && Number.isFinite(nextXiangting)
+      ? Math.max(0, currentXiangting - nextXiangting)
+      : 0;
+    const directTenpai = Number.isFinite(nextXiangting) && nextXiangting === 0 && shantenImprovesBy > 0;
+    const liveUkeireDelta = Number(hardCallMetrics && hardCallMetrics.liveUkeireDelta || 0) || 0;
+    const liveTingpaiDelta = Number(hardCallMetrics && hardCallMetrics.liveTingpaiDelta || 0) || 0;
+    const hardEvDelta = Number(hardCallMetrics && hardCallMetrics.hardEvDelta || 0) || 0;
+    const currentLiveUkeire = Number(hardCallMetrics && hardCallMetrics.currentLiveUkeireCount || 0) || 0;
+    const currentLiveTingpai = Number(hardCallMetrics && hardCallMetrics.currentLiveTingpaiCount || 0) || 0;
+    const currentWaitQuality = Number(hardCallMetrics && hardCallMetrics.currentWaitQualityScore || 0) || 0;
+    const nextContextualHandValue = Number(hardCallMetrics && hardCallMetrics.nextContextualHandValueEstimate || 0) || 0;
+    const currentContextualHandValue = Number(hardCallMetrics && hardCallMetrics.currentContextualHandValueEstimate || 0) || 0;
+    const callOpenRouteScore = (
+      shantenImprovesBy * weights.callShantenImprove
+      + (directTenpai ? weights.callDirectTenpai : 0)
+      + Math.max(0, liveUkeireDelta) * weights.callLiveUkeireDelta
+      + Math.max(0, liveTingpaiDelta) * weights.callLiveTingpaiDelta
+      + Math.max(0, hardEvDelta) * weights.callHardEvDelta
+      + nextContextualHandValue * weights.callContextualHandValue
+      + (isYakuhai ? weights.callYakuhai : 0)
+    );
+    const riichiPotential = estimateClosedRiichiPotential(currentXiangting, hardCallMetrics || {}, weights);
+    const lostClosedRouteCost = weights.lostClosedRouteBase + riichiPotential * 0.45;
+    const passClosedRouteScore = (
+      weights.passClosedBase
+      + remainingTiles * weights.passRemainingTile
+      + currentLiveUkeire * weights.passLiveUkeire
+      + currentLiveTingpai * weights.passLiveTingpai
+      + currentWaitQuality * weights.passWaitQuality
+      + currentContextualHandValue * weights.passContextualHandValue
+      + riichiPotential
+      + lostClosedRouteCost
+    );
+    const margin = passClosedRouteScore - callOpenRouteScore;
+    const base = {
+      enabled,
+      mode: 'closed-route-value-rebalance-v1',
+      active: false,
+      override: false,
+      allowed: true,
+      reason: enabled ? 'hard-call-closed-route-value-inactive' : 'hard-call-closed-route-value-disabled',
+      currentXiangting: Number.isFinite(currentXiangting) ? currentXiangting : null,
+      nextXiangting: Number.isFinite(nextXiangting) ? nextXiangting : null,
+      remainingTiles,
+      riichiPressure,
+      closedHandBefore,
+      isYakuhaiPeng: isYakuhai,
+      directTenpai,
+      callOpenRouteScore,
+      passClosedRouteScore,
+      lostClosedRouteCost,
+      riichiPotential,
+      margin,
+      minMargin
+    };
+
+    if (!enabled) return base;
+    if (!closedHandBefore) return { ...base, reason: 'hard-call-closed-route-open-hand' };
+    if (routePolicy.pressureDisablesClosedRouteOverride !== false && riichiPressure > 0) {
+      return { ...base, reason: 'hard-call-closed-route-pressure-present' };
+    }
+    if (!Number.isFinite(currentXiangting) || currentXiangting > maxXiangting) {
+      return { ...base, reason: 'hard-call-closed-route-xiangting-out-of-range' };
+    }
+    if (remainingTiles < minRemainingTiles) {
+      return { ...base, reason: 'hard-call-closed-route-too-late' };
+    }
+    if (directTenpai && routePolicy.directTenpaiCallAlwaysAllow !== false) {
+      return {
+        ...base,
+        active: true,
+        allowed: true,
+        reason: 'hard-call-closed-route-direct-tenpai-allowed'
+      };
+    }
+    if (margin >= minMargin) {
+      return {
+        ...base,
+        active: true,
+        override: true,
+        allowed: false,
+        reason: 'hard-call-closed-route-value-pass'
+      };
+    }
+    return {
+      ...base,
+      active: true,
+      allowed: true,
+      reason: 'hard-call-closed-route-value-call'
     };
   }
 
@@ -340,7 +544,7 @@
       ? policy.call
       : {};
     const policyId = typeof policy.id === 'string' && policy.id ? policy.id : 'easy';
-    if (policyId === 'hard' && callPolicy.enableHardCallReview !== false) {
+    if (shouldUseHardCallRules(policy, callPolicy)) {
       return buildHardCallRules(runtime, seatKey, currentMetrics, nextMetrics, action, policy, hardCallMetrics);
     }
 
@@ -390,6 +594,22 @@
     return reasons;
   }
 
+  function findPassAction(actions = [], seatKey) {
+    const passAction = (Array.isArray(actions) ? actions : []).find((action) => (
+      action
+      && action.type === 'pass'
+      && (!action.payload || !action.payload.seat || action.payload.seat === seatKey)
+    ));
+    if (passAction) return passAction;
+    return {
+      type: 'pass',
+      payload: {
+        seat: seatKey,
+        reason: 'hard-call-closed-route-value-pass'
+      }
+    };
+  }
+
   function evaluateCalls(runtime, seatKey, actions = [], options = {}) {
     const adapter = getCoreAdapter();
     if (!runtime || typeof runtime.getSeatIndex !== 'function') return null;
@@ -406,6 +626,7 @@
       handValueEstimate: estimateHandShapeValue(shoupai.clone())
     };
     let best = null;
+    let bestRouteOverride = null;
 
     (Array.isArray(actions) ? actions : []).forEach((action) => {
       const payload = action && action.payload && typeof action.payload === 'object'
@@ -430,11 +651,41 @@
         handValueEstimate: estimateHandShapeValue(simulated)
       };
       if (!Number.isFinite(metrics.xiangting)) return;
-      const hardCallMetrics = policy && policy.id === 'hard'
+      const callPolicy = policy && policy.call && typeof policy.call === 'object'
+        ? policy.call
+        : {};
+      const hardCallMetrics = shouldUseHardCallRules(policy, callPolicy)
         ? evaluateHardCallMetrics(adapter, runtime, seatKey, shoupai, simulated, currentMetrics, metrics, action, policy)
         : null;
       const reasons = buildSimpleCallRules(runtime, seatKey, currentMetrics, metrics, action, policy, hardCallMetrics);
       if (!reasons.length) return;
+
+      if (hardCallMetrics) {
+        const routeReview = evaluateClosedRouteValueReview(
+          runtime,
+          seatKey,
+          currentMetrics,
+          metrics,
+          action,
+          policy,
+          hardCallMetrics
+        );
+        hardCallMetrics.closedRouteValueReview = routeReview;
+        if (routeReview && routeReview.override === true) {
+          const rejected = {
+            action,
+            callType,
+            metrics,
+            reasons: [routeReview.reason],
+            policy,
+            hardCallMetrics
+          };
+          if (compareCallEvaluation(rejected, bestRouteOverride)) {
+            bestRouteOverride = rejected;
+          }
+          return;
+        }
+      }
 
       const evaluation = {
         action,
@@ -452,7 +703,17 @@
       }
     });
 
-    return best;
+    if (best) return best;
+    if (bestRouteOverride) {
+      return {
+        action: findPassAction(actions, seatKey),
+        policy,
+        reasons: bestRouteOverride.reasons,
+        metrics: bestRouteOverride.metrics,
+        hardCallMetrics: bestRouteOverride.hardCallMetrics
+      };
+    }
+    return null;
   }
 
   function createCallEvaluator() {
@@ -463,6 +724,7 @@
 
   return {
     evaluateCalls,
+    evaluateClosedRouteValueReview,
     createCallEvaluator
   };
 });

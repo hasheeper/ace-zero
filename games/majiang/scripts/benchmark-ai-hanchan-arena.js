@@ -21,7 +21,8 @@ const DEFAULT_CHECKPOINT_INTERVAL = 25;
 const DEFAULT_STDOUT_FORMAT = 'json';
 const EXPERIMENTAL_OVERLAYS = Object.freeze({
   DEFENSE_EQUAL_SAFE_BACKSTEP_V1: 'defense-equal-safe-backstep-v1',
-  NO_PRESSURE_SAME_XIANGTING_RERANK_V1: 'no-pressure-same-xiangting-rerank-v1'
+  NO_PRESSURE_SAME_XIANGTING_RERANK_V1: 'no-pressure-same-xiangting-rerank-v1',
+  CLOSED_ROUTE_VALUE_REBALANCE_V1: 'closed-route-value-rebalance-v1'
 });
 
 const matchStateHelpers = createMatchStateHelpers();
@@ -87,11 +88,25 @@ function createPureHardPolicy() {
   return policy;
 }
 
+function createAggressiveHardPolicy() {
+  const policy = createPureHardPolicy();
+  policy.id = 'hard-aggressive';
+  policy.personality = 'aggressive';
+  return policy;
+}
+
 function createTunedHardPolicy() {
   const policy = hardPolicyApi && typeof hardPolicyApi.createHardPolicy === 'function'
     ? hardPolicyApi.createHardPolicy()
     : { id: 'hard-tuned' };
   policy.id = 'hard-tuned';
+  return policy;
+}
+
+function createDefensiveHardPolicy() {
+  const policy = createTunedHardPolicy();
+  policy.id = 'hard-defensive';
+  policy.personality = 'defensive';
   return policy;
 }
 
@@ -131,6 +146,19 @@ function applyExperimentalOverlay(policy, overlayName) {
     policy.discard.sameXiangtingRerankMaxXiangting = 4;
     return;
   }
+  if (overlayName === EXPERIMENTAL_OVERLAYS.CLOSED_ROUTE_VALUE_REBALANCE_V1) {
+    policy.route = policy.route && typeof policy.route === 'object' ? policy.route : {};
+    policy.route.enableClosedRouteValueRebalance = true;
+    policy.route.closedRouteMaxXiangting = 2;
+    policy.route.closedRouteMinRemainingTiles = 24;
+    policy.route.closedRouteOverrideMinMargin = 35;
+    policy.route.directTenpaiCallAlwaysAllow = true;
+    policy.route.pressureDisablesClosedRouteOverride = true;
+    policy.route.weights = {
+      ...((policy.route && policy.route.weights) || {})
+    };
+    return;
+  }
   throw new Error(`Unknown hard experimental overlay: ${overlayName}`);
 }
 
@@ -144,6 +172,31 @@ function createExperimentalHardPolicy(options = {}) {
     overlays,
     note: 'Benchmark-only variant. Defaults to hard-tuned until explicit experimental overlays are enabled.'
   };
+  return policy;
+}
+
+function createBalancedHardPolicy() {
+  const policy = createTunedHardPolicy();
+  policy.id = 'hard-balanced';
+  policy.personality = 'balanced';
+  policy.route = policy.route && typeof policy.route === 'object' ? policy.route : {};
+  policy.route.enableClosedRouteValueRebalance = true;
+  policy.route.closedRouteMaxXiangting = 1;
+  policy.route.closedRouteMinRemainingTiles = 24;
+  policy.route.closedRouteOverrideMinMargin = 90;
+  policy.route.directTenpaiCallAlwaysAllow = true;
+  policy.route.pressureDisablesClosedRouteOverride = true;
+  policy.route.weights = {
+    ...((policy.route && policy.route.weights) || {})
+  };
+  return policy;
+}
+
+function createHeavyHardPolicy() {
+  const policy = createTunedHardPolicy();
+  policy.id = 'hard-heavy';
+  policy.personality = 'heavy';
+  applyExperimentalOverlay(policy, EXPERIMENTAL_OVERLAYS.CLOSED_ROUTE_VALUE_REBALANCE_V1);
   return policy;
 }
 
@@ -165,15 +218,43 @@ function createVariantPresets() {
       id: 'hard-pure',
       label: '困难 AI（纯启发）',
       difficulty: 'hard',
-      description: 'Hard core heuristic policy with post-Mortal-tuning shape/defense/cleanup gates disabled.',
+      description: 'Legacy alias for hard-aggressive. Hard core heuristic policy with post-Mortal-tuning shape/defense/cleanup gates disabled.',
       createPolicy: createPureHardPolicy
+    },
+    'hard-aggressive': {
+      id: 'hard-aggressive',
+      label: '困难 AI（速攻）',
+      difficulty: 'hard',
+      description: 'Speed-oriented hard personality. Uses the pure hard core with later defensive/shape tuning gates disabled.',
+      createPolicy: createAggressiveHardPolicy
     },
     'hard-tuned': {
       id: 'hard-tuned',
       label: '困难 AI（后微调）',
       difficulty: 'hard',
-      description: 'Current formal hard policy, including later hard-only tuning gates.',
+      description: 'Legacy alias for hard-defensive. Current formal hard policy, including later hard-only tuning gates.',
       createPolicy: createTunedHardPolicy
+    },
+    'hard-defensive': {
+      id: 'hard-defensive',
+      label: '困难 AI（防御）',
+      difficulty: 'hard',
+      description: 'Defense-oriented hard personality. Current tuned/formal hard baseline with retained hard-only safety gates.',
+      createPolicy: createDefensiveHardPolicy
+    },
+    'hard-balanced': {
+      id: 'hard-balanced',
+      label: '困难 AI（平衡）',
+      difficulty: 'hard',
+      description: 'Balanced hard personality. Keeps tuned hard base and applies a milder closed-riichi route value rebalance.',
+      createPolicy: createBalancedHardPolicy
+    },
+    'hard-heavy': {
+      id: 'hard-heavy',
+      label: '困难 AI（打点）',
+      difficulty: 'hard',
+      description: 'Value-oriented hard personality. Keeps tuned hard base and adds closed-riichi route value rebalance.',
+      createPolicy: createHeavyHardPolicy
     },
     'hard-experimental': {
       id: 'hard-experimental',
@@ -216,6 +297,7 @@ function summarizeVariantConfig(variant) {
     difficulty: variant.difficulty,
     description: variant.description,
     policyId: policy && policy.id ? policy.id : variant.difficulty,
+    personality: policy && policy.personality ? policy.personality : null,
     hardPolicyPatch: policy && variant.difficulty === 'hard'
       ? {
           discard: policy.discard ? {
@@ -230,6 +312,18 @@ function summarizeVariantConfig(variant) {
           } : null,
           riichi: policy.riichi ? {
             allowNoPressureThinRiichi: Boolean(policy.riichi.allowNoPressureThinRiichi)
+          } : null,
+          call: policy.call ? {
+            enableHardCallReview: Boolean(policy.call.enableHardCallReview),
+            allowYakuhaiPeng: Boolean(policy.call.allowYakuhaiPeng),
+            allowShantenImprovement: Boolean(policy.call.allowShantenImprovement),
+            allowFlatSpeedUp: Boolean(policy.call.allowFlatSpeedUp)
+          } : null,
+          route: policy.route ? {
+            enableClosedRouteValueRebalance: Boolean(policy.route.enableClosedRouteValueRebalance),
+            closedRouteMaxXiangting: policy.route.closedRouteMaxXiangting,
+            closedRouteMinRemainingTiles: policy.route.closedRouteMinRemainingTiles,
+            closedRouteOverrideMinMargin: policy.route.closedRouteOverrideMinMargin
           } : null,
           experimentalOverlay: policy.experimentalOverlay ? {
             enabled: Boolean(policy.experimentalOverlay.enabled),
@@ -397,13 +491,58 @@ function addSeatCounters(target, source) {
   return target;
 }
 
+function createReasonCountersBySeat() {
+  return SEATS.reduce((result, seatKey) => {
+    result[seatKey] = {};
+    return result;
+  }, {});
+}
+
+function incrementReasonCounter(container, seatKey, reason) {
+  if (!container || !seatKey || !reason) return;
+  if (!container[seatKey] || typeof container[seatKey] !== 'object') {
+    container[seatKey] = {};
+  }
+  container[seatKey][reason] = Number(container[seatKey][reason] || 0) + 1;
+}
+
+function addReasonCounters(target, source) {
+  Object.entries(source || {}).forEach(([reason, count]) => {
+    target[reason] = Number(target[reason] || 0) + Number(count || 0);
+  });
+  return target;
+}
+
+function addReasonCountersBySeat(target, source) {
+  SEATS.forEach((seatKey) => {
+    if (!target[seatKey] || typeof target[seatKey] !== 'object') target[seatKey] = {};
+    addReasonCounters(target[seatKey], source && source[seatKey]);
+  });
+  return target;
+}
+
 function createRoundCounters() {
   return {
     draws: createCountersBySeat(),
     discards: createCountersBySeat(),
     riichi: createCountersBySeat(),
     calls: createCountersBySeat(),
+    chiCalls: createCountersBySeat(),
+    pengCalls: createCountersBySeat(),
+    yakuhaiPengCalls: createCountersBySeat(),
+    shantenImproveCalls: createCountersBySeat(),
+    flatCalls: createCountersBySeat(),
+    closedCalls: createCountersBySeat(),
+    closedRouteValueReviewedCalls: createCountersBySeat(),
+    closedRouteValueOverrideCalls: createCountersBySeat(),
+    closedRouteCallOpenScoreSum: createCountersBySeat(),
+    closedRoutePassScoreSum: createCountersBySeat(),
+    closedRouteMarginSum: createCountersBySeat(),
+    closedRouteScoreSamples: createCountersBySeat(),
+    riichiOpportunities: createCountersBySeat(),
     reactions: createCountersBySeat(),
+    callReasonCounts: createReasonCountersBySeat(),
+    riichiRejectReasonCounts: createReasonCountersBySeat(),
     errors: []
   };
 }
@@ -415,7 +554,22 @@ function createMatchCounters() {
     discards: createCountersBySeat(),
     riichi: createCountersBySeat(),
     calls: createCountersBySeat(),
+    chiCalls: createCountersBySeat(),
+    pengCalls: createCountersBySeat(),
+    yakuhaiPengCalls: createCountersBySeat(),
+    shantenImproveCalls: createCountersBySeat(),
+    flatCalls: createCountersBySeat(),
+    closedCalls: createCountersBySeat(),
+    closedRouteValueReviewedCalls: createCountersBySeat(),
+    closedRouteValueOverrideCalls: createCountersBySeat(),
+    closedRouteCallOpenScoreSum: createCountersBySeat(),
+    closedRoutePassScoreSum: createCountersBySeat(),
+    closedRouteMarginSum: createCountersBySeat(),
+    closedRouteScoreSamples: createCountersBySeat(),
+    riichiOpportunities: createCountersBySeat(),
     reactions: createCountersBySeat(),
+    callReasonCounts: createReasonCountersBySeat(),
+    riichiRejectReasonCounts: createReasonCountersBySeat(),
     wins: createCountersBySeat(),
     riichiWins: createCountersBySeat(),
     nonRiichiWins: createCountersBySeat(),
@@ -438,9 +592,30 @@ function createMatchCounters() {
 }
 
 function mergeRoundCounters(matchCounters, roundCounters) {
-  ['draws', 'discards', 'riichi', 'calls', 'reactions'].forEach((key) => {
+  [
+    'draws',
+    'discards',
+    'riichi',
+    'calls',
+    'chiCalls',
+    'pengCalls',
+    'yakuhaiPengCalls',
+    'shantenImproveCalls',
+    'flatCalls',
+    'closedCalls',
+    'closedRouteValueReviewedCalls',
+    'closedRouteValueOverrideCalls',
+    'closedRouteCallOpenScoreSum',
+    'closedRoutePassScoreSum',
+    'closedRouteMarginSum',
+    'closedRouteScoreSamples',
+    'riichiOpportunities',
+    'reactions'
+  ].forEach((key) => {
     addSeatCounters(matchCounters[key], roundCounters[key]);
   });
+  addReasonCountersBySeat(matchCounters.callReasonCounts, roundCounters.callReasonCounts);
+  addReasonCountersBySeat(matchCounters.riichiRejectReasonCounts, roundCounters.riichiRejectReasonCounts);
   SEATS.forEach((seatKey) => {
     if (Number(roundCounters && roundCounters.calls && roundCounters.calls[seatKey] || 0) > 0) {
       matchCounters.callRounds[seatKey] += 1;
@@ -602,6 +777,116 @@ function handleHuleReactions(runtime, huleActions, roundCounters) {
   return true;
 }
 
+function isSeatClosed(runtime, seatKey) {
+  const seatIndex = runtime && typeof runtime.getSeatIndex === 'function'
+    ? runtime.getSeatIndex(seatKey)
+    : -1;
+  const shoupai = seatIndex >= 0 && runtime && runtime.board && Array.isArray(runtime.board.shoupai)
+    ? runtime.board.shoupai[seatIndex]
+    : null;
+  return Boolean(shoupai && Array.isArray(shoupai._fulou) && shoupai._fulou.length === 0);
+}
+
+function recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision, options = {}) {
+  if (!roundCounters || !seatKey || !decision) return;
+  const aiDecision = decision.aiDecision && typeof decision.aiDecision === 'object'
+    ? decision.aiDecision
+    : {};
+  const hardCallMetrics = aiDecision.hardCallMetrics && typeof aiDecision.hardCallMetrics === 'object'
+    ? aiDecision.hardCallMetrics
+    : {};
+  const review = hardCallMetrics.closedRouteValueReview && typeof hardCallMetrics.closedRouteValueReview === 'object'
+    ? hardCallMetrics.closedRouteValueReview
+    : null;
+  if (!review || review.active !== true) return;
+
+  roundCounters.closedRouteValueReviewedCalls[seatKey] += 1;
+  if (review.override === true) {
+    roundCounters.closedRouteValueOverrideCalls[seatKey] += 1;
+  }
+
+  const callOpenRouteScore = Number(review.callOpenRouteScore);
+  const passClosedRouteScore = Number(review.passClosedRouteScore);
+  const margin = Number(review.margin);
+  if (
+    Number.isFinite(callOpenRouteScore)
+    && Number.isFinite(passClosedRouteScore)
+    && Number.isFinite(margin)
+  ) {
+    roundCounters.closedRouteCallOpenScoreSum[seatKey] += callOpenRouteScore;
+    roundCounters.closedRoutePassScoreSum[seatKey] += passClosedRouteScore;
+    roundCounters.closedRouteMarginSum[seatKey] += margin;
+    roundCounters.closedRouteScoreSamples[seatKey] += 1;
+  }
+
+  if (options.recordReasons === true) {
+    const reasons = Array.isArray(aiDecision.reasons) ? aiDecision.reasons : [];
+    reasons.forEach((reason) => incrementReasonCounter(roundCounters.callReasonCounts, seatKey, reason));
+  }
+}
+
+function recordCallDiagnostics(runtime, roundCounters, seatKey, decision) {
+  if (!roundCounters || !seatKey || !decision || !decision.payload) return;
+  const callType = typeof decision.payload.callType === 'string' ? decision.payload.callType : null;
+  const aiDecision = decision.aiDecision && typeof decision.aiDecision === 'object'
+    ? decision.aiDecision
+    : {};
+  const reasons = Array.isArray(aiDecision.reasons) ? aiDecision.reasons : [];
+  const metrics = aiDecision.metrics && typeof aiDecision.metrics === 'object' ? aiDecision.metrics : {};
+  const hardCallMetrics = aiDecision.hardCallMetrics && typeof aiDecision.hardCallMetrics === 'object'
+    ? aiDecision.hardCallMetrics
+    : {};
+  const currentXiangting = Number(hardCallMetrics.currentXiangting);
+  const nextXiangting = Number.isFinite(Number(metrics.xiangting))
+    ? Number(metrics.xiangting)
+    : Number(hardCallMetrics.nextXiangting);
+  const closedBefore = hardCallMetrics.closedHandBefore === true
+    || (!Object.prototype.hasOwnProperty.call(hardCallMetrics, 'closedHandBefore') && isSeatClosed(runtime, seatKey));
+  const reasonText = reasons.join(' ');
+
+  if (callType === 'chi') roundCounters.chiCalls[seatKey] += 1;
+  if (callType === 'peng') roundCounters.pengCalls[seatKey] += 1;
+  if (callType === 'peng' && (hardCallMetrics.isYakuhaiPeng === true || reasonText.includes('yakuhai-peng'))) {
+    roundCounters.yakuhaiPengCalls[seatKey] += 1;
+  }
+  if (closedBefore) {
+    roundCounters.closedCalls[seatKey] += 1;
+  }
+  if (Number.isFinite(currentXiangting) && Number.isFinite(nextXiangting)) {
+    if (nextXiangting < currentXiangting) roundCounters.shantenImproveCalls[seatKey] += 1;
+    if (nextXiangting === currentXiangting) roundCounters.flatCalls[seatKey] += 1;
+  } else {
+    if (reasonText.includes('improves-xiangting')) roundCounters.shantenImproveCalls[seatKey] += 1;
+    if (reasonText.includes('flat-speed-up')) roundCounters.flatCalls[seatKey] += 1;
+  }
+  recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision);
+  reasons.forEach((reason) => incrementReasonCounter(roundCounters.callReasonCounts, seatKey, reason));
+}
+
+function recordRiichiOpportunity(runtime, seatKey, decision, roundCounters) {
+  if (!runtime || !seatKey || !decision || !roundCounters) return;
+  if (!isSeatClosed(runtime, seatKey)) return;
+  const metrics = decision.metrics && typeof decision.metrics === 'object' ? decision.metrics : {};
+  if (Number(metrics.xiangting) !== 0) return;
+  const riichiDecision = decision.riichiDecision && typeof decision.riichiDecision === 'object'
+    ? decision.riichiDecision
+    : null;
+  const reasons = Array.isArray(riichiDecision && riichiDecision.reasons) ? riichiDecision.reasons : [];
+  const illegalReasons = new Set([
+    'riichi-not-tenpai',
+    'riichi-illegal-discard-choice',
+    'riichi-disabled-by-ruleset',
+    'riichi-invalid-seat',
+    'riichi-missing-context'
+  ]);
+  if (reasons.some((reason) => illegalReasons.has(reason))) return;
+  roundCounters.riichiOpportunities[seatKey] += 1;
+  if (!decision.shouldRiichi) {
+    const reason = reasons[0] || 'riichi-rejected-unknown';
+    incrementReasonCounter(roundCounters.riichiRejectReasonCounts, seatKey, reason);
+  }
+}
+
 function handleReaction(runtime, aiController, assignments, roundCounters) {
   while (runtime && runtime.pendingReaction && getPhase(runtime) === ROUND_PHASES.AWAIT_REACTION) {
     const sortedActions = sortActiveReactionActions(runtime);
@@ -628,12 +913,16 @@ function handleReaction(runtime, aiController, assignments, roundCounters) {
       decisionContextForSeat(assignments, seatKey)
     );
     if (decision && decision.type !== 'pass') {
-      runtime.dispatch(decision);
       roundCounters.calls[seatKey] += 1;
+      recordCallDiagnostics(runtime, roundCounters, seatKey, decision);
+      runtime.dispatch(decision);
       roundCounters.reactions[seatKey] += 1;
       return;
     }
 
+    if (decision && decision.type === 'pass') {
+      recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision, { recordReasons: true });
+    }
     passSeat(runtime, seatKey);
   }
 }
@@ -685,6 +974,7 @@ function runOneRound(baseConfig, matchState, assignments, options = {}) {
         const decision = aiController.chooseDiscard(seatKey, decisionContextForSeat(assignments, seatKey));
         const tileCode = normalizeDiscardTile(decision, runtime, seatKey);
         const shouldRiichi = Boolean(decision && decision.shouldRiichi);
+        recordRiichiOpportunity(runtime, seatKey, decision, counters);
         runtime.discardTile(seatKey, tileCode, {
           riichi: shouldRiichi
         });
@@ -964,6 +1254,21 @@ function createEmptyVariantStats() {
     riichiRounds: 0,
     calls: 0,
     callRounds: 0,
+    chiCalls: 0,
+    pengCalls: 0,
+    yakuhaiPengCalls: 0,
+    shantenImproveCalls: 0,
+    flatCalls: 0,
+    closedCalls: 0,
+    closedRouteValueReviewedCalls: 0,
+    closedRouteValueOverrideCalls: 0,
+    closedRouteCallOpenScoreSum: 0,
+    closedRoutePassScoreSum: 0,
+    closedRouteMarginSum: 0,
+    closedRouteScoreSamples: 0,
+    riichiOpportunities: 0,
+    callReasonCounts: {},
+    riichiRejectReasonCounts: {},
     winTurnSum: 0,
     winTurnSamples: 0,
     winPointSum: 0,
@@ -984,9 +1289,22 @@ function createEmptyVariantStats() {
     riichiRatePerRound: 0,
     riichiRoundRate: 0,
     riichiPerDiscard: 0,
+    riichiOpportunityPerRound: 0,
+    riichiOpportunityTakeRate: 0,
     callRoundRate: 0,
     callRatePerDiscard: 0,
     callPerRound: 0,
+    chiCallPerRound: 0,
+    pengCallPerRound: 0,
+    closedCallPerRound: 0,
+    flatCallPerRound: 0,
+    shantenImproveCallPerRound: 0,
+    yakuhaiPengCallPerRound: 0,
+    closedRouteReviewPerRound: 0,
+    closedRouteOverridePerRound: 0,
+    averageCallOpenRouteScore: 0,
+    averagePassClosedRouteScore: 0,
+    closedRouteMarginAverage: 0,
     averageWinTurn: 0,
     averageWinPoints: 0,
     averageDealInPoints: 0,
@@ -1052,9 +1370,22 @@ function finalizeVariantStats(stats) {
   stats.riichiRatePerRound = safeRate(stats.riichi, stats.roundsSeen);
   stats.riichiRoundRate = safeRate(stats.riichiRounds || stats.riichi, stats.roundsSeen);
   stats.riichiPerDiscard = safeRate(stats.riichi, stats.discards);
+  stats.riichiOpportunityPerRound = safeRate(stats.riichiOpportunities, stats.roundsSeen);
+  stats.riichiOpportunityTakeRate = safeRate(stats.riichi, stats.riichiOpportunities);
   stats.callRoundRate = safeRate(stats.callRounds, stats.roundsSeen);
   stats.callRatePerDiscard = safeRate(stats.calls, stats.discards + stats.calls);
   stats.callPerRound = safeRate(stats.calls, stats.roundsSeen);
+  stats.chiCallPerRound = safeRate(stats.chiCalls, stats.roundsSeen);
+  stats.pengCallPerRound = safeRate(stats.pengCalls, stats.roundsSeen);
+  stats.closedCallPerRound = safeRate(stats.closedCalls, stats.roundsSeen);
+  stats.flatCallPerRound = safeRate(stats.flatCalls, stats.roundsSeen);
+  stats.shantenImproveCallPerRound = safeRate(stats.shantenImproveCalls, stats.roundsSeen);
+  stats.yakuhaiPengCallPerRound = safeRate(stats.yakuhaiPengCalls, stats.roundsSeen);
+  stats.closedRouteReviewPerRound = safeRate(stats.closedRouteValueReviewedCalls, stats.roundsSeen);
+  stats.closedRouteOverridePerRound = safeRate(stats.closedRouteValueOverrideCalls, stats.roundsSeen);
+  stats.averageCallOpenRouteScore = safeRate(stats.closedRouteCallOpenScoreSum, stats.closedRouteScoreSamples);
+  stats.averagePassClosedRouteScore = safeRate(stats.closedRoutePassScoreSum, stats.closedRouteScoreSamples);
+  stats.closedRouteMarginAverage = safeRate(stats.closedRouteMarginSum, stats.closedRouteScoreSamples);
   stats.averageWinTurn = safeRate(stats.winTurnSum, stats.winTurnSamples);
   stats.averageWinPoints = safeRate(stats.winPointSum, stats.winPointSamples);
   stats.averageDealInPoints = safeRate(stats.dealInPointSum, stats.dealInPointSamples);
@@ -1113,6 +1444,21 @@ function summarizeMatchRows(rows, variants) {
       stats.riichiRounds += Number(counters.riichiRounds && counters.riichiRounds[seatKey] || 0);
       stats.calls += Number(counters.calls && counters.calls[seatKey] || 0);
       stats.callRounds += Number(counters.callRounds && counters.callRounds[seatKey] || 0);
+      stats.chiCalls += Number(counters.chiCalls && counters.chiCalls[seatKey] || 0);
+      stats.pengCalls += Number(counters.pengCalls && counters.pengCalls[seatKey] || 0);
+      stats.yakuhaiPengCalls += Number(counters.yakuhaiPengCalls && counters.yakuhaiPengCalls[seatKey] || 0);
+      stats.shantenImproveCalls += Number(counters.shantenImproveCalls && counters.shantenImproveCalls[seatKey] || 0);
+      stats.flatCalls += Number(counters.flatCalls && counters.flatCalls[seatKey] || 0);
+      stats.closedCalls += Number(counters.closedCalls && counters.closedCalls[seatKey] || 0);
+      stats.closedRouteValueReviewedCalls += Number(counters.closedRouteValueReviewedCalls && counters.closedRouteValueReviewedCalls[seatKey] || 0);
+      stats.closedRouteValueOverrideCalls += Number(counters.closedRouteValueOverrideCalls && counters.closedRouteValueOverrideCalls[seatKey] || 0);
+      stats.closedRouteCallOpenScoreSum += Number(counters.closedRouteCallOpenScoreSum && counters.closedRouteCallOpenScoreSum[seatKey] || 0);
+      stats.closedRoutePassScoreSum += Number(counters.closedRoutePassScoreSum && counters.closedRoutePassScoreSum[seatKey] || 0);
+      stats.closedRouteMarginSum += Number(counters.closedRouteMarginSum && counters.closedRouteMarginSum[seatKey] || 0);
+      stats.closedRouteScoreSamples += Number(counters.closedRouteScoreSamples && counters.closedRouteScoreSamples[seatKey] || 0);
+      stats.riichiOpportunities += Number(counters.riichiOpportunities && counters.riichiOpportunities[seatKey] || 0);
+      addReasonCounters(stats.callReasonCounts, counters.callReasonCounts && counters.callReasonCounts[seatKey]);
+      addReasonCounters(stats.riichiRejectReasonCounts, counters.riichiRejectReasonCounts && counters.riichiRejectReasonCounts[seatKey]);
       stats.winTurnSum += Number(counters.winTurnSum && counters.winTurnSum[seatKey] || 0);
       stats.winTurnSamples += Number(counters.winTurnSamples && counters.winTurnSamples[seatKey] || 0);
       stats.winPointSum += Number(counters.winPointSum && counters.winPointSum[seatKey] || 0);
@@ -1212,9 +1558,22 @@ function buildVariantRecordPanel(stats = {}) {
     ronRatePerRound: metricValue(stats, 'ronRatePerRound'),
     riichiRate: metricValue(stats, 'riichiRoundRate', 'riichiRatePerRound'),
     riichiPerDiscard: metricValue(stats, 'riichiPerDiscard'),
+    riichiOpportunityPerRound: metricValue(stats, 'riichiOpportunityPerRound'),
+    riichiOpportunityTakeRate: metricValue(stats, 'riichiOpportunityTakeRate'),
     callRate: callRoundRate,
     callsPerRound: callPerRound,
     callRatePerDiscard: metricValue(stats, 'callRatePerDiscard'),
+    chiCallsPerRound: metricValue(stats, 'chiCallPerRound'),
+    pengCallsPerRound: metricValue(stats, 'pengCallPerRound'),
+    closedCallsPerRound: metricValue(stats, 'closedCallPerRound'),
+    flatCallsPerRound: metricValue(stats, 'flatCallPerRound'),
+    shantenImproveCallsPerRound: metricValue(stats, 'shantenImproveCallPerRound'),
+    yakuhaiPengCallsPerRound: metricValue(stats, 'yakuhaiPengCallPerRound'),
+    closedRouteReviewPerRound: metricValue(stats, 'closedRouteReviewPerRound'),
+    closedRouteOverridePerRound: metricValue(stats, 'closedRouteOverridePerRound'),
+    averageCallOpenRouteScore: metricValue(stats, 'averageCallOpenRouteScore'),
+    averagePassClosedRouteScore: metricValue(stats, 'averagePassClosedRouteScore'),
+    closedRouteMarginAverage: metricValue(stats, 'closedRouteMarginAverage'),
     drawTenpaiRate: metricValue(stats, 'drawTenpaiRate'),
     averageWinTurn: metricValue(stats, 'averageWinTurn'),
     averageWinPoints: metricValue(stats, 'averageWinPoints'),
@@ -1228,10 +1587,22 @@ function buildVariantRecordPanel(stats = {}) {
       drawRounds: metricValue(stats, 'drawRounds'),
       drawTenpai: metricValue(stats, 'drawTenpai'),
       riichi: metricValue(stats, 'riichi'),
+      riichiOpportunities: metricValue(stats, 'riichiOpportunities'),
       calls: metricValue(stats, 'calls'),
       callRounds: metricValue(stats, 'callRounds'),
+      chiCalls: metricValue(stats, 'chiCalls'),
+      pengCalls: metricValue(stats, 'pengCalls'),
+      yakuhaiPengCalls: metricValue(stats, 'yakuhaiPengCalls'),
+      shantenImproveCalls: metricValue(stats, 'shantenImproveCalls'),
+      flatCalls: metricValue(stats, 'flatCalls'),
+      closedCalls: metricValue(stats, 'closedCalls'),
+      closedRouteValueReviewedCalls: metricValue(stats, 'closedRouteValueReviewedCalls'),
+      closedRouteValueOverrideCalls: metricValue(stats, 'closedRouteValueOverrideCalls'),
+      closedRouteScoreSamples: metricValue(stats, 'closedRouteScoreSamples'),
       roundsSeen: metricValue(stats, 'roundsSeen')
     },
+    callReasonCounts: stats.callReasonCounts || {},
+    riichiRejectReasonCounts: stats.riichiRejectReasonCounts || {},
     uncertainty: stats.uncertainty || null,
     availability: {
       drawStats: drawRate != null,
@@ -1274,7 +1645,20 @@ function formatVariantRecordPanel(variant, stats = {}) {
       + ` ron/R=${formatMaybePercent(panel.ronRatePerRound)}`
       + ` tsumo/R=${formatMaybePercent(panel.tsumoRatePerRound)}`
       + ` calls/R=${formatMaybeNumber(panel.callsPerRound, 2)}`
-      + ` riichi/discard=${formatMaybePercent(panel.riichiPerDiscard)}`
+      + ` riichi/discard=${formatMaybePercent(panel.riichiPerDiscard)}`,
+    `[arena]     chi/R=${formatMaybeNumber(panel.chiCallsPerRound, 2)}`
+      + ` peng/R=${formatMaybeNumber(panel.pengCallsPerRound, 2)}`
+      + ` closedCall/R=${formatMaybeNumber(panel.closedCallsPerRound, 2)}`
+      + ` flatCall/R=${formatMaybeNumber(panel.flatCallsPerRound, 2)}`
+      + ` improveCall/R=${formatMaybeNumber(panel.shantenImproveCallsPerRound, 2)}`
+      + ` yakuhai/R=${formatMaybeNumber(panel.yakuhaiPengCallsPerRound, 2)}`
+      + ` riichiOpp/R=${formatMaybeNumber(panel.riichiOpportunityPerRound, 2)}`
+      + ` riichiOppTake=${formatMaybePercent(panel.riichiOpportunityTakeRate)}`,
+    `[arena]     closedRouteReview/R=${formatMaybeNumber(panel.closedRouteReviewPerRound, 2)}`
+      + ` closedRouteOverride/R=${formatMaybeNumber(panel.closedRouteOverridePerRound, 2)}`
+      + ` callRouteScore=${formatMaybeNumber(panel.averageCallOpenRouteScore, 1)}`
+      + ` passRouteScore=${formatMaybeNumber(panel.averagePassClosedRouteScore, 1)}`
+      + ` routeMargin=${formatMaybeNumber(panel.closedRouteMarginAverage, 1)}`
   ];
 }
 
@@ -1509,11 +1893,15 @@ module.exports = {
   createPureHardPolicy,
   createTunedHardPolicy,
   createExperimentalHardPolicy,
+  createBalancedHardPolicy,
   buildArenaReport,
   runOneRound,
   runOneMatch,
   summarizeMatchRows,
   buildVariantRecordPanel,
   formatVariantRecordPanel,
-  formatArenaSummary
+  formatArenaSummary,
+  createAggressiveHardPolicy,
+  createDefensiveHardPolicy,
+  createHeavyHardPolicy
 };

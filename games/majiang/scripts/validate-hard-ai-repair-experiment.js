@@ -183,6 +183,27 @@ function validateHardExperimentalTileChoiceOverlayPolicy() {
   })}`);
 }
 
+function validateHardExperimentalClosedRouteOverlayPolicy() {
+  const policy = experimentApi.summarizePolicyEquivalence({
+    experimentalOverlays: ['closed-route-value-rebalance-v1']
+  });
+  assert(policy.tunedPolicyId === 'hard-tuned', `expected tuned policy id, got ${policy.tunedPolicyId}`);
+  assert(policy.experimentalPolicyId === 'hard-experimental', `expected experimental policy id, got ${policy.experimentalPolicyId}`);
+  assert(policy.experimentalOverlay && policy.experimentalOverlay.enabled === true, `expected enabled overlay, got ${JSON.stringify(policy.experimentalOverlay)}`);
+  assert(policy.overlayEnabled === true, `expected overlayEnabled true, got ${policy.overlayEnabled}`);
+  assert(policy.equivalentToHardTuned === false, `expected overlay to differ from tuned, got ${JSON.stringify(policy)}`);
+  assert(
+    policy.differences.some((entry) => entry.path === 'route.enableClosedRouteValueRebalance' && entry.experimental === true),
+    `expected route.enableClosedRouteValueRebalance diff, got ${JSON.stringify(policy.differences)}`
+  );
+
+  console.log('[PASS] hard-ai-repair-experiment-closed-route-overlay-policy-smoke');
+  console.log(`  snapshot=${JSON.stringify({
+    overlays: policy.requestedOverlays,
+    differences: policy.differences.map((entry) => entry.path)
+  })}`);
+}
+
 function validateRepairExperimentSummary() {
   const pool = buildFixturePool();
   const summary = experimentApi.buildRepairExperimentSummary({
@@ -313,13 +334,54 @@ function validateRepairExperimentTileChoiceOverlaySummary() {
   })}`);
 }
 
+function validateRepairExperimentClosedRouteOverlaySummary() {
+  const pool = buildFixturePool();
+  const summary = experimentApi.buildRepairExperimentSummary({
+    smoke: true,
+    pool: '/tmp/h14-p2-validator-pool.json',
+    skipMortal: true,
+    skipArena: true,
+    mortalSamplesPerSeat: 1,
+    arenaMatches: 1,
+    experimentalOverlays: ['closed-route-value-rebalance-v1']
+  }, {
+    pool,
+    tunedMortal: makeMortalReport('hard-tuned', [
+      { level: 'exact', bucket: 'tile-choice' }
+    ]),
+    experimentalMortal: makeMortalReport('hard-experimental', [
+      { level: 'exact', bucket: 'tile-choice' }
+    ]),
+    arena: {
+      ...makeArenaReport(),
+      experimentalOverlays: ['closed-route-value-rebalance-v1']
+    }
+  });
+
+  assert(summary.policy && summary.policy.overlayEnabled === true, `expected overlay enabled, got ${JSON.stringify(summary.policy)}`);
+  assert(summary.policy.differences.some((entry) => entry.path === 'route.enableClosedRouteValueRebalance'), `expected route overlay diff, got ${JSON.stringify(summary.policy.differences)}`);
+  assert(summary.options.experimentalOverlays.includes('closed-route-value-rebalance-v1'), `expected closed route overlay option, got ${JSON.stringify(summary.options)}`);
+  assert(summary.fixtureGate.replayStatus === 'complete', `expected replay complete, got ${JSON.stringify(summary.fixtureGate)}`);
+  assert(summary.gate.passed.includes('experimental-overlay-explicit'), `expected explicit overlay gate pass, got ${JSON.stringify(summary.gate)}`);
+  assertNoLargeObjects(summary);
+
+  console.log('[PASS] hard-ai-repair-experiment-closed-route-overlay-summary-smoke');
+  console.log(`  snapshot=${JSON.stringify({
+    overlays: summary.options.experimentalOverlays,
+    fixtureReplay: summary.fixtureGate.replayStatus,
+    gate: summary.gate.status
+  })}`);
+}
+
 function main() {
   validateHardExperimentalBaseline();
   validateHardExperimentalOverlayPolicy();
   validateHardExperimentalTileChoiceOverlayPolicy();
+  validateHardExperimentalClosedRouteOverlayPolicy();
   validateRepairExperimentSummary();
   validateRepairExperimentOverlaySummary();
   validateRepairExperimentTileChoiceOverlaySummary();
+  validateRepairExperimentClosedRouteOverlaySummary();
 }
 
 if (require.main === module) {
@@ -330,7 +392,9 @@ module.exports = {
   validateHardExperimentalBaseline,
   validateHardExperimentalOverlayPolicy,
   validateHardExperimentalTileChoiceOverlayPolicy,
+  validateHardExperimentalClosedRouteOverlayPolicy,
   validateRepairExperimentSummary,
   validateRepairExperimentOverlaySummary,
-  validateRepairExperimentTileChoiceOverlaySummary
+  validateRepairExperimentTileChoiceOverlaySummary,
+  validateRepairExperimentClosedRouteOverlaySummary
 };
