@@ -146,3 +146,36 @@ node games/majiang/scripts/build-hard-ai-experimental-ledger.js \
 - `manual-route-review=19`
 
 这意味着下一步应优先复盘这 `19` 条路线分歧；没有新的 overlay 候选需要立刻跑 arena。
+
+## P6 Route Review And Arena Baseline
+
+P6 不新增 overlay。它只补两份证据：
+
+1. `hard-tuned` 相对 `hard-pure` 的 arena 基线判定。
+2. `manual-route-review` 的固定局面复盘包。
+
+生成路线复盘包：
+
+```bash
+node games/majiang/scripts/build-hard-ai-route-review-pack.js \
+  --ledger /tmp/h14-p5-hard-ai-experimental-ledger.json \
+  --pool /tmp/h14-p1-hard-ai-repair-candidates.json \
+  --tile-choice-replay /tmp/h14-p4-tile-choice-replay.json \
+  --json-out /tmp/h14-p6-route-review-pack.json \
+  --md-out /tmp/h14-p6-route-review-pack.md
+```
+
+分析 `hard-pure` vs `hard-tuned` arena：
+
+```bash
+node games/majiang/scripts/analyze-hard-ai-tuned-vs-pure-arena.js \
+  --report /tmp/ace-zero-arena/h14-hard-pure-vs-3-hard-tuned-1000.json \
+  --out /tmp/h14-p6-tuned-vs-pure-arena-analysis.json
+```
+
+判读：
+
+- `sampleStatus=scout`：样本还不够，只能看方向，不能定案。正式判定要求 `hard-pure records >= 800`。
+- `tuned-better`：优先进入 P7B，从路线复盘里挑 `likely-bad-route` 建 fixture。
+- `tuned-speed-loss-suspect` 或 `tuned-defense-gain-not-monetized`：优先进入 P7A，做 shape/defense/riichi tuning gate 消融。
+- `inconclusive`：继续扩样本或换 seed，不改正式 hard。

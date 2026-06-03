@@ -62,7 +62,9 @@ const mahjongAiSmokes = [
   'games/majiang/scripts/validate-hard-ai-tile-choice-replay.js',
   'games/majiang/scripts/validate-hard-ai-repair-candidates.js',
   'games/majiang/scripts/validate-hard-ai-repair-experiment.js',
-  'games/majiang/scripts/validate-hard-ai-experimental-ledger.js'
+  'games/majiang/scripts/validate-hard-ai-experimental-ledger.js',
+  'games/majiang/scripts/validate-hard-ai-route-review-pack.js',
+  'games/majiang/scripts/validate-hard-ai-tuned-vs-pure-arena.js'
 ];
 
 const mahjongScenarioSmokes = [
