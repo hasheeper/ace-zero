@@ -15,6 +15,8 @@ H14 当前先收口为“证据闭环”阶段：
 
 因此下一轮不要继续直接加规则。更稳的方向是用无 Mortal 的半庄 arena 先确认 `hard-tuned` 相对 `hard-pure` 的真实收益，再从候选池里挑可人工复盘的恶手做小补丁。
 
+P5 新增 `hard-ai-experimental-ledger`：把 P1 repair pool、P3 defense replay、P4 tile-choice replay、P3/P4 scout 结果合并成一份候选账本。它只做诊断，不改正式 `hard-tuned`，也不启用新的 overlay。
+
 ## What Was Cleaned
 
 - 删除工作区里的 macOS `.DS_Store` 系统文件。
@@ -110,3 +112,37 @@ nohup node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
 3. Arena 1000 半庄 `avgRank`、四位率、放铳率不劣于当前 `hard-tuned`。
 
 只提升 Mortal exact 但 arena 变差的补丁，不进入正式困难 AI。
+
+## Experimental Ledger
+
+P5 收口命令：
+
+```bash
+node games/majiang/scripts/build-hard-ai-experimental-ledger.js \
+  --pool /tmp/h14-p1-hard-ai-repair-candidates.json \
+  --defense-replay /tmp/h14-p3-defense-replay.json \
+  --tile-choice-replay /tmp/h14-p4-tile-choice-replay.json \
+  --defense-experiment /tmp/h14-p3-defense-experiment-scout.json \
+  --tile-choice-experiment /tmp/h14-p4-tile-choice-experiment-scout.json \
+  --out /tmp/h14-p5-hard-ai-experimental-ledger.json
+```
+
+读账本时优先看：
+
+- `rejected-by-arena-scout`：候选级可改，但 arena scout 已拒绝，不要重复推进同一 overlay。
+- `rejected-by-replay-gate` / `blocked-by-replay-gate`：replay 没有找到可直接补丁样本，不跑 arena。
+- `manual-route-review`：需要人工复盘路线、宝牌、红五、役牌或听牌形，不应该继续堆简单 shape 规则。
+- `eligible-for-scout`：只表示可以设计下一轮 scout，不表示可以进正式 hard。
+
+当前本机 P5 快照：
+
+- total `126`
+- same-xiangting tile-choice `84`
+- defense `15`
+- backstep `19`
+- route-dora-five `8`
+- `eligible-for-scout=0`
+- `rejected-by-arena-scout=1`
+- `manual-route-review=19`
+
+这意味着下一步应优先复盘这 `19` 条路线分歧；没有新的 overlay 候选需要立刻跑 arena。

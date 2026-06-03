@@ -449,6 +449,7 @@ function assertCompactHardCandidateDiagnostic(candidate) {
     'metrics',
     'selectedFinal',
     'selectedInitial',
+    'route',
     'shape',
     'tileCode',
     'tileIndex'
@@ -515,6 +516,43 @@ function assertCompactHardCandidateDiagnostic(candidate) {
       assert(!Object.prototype.hasOwnProperty.call(candidate.shape, key), `diagnostic shape must not include ${key}: ${JSON.stringify(candidate.shape)}`);
     });
   }
+
+  assertExactKeys(candidate.route, [
+    'breaksRyanmenBlock',
+    'breaksValueRoute',
+    'breaksYakuhaiPair',
+    'closedRiichiRouteRisk',
+    'cutsFive',
+    'cutsRedFive',
+    'cutsYakuhai',
+    'discardAdjacentToDora',
+    'discardIsDora',
+    'discardTileRole',
+    'keepsDoraCount',
+    'keepsFiveCount',
+    'keepsYakuhaiCount',
+    'reasons'
+  ], 'hard candidate route');
+  [
+    'breaksRyanmenBlock',
+    'breaksValueRoute',
+    'breaksYakuhaiPair',
+    'closedRiichiRouteRisk',
+    'cutsFive',
+    'cutsRedFive',
+    'cutsYakuhai',
+    'discardAdjacentToDora',
+    'discardIsDora'
+  ].forEach((key) => {
+    assert(typeof candidate.route[key] === 'boolean', `expected route boolean ${key}, got ${JSON.stringify(candidate.route)}`);
+  });
+  assert(Number.isFinite(Number(candidate.route.keepsDoraCount)), `expected route dora count, got ${JSON.stringify(candidate.route)}`);
+  assert(Number.isFinite(Number(candidate.route.keepsFiveCount)), `expected route five count, got ${JSON.stringify(candidate.route)}`);
+  assert(Number.isFinite(Number(candidate.route.keepsYakuhaiCount)), `expected route yakuhai count, got ${JSON.stringify(candidate.route)}`);
+  assert(Array.isArray(candidate.route.reasons), `expected route reasons, got ${JSON.stringify(candidate.route)}`);
+  ['waits', 'hardContext', 'hand', 'runtime', 'beforeShoupai', 'afterShoupai'].forEach((key) => {
+    assert(!Object.prototype.hasOwnProperty.call(candidate.route, key), `diagnostic route must not include ${key}: ${JSON.stringify(candidate.route)}`);
+  });
 }
 
 function runHardCandidateDiagnosticsDefaultHiddenSmoke(cwd) {
