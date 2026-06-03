@@ -40,6 +40,34 @@
       };
     }
 
+    function buildHuleWinnerLogSummaries(roundResult = null, fallbackResult = null) {
+      if (roundResult && Array.isArray(roundResult.winners) && roundResult.winners.length) {
+        return roundResult.winners.map((entry) => {
+          const summary = buildHuleLogSummary(entry && entry.result ? entry.result : null);
+          return {
+            winnerSeat: entry && entry.winnerSeat ? entry.winnerSeat : null,
+            fromSeat: entry && entry.fromSeat ? entry.fromSeat : null,
+            tileCode: entry && entry.tileCode ? entry.tileCode : null,
+            ...summary,
+            yaku: summary.役种名称,
+            fanshu: summary.番数,
+            fu: summary.符数
+          };
+        });
+      }
+
+      const summary = buildHuleLogSummary(fallbackResult || (roundResult && roundResult.result ? roundResult.result : null));
+      return [{
+        winnerSeat: roundResult && roundResult.winnerSeat ? roundResult.winnerSeat : null,
+        fromSeat: roundResult && roundResult.fromSeat ? roundResult.fromSeat : null,
+        tileCode: roundResult && roundResult.tileCode ? roundResult.tileCode : null,
+        ...summary,
+        yaku: summary.役种名称,
+        fanshu: summary.番数,
+        fu: summary.符数
+      }].filter((entry) => entry.winnerSeat || entry.fanshu != null || entry.fu != null || entry.yaku.length);
+    }
+
     function buildSeatWindLogDetail(snapshot = null) {
       const info = snapshot && snapshot.info ? snapshot.info : null;
       const seatWinds = info && info.seatWinds && typeof info.seatWinds === 'object'
@@ -85,37 +113,49 @@
     function queueWinnerReveal(table, event, roundResult, options = {}) {
       if (!table || typeof table.playWinnerRevealForSeat !== 'function') return;
       if (!roundResult || roundResult.type !== 'hule') return;
-      const winnerSeat = roundResult.winnerSeat || null;
-      if (!winnerSeat) return;
+      const winnerEntries = roundResult.multiHule && Array.isArray(roundResult.winners) && roundResult.winners.length
+        ? roundResult.winners
+        : [{
+            winnerSeat: roundResult.winnerSeat || null,
+            tileCode: roundResult.tileCode || null,
+            rongpai: roundResult.rongpai || null
+          }];
 
       const snapshot = event && event.snapshot ? event.snapshot : null;
       const truthSeats = snapshot && snapshot.views && snapshot.views.truthView && snapshot.views.truthView.seats
         ? snapshot.views.truthView.seats
         : null;
-      const seatSnapshot = truthSeats && truthSeats[winnerSeat]
-        ? truthSeats[winnerSeat]
-        : (snapshot && snapshot.seats ? snapshot.seats[winnerSeat] : null);
-      const handTiles = seatSnapshot && Array.isArray(seatSnapshot.handTiles)
-        ? seatSnapshot.handTiles.map((tile) => ({ ...tile }))
-        : [];
-      const winningTileCode = normalizeRoundResultTileCode(roundResult.rongpai || roundResult.tileCode || null);
       const delayMs = Number.isFinite(Number(options.delayMs)) ? Number(options.delayMs) : 420;
 
-      globalRef.setTimeout(() => {
-        try {
-          table.playWinnerRevealForSeat(winnerSeat, {
-            handTiles,
-            winningTileCode,
-            autoClearMs: 0
-          });
-        } catch (error) {
-          logRuntime('warn', '和牌后赢家推平动画播放失败', {
-            winnerSeat,
-            winningTileCode,
-            message: error && error.message ? error.message : String(error)
-          });
-        }
-      }, Math.max(0, delayMs));
+      winnerEntries.forEach((entry, index) => {
+        const winnerSeat = entry && entry.winnerSeat ? entry.winnerSeat : null;
+        if (!winnerSeat) return;
+        const seatSnapshot = truthSeats && truthSeats[winnerSeat]
+          ? truthSeats[winnerSeat]
+          : (snapshot && snapshot.seats ? snapshot.seats[winnerSeat] : null);
+        const handTiles = seatSnapshot && Array.isArray(seatSnapshot.handTiles)
+          ? seatSnapshot.handTiles.map((tile) => ({ ...tile }))
+          : [];
+        const winningTileCode = normalizeRoundResultTileCode(
+          (entry && (entry.rongpai || entry.tileCode)) || roundResult.rongpai || roundResult.tileCode || null
+        );
+
+        globalRef.setTimeout(() => {
+          try {
+            table.playWinnerRevealForSeat(winnerSeat, {
+              handTiles,
+              winningTileCode,
+              autoClearMs: 0
+            });
+          } catch (error) {
+            logRuntime('warn', '和牌后赢家推平动画播放失败', {
+              winnerSeat,
+              winningTileCode,
+              message: error && error.message ? error.message : String(error)
+            });
+          }
+        }, Math.max(0, delayMs + index * 280));
+      });
     }
 
     function queueSettlementPanel(table, payload = {}, options = {}) {
@@ -137,6 +177,7 @@
       normalizeRoundResultTileCode,
       extractHuleYakuNames,
       buildHuleLogSummary,
+      buildHuleWinnerLogSummaries,
       buildSeatWindLogDetail,
       formatRoundCutInLabel,
       formatSpacedCutInLabel,

@@ -40,6 +40,7 @@
       flatUkeireBoost: 5,
       flatTingpaiBoost: 1,
       flatHandShapeBoost: 3,
+      minFlatHandValueDelta: 0,
       suppressFlatCallsUnderRiichi: true
     },
     defense: {

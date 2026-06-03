@@ -1196,7 +1196,8 @@
       runtime.pendingKanResolution = null;
       runtime.roundResult = buildMultiHuleRoundResult(runtime, settlements, {
         qianggang: Boolean(orderedSelections.some((entry) => entry.options && entry.options.qianggang)),
-        lingshang: false
+        lingshang: false,
+        fenpei: totalFenpei
       });
       runtime.setPhase(FORMAL_PHASES.ROUND_END);
       runtime.emit('round:hule', {

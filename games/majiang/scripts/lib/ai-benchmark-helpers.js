@@ -7,9 +7,13 @@ const { SingleRoundRuntime } = require('../../engine/runtime/single-round-runtim
 const { createScriptedDrawPolicy } = require('../../engine/base/draw-policy');
 const baseAiApi = require('../../engine/ai/base-ai');
 const { createCoachController } = require('../../engine/coach/review/coach-controller');
+const {
+  resolveMortalCondaEnvPath,
+  resolveMortalRoot
+} = require('../../engine/coach/mortal/mortal-adapter');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_MORTAL_ROOT = path.resolve(ROOT, '..', 'third_party', 'Mortal');
+const DEFAULT_MORTAL_ROOT = resolveMortalRoot();
 
 function loadJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -226,7 +230,9 @@ function evaluateCase(caseDef, options = {}) {
   const controller = createCoachController(runtime, {
     perspectiveSeatKey: caseDef.perspectiveSeatKey,
     mortalRoot: options.mortalRoot || DEFAULT_MORTAL_ROOT,
-    condaEnvPath: options.condaEnvPath,
+    condaEnvPath: options.condaEnvPath || resolveMortalCondaEnvPath({
+      mortalRoot: options.mortalRoot || DEFAULT_MORTAL_ROOT
+    }),
     configPath: options.configPath
   });
   const inference = controller.requestSuggestion();

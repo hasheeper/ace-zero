@@ -5,7 +5,9 @@
       require('../support/hand-metrics'),
       require('../difficulty/easy-policy'),
       require('../difficulty/normal-policy'),
-      require('../difficulty/hard-policy')
+      require('../difficulty/hard-policy'),
+      require('../support/hard-ev'),
+      require('../support/round-context')
     );
     return;
   }
@@ -14,14 +16,18 @@
     root.AceMahjongAiHandMetrics || null,
     root.AceMahjongEasyDifficultyPolicy || null,
     root.AceMahjongNormalDifficultyPolicy || null,
-    root.AceMahjongHardDifficultyPolicy || null
+    root.AceMahjongHardDifficultyPolicy || null,
+    root.AceMahjongAiHardEv || null,
+    root.AceMahjongAiRoundContext || null
   );
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(
   coreAdapter,
   handMetricsApi,
   easyPolicyApi,
   normalPolicyApi,
-  hardPolicyApi
+  hardPolicyApi,
+  hardEvApi,
+  roundContextApi
 ) {
   'use strict';
 
@@ -98,6 +104,22 @@
     )).length;
   }
 
+  function getHardEvApi() {
+    if (hardEvApi) return hardEvApi;
+    if (typeof globalThis !== 'undefined' && globalThis.AceMahjongAiHardEv) {
+      return globalThis.AceMahjongAiHardEv;
+    }
+    return null;
+  }
+
+  function getRoundContextApi() {
+    if (roundContextApi) return roundContextApi;
+    if (typeof globalThis !== 'undefined' && globalThis.AceMahjongAiRoundContext) {
+      return globalThis.AceMahjongAiRoundContext;
+    }
+    return null;
+  }
+
   function compareCallEvaluation(next, best) {
     if (!best) return true;
     if (next.metrics.xiangting < best.metrics.xiangting) return true;
@@ -149,11 +171,179 @@
     return getYakuhaiTileCodes(runtime, seatKey).includes(tileCode);
   }
 
-  function buildSimpleCallRules(runtime, seatKey, currentMetrics, nextMetrics, action, policy = {}) {
+  function evaluateHardCallHand(adapter, runtime, seatKey, shoupai, handValueEstimate, policy = {}, hardContext = null) {
+    const api = getHardEvApi();
+    if (!api || typeof api.evaluateHardDiscardMetrics !== 'function') return null;
+    try {
+      return api.evaluateHardDiscardMetrics(adapter, runtime, seatKey, shoupai, {
+        handValueEstimate,
+        policy: policy && policy.discard && typeof policy.discard === 'object'
+          ? policy.discard
+          : {},
+        contextPolicy: policy && policy.context && typeof policy.context === 'object'
+          ? policy.context
+          : {},
+        hardContext
+      });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function evaluateHardCallMetrics(adapter, runtime, seatKey, currentShoupai, nextShoupai, currentMetrics, nextMetrics, action, policy = {}) {
+    const contextApi = getRoundContextApi();
+    const hardContext = contextApi && typeof contextApi.buildRuntimeHardRoundContext === 'function'
+      ? contextApi.buildRuntimeHardRoundContext(runtime, seatKey, {
+          contextPolicy: policy && policy.context && typeof policy.context === 'object'
+            ? policy.context
+            : {}
+        })
+      : null;
+    const currentHard = evaluateHardCallHand(
+      adapter,
+      runtime,
+      seatKey,
+      currentShoupai.clone(),
+      Number(currentMetrics && currentMetrics.handValueEstimate || 0) || 0,
+      policy,
+      hardContext
+    );
+    const nextHard = evaluateHardCallHand(
+      adapter,
+      runtime,
+      seatKey,
+      nextShoupai.clone(),
+      Number(nextMetrics && nextMetrics.handValueEstimate || 0) || 0,
+      policy,
+      hardContext
+    );
+    const currentLiveUkeire = Number(currentHard && currentHard.liveUkeireCount || 0) || 0;
+    const nextLiveUkeire = Number(nextHard && nextHard.liveUkeireCount || 0) || 0;
+    const currentLiveTingpai = Number(currentHard && currentHard.liveTingpaiCount || 0) || 0;
+    const nextLiveTingpai = Number(nextHard && nextHard.liveTingpaiCount || 0) || 0;
+    const currentHardEvScore = Number(currentHard && currentHard.hardEvScore || 0) || 0;
+    const nextHardEvScore = Number(nextHard && nextHard.hardEvScore || 0) || 0;
+    const currentHandValue = Number(currentMetrics && currentMetrics.handValueEstimate || 0) || 0;
+    const nextHandValue = Number(nextMetrics && nextMetrics.handValueEstimate || 0) || 0;
+    const currentContextualHandValue = Number.isFinite(Number(currentHard && currentHard.contextualHandValueEstimate))
+      ? Number(currentHard.contextualHandValueEstimate)
+      : contextApi && typeof contextApi.applyHardContextToHandValue === 'function'
+      ? contextApi.applyHardContextToHandValue(currentHandValue, hardContext)
+      : currentHandValue;
+    const nextContextualHandValue = Number.isFinite(Number(nextHard && nextHard.contextualHandValueEstimate))
+      ? Number(nextHard.contextualHandValueEstimate)
+      : contextApi && typeof contextApi.applyHardContextToHandValue === 'function'
+      ? contextApi.applyHardContextToHandValue(nextHandValue, hardContext)
+      : nextHandValue;
+
+    return {
+      riichiPressure: countRiichiOpponents(runtime, seatKey),
+      isYakuhaiPeng: isYakuhaiPeng(runtime, seatKey, action),
+      hardContext,
+      currentLiveUkeireCount: currentLiveUkeire,
+      nextLiveUkeireCount: nextLiveUkeire,
+      liveUkeireDelta: nextLiveUkeire - currentLiveUkeire,
+      currentLiveTingpaiCount: currentLiveTingpai,
+      nextLiveTingpaiCount: nextLiveTingpai,
+      liveTingpaiDelta: nextLiveTingpai - currentLiveTingpai,
+      currentHardEvScore,
+      nextHardEvScore,
+      hardEvDelta: nextHardEvScore - currentHardEvScore,
+      currentContextualHandValueEstimate: currentContextualHandValue,
+      nextContextualHandValueEstimate: nextContextualHandValue,
+      handValueDelta: nextHandValue - currentHandValue,
+      contextualHandValueDelta: nextContextualHandValue - currentContextualHandValue,
+      currentBestWaitType: currentHard && currentHard.bestWaitType ? currentHard.bestWaitType : null,
+      nextBestWaitType: nextHard && nextHard.bestWaitType ? nextHard.bestWaitType : null
+    };
+  }
+
+  function buildHardCallRules(runtime, seatKey, currentMetrics, nextMetrics, action, policy = {}, hardCallMetrics = null) {
     const reasons = [];
     const callPolicy = policy && policy.call && typeof policy.call === 'object'
       ? policy.call
       : {};
+    const currentXiangting = Number(currentMetrics && currentMetrics.xiangting);
+    const nextXiangting = Number(nextMetrics && nextMetrics.xiangting);
+    const currentUkeire = Number(currentMetrics && currentMetrics.ukeireCount || 0);
+    const nextUkeire = Number(nextMetrics && nextMetrics.ukeireCount || 0);
+    const currentTingpaiCount = Number(currentMetrics && currentMetrics.tingpaiCount || 0);
+    const nextTingpaiCount = Number(nextMetrics && nextMetrics.tingpaiCount || 0);
+    const currentHandValue = Number(currentMetrics && currentMetrics.handValueEstimate || 0);
+    const nextHandValue = Number(nextMetrics && nextMetrics.handValueEstimate || 0);
+    const currentContextualHandValue = Number.isFinite(Number(hardCallMetrics && hardCallMetrics.currentContextualHandValueEstimate))
+      ? Number(hardCallMetrics.currentContextualHandValueEstimate)
+      : currentHandValue;
+    const nextContextualHandValue = Number.isFinite(Number(hardCallMetrics && hardCallMetrics.nextContextualHandValueEstimate))
+      ? Number(hardCallMetrics.nextContextualHandValueEstimate)
+      : nextHandValue;
+    const riichiPressure = hardCallMetrics
+      ? Number(hardCallMetrics.riichiPressure || 0) || 0
+      : countRiichiOpponents(runtime, seatKey);
+    const isYakuhai = hardCallMetrics
+      ? Boolean(hardCallMetrics.isYakuhaiPeng)
+      : isYakuhaiPeng(runtime, seatKey, action);
+    const minPressureHandValue = Number(callPolicy.minPressureHandValue || 0) || 0;
+    const minFlatHandValueDelta = Number.isFinite(Number(callPolicy.minFlatHandValueDelta))
+      ? Number(callPolicy.minFlatHandValueDelta)
+      : 0;
+    const flatCallKeepsShape = nextContextualHandValue >= currentContextualHandValue + minFlatHandValueDelta;
+    const shantenImproves = callPolicy.allowShantenImprovement !== false && nextXiangting < currentXiangting;
+    const yakuhaiAccepted = callPolicy.allowYakuhaiPeng !== false && isYakuhai && nextXiangting <= currentXiangting;
+
+    if (riichiPressure && (shantenImproves || yakuhaiAccepted) && nextContextualHandValue < minPressureHandValue) {
+      return reasons;
+    }
+
+    if (shantenImproves) {
+      reasons.push('hard-call-improves-xiangting');
+    }
+
+    if (yakuhaiAccepted) {
+      reasons.push('hard-call-yakuhai-peng');
+    }
+
+    if (callPolicy.allowFlatSpeedUp === false || nextXiangting !== currentXiangting || !flatCallKeepsShape) {
+      return reasons;
+    }
+    if (riichiPressure && callPolicy.rejectFlatCallsUnderPressure !== false) {
+      return reasons;
+    }
+
+    const minLiveUkeireBoost = Number(callPolicy.minLiveUkeireBoost || 0) || 0;
+    const minLiveTingpaiBoost = Number(callPolicy.minLiveTingpaiBoost || 0) || 0;
+    const minHardEvBoost = Number(callPolicy.minHardEvBoost || 0) || 0;
+    const flatUkeireBoost = Number(callPolicy.flatUkeireBoost || 0) || 0;
+    const flatTingpaiBoost = Number(callPolicy.flatTingpaiBoost || 0) || 0;
+    const flatHandShapeBoost = Number(callPolicy.flatHandShapeBoost || 0) || 0;
+    const liveUkeireDelta = Number(hardCallMetrics && hardCallMetrics.liveUkeireDelta || 0) || 0;
+    const liveTingpaiDelta = Number(hardCallMetrics && hardCallMetrics.liveTingpaiDelta || 0) || 0;
+    const hardEvDelta = Number(hardCallMetrics && hardCallMetrics.hardEvDelta || 0) || 0;
+
+    if (
+      liveUkeireDelta >= minLiveUkeireBoost
+      || liveTingpaiDelta >= minLiveTingpaiBoost
+      || hardEvDelta >= minHardEvBoost
+      || nextUkeire >= currentUkeire + flatUkeireBoost
+      || nextTingpaiCount >= currentTingpaiCount + flatTingpaiBoost
+      || nextHandValue >= currentHandValue + flatHandShapeBoost
+    ) {
+      reasons.push('hard-call-flat-speed-up');
+    }
+
+    return reasons;
+  }
+
+  function buildSimpleCallRules(runtime, seatKey, currentMetrics, nextMetrics, action, policy = {}, hardCallMetrics = null) {
+    const reasons = [];
+    const callPolicy = policy && policy.call && typeof policy.call === 'object'
+      ? policy.call
+      : {};
+    const policyId = typeof policy.id === 'string' && policy.id ? policy.id : 'easy';
+    if (policyId === 'hard' && callPolicy.enableHardCallReview !== false) {
+      return buildHardCallRules(runtime, seatKey, currentMetrics, nextMetrics, action, policy, hardCallMetrics);
+    }
+
     const riichiPressure = countRiichiOpponents(runtime, seatKey);
     const currentXiangting = Number(currentMetrics && currentMetrics.xiangting);
     const nextXiangting = Number(nextMetrics && nextMetrics.xiangting);
@@ -170,26 +360,31 @@
     const flatUkeireBoost = Number(callPolicy.flatUkeireBoost || 0) || 0;
     const flatTingpaiBoost = Number(callPolicy.flatTingpaiBoost || 0) || 0;
     const flatHandShapeBoost = Number(callPolicy.flatHandShapeBoost || 0) || 0;
+    const minFlatHandValueDelta = Number.isFinite(Number(callPolicy.minFlatHandValueDelta))
+      ? Number(callPolicy.minFlatHandValueDelta)
+      : (policyId === 'normal' ? 0 : -Infinity);
+    const flatCallKeepsShape = nextHandValue >= currentHandValue + minFlatHandValueDelta;
 
     if (allowShantenImprovement && nextXiangting < currentXiangting) {
-      reasons.push('easy-call-improves-xiangting');
+      reasons.push(`${policyId}-call-improves-xiangting`);
     }
 
     if (allowYakuhaiPeng && isYakuhaiPeng(runtime, seatKey, action) && nextXiangting <= currentXiangting) {
-      reasons.push('easy-call-yakuhai-peng');
+      reasons.push(`${policyId}-call-yakuhai-peng`);
     }
 
     if (
       allowFlatSpeedUp
       && (!riichiPressure || !suppressFlatCallsUnderRiichi)
       && nextXiangting === currentXiangting
+      && flatCallKeepsShape
       && (
         nextUkeire >= currentUkeire + flatUkeireBoost
         || nextTingpaiCount >= currentTingpaiCount + flatTingpaiBoost
         || nextHandValue >= currentHandValue + flatHandShapeBoost
       )
     ) {
-      reasons.push('easy-call-flat-speed-up');
+      reasons.push(`${policyId}-call-flat-speed-up`);
     }
 
     return reasons;
@@ -235,7 +430,10 @@
         handValueEstimate: estimateHandShapeValue(simulated)
       };
       if (!Number.isFinite(metrics.xiangting)) return;
-      const reasons = buildSimpleCallRules(runtime, seatKey, currentMetrics, metrics, action, policy);
+      const hardCallMetrics = policy && policy.id === 'hard'
+        ? evaluateHardCallMetrics(adapter, runtime, seatKey, shoupai, simulated, currentMetrics, metrics, action, policy)
+        : null;
+      const reasons = buildSimpleCallRules(runtime, seatKey, currentMetrics, metrics, action, policy, hardCallMetrics);
       if (!reasons.length) return;
 
       const evaluation = {
@@ -245,6 +443,9 @@
         reasons,
         policy
       };
+      if (hardCallMetrics) {
+        evaluation.hardCallMetrics = hardCallMetrics;
+      }
 
       if (compareCallEvaluation(evaluation, best)) {
         best = evaluation;

@@ -3,10 +3,12 @@
 const path = require('path');
 const {
   ROOT,
+  DEFAULT_MORTAL_ROOT,
   buildEasyBenchmarkCases,
   evaluateCase
 } = require('./lib/ai-benchmark-helpers');
 const { buildBenchmarkAnalysisReport } = require('../engine/coach/review/benchmark-analysis');
+const { resolveMortalConfigPath } = require('../engine/coach/mortal/mortal-adapter');
 
 function assert(condition, message) {
   if (!condition) {
@@ -15,7 +17,10 @@ function assert(condition, message) {
 }
 
 function main() {
-  const smokeConfigPath = path.join(ROOT, '..', 'third_party', 'Mortal', 'mortal', 'config.smoke.toml');
+  const smokeConfigPath = resolveMortalConfigPath({
+    mortalRoot: DEFAULT_MORTAL_ROOT,
+    configPath: path.join(DEFAULT_MORTAL_ROOT, 'mortal', 'config.smoke.toml')
+  });
   const rows = buildEasyBenchmarkCases(ROOT).map((caseDef) => evaluateCase(caseDef, {
     configPath: smokeConfigPath
   }));

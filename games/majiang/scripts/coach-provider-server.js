@@ -2,16 +2,18 @@
 
 const http = require('http');
 const fs = require('fs');
-const path = require('path');
 
-const { createMortalCoachAdapter, resolveMortalConfigPath } = require('../engine/coach/mortal/mortal-adapter');
+const {
+  createMortalCoachAdapter,
+  resolveMortalCondaEnvPath,
+  resolveMortalConfigPath,
+  resolveMortalRoot
+} = require('../engine/coach/mortal/mortal-adapter');
 const { buildCoachSuggestion } = require('../engine/coach/review/suggestion-format');
 const { localTileToMjai } = require('../engine/coach/mjai/tile-codec');
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 14517;
-const DEFAULT_MORTAL_ROOT = path.resolve(__dirname, '../../third_party/Mortal');
-const DEFAULT_CONDA_ENV_PATH = path.join(DEFAULT_MORTAL_ROOT, '.conda/envs/mortal');
 const CANONICAL_SEAT_KEYS = ['bottom', 'right', 'top', 'left'];
 
 function sendJson(response, statusCode, payload) {
@@ -229,8 +231,11 @@ function syncSessionRecord(record, coachSession = {}) {
 function createCoachServer(options = {}) {
   const host = options.host || DEFAULT_HOST;
   const port = Number(options.port || DEFAULT_PORT);
-  const mortalRoot = options.mortalRoot || DEFAULT_MORTAL_ROOT;
-  const condaEnvPath = options.condaEnvPath || DEFAULT_CONDA_ENV_PATH;
+  const mortalRoot = resolveMortalRoot(options);
+  const condaEnvPath = resolveMortalCondaEnvPath({
+    ...options,
+    mortalRoot
+  });
   const configPath = resolveMortalConfigPath({
     mortalRoot,
     configPath: options.configPath

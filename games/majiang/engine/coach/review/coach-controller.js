@@ -3,6 +3,16 @@
 const { createMortalCoachAdapter } = require('../mortal/mortal-adapter');
 const { buildCoachSuggestion } = require('./suggestion-format');
 
+function cloneEventForCoach(event = null) {
+  if (!event || typeof event !== 'object') return null;
+  return {
+    type: event.type,
+    payload: event.payload == null ? event.payload : JSON.parse(JSON.stringify(event.payload)),
+    timestamp: event.timestamp,
+    meta: event.meta == null ? event.meta : JSON.parse(JSON.stringify(event.meta))
+  };
+}
+
 function createCoachController(runtime, options = {}) {
   if (!runtime) {
     throw new Error('createCoachController requires a runtime instance.');
@@ -14,6 +24,13 @@ function createCoachController(runtime, options = {}) {
   const mjaiEvents = [];
   let startedGame = false;
   let lastSuggestion = null;
+  const capturedEvents = [];
+  const unsubscribe = typeof runtime.subscribe === 'function'
+    ? runtime.subscribe((event) => {
+        const captured = cloneEventForCoach(event);
+        if (captured) capturedEvents.push(captured);
+      })
+    : null;
 
   function isSessionRuntime(value) {
     return Boolean(value && typeof value.getRuntime === 'function' && typeof value.getEventLog === 'function');
@@ -31,9 +48,12 @@ function createCoachController(runtime, options = {}) {
 
   function syncNewEvents() {
     ensureBootstrap();
-    const eventLog = typeof runtime.getEventLog === 'function'
+    const useCapturedEvents = typeof unsubscribe === 'function' || capturedEvents.length > 0;
+    const eventLog = useCapturedEvents
+      ? capturedEvents
+      : (typeof runtime.getEventLog === 'function'
       ? runtime.getEventLog()
-      : (Array.isArray(runtime.eventLog) ? runtime.eventLog : []);
+      : (Array.isArray(runtime.eventLog) ? runtime.eventLog : []));
     const newEvents = eventLog.slice(eventCursor);
     newEvents.forEach((event) => {
       if (isSessionRuntime(runtime) && event && event.type === 'session:round-start') {
@@ -70,6 +90,9 @@ function createCoachController(runtime, options = {}) {
     },
     getMjaiEvents() {
       return mjaiEvents.slice();
+    },
+    dispose() {
+      if (typeof unsubscribe === 'function') unsubscribe();
     }
   };
 }

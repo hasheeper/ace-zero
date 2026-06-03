@@ -216,6 +216,16 @@
     }).sort((left, right) => Number(Boolean(right.winner)) - Number(Boolean(left.winner)));
   }
 
+  function getRoundResultFenpei(roundResult, result) {
+    if (roundResult && roundResult.type === 'draw') {
+      return Array.isArray(roundResult.fenpei) ? roundResult.fenpei.slice() : [0, 0, 0, 0];
+    }
+    if (roundResult && roundResult.multiHule && Array.isArray(roundResult.fenpei)) {
+      return roundResult.fenpei.slice();
+    }
+    return result && Array.isArray(result.fenpei) ? result.fenpei.slice() : [0, 0, 0, 0];
+  }
+
   function buildRoundLabel(roundResult = {}, fallbackText = '') {
     if (fallbackText) return `${fallbackText}局`;
     const wind = ROUND_WIND_LABELS[Number(roundResult.zhuangfeng || 0)] || '东';
@@ -400,9 +410,7 @@
       : new Set(winnerSeat ? [winnerSeat] : []);
     const result = roundResult && roundResult.result ? roundResult.result : null;
     const scoreMap = roundResult && roundResult.scores ? roundResult.scores : {};
-    const fenpei = roundResult.type === 'draw'
-      ? (Array.isArray(roundResult.fenpei) ? roundResult.fenpei.slice() : [0, 0, 0, 0])
-      : (result && Array.isArray(result.fenpei) ? result.fenpei.slice() : [0, 0, 0, 0]);
+    const fenpei = getRoundResultFenpei(roundResult, result);
     const scoreRows = buildScoreRows(payload, winnerSeat, scoreMap, fenpei, winnerSeatSet);
     const base = {
       type: roundResult.type,

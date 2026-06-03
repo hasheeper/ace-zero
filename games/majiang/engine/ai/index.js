@@ -17,6 +17,18 @@ module.exports = {
   ...require('./support/hand-metrics'),
   ...require('./support/tile-danger'),
   ...require('./support/push-fold'),
+  ...require('./support/visible-tiles'),
+  ...require('./support/wait-quality'),
+  ...require('./support/danger-model'),
+  ...require('./support/hard-ev'),
+  ...require('./support/hard-push-fold'),
+  ...require('./support/hard-defense-tiebreak'),
+  ...require('./support/discard-shape'),
+  ...require('./support/discard-candidates'),
+  ...require('./support/discard-ranking'),
+  ...require('./support/hard-discard-review'),
+  ...require('./support/hard-candidate-diagnostics'),
+  ...require('./support/round-context'),
   ...require('./contracts/ai-input'),
   ...require('./contracts/ai-output')
 };

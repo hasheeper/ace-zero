@@ -43,12 +43,25 @@ const mahjongBridgeSmokes = [
   'games/majiang/scripts/validate-runtime-bridge-coach-state.js',
   'games/majiang/scripts/validate-runtime-bridge-coach-timer-cleanup.js',
   'games/majiang/scripts/validate-runtime-bridge-live-analysis.js',
+  'games/majiang/scripts/validate-runtime-bridge-multi-hule.js',
   'games/majiang/scripts/validate-runtime-bridge-pending-review-state.js',
   'games/majiang/scripts/validate-runtime-bridge-reaction-review-baseline.js',
   'games/majiang/scripts/validate-runtime-bridge-review-hold.js',
   'games/majiang/scripts/validate-runtime-bridge-review-to-draw-live-switch.js',
   'games/majiang/scripts/validate-runtime-bridge-review-to-live-switch.js',
   'games/majiang/scripts/validate-analysis-page.js'
+];
+
+const mahjongAiSmokes = [
+  'games/majiang/scripts/validate-normal-ai.js',
+  'games/majiang/scripts/validate-hard-ai.js',
+  'games/majiang/scripts/validate-hard-headless-stats.js',
+  'games/majiang/scripts/validate-hard-promotion-gates.js',
+  'games/majiang/scripts/validate-hard-tile-choice-corpus.js',
+  'games/majiang/scripts/validate-hard-ai-defense-replay.js',
+  'games/majiang/scripts/validate-hard-ai-tile-choice-replay.js',
+  'games/majiang/scripts/validate-hard-ai-repair-candidates.js',
+  'games/majiang/scripts/validate-hard-ai-repair-experiment.js'
 ];
 
 const mahjongScenarioSmokes = [
@@ -99,7 +112,16 @@ const texasCdpSmokes = [
 ];
 
 const mahjongMortalSmokes = [
-  'games/majiang/scripts/validate-mjai-bridge.js'
+  'games/majiang/scripts/validate-mjai-bridge.js',
+  'games/majiang/scripts/validate-hard-vs-mortal-benchmark.js',
+  'games/majiang/scripts/validate-hard-ai-stage1-evidence.js',
+  'games/majiang/scripts/validate-hard-disagreement-corpus.js',
+  'games/majiang/scripts/validate-hard-disagreement-adjudication.js',
+  'games/majiang/scripts/validate-hard-p0-likely-bad-review.js',
+  'games/majiang/scripts/validate-hard-p0-fixture-first-corpus.js',
+  'games/majiang/scripts/validate-hard-mortal-ranker-dataset.js',
+  'games/majiang/scripts/validate-hard-mortal-ranker-baseline.js',
+  'games/majiang/scripts/validate-hard-mortal-ranker-training.js'
 ];
 
 function nodeTasks(files, prefix) {
@@ -118,6 +140,7 @@ const quickTasks = [
   { type: 'node', name: 'Dashboard overview boundary smoke', script: 'apps/dashboard/pages/overview/scripts/validate-overview-boundaries.js' },
   ...nodeTasks(stCoreSmokes, 'ST core smoke'),
   ...nodeTasks(mahjongBridgeSmokes, 'Mahjong bridge smoke'),
+  ...nodeTasks(mahjongAiSmokes, 'Mahjong AI smoke'),
   ...nodeTasks(texasNodeSmokes, 'Texas Node smoke')
 ];
 

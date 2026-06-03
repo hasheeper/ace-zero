@@ -15,7 +15,7 @@
   'use strict';
 
   const DIFFICULTY_TIERS = Object.freeze(['easy', 'normal', 'hard', 'hell']);
-  const IMPLEMENTED_DIFFICULTIES = Object.freeze(['easy']);
+  const IMPLEMENTED_DIFFICULTIES = Object.freeze(['easy', 'normal', 'hard']);
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -100,7 +100,7 @@
       },
       chooseDiscard(seatKey, decisionContext = {}) {
         const config = seatConfigs.get(seatKey);
-        if (!config || !config.enabled || config.difficulty !== 'easy') return null;
+        if (!config || !config.enabled || !config.implemented) return null;
         if (!runtime || !runtime.rulesetProfile || runtime.rulesetProfile.id !== 'riichi-4p') return null;
         if (!discardEvaluator || typeof discardEvaluator.evaluateRuntimeDiscard !== 'function') return null;
         return discardEvaluator.evaluateRuntimeDiscard(runtime, seatKey, {
@@ -111,7 +111,7 @@
       },
       chooseReaction(seatKey, availableActions = [], decisionContext = {}) {
         const config = seatConfigs.get(seatKey);
-        if (!config || !config.enabled || config.difficulty !== 'easy') return null;
+        if (!config || !config.enabled || !config.implemented) return null;
         if (!runtime || !runtime.rulesetProfile || runtime.rulesetProfile.id !== 'riichi-4p') return null;
         const huleAction = selectHuleReaction(availableActions);
         if (huleAction) return huleAction;
@@ -121,7 +121,20 @@
           difficulty: config.difficulty,
           profile: config.profile
         });
-        return callDecision && callDecision.action ? callDecision.action : null;
+        if (!callDecision || !callDecision.action) return null;
+        const aiDecision = {
+          difficulty: config.difficulty,
+          policyId: callDecision.policy && callDecision.policy.id ? callDecision.policy.id : config.difficulty,
+          reasons: Array.isArray(callDecision.reasons) ? callDecision.reasons.slice() : [],
+          metrics: callDecision.metrics ? clone(callDecision.metrics) : null
+        };
+        if (callDecision.hardCallMetrics) {
+          aiDecision.hardCallMetrics = clone(callDecision.hardCallMetrics);
+        }
+        return {
+          ...callDecision.action,
+          aiDecision
+        };
       }
     };
   }

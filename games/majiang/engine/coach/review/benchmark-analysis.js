@@ -16,6 +16,14 @@ function classifyBenchmarkRow(row = {}) {
     };
   }
 
+  if (tags.includes('stale-mortal-state') || (row && row.mortalAlignment && row.mortalAlignment.status === 'stale')) {
+    return {
+      verdict: 'unknown',
+      bucket: 'stale-mortal-state',
+      reason: 'mortal-output-did-not-advance'
+    };
+  }
+
   if (comparison.exactMatch) {
     return {
       verdict: 'good',
@@ -27,7 +35,7 @@ function classifyBenchmarkRow(row = {}) {
   if (comparison.mismatchKind === 'missing') {
     return {
       verdict: 'bad',
-      bucket: 'missing',
+      bucket: tags.includes('missing-mortal') ? 'missing-mortal' : 'missing',
       reason: 'no-mortal-decision'
     };
   }
@@ -40,16 +48,26 @@ function classifyBenchmarkRow(row = {}) {
     };
   }
 
+  if (tags.includes('riichi-missed') || tags.includes('riichi-overpush')) {
+    return {
+      verdict: 'bad',
+      bucket: tags.includes('riichi-missed') ? 'riichi-missed' : 'riichi-overpush',
+      reason: 'riichi-disagreement'
+    };
+  }
+
   if (comparison.mismatchKind === 'riichi') {
     return {
       verdict: 'bad',
-      bucket: 'riichi-threshold',
+      bucket: tags.includes('riichi-missed')
+        ? 'riichi-missed'
+        : (tags.includes('riichi-overpush') ? 'riichi-overpush' : 'riichi-threshold'),
       reason: 'riichi-disagreement'
     };
   }
 
   if (comparison.mismatchKind === 'tile') {
-    if (hasDefenseTag) {
+    if (hasDefenseTag || tags.includes('tile-defense')) {
       return {
         verdict: 'bad',
         bucket: 'tile-defense',

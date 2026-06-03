@@ -1707,6 +1707,10 @@
     return bridgeFrontendEffects.buildHuleLogSummary(result);
   }
 
+  function buildHuleWinnerLogSummaries(roundResult = null, fallbackResult = null) {
+    return bridgeFrontendEffects.buildHuleWinnerLogSummaries(roundResult, fallbackResult);
+  }
+
   function buildSeatWindLogDetail(snapshot = null) {
     return bridgeFrontendEffects.buildSeatWindLogDetail(snapshot);
   }
@@ -2086,28 +2090,43 @@
           table.clearRuntimeHandStatusOverlay();
         }
         const roundResult = event.payload && event.payload.roundResult ? event.payload.roundResult : null;
-        const winners = roundResult && Array.isArray(roundResult.winners)
-          ? roundResult.winners.map((entry) => ({
-              winnerSeat: entry && entry.winnerSeat ? entry.winnerSeat : null,
-              fromSeat: entry && entry.fromSeat ? entry.fromSeat : null,
-              ...buildHuleLogSummary(entry && entry.result ? entry.result : null)
-            }))
-          : [];
+        const winnerSummaries = buildHuleWinnerLogSummaries(
+          roundResult,
+          event.payload && event.payload.result ? event.payload.result : null
+        );
         const huleSummary = buildHuleLogSummary(event.payload && event.payload.result ? event.payload.result : null);
+        const multiSummary = roundResult && roundResult.multiHule && winnerSummaries.length
+          ? {
+              番数: winnerSummaries.map((entry) => entry.番数),
+              符数: winnerSummaries.map((entry) => entry.符数),
+              役种名称: winnerSummaries.map((entry) => entry.役种名称),
+              yaku: winnerSummaries.map((entry) => entry.yaku),
+              fanshu: winnerSummaries.map((entry) => entry.fanshu),
+              fu: winnerSummaries.map((entry) => entry.fu)
+            }
+          : {
+              番数: huleSummary.番数,
+              符数: huleSummary.符数,
+              役种名称: huleSummary.役种名称,
+              yaku: huleSummary.役种名称,
+              fanshu: huleSummary.番数,
+              fu: huleSummary.符数
+            };
         logRuntime('info', '和牌结束', {
           winnerSeat: roundResult ? roundResult.winnerSeat : null,
+          winnerSeats: winnerSummaries.map((entry) => entry.winnerSeat).filter(Boolean),
           fromSeat: roundResult ? roundResult.fromSeat : null,
           winnerCount: roundResult ? Number(roundResult.winnerCount || 0) : 0,
           multiHule: Boolean(roundResult && roundResult.multiHule),
           baojiaSeat: roundResult ? roundResult.baojiaSeat : null,
           baojiaYaku: roundResult ? roundResult.baojiaYaku : null,
-          番数: huleSummary.番数,
-          符数: huleSummary.符数,
-          役种名称: huleSummary.役种名称,
-          winners,
-          yaku: huleSummary.役种名称,
-          fanshu: huleSummary.番数,
-          fu: huleSummary.符数,
+          番数: multiSummary.番数,
+          符数: multiSummary.符数,
+          役种名称: multiSummary.役种名称,
+          winners: winnerSummaries,
+          yaku: multiSummary.yaku,
+          fanshu: multiSummary.fanshu,
+          fu: multiSummary.fu,
           changbangBefore: roundResult ? roundResult.changbang : null,
           lizhibangBefore: roundResult ? roundResult.lizhibang : null,
           scores: roundResult ? clone(roundResult.scores || {}) : {}

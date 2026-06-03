@@ -2,6 +2,10 @@
 
 const path = require('path');
 const { validateMortalConfigAssets } = require('./coach-provider-server');
+const {
+  resolveMortalConfigPath,
+  resolveMortalRoot
+} = require('../engine/coach/mortal/mortal-adapter');
 
 function assert(condition, message) {
   if (!condition) {
@@ -10,15 +14,11 @@ function assert(condition, message) {
 }
 
 function main() {
-  const configPath = path.join(
-    __dirname,
-    '..',
-    '..',
-    'third_party',
-    'Mortal',
-    'mortal',
-    'config.real.toml'
-  );
+  const mortalRoot = resolveMortalRoot();
+  const configPath = resolveMortalConfigPath({
+    mortalRoot,
+    configPath: path.join(mortalRoot, 'mortal', 'config.real.toml')
+  });
   const validation = validateMortalConfigAssets(configPath);
 
   assert(Array.isArray(validation.requiredPaths) && validation.requiredPaths.length >= 1, `expected real config to reference model files, got ${JSON.stringify(validation)}`);

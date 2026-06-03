@@ -2,12 +2,13 @@
 'use strict'
 
 import time
+import os
 from pathlib import Path
 
 import torch
 
 
-ROOT = Path('/Users/liuhang/Documents/acezero/third_party/Mortal')
+ROOT = Path(os.environ.get('MORTAL_ROOT', '/Users/liuhang/Documents/Mortal'))
 MORTAL_DIR = ROOT / 'mortal'
 MODELS_DIR = ROOT / 'models'
 

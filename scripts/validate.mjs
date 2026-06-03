@@ -135,7 +135,24 @@ async function runCdpPreflightTask() {
 }
 
 async function runMortalPreflightTask() {
-  const mortalRoot = process.env.MORTAL_ROOT || '/Users/liuhang/Documents/acezero/third_party/Mortal';
+  const mortalCandidates = [
+    '/Users/liuhang/Documents/Mortal',
+    '/Users/liuhang/Documents/acezero/third_party/Mortal'
+  ];
+  let mortalRoot = process.env.MORTAL_ROOT || mortalCandidates[0];
+  if (!process.env.MORTAL_ROOT) {
+    for (const candidate of mortalCandidates) {
+      try {
+        const stats = await fs.stat(path.join(candidate, 'mortal', 'mortal.py'));
+        if (stats.isFile()) {
+          mortalRoot = candidate;
+          break;
+        }
+      } catch (_) {
+        // Try the next known local Mortal location.
+      }
+    }
+  }
   const configPath = process.env.MORTAL_CFG_PATH || path.join(mortalRoot, 'mortal', 'config.smoke.toml');
   const condaEnvPath = process.env.MORTAL_CONDA_ENV_PATH || path.join(mortalRoot, '.conda/envs/mortal');
   const requiredFiles = [
