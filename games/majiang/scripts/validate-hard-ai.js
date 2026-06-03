@@ -3057,12 +3057,105 @@ function runClosedRouteBalancedPolicySmoke() {
   assert(review.active === true, `expected balanced policy route review to be active, got ${JSON.stringify(review)}`);
   assert(review.override === true, `expected balanced policy to override this high-margin fixture, got ${JSON.stringify(review)}`);
   assert(review.minMargin === 90, `expected balanced margin threshold, got ${JSON.stringify(review)}`);
+  assert(review.balancedState == null, `stable balanced should not use H16 balanced state, got ${JSON.stringify(review)}`);
   return {
     name: 'hard-closed-route-balanced-policy-smoke',
     snapshot: {
       reason: review.reason,
       minMargin: review.minMargin,
       margin: review.margin
+    }
+  };
+}
+
+function runClosedRouteBalancedDevValueOverrideSmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    policyId: 'hard-balanced-dev',
+    route: {
+      enableBalancedRouteState: true,
+      closedRouteMaxXiangting: 2,
+      closedRouteOverrideMinMargin: 150,
+      balancedValueOverrideMinMargin: 150,
+      balancedNeutralOverrideMinMargin: 180
+    },
+    currentMetrics: {
+      xiangting: 2
+    },
+    nextMetrics: {
+      xiangting: 2
+    },
+    hardCallMetrics: {
+      currentContextualHandValueEstimate: 72
+    }
+  });
+  assert(review.enabled === true, `expected balanced-dev route review enabled, got ${JSON.stringify(review)}`);
+  assert(review.active === true, `expected balanced-dev value route review active, got ${JSON.stringify(review)}`);
+  assert(review.balancedState === 'value', `expected balanced-dev value state, got ${JSON.stringify(review)}`);
+  assert(review.effectiveMinMargin === 150, `expected value effective margin, got ${JSON.stringify(review)}`);
+  assert(review.override === true && review.allowed === false, `expected balanced-dev value state to override this fixture, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-closed-route-balanced-dev-value-smoke',
+    snapshot: {
+      reason: review.reason,
+      balancedState: review.balancedState,
+      effectiveMinMargin: review.effectiveMinMargin,
+      margin: review.margin
+    }
+  };
+}
+
+function runClosedRouteBalancedDevDirectTenpaiSmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    policyId: 'hard-balanced-dev',
+    route: {
+      enableBalancedRouteState: true,
+      closedRouteMaxXiangting: 2
+    },
+    nextMetrics: {
+      xiangting: 0,
+      tingpaiCount: 6,
+      ukeireCount: 18,
+      handValueEstimate: 24
+    },
+    hardCallMetrics: {
+      nextLiveTingpaiCount: 6,
+      liveTingpaiDelta: 1,
+      nextContextualHandValueEstimate: 24
+    }
+  });
+  assert(review.balancedState === 'tenpai-speed', `expected balanced-dev tenpai-speed state, got ${JSON.stringify(review)}`);
+  assert(review.override === false && review.allowed === true, `expected balanced-dev direct tenpai call to remain allowed, got ${JSON.stringify(review)}`);
+  assert(review.reason === 'hard-call-closed-route-direct-tenpai-allowed', `unexpected reason: ${review.reason}`);
+  return {
+    name: 'hard-closed-route-balanced-dev-direct-tenpai-smoke',
+    snapshot: {
+      reason: review.reason,
+      balancedState: review.balancedState,
+      directTenpai: review.directTenpai
+    }
+  };
+}
+
+function runClosedRouteBalancedDevPressureSmoke() {
+  const review = evaluateClosedRouteValueFixture({
+    policyId: 'hard-balanced-dev',
+    route: {
+      enableBalancedRouteState: true,
+      closedRouteMaxXiangting: 2
+    },
+    hardCallMetrics: {
+      riichiPressure: 1
+    }
+  });
+  assert(review.balancedState === 'defense', `expected balanced-dev defense state under pressure, got ${JSON.stringify(review)}`);
+  assert(review.override === false && review.allowed === true, `expected pressure to keep call/pass decision unoverridden, got ${JSON.stringify(review)}`);
+  assert(review.reason === 'hard-call-closed-route-pressure-present', `unexpected reason: ${review.reason}`);
+  return {
+    name: 'hard-closed-route-balanced-dev-pressure-smoke',
+    snapshot: {
+      reason: review.reason,
+      balancedState: review.balancedState,
+      riichiPressure: review.riichiPressure
     }
   };
 }
@@ -3123,6 +3216,9 @@ function main() {
     runClosedRouteOpenHandRegressionSmoke(),
     runClosedRouteHighValueCallAllowSmoke(),
     runClosedRouteBalancedPolicySmoke(),
+    runClosedRouteBalancedDevValueOverrideSmoke(),
+    runClosedRouteBalancedDevDirectTenpaiSmoke(),
+    runClosedRouteBalancedDevPressureSmoke(),
     runHardVsNormalComparisonSmoke(cwd)
   ];
 

@@ -195,7 +195,11 @@
       || policyId === 'hard-tuned'
       || policyId === 'hard-defensive'
       || policyId === 'hard-balanced'
+      || policyId === 'hard-aggressive-dev'
+      || policyId === 'hard-defensive-dev'
+      || policyId === 'hard-balanced-dev'
       || policyId === 'hard-heavy'
+      || policyId === 'hard-heavy-dev'
       || policyId === 'hard-experimental'
       || policyId === 'hell';
   }
@@ -347,13 +351,149 @@
     ) * Number(weights.passRiichiPotential || 0);
   }
 
+  function resolveBalancedRouteState(routePolicy = {}, context = {}) {
+    const remainingTiles = Number(context.remainingTiles || 0) || 0;
+    const riichiPressure = Number(context.riichiPressure || 0) || 0;
+    const currentXiangting = Number(context.currentXiangting);
+    const nextXiangting = Number(context.nextXiangting);
+    const directTenpai = context.directTenpai === true;
+    const shantenImprovesBy = Number(context.shantenImprovesBy || 0) || 0;
+    const liveUkeireDelta = Number(context.liveUkeireDelta || 0) || 0;
+    const hardEvDelta = Number(context.hardEvDelta || 0) || 0;
+    const currentContextualHandValue = Number(context.currentContextualHandValue || 0) || 0;
+    const nextContextualHandValue = Number(context.nextContextualHandValue || 0) || 0;
+    const riichiPotential = Number(context.riichiPotential || 0) || 0;
+    const minRemainingTiles = numberFromPolicy(routePolicy, 'closedRouteMinRemainingTiles', 24);
+    const valueMargin = numberFromPolicy(routePolicy, 'balancedValueOverrideMinMargin', 95);
+    const neutralMargin = numberFromPolicy(routePolicy, 'balancedNeutralOverrideMinMargin', 140);
+    const lowValueMax = numberFromPolicy(routePolicy, 'balancedLowValueMax', 28);
+    const strongHardEvDelta = numberFromPolicy(routePolicy, 'balancedStrongCallHardEvDelta', 120);
+    const strongLiveUkeireDelta = numberFromPolicy(routePolicy, 'balancedStrongCallLiveUkeireDelta', 12);
+    const shantenHardEvDelta = numberFromPolicy(routePolicy, 'balancedShantenCallHardEvDelta', 60);
+    const shantenLiveUkeireDelta = numberFromPolicy(routePolicy, 'balancedShantenCallLiveUkeireDelta', 8);
+    const valueMinRiichiPotential = numberFromPolicy(routePolicy, 'balancedValueMinRiichiPotential', 55);
+    const valueMinContextualHandValue = numberFromPolicy(routePolicy, 'balancedValueMinContextualHandValue', 32);
+    const twoShantenValueMinRiichiPotential = numberFromPolicy(routePolicy, 'balancedTwoShantenValueMinRiichiPotential', 80);
+    const twoShantenValueMinContextualHandValue = numberFromPolicy(routePolicy, 'balancedTwoShantenValueMinContextualHandValue', 60);
+    const reasons = [];
+
+    if (riichiPressure > 0) {
+      reasons.push('balanced-state-riichi-pressure');
+      return {
+        state: 'defense',
+        reasons,
+        overrideAllowed: false,
+        effectiveMinMargin: null
+      };
+    }
+    if (directTenpai) {
+      reasons.push('balanced-state-direct-tenpai');
+      return {
+        state: 'tenpai-speed',
+        reasons,
+        overrideAllowed: false,
+        effectiveMinMargin: null
+      };
+    }
+    if (remainingTiles < minRemainingTiles) {
+      reasons.push('balanced-state-late-round');
+      return {
+        state: 'tenpai-speed',
+        reasons,
+        overrideAllowed: false,
+        effectiveMinMargin: null
+      };
+    }
+
+    const lowValueRoute = Math.max(currentContextualHandValue, nextContextualHandValue) <= lowValueMax;
+    const valueRoute = Number.isFinite(currentXiangting) && currentXiangting <= 2 && (
+      currentXiangting >= 2
+        ? (
+            currentContextualHandValue >= twoShantenValueMinContextualHandValue
+            || riichiPotential >= twoShantenValueMinRiichiPotential
+          )
+        : (
+            currentContextualHandValue >= valueMinContextualHandValue
+            || riichiPotential >= valueMinRiichiPotential
+          )
+    );
+    const strongCallGain = hardEvDelta >= strongHardEvDelta || liveUkeireDelta >= strongLiveUkeireDelta;
+    const twoShantenSpeedImprove = (
+      shantenImprovesBy > 0
+      && Number.isFinite(currentXiangting)
+      && currentXiangting >= 2
+      && !valueRoute
+      && lowValueRoute
+    );
+    const shantenCallGain = shantenImprovesBy > 0 && (
+      twoShantenSpeedImprove
+      || hardEvDelta >= shantenHardEvDelta
+      || liveUkeireDelta >= shantenLiveUkeireDelta
+      || lowValueRoute
+    );
+    if (strongCallGain || shantenCallGain) {
+      if (strongCallGain) reasons.push('balanced-state-strong-call-gain');
+      if (shantenCallGain) reasons.push('balanced-state-shanten-speed');
+      if (lowValueRoute) reasons.push('balanced-state-low-value-route');
+      return {
+        state: 'speed',
+        reasons,
+        overrideAllowed: false,
+        effectiveMinMargin: null
+      };
+    }
+
+    if (valueRoute) {
+      if (
+        currentXiangting >= 2
+          ? currentContextualHandValue >= twoShantenValueMinContextualHandValue
+          : currentContextualHandValue >= valueMinContextualHandValue
+      ) reasons.push('balanced-state-closed-value');
+      if (
+        currentXiangting >= 2
+          ? riichiPotential >= twoShantenValueMinRiichiPotential
+          : riichiPotential >= valueMinRiichiPotential
+      ) reasons.push('balanced-state-riichi-potential');
+      return {
+        state: 'value',
+        reasons,
+        overrideAllowed: true,
+        effectiveMinMargin: valueMargin
+      };
+    }
+
+    if (Number.isFinite(nextXiangting) && nextXiangting <= 1 && shantenImprovesBy > 0) {
+      reasons.push('balanced-state-near-tenpai-speed');
+      return {
+        state: 'tenpai-speed',
+        reasons,
+        overrideAllowed: false,
+        effectiveMinMargin: null
+      };
+    }
+
+    reasons.push('balanced-state-neutral');
+    return {
+      state: 'neutral',
+      reasons,
+      overrideAllowed: true,
+      effectiveMinMargin: neutralMargin
+    };
+  }
+
   function evaluateClosedRouteValueReview(runtime, seatKey, currentMetrics, nextMetrics, action, policy = {}, hardCallMetrics = null) {
     const routePolicy = policy && policy.route && typeof policy.route === 'object'
       ? policy.route
       : {};
     const policyId = typeof policy.id === 'string' ? policy.id : '';
     const enabled = routePolicy.enableClosedRouteValueRebalance === true
-      && (policyId === 'hard-experimental' || policyId === 'hard-balanced' || policyId === 'hard-heavy');
+      && (
+        policyId === 'hard-experimental'
+        || policyId === 'hard-balanced'
+        || policyId === 'hard-balanced-dev'
+        || policyId === 'hard-heavy'
+        || policyId === 'hard-heavy-dev'
+      );
     const currentXiangting = Number(currentMetrics && currentMetrics.xiangting);
     const nextXiangting = Number(nextMetrics && nextMetrics.xiangting);
     const remainingTiles = getRemainingTiles(runtime);
@@ -404,6 +544,26 @@
       + lostClosedRouteCost
     );
     const margin = passClosedRouteScore - callOpenRouteScore;
+    const balancedStateReview = policyId === 'hard-balanced-dev' && routePolicy.enableBalancedRouteState === true
+      ? resolveBalancedRouteState(routePolicy, {
+          remainingTiles,
+          riichiPressure,
+          currentXiangting,
+          nextXiangting,
+          directTenpai,
+          shantenImprovesBy,
+          liveUkeireDelta,
+          hardEvDelta,
+          currentContextualHandValue,
+          nextContextualHandValue,
+          riichiPotential
+        })
+      : null;
+    const effectiveMinMargin = balancedStateReview
+      ? balancedStateReview.overrideAllowed
+        ? balancedStateReview.effectiveMinMargin
+        : null
+      : minMargin;
     const base = {
       enabled,
       mode: 'closed-route-value-rebalance-v1',
@@ -423,7 +583,10 @@
       lostClosedRouteCost,
       riichiPotential,
       margin,
-      minMargin
+      minMargin,
+      effectiveMinMargin,
+      balancedState: balancedStateReview ? balancedStateReview.state : null,
+      balancedStateReasons: balancedStateReview ? balancedStateReview.reasons.slice() : []
     };
 
     if (!enabled) return base;
@@ -445,7 +608,15 @@
         reason: 'hard-call-closed-route-direct-tenpai-allowed'
       };
     }
-    if (margin >= minMargin) {
+    if (balancedStateReview && balancedStateReview.overrideAllowed === false) {
+      return {
+        ...base,
+        active: true,
+        allowed: true,
+        reason: `hard-call-balanced-${balancedStateReview.state}-call`
+      };
+    }
+    if (margin >= effectiveMinMargin) {
       return {
         ...base,
         active: true,

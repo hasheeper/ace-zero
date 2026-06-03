@@ -200,6 +200,65 @@ function createHeavyHardPolicy() {
   return policy;
 }
 
+function createAggressiveDevHardPolicy() {
+  const policy = createAggressiveHardPolicy();
+  policy.id = 'hard-aggressive-dev';
+  policy.personality = 'aggressive-dev';
+  policy.devVariant = {
+    parent: 'hard-aggressive',
+    note: 'H16 dev variant. Initially inherits hard-aggressive until explicit dev tuning lands.'
+  };
+  return policy;
+}
+
+function createDefensiveDevHardPolicy() {
+  const policy = createDefensiveHardPolicy();
+  policy.id = 'hard-defensive-dev';
+  policy.personality = 'defensive-dev';
+  policy.devVariant = {
+    parent: 'hard-defensive',
+    note: 'H16 dev variant. Initially inherits hard-defensive until explicit dev tuning lands.'
+  };
+  return policy;
+}
+
+function createBalancedDevHardPolicy() {
+  const policy = createBalancedHardPolicy();
+  policy.id = 'hard-balanced-dev';
+  policy.personality = 'balanced-dev';
+  policy.devVariant = {
+    parent: 'hard-balanced',
+    note: 'H16 dev variant. Uses balanced state routing while keeping the shared route scorer.'
+  };
+  policy.route = policy.route && typeof policy.route === 'object' ? policy.route : {};
+  policy.route.enableBalancedRouteState = true;
+  policy.route.closedRouteMaxXiangting = 2;
+  policy.route.closedRouteOverrideMinMargin = 150;
+  policy.route.balancedValueOverrideMinMargin = 150;
+  policy.route.balancedNeutralOverrideMinMargin = 230;
+  policy.route.balancedLowValueMax = 36;
+  policy.route.balancedStrongCallHardEvDelta = 120;
+  policy.route.balancedStrongCallLiveUkeireDelta = 12;
+  policy.route.balancedShantenCallHardEvDelta = 40;
+  policy.route.balancedShantenCallLiveUkeireDelta = 6;
+  policy.route.balancedValueMinRiichiPotential = 65;
+  policy.route.balancedValueMinContextualHandValue = 40;
+  policy.route.balancedTwoShantenValueMinRiichiPotential = 80;
+  policy.route.balancedTwoShantenValueMinContextualHandValue = 60;
+  return policy;
+}
+
+function createHeavyDevHardPolicy() {
+  const policy = createHeavyHardPolicy();
+  policy.id = 'hard-heavy-dev';
+  policy.personality = 'heavy-dev';
+  policy.devVariant = {
+    parent: 'hard-heavy',
+    note: 'H16 dev variant. Initially inherits hard-heavy until explicit dev tuning lands.'
+  };
+  return policy;
+}
+
 function createVariantPresets() {
   return {
     easy: {
@@ -228,6 +287,13 @@ function createVariantPresets() {
       description: 'Speed-oriented hard personality. Uses the pure hard core with later defensive/shape tuning gates disabled.',
       createPolicy: createAggressiveHardPolicy
     },
+    'hard-aggressive-dev': {
+      id: 'hard-aggressive-dev',
+      label: '困难 AI（速攻 dev）',
+      difficulty: 'hard',
+      description: 'Development variant for hard-aggressive. Inherits stable aggressive behavior until H16 speed tuning is enabled.',
+      createPolicy: createAggressiveDevHardPolicy
+    },
     'hard-tuned': {
       id: 'hard-tuned',
       label: '困难 AI（后微调）',
@@ -242,6 +308,13 @@ function createVariantPresets() {
       description: 'Defense-oriented hard personality. Current tuned/formal hard baseline with retained hard-only safety gates.',
       createPolicy: createDefensiveHardPolicy
     },
+    'hard-defensive-dev': {
+      id: 'hard-defensive-dev',
+      label: '困难 AI（防御 dev）',
+      difficulty: 'hard',
+      description: 'Development variant for hard-defensive. Inherits stable defensive behavior until H16 counterattack tuning is enabled.',
+      createPolicy: createDefensiveDevHardPolicy
+    },
     'hard-balanced': {
       id: 'hard-balanced',
       label: '困难 AI（平衡）',
@@ -249,12 +322,26 @@ function createVariantPresets() {
       description: 'Balanced hard personality. Keeps tuned hard base and applies a milder closed-riichi route value rebalance.',
       createPolicy: createBalancedHardPolicy
     },
+    'hard-balanced-dev': {
+      id: 'hard-balanced-dev',
+      label: '困难 AI（平衡 dev）',
+      difficulty: 'hard',
+      description: 'Development variant for hard-balanced. Adds H16 balanced state routing on top of the shared route scorer.',
+      createPolicy: createBalancedDevHardPolicy
+    },
     'hard-heavy': {
       id: 'hard-heavy',
       label: '困难 AI（打点）',
       difficulty: 'hard',
       description: 'Value-oriented hard personality. Keeps tuned hard base and adds closed-riichi route value rebalance.',
       createPolicy: createHeavyHardPolicy
+    },
+    'hard-heavy-dev': {
+      id: 'hard-heavy-dev',
+      label: '困难 AI（打点 dev）',
+      difficulty: 'hard',
+      description: 'Development variant for hard-heavy. Inherits stable heavy behavior until H16 turn-decay tuning is enabled.',
+      createPolicy: createHeavyDevHardPolicy
     },
     'hard-experimental': {
       id: 'hard-experimental',
@@ -321,10 +408,14 @@ function summarizeVariantConfig(variant) {
           } : null,
           route: policy.route ? {
             enableClosedRouteValueRebalance: Boolean(policy.route.enableClosedRouteValueRebalance),
+            enableBalancedRouteState: Boolean(policy.route.enableBalancedRouteState),
             closedRouteMaxXiangting: policy.route.closedRouteMaxXiangting,
             closedRouteMinRemainingTiles: policy.route.closedRouteMinRemainingTiles,
-            closedRouteOverrideMinMargin: policy.route.closedRouteOverrideMinMargin
+            closedRouteOverrideMinMargin: policy.route.closedRouteOverrideMinMargin,
+            balancedValueOverrideMinMargin: policy.route.balancedValueOverrideMinMargin,
+            balancedNeutralOverrideMinMargin: policy.route.balancedNeutralOverrideMinMargin
           } : null,
+          devVariant: policy.devVariant ? clone(policy.devVariant) : null,
           experimentalOverlay: policy.experimentalOverlay ? {
             enabled: Boolean(policy.experimentalOverlay.enabled),
             overlays: Array.isArray(policy.experimentalOverlay.overlays) ? policy.experimentalOverlay.overlays.slice() : []
@@ -539,6 +630,8 @@ function createRoundCounters() {
     closedRoutePassScoreSum: createCountersBySeat(),
     closedRouteMarginSum: createCountersBySeat(),
     closedRouteScoreSamples: createCountersBySeat(),
+    balancedRouteStateCounts: createReasonCountersBySeat(),
+    balancedRouteStateReasonCounts: createReasonCountersBySeat(),
     riichiOpportunities: createCountersBySeat(),
     reactions: createCountersBySeat(),
     callReasonCounts: createReasonCountersBySeat(),
@@ -566,6 +659,8 @@ function createMatchCounters() {
     closedRoutePassScoreSum: createCountersBySeat(),
     closedRouteMarginSum: createCountersBySeat(),
     closedRouteScoreSamples: createCountersBySeat(),
+    balancedRouteStateCounts: createReasonCountersBySeat(),
+    balancedRouteStateReasonCounts: createReasonCountersBySeat(),
     riichiOpportunities: createCountersBySeat(),
     reactions: createCountersBySeat(),
     callReasonCounts: createReasonCountersBySeat(),
@@ -616,6 +711,8 @@ function mergeRoundCounters(matchCounters, roundCounters) {
   });
   addReasonCountersBySeat(matchCounters.callReasonCounts, roundCounters.callReasonCounts);
   addReasonCountersBySeat(matchCounters.riichiRejectReasonCounts, roundCounters.riichiRejectReasonCounts);
+  addReasonCountersBySeat(matchCounters.balancedRouteStateCounts, roundCounters.balancedRouteStateCounts);
+  addReasonCountersBySeat(matchCounters.balancedRouteStateReasonCounts, roundCounters.balancedRouteStateReasonCounts);
   SEATS.forEach((seatKey) => {
     if (Number(roundCounters && roundCounters.calls && roundCounters.calls[seatKey] || 0) > 0) {
       matchCounters.callRounds[seatKey] += 1;
@@ -817,6 +914,14 @@ function recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision, opt
     roundCounters.closedRoutePassScoreSum[seatKey] += passClosedRouteScore;
     roundCounters.closedRouteMarginSum[seatKey] += margin;
     roundCounters.closedRouteScoreSamples[seatKey] += 1;
+  }
+  if (typeof review.balancedState === 'string' && review.balancedState) {
+    incrementReasonCounter(roundCounters.balancedRouteStateCounts, seatKey, review.balancedState);
+  }
+  if (Array.isArray(review.balancedStateReasons)) {
+    review.balancedStateReasons.forEach((reason) => (
+      incrementReasonCounter(roundCounters.balancedRouteStateReasonCounts, seatKey, reason)
+    ));
   }
 
   if (options.recordReasons === true) {
@@ -1266,6 +1371,8 @@ function createEmptyVariantStats() {
     closedRoutePassScoreSum: 0,
     closedRouteMarginSum: 0,
     closedRouteScoreSamples: 0,
+    balancedRouteStateCounts: {},
+    balancedRouteStateReasonCounts: {},
     riichiOpportunities: 0,
     callReasonCounts: {},
     riichiRejectReasonCounts: {},
@@ -1459,6 +1566,8 @@ function summarizeMatchRows(rows, variants) {
       stats.riichiOpportunities += Number(counters.riichiOpportunities && counters.riichiOpportunities[seatKey] || 0);
       addReasonCounters(stats.callReasonCounts, counters.callReasonCounts && counters.callReasonCounts[seatKey]);
       addReasonCounters(stats.riichiRejectReasonCounts, counters.riichiRejectReasonCounts && counters.riichiRejectReasonCounts[seatKey]);
+      addReasonCounters(stats.balancedRouteStateCounts, counters.balancedRouteStateCounts && counters.balancedRouteStateCounts[seatKey]);
+      addReasonCounters(stats.balancedRouteStateReasonCounts, counters.balancedRouteStateReasonCounts && counters.balancedRouteStateReasonCounts[seatKey]);
       stats.winTurnSum += Number(counters.winTurnSum && counters.winTurnSum[seatKey] || 0);
       stats.winTurnSamples += Number(counters.winTurnSamples && counters.winTurnSamples[seatKey] || 0);
       stats.winPointSum += Number(counters.winPointSum && counters.winPointSum[seatKey] || 0);
@@ -1529,6 +1638,14 @@ function formatMaybeInteger(value) {
 
 function formatMaybePercent(value) {
   return value == null ? 'n/a' : formatPercent(value);
+}
+
+function formatCompactReasonCounts(counts = {}) {
+  const entries = Object.entries(counts || {})
+    .filter(([, count]) => Number(count || 0) > 0)
+    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0) || String(left[0]).localeCompare(String(right[0])));
+  if (!entries.length) return '';
+  return entries.map(([key, count]) => `${key}:${Number(count || 0)}`).join(',');
 }
 
 function buildVariantRecordPanel(stats = {}) {
@@ -1603,6 +1720,8 @@ function buildVariantRecordPanel(stats = {}) {
     },
     callReasonCounts: stats.callReasonCounts || {},
     riichiRejectReasonCounts: stats.riichiRejectReasonCounts || {},
+    balancedRouteStateCounts: stats.balancedRouteStateCounts || {},
+    balancedRouteStateReasonCounts: stats.balancedRouteStateReasonCounts || {},
     uncertainty: stats.uncertainty || null,
     availability: {
       drawStats: drawRate != null,
@@ -1620,7 +1739,7 @@ function formatVariantRecordPanel(variant, stats = {}) {
     ? `±${roundMetric(stats.uncertainty.averageRankStandardError, 3)}`
     : '';
   const title = variant && variant.id ? variant.id : 'unknown';
-  return [
+  const lines = [
     `[arena]   ${title}`
       + ` rec=${formatMaybeInteger(panel.records)}`
       + ` avgRank=${formatMaybeNumber(panel.averageRank, 2)}${rankSe}`
@@ -1660,6 +1779,15 @@ function formatVariantRecordPanel(variant, stats = {}) {
       + ` passRouteScore=${formatMaybeNumber(panel.averagePassClosedRouteScore, 1)}`
       + ` routeMargin=${formatMaybeNumber(panel.closedRouteMarginAverage, 1)}`
   ];
+  const balancedStates = formatCompactReasonCounts(panel.balancedRouteStateCounts);
+  if (balancedStates) {
+    lines.push(`[arena]     balancedState=${balancedStates}`);
+  }
+  const balancedReasons = formatCompactReasonCounts(panel.balancedRouteStateReasonCounts);
+  if (balancedReasons) {
+    lines.push(`[arena]     balancedStateReason=${balancedReasons}`);
+  }
+  return lines;
 }
 
 function formatArenaSummary(label, summary, variants) {
@@ -1903,5 +2031,9 @@ module.exports = {
   formatArenaSummary,
   createAggressiveHardPolicy,
   createDefensiveHardPolicy,
-  createHeavyHardPolicy
+  createHeavyHardPolicy,
+  createAggressiveDevHardPolicy,
+  createDefensiveDevHardPolicy,
+  createBalancedDevHardPolicy,
+  createHeavyDevHardPolicy
 };

@@ -206,25 +206,39 @@ function validateHardPersonalityTargetVariants() {
     '--target-variant',
     'hard-balanced'
   ]));
+  const balancedDev = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-balanced-dev'
+  ]));
   const heavy = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
     '--target-variant',
     'hard-heavy'
+  ]));
+  const heavyDev = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-heavy-dev'
   ]));
 
   assert(aggressive.id === 'hard-aggressive' && aggressive.policy && aggressive.policy.id === 'hard-aggressive', `expected aggressive target policy, got ${JSON.stringify(aggressive)}`);
   assert(defensive.id === 'hard-defensive' && defensive.policy && defensive.policy.id === 'hard-defensive', `expected defensive target policy, got ${JSON.stringify(defensive)}`);
   assert(balanced.id === 'hard-balanced' && balanced.policy && balanced.policy.id === 'hard-balanced', `expected balanced target policy, got ${JSON.stringify(balanced)}`);
+  assert(balancedDev.id === 'hard-balanced-dev' && balancedDev.policy && balancedDev.policy.id === 'hard-balanced-dev', `expected balanced-dev target policy, got ${JSON.stringify(balancedDev)}`);
   assert(heavy.id === 'hard-heavy' && heavy.policy && heavy.policy.id === 'hard-heavy', `expected heavy target policy, got ${JSON.stringify(heavy)}`);
+  assert(heavyDev.id === 'hard-heavy-dev' && heavyDev.policy && heavyDev.policy.id === 'hard-heavy-dev', `expected heavy-dev target policy, got ${JSON.stringify(heavyDev)}`);
   assert(aggressive.policy.discard.enableNoPressureShapeReview === false, `expected aggressive/pure shape gate off, got ${JSON.stringify(aggressive.policy.discard)}`);
   assert(defensive.policy.defense.enableLowDangerTiebreak === true, `expected defensive tuned defense gate, got ${JSON.stringify(defensive.policy.defense)}`);
   assert(balanced.policy.route.enableClosedRouteValueRebalance === true, `expected balanced route scoring, got ${JSON.stringify(balanced.policy.route)}`);
   assert(balanced.policy.route.closedRouteMaxXiangting < heavy.policy.route.closedRouteMaxXiangting, `expected balanced route range to be narrower than heavy, got ${JSON.stringify({ balanced: balanced.policy.route, heavy: heavy.policy.route })}`);
+  assert(balancedDev.policy.route.enableBalancedRouteState === true, `expected balanced-dev route state, got ${JSON.stringify(balancedDev.policy.route)}`);
+  assert(balancedDev.policy.devVariant.parent === 'hard-balanced', `expected balanced-dev parent, got ${JSON.stringify(balancedDev.policy.devVariant)}`);
   assert(heavy.policy.route.enableClosedRouteValueRebalance === true, `expected heavy route scoring, got ${JSON.stringify(heavy.policy.route)}`);
+  assert(heavyDev.policy.devVariant.parent === 'hard-heavy', `expected heavy-dev parent, got ${JSON.stringify(heavyDev.policy.devVariant)}`);
 
   console.log('[PASS] hard-vs-mortal-personality-target-variant-smoke');
   console.log(`  snapshot=${JSON.stringify({
-    variants: [aggressive.id, defensive.id, balanced.id, heavy.id],
+    variants: [aggressive.id, defensive.id, balanced.id, balancedDev.id, heavy.id, heavyDev.id],
     balancedRouteMargin: balanced.policy.route.closedRouteOverrideMinMargin,
+    balancedDevRouteState: balancedDev.policy.route.enableBalancedRouteState,
     heavyRouteEnabled: heavy.policy.route.enableClosedRouteValueRebalance
   })}`);
 }

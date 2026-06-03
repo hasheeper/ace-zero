@@ -149,38 +149,61 @@ function validateRepeatedVariantLineup() {
 function validateHardPersonalityPresets() {
   const variants = arenaApi.resolveVariants([
     'hard-aggressive',
+    'hard-aggressive-dev',
     'hard-defensive',
+    'hard-defensive-dev',
     'hard-balanced',
-    'hard-heavy'
+    'hard-balanced-dev',
+    'hard-heavy',
+    'hard-heavy-dev'
   ]);
   const byId = variants.reduce((result, variant) => {
     result[variant.id] = variant;
     return result;
   }, {});
   assert(byId['hard-aggressive'] && byId['hard-aggressive'].policy, `expected hard-aggressive policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-aggressive-dev'] && byId['hard-aggressive-dev'].policy, `expected hard-aggressive-dev policy, got ${JSON.stringify(byId)}`);
   assert(byId['hard-defensive'] && byId['hard-defensive'].policy, `expected hard-defensive policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-defensive-dev'] && byId['hard-defensive-dev'].policy, `expected hard-defensive-dev policy, got ${JSON.stringify(byId)}`);
   assert(byId['hard-balanced'] && byId['hard-balanced'].policy, `expected hard-balanced policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-balanced-dev'] && byId['hard-balanced-dev'].policy, `expected hard-balanced-dev policy, got ${JSON.stringify(byId)}`);
   assert(byId['hard-heavy'] && byId['hard-heavy'].policy, `expected hard-heavy policy, got ${JSON.stringify(byId)}`);
+  assert(byId['hard-heavy-dev'] && byId['hard-heavy-dev'].policy, `expected hard-heavy-dev policy, got ${JSON.stringify(byId)}`);
   assert(byId['hard-aggressive'].policy.id === 'hard-aggressive', `expected aggressive policy id, got ${byId['hard-aggressive'].policy.id}`);
+  assert(byId['hard-aggressive-dev'].policy.id === 'hard-aggressive-dev', `expected aggressive-dev policy id, got ${byId['hard-aggressive-dev'].policy.id}`);
   assert(byId['hard-defensive'].policy.id === 'hard-defensive', `expected defensive policy id, got ${byId['hard-defensive'].policy.id}`);
+  assert(byId['hard-defensive-dev'].policy.id === 'hard-defensive-dev', `expected defensive-dev policy id, got ${byId['hard-defensive-dev'].policy.id}`);
   assert(byId['hard-balanced'].policy.id === 'hard-balanced', `expected balanced policy id, got ${byId['hard-balanced'].policy.id}`);
+  assert(byId['hard-balanced-dev'].policy.id === 'hard-balanced-dev', `expected balanced-dev policy id, got ${byId['hard-balanced-dev'].policy.id}`);
   assert(byId['hard-heavy'].policy.id === 'hard-heavy', `expected heavy policy id, got ${byId['hard-heavy'].policy.id}`);
+  assert(byId['hard-heavy-dev'].policy.id === 'hard-heavy-dev', `expected heavy-dev policy id, got ${byId['hard-heavy-dev'].policy.id}`);
   assert(byId['hard-aggressive'].policy.personality === 'aggressive', `expected aggressive personality, got ${JSON.stringify(byId['hard-aggressive'].policy)}`);
+  assert(byId['hard-aggressive-dev'].policy.personality === 'aggressive-dev', `expected aggressive-dev personality, got ${JSON.stringify(byId['hard-aggressive-dev'].policy)}`);
   assert(byId['hard-defensive'].policy.personality === 'defensive', `expected defensive personality, got ${JSON.stringify(byId['hard-defensive'].policy)}`);
+  assert(byId['hard-defensive-dev'].policy.personality === 'defensive-dev', `expected defensive-dev personality, got ${JSON.stringify(byId['hard-defensive-dev'].policy)}`);
   assert(byId['hard-balanced'].policy.personality === 'balanced', `expected balanced personality, got ${JSON.stringify(byId['hard-balanced'].policy)}`);
+  assert(byId['hard-balanced-dev'].policy.personality === 'balanced-dev', `expected balanced-dev personality, got ${JSON.stringify(byId['hard-balanced-dev'].policy)}`);
   assert(byId['hard-heavy'].policy.personality === 'heavy', `expected heavy personality, got ${JSON.stringify(byId['hard-heavy'].policy)}`);
+  assert(byId['hard-heavy-dev'].policy.personality === 'heavy-dev', `expected heavy-dev personality, got ${JSON.stringify(byId['hard-heavy-dev'].policy)}`);
   assert(byId['hard-aggressive'].policy.discard.enableNoPressureShapeReview === false, 'expected aggressive to use pure speed policy shape gate off');
+  assert(byId['hard-aggressive-dev'].policy.devVariant.parent === 'hard-aggressive', `expected aggressive-dev parent, got ${JSON.stringify(byId['hard-aggressive-dev'].policy.devVariant)}`);
   assert(byId['hard-defensive'].policy.defense.enableLowDangerTiebreak === true, 'expected defensive to keep tuned defense gate');
+  assert(byId['hard-defensive-dev'].policy.devVariant.parent === 'hard-defensive', `expected defensive-dev parent, got ${JSON.stringify(byId['hard-defensive-dev'].policy.devVariant)}`);
   assert(byId['hard-balanced'].policy.route.enableClosedRouteValueRebalance === true, 'expected balanced to enable closed route value scoring');
   assert(byId['hard-balanced'].policy.route.closedRouteMaxXiangting < byId['hard-heavy'].policy.route.closedRouteMaxXiangting, 'expected balanced to review a narrower route range than heavy');
   assert(byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin > byId['hard-heavy'].policy.route.closedRouteOverrideMinMargin, 'expected balanced to use stricter override margin than heavy');
+  assert(byId['hard-balanced-dev'].policy.devVariant.parent === 'hard-balanced', `expected balanced-dev parent, got ${JSON.stringify(byId['hard-balanced-dev'].policy.devVariant)}`);
+  assert(byId['hard-balanced-dev'].policy.route.enableBalancedRouteState === true, 'expected balanced-dev to enable balanced route state');
+  assert(byId['hard-balanced-dev'].policy.route.closedRouteMaxXiangting > byId['hard-balanced'].policy.route.closedRouteMaxXiangting, 'expected balanced-dev to expand route review range');
   assert(byId['hard-heavy'].policy.route.enableClosedRouteValueRebalance === true, 'expected heavy to enable closed route value scoring');
+  assert(byId['hard-heavy-dev'].policy.devVariant.parent === 'hard-heavy', `expected heavy-dev parent, got ${JSON.stringify(byId['hard-heavy-dev'].policy.devVariant)}`);
 
   console.log('[PASS] ai-hanchan-arena-hard-personality-presets-smoke');
   console.log(`  snapshot=${JSON.stringify({
     variants: variants.map((variant) => variant.id),
     policies: variants.map((variant) => variant.policy.id),
     balancedRouteMargin: byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin,
+    balancedDevRouteMargin: byId['hard-balanced-dev'].policy.route.closedRouteOverrideMinMargin,
     heavyRouteEnabled: byId['hard-heavy'].policy.route.enableClosedRouteValueRebalance
   })}`);
 }
@@ -217,11 +240,66 @@ function validateMirrorStructure() {
   })}`);
 }
 
+function validateBalancedStateSummarySmoke() {
+  const variants = arenaApi.resolveVariants(['hard-balanced-dev']);
+  const summary = arenaApi.summarizeMatchRows([
+    {
+      completed: true,
+      rounds: 10,
+      seatResults: [
+        {
+          seat: 'bottom',
+          variant: 'hard-balanced-dev',
+          rank: 1,
+          score: 32000
+        }
+      ],
+      counters: {
+        drawRounds: 0,
+        balancedRouteStateCounts: {
+          bottom: {
+            value: 3,
+            speed: 2
+          }
+        },
+        balancedRouteStateReasonCounts: {
+          bottom: {
+            'balanced-state-riichi-potential': 3,
+            'balanced-state-strong-call-gain': 2
+          }
+        },
+        closedRouteValueReviewedCalls: { bottom: 5 },
+        closedRouteValueOverrideCalls: { bottom: 3 },
+        closedRouteCallOpenScoreSum: { bottom: 500 },
+        closedRoutePassScoreSum: { bottom: 1200 },
+        closedRouteMarginSum: { bottom: 700 },
+        closedRouteScoreSamples: { bottom: 5 }
+      }
+    }
+  ], variants);
+  const stats = summary.variantStats['hard-balanced-dev'];
+  assert(stats.balancedRouteStateCounts.value === 3, `expected value state count, got ${JSON.stringify(stats.balancedRouteStateCounts)}`);
+  assert(stats.balancedRouteStateCounts.speed === 2, `expected speed state count, got ${JSON.stringify(stats.balancedRouteStateCounts)}`);
+  assert(stats.balancedRouteStateReasonCounts['balanced-state-riichi-potential'] === 3, `expected balanced reason count, got ${JSON.stringify(stats.balancedRouteStateReasonCounts)}`);
+  const text = arenaApi.formatArenaSummary('balanced-state fixture', summary, variants);
+  assert(text.includes('balancedState=value:3,speed:2'), `expected balanced state summary line, got ${text}`);
+  assert(text.includes('balancedStateReason=balanced-state-riichi-potential:3,balanced-state-strong-call-gain:2'), `expected balanced state reason summary line, got ${text}`);
+
+  console.log('[PASS] ai-hanchan-arena-balanced-state-summary-smoke');
+  console.log(`  snapshot=${JSON.stringify({
+    variant: variants[0].id,
+    balancedStateCounts: stats.balancedRouteStateCounts,
+    balancedStateReasonCounts: stats.balancedRouteStateReasonCounts,
+    closedRouteOverridePerRound: stats.closedRouteOverridePerRound
+  })}`);
+}
+
 function main() {
   validateMixedSmoke();
   validateAnalyzerSmoke();
   validateRepeatedVariantLineup();
   validateHardPersonalityPresets();
+  validateBalancedStateSummarySmoke();
   validateMirrorStructure();
 }
 
@@ -233,5 +311,6 @@ module.exports = {
   validateMixedSmoke,
   validateRepeatedVariantLineup,
   validateHardPersonalityPresets,
+  validateBalancedStateSummarySmoke,
   validateMirrorStructure
 };

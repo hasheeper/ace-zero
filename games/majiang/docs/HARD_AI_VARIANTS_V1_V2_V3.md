@@ -46,7 +46,32 @@ Last updated: 2026-06-03
 
 - 共用引擎保证维护成本低。
 - personality 只改变偏好，不改变规则解释。
-- 新调参先在对应 personality 上 arena scout，不直接改 formal `hard`。
+- 新调参先进入对应 `hard-xxx-dev`，再做 arena scout，不直接改 stable personality 或 formal `hard`。
+
+## Dev Variant Rule
+
+当前四个 personality 名称代表 stable checkpoint：
+
+- `hard-aggressive`
+- `hard-defensive`
+- `hard-balanced`
+- `hard-heavy`
+
+后续调参统一使用 dev 名称：
+
+- `hard-aggressive-dev`
+- `hard-defensive-dev`
+- `hard-balanced-dev`
+- `hard-heavy-dev`
+
+Dev variants inherit from their stable parent and carry only the current experiment deltas. A failed scout should be discarded from dev without changing the stable variant.
+
+Promotion rule:
+
+- 200-match scout first.
+- 1000-match confirmation second.
+- Only after both pass can `hard-xxx-dev` deltas be copied into stable `hard-xxx`.
+- Formal `hard` remains unchanged unless there is a separate explicit promotion decision.
 
 ## Expected Arena Profile
 
@@ -83,6 +108,15 @@ Last updated: 2026-06-03
 | `hard-defensive` | tuned hard | off | none | none |
 | `hard-balanced` | tuned hard | on, mild | `xiangting <= 1` | `90` |
 | `hard-heavy` | tuned hard | on, strong | `xiangting <= 2` | `35` |
+
+Dev variants:
+
+| Variant | Stable Parent | Behavior Delta |
+| --- | --- | --- |
+| `hard-aggressive-dev` | `hard-aggressive` | none yet |
+| `hard-defensive-dev` | `hard-defensive` | none yet |
+| `hard-balanced-dev` | `hard-balanced` | H16 balanced route state layer |
+| `hard-heavy-dev` | `hard-heavy` | none yet |
 
 ## hard-aggressive
 
@@ -142,6 +176,46 @@ Last updated: 2026-06-03
 - 作为四个 personality 的默认竞技场主力候选。
 - 重点看 avgRank，而不是单项漂亮。
 - 预期应该比 heavy 保留更多副露速度，比 defensive 多一点立直/打点。
+
+## hard-balanced-dev
+
+`hard-balanced-dev` 是 H16 当前唯一有行为差异的 dev 变体。它不重写 balanced AI，而是复用 `hard-balanced` 的 tuned base、call evaluator、`evaluateClosedRouteValueReview` 路线评分和 arena 诊断，只在 route review 内增加一层轻量状态分流。
+
+当前参数：
+
+| Setting | Value | Meaning |
+| --- | ---: | --- |
+| `enableBalancedRouteState` | `true` | 开启 H16 balanced 状态分流 |
+| `closedRouteMaxXiangting` | `2` | 比 stable balanced 多看 2 向听门清路线 |
+| `closedRouteOverrideMinMargin` | `150` | 默认 route 覆盖基础 margin |
+| `balancedValueOverrideMinMargin` | `150` | `value` 状态覆盖 margin |
+| `balancedNeutralOverrideMinMargin` | `230` | `neutral` 状态覆盖 margin，更保守 |
+| `balancedLowValueMax` | `36` | 低价值推进优先放行 |
+
+状态分流：
+
+| State | Behavior |
+| --- | --- |
+| `defense` | 有立直压力时不做门清路线覆盖 |
+| `tenpai-speed` | 直接进听或晚巡时保留速度 |
+| `speed` | 低价值或明显推进收益 call 放行 |
+| `value` | 门清价值/立直潜力足够时允许 route scorer 覆盖 call |
+| `neutral` | 只在极明显门清收益时覆盖 call |
+
+诊断字段：
+
+- `balancedState`
+- `balancedStateReason`
+- `effectiveMinMargin`
+
+最近 10 半庄 mechanism smoke 只用于确认参数落点，不作为强弱结论：
+
+| Variant | `calls/R` | `riichi` | `closedRouteReview/R` | `closedRouteOverride/R` |
+| --- | ---: | ---: | ---: | ---: |
+| `hard-balanced` | 1.23 | 9.5% | 0.14 | 0.02 |
+| `hard-balanced-dev` | 1.08 | 10.2% | 0.45 | 0.12 |
+
+正式判断仍需 200 半庄 scout，再决定是否跑 1000 半庄确认。
 
 ## hard-heavy
 
@@ -206,6 +280,8 @@ Rejected and removed from active runtime:
 - `callRouteScore`
 - `passRouteScore`
 - `routeMargin`
+- `balancedState`
+- `balancedStateReason`
 
 已移除的 H15b 专属字段：
 
@@ -226,6 +302,19 @@ node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
   --progress \
   --stdout summary \
   --out /tmp/hard-four-personalities-mixed-200.json
+```
+
+### Balanced Dev Focused Scout
+
+```bash
+node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
+  --mode mixed \
+  --variants hard-balanced,hard-balanced-dev,hard-balanced,hard-balanced-dev \
+  --matches 200 \
+  --checkpoint-interval 25 \
+  --progress \
+  --stdout summary \
+  --out /tmp/h16-balanced-dev-focused-200.json
 ```
 
 ### Legacy v1 vs v2 Arena Baseline
