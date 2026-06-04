@@ -263,7 +263,9 @@
       difficulty,
       hardPushFoldPolicy,
       hardDefensePolicy,
-      pushFoldState
+      pushFoldState,
+      runtime,
+      seatKey
     });
     bestDecision = hardReview && hardReview.selectedDecision ? hardReview.selectedDecision : bestDecision;
 

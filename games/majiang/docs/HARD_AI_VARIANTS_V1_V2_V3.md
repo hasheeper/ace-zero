@@ -1,6 +1,6 @@
 # Hard AI Variants: Aggressive, Defensive, Balanced, Heavy
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
 ## Summary
 
@@ -10,8 +10,14 @@ Last updated: 2026-06-03
 | --- | --- | --- | --- |
 | hard aggressive / 速攻 | `hard-aggressive` | `hard-pure` | 更重速度、副露推进、保留纯启发 hard 的攻速底色 |
 | hard defensive / 防御 | `hard-defensive` | `hard-tuned` / formal `hard` | 当前 tuned 基线，更重安全、低危险排序和稳定顺位 |
-| hard balanced / 平衡 | `hard-balanced` | tuned + mild route value | 在 tuned 基线之上温和保护门清路线，目标是速度、打点、防守综合最优 |
+| hard balanced / 平衡 | `hard-balanced` | promoted balanced route-state profile | 在 tuned 基线之上启用轻量 route state，替代旧的 route-inactive bug 版本 |
 | hard heavy / 打点 | `hard-heavy` | H15c route value | 保留 tuned 基线，加入门清立直路线价值评分，追求更高打点/立直路线 |
+
+H18 后续清理：
+
+- `hard-balanced-candidate` 已移除。它只是 `hard-heavy` 克隆改名，arena 数据差异来自小样本和非配对随机路径，没有提供独立机制信号。
+- `hard-heavy-dev` 已移除。它把同一套 closed-route scorer 继续推向打点，但 scout 显示 route 分数抬高没有转化为更高 avgWin 或更好顺位。
+- 旧 `hard-balanced` 已退役。它的 `closedRouteOverride/R` 长期接近 0，实际是 route-inactive bug 版本；原 `hard-balanced-dev` 的轻量状态分流已晋升为新的 stable `hard-balanced`。
 
 兼容旧名仍保留：
 
@@ -62,7 +68,6 @@ Last updated: 2026-06-03
 - `hard-aggressive-dev`
 - `hard-defensive-dev`
 - `hard-balanced-dev`
-- `hard-heavy-dev`
 
 Dev variants inherit from their stable parent and carry only the current experiment deltas. A failed scout should be discarded from dev without changing the stable variant.
 
@@ -84,6 +89,10 @@ Promotion rule:
 | `hard-heavy` / 打点 | 2.50 | 27.5% | 25.5% | 4100 | 14.5% | 58.0% | 19.5% | 14.2% |
 | `hard-balanced` / 平衡 | 2.38 | 26.5% | 19.0% | 3850 | 11.5% | 66.0% | 22.0% | 13.0% |
 
+当前 promoted balanced 目标另行观察：
+
+- `hard-balanced`：高立直平衡流的稳定版本，目标 `riichi 15%-20%`、`calls/R 0.85-1.10`、`nonRiichiWin 55%-65%`，但 `hule` 和 `drawTenpai` 不能崩。
+
 读法：
 
 - `aggressive` 应该赢得快，但四位率和放铳会偏高。
@@ -98,7 +107,7 @@ Promotion rule:
 | `hard-aggressive` | 速度、副露推进、先制和牌 | call 接受阈值、平向听 speed-up、向听改善 call、低压力 push | 四位率继续失控、dealIn/R 明显高于 16%、avgWin 过低导致只会小和 |
 | `hard-defensive` | 放铳控制、四位规避、压力下安全牌质量 | danger/safety rank、low-danger tiebreak、push/fold 阈值、晚巡领先防守 | hule/drawTenpai 掉太多、只会缩导致 avgRank 变差 |
 | `hard-heavy` | 门清立直路线、平均打点、一位率 | route value 权重、closed-route margin、riichi value threshold、好型/打点保留 | call/R 被压过头、win/R 和 drawTenpai 明显下降 |
-| `hard-balanced` | 综合顺位、速度/打点/防守三者折中 | mild route value、轻量 defense gate、riichi opportunity take rate、不过度少鸣 | 指标变成四不像：avgRank 不优、打点不升、四位率也不低 |
+| `hard-balanced` | 综合顺位、速度/打点/防守三者折中 | route state、riichi opportunity take rate、不过度少鸣、不过度重打点 | 指标变成四不像：avgRank 不优、打点不升、四位率也不低 |
 
 ## Current Policy Shape
 
@@ -106,7 +115,7 @@ Promotion rule:
 | --- | --- | --- | --- | --- |
 | `hard-aggressive` | pure hard | off | none | none |
 | `hard-defensive` | tuned hard | off | none | none |
-| `hard-balanced` | tuned hard | on, mild | `xiangting <= 1` | `90` |
+| `hard-balanced` | tuned hard | on, route state | `xiangting <= 2` | base `95`, value `85`, neutral `135` |
 | `hard-heavy` | tuned hard | on, strong | `xiangting <= 2` | `35` |
 
 Dev variants:
@@ -114,9 +123,8 @@ Dev variants:
 | Variant | Stable Parent | Behavior Delta |
 | --- | --- | --- |
 | `hard-aggressive-dev` | `hard-aggressive` | none yet |
-| `hard-defensive-dev` | `hard-defensive` | none yet |
-| `hard-balanced-dev` | `hard-balanced` | H16 balanced route state layer |
-| `hard-heavy-dev` | `hard-heavy` | none yet |
+| `hard-defensive-dev` | `hard-defensive` | H17 threat score, rank-aware push/fold, deal-in attribution |
+| `hard-balanced-dev` | `hard-balanced` | none currently; inherits promoted stable until the next explicit experiment |
 
 ## hard-aggressive
 
@@ -138,6 +146,39 @@ Dev variants:
 
 ## hard-defensive
 
+Stable `hard-defensive` is still the tuned/formal hard baseline. It intentionally does not enable the H17 dev defense scorer.
+
+`hard-defensive-dev` adds only dev-side behavior:
+
+| Section | Setting | Meaning |
+| --- | --- | --- |
+| defense | `enableThreatScoreReview=true` | score opponent threat compactly from riichi/open-hand/dora/late-round signals |
+| defense | `enableRankAwarePushFold=true` | bias push/fold by `protect-lead`, `protect-second`, `neutral-defense`, `comeback`, and `safe-tenpai` states |
+| defense | `enableDealInAttribution=true` | emit compact arena attribution for actual deal-ins |
+
+The scoring layer is continuous: it adds expected deal-in cost and state bias to the existing hard push/fold review. H17b explicitly removed the attempted closed-route/riichi alignment from `hard-defensive-dev`: arena showed it improved rank by turning into a heavy-like high-riichi route personality, but it raised deal-in and broke the defensive identity. Route personality tuning belongs to `hard-balanced` and stable `hard-heavy`, not defensive.
+
+H17 scout:
+
+```bash
+node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
+  --mode mixed \
+  --variants hard-defensive,hard-defensive-dev,hard-balanced,hard-heavy \
+  --matches 200 \
+  --checkpoint-interval 25 \
+  --progress \
+  --stdout summary \
+  --out /tmp/h17-defensive-dev-scout-200.json
+```
+
+Read these added lines for `hard-defensive-dev`:
+
+- `defensiveState=...`
+- `threatReason=...`
+- `dealInAttribution=...`
+
+Promotion to 1000 hanchan requires no arena errors, `avgRank` no worse than stable defensive by more than `0.02`, `dealIn <= 13.0%` or fourth-rate down at least `2pp`, and no collapse in `hule` or `drawTenpai`. Defensive-dev style targets should be evaluated through `dealIn`, fourth-rate, and attribution reductions; high riichi or low call rate is not a defensive success criterion.
+
 `hard-defensive` 是当前 tuned hard policy 的人格化名称，也就是正式 `hard` 当前基线的主要来源。
 
 相比 aggressive，defensive 打开了这些已保留调整：
@@ -158,39 +199,53 @@ Dev variants:
 
 ## hard-balanced
 
-`hard-balanced` 是综合顺位人格。它以 defensive/tuned 为基础，但只温和启用门清路线价值评分。
+`hard-balanced` 是综合顺位人格。旧版本只温和启用门清路线价值评分，但 `closedRouteOverride/R` 长期接近 0，实际没有形成可用 personality；现在已由原 `hard-balanced-dev` 的轻量 route-state profile 晋升替换。
 
 它默认打开：
 
 | Section | Setting | Meaning |
 | --- | --- | --- |
 | route | `enableClosedRouteValueRebalance=true` | 对 call 与 pass 的路线价值做评分 |
-| route | `closedRouteMaxXiangting=1` | 只在 1 向听以内保护门清路线，避免过早损失速度 |
+| route | `enableBalancedRouteState=true` | 用 `speed/value/tenpai-speed/defense/neutral` 状态决定是否允许覆盖 call |
+| route | `closedRouteMaxXiangting=2` | 允许观察 2 向听以内的门清路线 |
 | route | `closedRouteMinRemainingTiles=24` | 晚巡不硬保门清路线 |
-| route | `closedRouteOverrideMinMargin=90` | 比 heavy 更严格，只有 pass 路线明显更好才覆盖 call |
+| route | `closedRouteOverrideMinMargin=95` | 默认 route 覆盖基础 margin |
+| route | `balancedValueOverrideMinMargin=85` | `value` 状态下更积极保留门清/立直路线 |
+| route | `balancedNeutralOverrideMinMargin=135` | `neutral` 状态下保持保守 |
 | route | `directTenpaiCallAlwaysAllow=true` | 直接进听 call 不被挡 |
 | route | `pressureDisablesClosedRouteOverride=true` | 有立直压力时不触发路线覆盖 |
+| riichi | `minLiveTingpaiCount=2` | 放宽立直候选的有效听牌门槛 |
+| riichi | `minWaitQualityScore=6` | 放宽好型质量门槛 |
 
 用途：
 
 - 作为四个 personality 的默认竞技场主力候选。
 - 重点看 avgRank，而不是单项漂亮。
 - 预期应该比 heavy 保留更多副露速度，比 defensive 多一点立直/打点。
+- 当前重点继续观察：立直率、副露率、听牌率和四位率是否同时维持在可接受区间。
 
 ## hard-balanced-dev
 
-`hard-balanced-dev` 是 H16 当前唯一有行为差异的 dev 变体。它不重写 balanced AI，而是复用 `hard-balanced` 的 tuned base、call evaluator、`evaluateClosedRouteValueReview` 路线评分和 arena 诊断，只在 route review 内增加一层轻量状态分流。
+`hard-balanced-dev` 当前只是下一轮实验壳。它继承 promoted stable `hard-balanced`，不再携带额外行为差异。
 
-当前参数：
+保留这个名字的原因：
+
+- 后续如果继续微调 balanced，先改 `hard-balanced-dev`。
+- scout/1000 确认通过后，再把 dev delta 合并进 stable `hard-balanced`。
+- 当前不要再用 `hard-balanced` vs `hard-balanced-dev` 判断旧 bug，因为两者行为应基本一致。
+
+当前 stable/promoted 参数：
 
 | Setting | Value | Meaning |
 | --- | ---: | --- |
-| `enableBalancedRouteState` | `true` | 开启 H16 balanced 状态分流 |
-| `closedRouteMaxXiangting` | `2` | 比 stable balanced 多看 2 向听门清路线 |
-| `closedRouteOverrideMinMargin` | `150` | 默认 route 覆盖基础 margin |
-| `balancedValueOverrideMinMargin` | `150` | `value` 状态覆盖 margin |
-| `balancedNeutralOverrideMinMargin` | `230` | `neutral` 状态覆盖 margin，更保守 |
-| `balancedLowValueMax` | `36` | 低价值推进优先放行 |
+| `enableBalancedRouteState` | `true` | 开启 balanced 状态分流 |
+| `closedRouteMaxXiangting` | `2` | 观察 2 向听门清路线 |
+| `closedRouteOverrideMinMargin` | `95` | 默认 route 覆盖基础 margin |
+| `balancedValueOverrideMinMargin` | `85` | `value` 状态覆盖 margin，鼓励门清立直路线 |
+| `balancedNeutralOverrideMinMargin` | `135` | `neutral` 状态覆盖 margin，仍比 value 保守 |
+| `balancedLowValueMax` | `30` | 低价值推进优先放行范围收窄 |
+| `riichi.minLiveTingpaiCount` | `2` | 比 stable 更愿意立直 |
+| `riichi.minWaitQualityScore` | `6` | 放宽好型质量门槛，目标是 15%-20% 立直区间 |
 
 状态分流：
 
@@ -208,14 +263,27 @@ Dev variants:
 - `balancedStateReason`
 - `effectiveMinMargin`
 
-最近 10 半庄 mechanism smoke 只用于确认参数落点，不作为强弱结论：
+旧 balanced 与 promoted profile 的 mechanism 对照只作为历史参照：
 
 | Variant | `calls/R` | `riichi` | `closedRouteReview/R` | `closedRouteOverride/R` |
 | --- | ---: | ---: | ---: | ---: |
-| `hard-balanced` | 1.23 | 9.5% | 0.14 | 0.02 |
-| `hard-balanced-dev` | 1.08 | 10.2% | 0.45 | 0.12 |
+| old `hard-balanced` | 1.23 | 9.5% | 0.14 | 0.02 |
+| promoted `hard-balanced` | 1.08 | 10.2% | 0.45 | 0.12 |
 
-正式判断仍需 200 半庄 scout，再决定是否跑 1000 半庄确认。
+正式判断仍需持续用 200/1000 半庄确认；现在 stable 名称已指向 promoted profile。
+
+Promoted balanced ecosystem scout 命令：
+
+```bash
+node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
+  --mode mixed \
+  --variants hard-aggressive,hard-defensive,hard-balanced,hard-heavy \
+  --matches 200 \
+  --checkpoint-interval 25 \
+  --progress \
+  --stdout summary \
+  --out /tmp/h18-balanced-promoted-ecosystem-200.json
+```
 
 ## hard-heavy
 
@@ -237,6 +305,13 @@ Dev variants:
 - 作为打点人格长期微调。
 - 重点看平均打点、立直率、非立直和牌占比、和牌率、流局听牌率和顺位收益。
 - 不追求单纯少鸣；`calls/R` 只是观测项。
+
+## Retired H18 Branches
+
+`hard-balanced-candidate` and `hard-heavy-dev` are no longer accepted by arena or Mortal benchmark variant parsing.
+
+- `hard-balanced-candidate` was behavior-equivalent to `hard-heavy`, so it created confusing duplicate reports without a distinct mechanism.
+- `hard-heavy-dev` raised internal route margins but did not improve avgWin or avgRank in scout data, so the stronger route-weight direction is paused.
 
 ## hard-experimental
 
@@ -304,17 +379,17 @@ node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
   --out /tmp/hard-four-personalities-mixed-200.json
 ```
 
-### Balanced Dev Focused Scout
+### Balanced Stable Regression Scout
 
 ```bash
 node games/majiang/scripts/benchmark-ai-hanchan-arena.js \
   --mode mixed \
-  --variants hard-balanced,hard-balanced-dev,hard-balanced,hard-balanced-dev \
+  --variants hard-balanced,hard-balanced,hard-defensive,hard-heavy \
   --matches 200 \
   --checkpoint-interval 25 \
   --progress \
   --stdout summary \
-  --out /tmp/h16-balanced-dev-focused-200.json
+  --out /tmp/hard-balanced-promoted-regression-200.json
 ```
 
 ### Legacy v1 vs v2 Arena Baseline

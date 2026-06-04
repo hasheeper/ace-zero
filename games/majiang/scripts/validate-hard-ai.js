@@ -17,6 +17,7 @@ const dangerModelApi = require('../engine/ai/support/danger-model');
 const hardEvApi = require('../engine/ai/support/hard-ev');
 const hardPushFoldApi = require('../engine/ai/support/hard-push-fold');
 const hardDefenseTiebreakApi = require('../engine/ai/support/hard-defense-tiebreak');
+const hardDefensiveProfileApi = require('../engine/ai/support/hard-defensive-profile');
 const discardRankingApi = require('../engine/ai/support/discard-ranking');
 const hardPolicyApi = require('../engine/ai/difficulty/hard-policy');
 
@@ -3049,28 +3050,36 @@ function runClosedRouteBalancedPolicySmoke() {
   const review = evaluateClosedRouteValueFixture({
     policyId: 'hard-balanced',
     route: {
-      closedRouteMaxXiangting: 1,
-      closedRouteOverrideMinMargin: 90
+      enableBalancedRouteState: true,
+      closedRouteMaxXiangting: 2,
+      closedRouteOverrideMinMargin: 95,
+      balancedValueOverrideMinMargin: 85,
+      balancedNeutralOverrideMinMargin: 135,
+      balancedLowValueMax: 30,
+      balancedValueMinContextualHandValue: 30
     }
   });
   assert(review.enabled === true, `expected balanced policy to enable route review, got ${JSON.stringify(review)}`);
   assert(review.active === true, `expected balanced policy route review to be active, got ${JSON.stringify(review)}`);
   assert(review.override === true, `expected balanced policy to override this high-margin fixture, got ${JSON.stringify(review)}`);
-  assert(review.minMargin === 90, `expected balanced margin threshold, got ${JSON.stringify(review)}`);
-  assert(review.balancedState == null, `stable balanced should not use H16 balanced state, got ${JSON.stringify(review)}`);
+  assert(review.minMargin === 95, `expected promoted balanced base margin threshold, got ${JSON.stringify(review)}`);
+  assert(review.balancedState === 'value', `expected promoted balanced value state, got ${JSON.stringify(review)}`);
+  assert(review.effectiveMinMargin === 85, `expected promoted balanced value margin, got ${JSON.stringify(review)}`);
   return {
     name: 'hard-closed-route-balanced-policy-smoke',
     snapshot: {
       reason: review.reason,
       minMargin: review.minMargin,
+      balancedState: review.balancedState,
+      effectiveMinMargin: review.effectiveMinMargin,
       margin: review.margin
     }
   };
 }
 
-function runClosedRouteBalancedDevValueOverrideSmoke() {
+function runClosedRouteBalancedValueOverrideSmoke() {
   const review = evaluateClosedRouteValueFixture({
-    policyId: 'hard-balanced-dev',
+    policyId: 'hard-balanced',
     route: {
       enableBalancedRouteState: true,
       closedRouteMaxXiangting: 2,
@@ -3088,13 +3097,13 @@ function runClosedRouteBalancedDevValueOverrideSmoke() {
       currentContextualHandValueEstimate: 72
     }
   });
-  assert(review.enabled === true, `expected balanced-dev route review enabled, got ${JSON.stringify(review)}`);
-  assert(review.active === true, `expected balanced-dev value route review active, got ${JSON.stringify(review)}`);
-  assert(review.balancedState === 'value', `expected balanced-dev value state, got ${JSON.stringify(review)}`);
+  assert(review.enabled === true, `expected balanced route review enabled, got ${JSON.stringify(review)}`);
+  assert(review.active === true, `expected balanced value route review active, got ${JSON.stringify(review)}`);
+  assert(review.balancedState === 'value', `expected balanced value state, got ${JSON.stringify(review)}`);
   assert(review.effectiveMinMargin === 150, `expected value effective margin, got ${JSON.stringify(review)}`);
-  assert(review.override === true && review.allowed === false, `expected balanced-dev value state to override this fixture, got ${JSON.stringify(review)}`);
+  assert(review.override === true && review.allowed === false, `expected balanced value state to override this fixture, got ${JSON.stringify(review)}`);
   return {
-    name: 'hard-closed-route-balanced-dev-value-smoke',
+    name: 'hard-closed-route-balanced-value-smoke',
     snapshot: {
       reason: review.reason,
       balancedState: review.balancedState,
@@ -3104,9 +3113,9 @@ function runClosedRouteBalancedDevValueOverrideSmoke() {
   };
 }
 
-function runClosedRouteBalancedDevDirectTenpaiSmoke() {
+function runClosedRouteBalancedDirectTenpaiSmoke() {
   const review = evaluateClosedRouteValueFixture({
-    policyId: 'hard-balanced-dev',
+    policyId: 'hard-balanced',
     route: {
       enableBalancedRouteState: true,
       closedRouteMaxXiangting: 2
@@ -3123,11 +3132,11 @@ function runClosedRouteBalancedDevDirectTenpaiSmoke() {
       nextContextualHandValueEstimate: 24
     }
   });
-  assert(review.balancedState === 'tenpai-speed', `expected balanced-dev tenpai-speed state, got ${JSON.stringify(review)}`);
-  assert(review.override === false && review.allowed === true, `expected balanced-dev direct tenpai call to remain allowed, got ${JSON.stringify(review)}`);
+  assert(review.balancedState === 'tenpai-speed', `expected balanced tenpai-speed state, got ${JSON.stringify(review)}`);
+  assert(review.override === false && review.allowed === true, `expected balanced direct tenpai call to remain allowed, got ${JSON.stringify(review)}`);
   assert(review.reason === 'hard-call-closed-route-direct-tenpai-allowed', `unexpected reason: ${review.reason}`);
   return {
-    name: 'hard-closed-route-balanced-dev-direct-tenpai-smoke',
+    name: 'hard-closed-route-balanced-direct-tenpai-smoke',
     snapshot: {
       reason: review.reason,
       balancedState: review.balancedState,
@@ -3136,9 +3145,9 @@ function runClosedRouteBalancedDevDirectTenpaiSmoke() {
   };
 }
 
-function runClosedRouteBalancedDevPressureSmoke() {
+function runClosedRouteBalancedPressureSmoke() {
   const review = evaluateClosedRouteValueFixture({
-    policyId: 'hard-balanced-dev',
+    policyId: 'hard-balanced',
     route: {
       enableBalancedRouteState: true,
       closedRouteMaxXiangting: 2
@@ -3147,15 +3156,763 @@ function runClosedRouteBalancedDevPressureSmoke() {
       riichiPressure: 1
     }
   });
-  assert(review.balancedState === 'defense', `expected balanced-dev defense state under pressure, got ${JSON.stringify(review)}`);
+  assert(review.balancedState === 'defense', `expected balanced defense state under pressure, got ${JSON.stringify(review)}`);
   assert(review.override === false && review.allowed === true, `expected pressure to keep call/pass decision unoverridden, got ${JSON.stringify(review)}`);
   assert(review.reason === 'hard-call-closed-route-pressure-present', `unexpected reason: ${review.reason}`);
   return {
-    name: 'hard-closed-route-balanced-dev-pressure-smoke',
+    name: 'hard-closed-route-balanced-pressure-smoke',
     snapshot: {
       reason: review.reason,
       balancedState: review.balancedState,
       riichiPressure: review.riichiPressure
+    }
+  };
+}
+
+function createDefensiveProfileFixtureRuntime(options = {}) {
+  const activeSeats = ['bottom', 'right', 'top', 'left'];
+  const riichiSeats = new Set(options.riichiSeats || ['top']);
+  const dealerSeat = options.dealerSeat || 'top';
+  const fulouBySeat = options.fulouBySeat || {};
+  return {
+    topology: {
+      activeSeats
+    },
+    riichiState: activeSeats.reduce((result, seatKey) => {
+      result[seatKey] = { declared: riichiSeats.has(seatKey) };
+      return result;
+    }, {}),
+    getDealerSeat() {
+      return dealerSeat;
+    },
+    getSeatIndex(seatKey) {
+      return activeSeats.indexOf(seatKey);
+    },
+    getWallState() {
+      return {
+        remaining: Number.isFinite(Number(options.remaining)) ? Number(options.remaining) : 14,
+        doraIndicators: options.doraIndicators || ['m4']
+      };
+    },
+    board: {
+      shoupai: activeSeats.map((seatKey) => ({
+        _fulou: (fulouBySeat[seatKey] || []).slice()
+      })),
+      shan: {
+        baopai: options.doraIndicators || ['m4']
+      }
+    }
+  };
+}
+
+function createPushFoldDecision(overrides = {}) {
+  return {
+    tileCode: overrides.tileCode || 'm5',
+    tileIndex: Number.isFinite(Number(overrides.tileIndex)) ? Number(overrides.tileIndex) : 0,
+    danger: {
+      dangerScore: Number.isFinite(Number(overrides.dangerScore)) ? Number(overrides.dangerScore) : 8,
+      categories: Array.isArray(overrides.categories) ? overrides.categories.slice() : [],
+      safetyRank: Number.isFinite(Number(overrides.safetyRank)) ? Number(overrides.safetyRank) : 9,
+      defenseTileRank: Number.isFinite(Number(overrides.defenseTileRank)) ? Number(overrides.defenseTileRank) : 94,
+      safetyReasons: Array.isArray(overrides.safetyReasons) ? overrides.safetyReasons.slice() : []
+    },
+    metrics: {
+      xiangting: Number.isFinite(Number(overrides.xiangting)) ? Number(overrides.xiangting) : 1,
+      handValueEstimate: Number.isFinite(Number(overrides.handValue)) ? Number(overrides.handValue) : 28
+    },
+    hardMetrics: {
+      hardEvScore: Number.isFinite(Number(overrides.hardEvScore)) ? Number(overrides.hardEvScore) : 100,
+      contextualHandValueEstimate: Number.isFinite(Number(overrides.handValue)) ? Number(overrides.handValue) : 28,
+      liveTingpaiCount: Number.isFinite(Number(overrides.liveTingpaiCount)) ? Number(overrides.liveTingpaiCount) : 0,
+      waitQualityScore: Number.isFinite(Number(overrides.waitQualityScore)) ? Number(overrides.waitQualityScore) : 0,
+      hardContext: overrides.hardContext || {}
+    }
+  };
+}
+
+function createDefensiveDevPolicyPatch(overrides = {}) {
+  return {
+    enableThreatScoreReview: true,
+    enableRankAwarePushFold: true,
+    enableDealInAttribution: true,
+    enableDefensiveUtilityShadow: true,
+    enableSafetyGateRerank: true,
+    enableSafetyGateDiagnostics: true,
+    highThreatScore: 11,
+    expectedDealInCostWeight: 0.16,
+    safetyGateMinThreatScore: 11,
+    safetyGateProtectScore: 8,
+    safetyGateMaxXiangtingLoss: 1,
+    safetyGateMinDangerDelta: 2,
+    safetyGateMinSafetyRankDelta: 2,
+    safetyGateMinExpectedCostDelta: 80,
+    safetyGateBackstepMinThreatScore: 14,
+    safetyGateBackstepMinExpectedCostDelta: 140,
+    safetyGateProtectedTenpaiMinHandValue: 42,
+    safetyGateProtectedTenpaiMinWaitQuality: 12,
+    protectLeadScore: 5000,
+    comebackTrailingScore: 7000,
+    ...overrides
+  };
+}
+
+function runDefensiveSafetyGateStableOffSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 1
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 1,
+    tileIndex: 1
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, safe], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch({ enableSafetyGateRerank: false })
+  });
+  assert(review == null, `expected stable/off safety gate to stay disabled, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-stable-off-smoke',
+    snapshot: {
+      enabled: false
+    }
+  };
+}
+
+function runDefensiveSafetyGateSameShantenSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 1,
+    handValue: 24,
+    hardEvScore: 140
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 1,
+    handValue: 20,
+    hardEvScore: 90,
+    tileIndex: 1
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, safe], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review && review.enabled === true && review.active === true, `expected active safety gate, got ${JSON.stringify(review)}`);
+  assert(review.override === true, `expected safety gate override, got ${JSON.stringify(review)}`);
+  assert(review.selectedTileCode === 'z1', `expected safer same-shanten tile, got ${JSON.stringify(review)}`);
+  assert(review.sameShanten === true && review.backstep === false, `expected same-shanten safety swap, got ${JSON.stringify(review)}`);
+  assert(review.reasons.includes('def-safety-gate-same-shanten'), `expected same-shanten reason, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-same-shanten-smoke',
+    snapshot: {
+      selectedTileCode: review.selectedTileCode,
+      sameShanten: review.sameShanten,
+      reasons: review.reasons
+    }
+  };
+}
+
+function runDefensiveSafetyGateRankProtectBackstepSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 8
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 7,
+    safetyRank: 8,
+    defenseTileRank: 88,
+    xiangting: 1,
+    handValue: 18,
+    hardEvScore: 100,
+    hardContext: {
+      scoreRank: 1,
+      leadOverSecond: 9000,
+      isLateRound: true
+    }
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 2,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1,
+    hardContext: attack.hardMetrics.hardContext
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, safe], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review && review.override === true, `expected rank-protect safety gate override, got ${JSON.stringify(review)}`);
+  assert(review.selectedTileCode === 'z1', `expected safe backstep tile, got ${JSON.stringify(review)}`);
+  assert(review.backstep === true, `expected backstep under protect-lead, got ${JSON.stringify(review)}`);
+  assert(review.rankDefenseState === 'protect-lead', `expected protect-lead state, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-rank-protect-backstep-smoke',
+    snapshot: {
+      selectedTileCode: review.selectedTileCode,
+      backstep: review.backstep,
+      rankDefenseState: review.rankDefenseState,
+      threatScore: review.threatScore
+    }
+  };
+}
+
+function runDefensiveSafetyGateNeutralBackstepBlockedSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 1,
+    handValue: 24,
+    hardEvScore: 140
+  });
+  const safeBackstep = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 2,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, safeBackstep], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review && review.active === true, `expected active neutral pressure safety gate, got ${JSON.stringify(review)}`);
+  assert(review.rankDefenseState === 'neutral-defense', `expected neutral-defense state, got ${JSON.stringify(review)}`);
+  assert(review.override === false, `expected neutral-defense backstep to be blocked, got ${JSON.stringify(review)}`);
+  assert(review.selectedTileCode === 'm5', `expected current attack tile kept without same-shanten safer tile, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-neutral-backstep-blocked-smoke',
+    snapshot: {
+      active: review.active,
+      rankDefenseState: review.rankDefenseState,
+      selectedTileCode: review.selectedTileCode,
+      reasons: review.reasons
+    }
+  };
+}
+
+function runDefensiveSafetyGatePrefersSameShantenSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 8
+  });
+  const hardContext = {
+    scoreRank: 1,
+    leadOverSecond: 9000,
+    isLateRound: true
+  };
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 1,
+    handValue: 18,
+    hardEvScore: 120,
+    hardContext
+  });
+  const sameShantenSemiSafe = createPushFoldDecision({
+    tileCode: 'm8',
+    dangerScore: 5,
+    safetyRank: 6,
+    defenseTileRank: 60,
+    xiangting: 1,
+    handValue: 18,
+    hardEvScore: 80,
+    tileIndex: 1,
+    hardContext
+  });
+  const safeBackstep = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 2,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 2,
+    hardContext
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, sameShantenSemiSafe, safeBackstep], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review && review.override === true, `expected safety gate override, got ${JSON.stringify(review)}`);
+  assert(review.selectedTileCode === 'm8', `expected same-shanten safer tile to beat backstep, got ${JSON.stringify(review)}`);
+  assert(review.sameShanten === true && review.backstep === false, `expected same-shanten override, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-prefers-same-shanten-smoke',
+    snapshot: {
+      selectedTileCode: review.selectedTileCode,
+      sameShanten: review.sameShanten,
+      backstep: review.backstep,
+      reasons: review.reasons
+    }
+  };
+}
+
+function runDefensiveSafetyGateSafeTenpaiProtectedSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 0,
+    handValue: 72,
+    hardEvScore: 1200,
+    liveTingpaiCount: 5,
+    waitQualityScore: 20,
+    hardContext: {
+      scoreRank: 4,
+      trailingByLeader: 12000
+    }
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 1,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1,
+    hardContext: attack.hardMetrics.hardContext
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, safe], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review && review.active === true, `expected active safety gate review, got ${JSON.stringify(review)}`);
+  assert(review.override === false, `expected protected tenpai not to be overridden, got ${JSON.stringify(review)}`);
+  assert(review.protectedPush === true, `expected protected push flag, got ${JSON.stringify(review)}`);
+  assert(review.selectedTileCode === 'm5', `expected current attack tile kept, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-safe-tenpai-protected-smoke',
+    snapshot: {
+      selectedTileCode: review.selectedTileCode,
+      protectedPush: review.protectedPush,
+      rankDefenseState: review.rankDefenseState
+    }
+  };
+}
+
+function runDefensiveSafetyGateComebackProtectedSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 1,
+    handValue: 56,
+    hardEvScore: 700,
+    hardContext: {
+      scoreRank: 4,
+      trailingByLeader: 12000
+    }
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 2,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1,
+    hardContext: attack.hardMetrics.hardContext
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, safe], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review && review.active === true, `expected active comeback safety gate review, got ${JSON.stringify(review)}`);
+  assert(review.override === false, `expected comeback not to backstep, got ${JSON.stringify(review)}`);
+  assert(review.protectedPush === true, `expected comeback protected push, got ${JSON.stringify(review)}`);
+  assert(review.rankDefenseState === 'comeback', `expected comeback state, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-comeback-protected-smoke',
+    snapshot: {
+      selectedTileCode: review.selectedTileCode,
+      protectedPush: review.protectedPush,
+      rankDefenseState: review.rankDefenseState
+    }
+  };
+}
+
+function runDefensiveSafetyGateLowPressureInactiveSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: [],
+    remaining: 42
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 5,
+    safetyRank: 6,
+    defenseTileRank: 60,
+    xiangting: 1,
+    handValue: 28,
+    hardEvScore: 180
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 1,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1
+  });
+  const review = hardPushFoldApi.evaluateSafetyGateRerank([attack, safe], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review && review.enabled === true, `expected safety gate diagnostic review, got ${JSON.stringify(review)}`);
+  assert(review.active === false, `expected low-pressure safety gate inactive, got ${JSON.stringify(review)}`);
+  assert(review.override === false, `expected low-pressure no override, got ${JSON.stringify(review)}`);
+  assert(review.reasons.includes('def-safety-gate-low-pressure'), `expected low-pressure reason, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safety-gate-low-pressure-inactive-smoke',
+    snapshot: {
+      active: review.active,
+      selectedTileCode: review.selectedTileCode,
+      reasons: review.reasons
+    }
+  };
+}
+
+function runDefensiveUtilityShadowSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 1,
+    handValue: 22,
+    hardEvScore: 120,
+    hardContext: {
+      scoreRank: 1,
+      leadOverSecond: 9000,
+      isLateRound: true
+    }
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 2,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1,
+    hardContext: attack.hardMetrics.hardContext
+  });
+  const shadow = hardPushFoldApi.evaluateDefensiveUtilityShadow([attack, safe], attack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(shadow && shadow.enabled === true, `expected defensive utility shadow, got ${JSON.stringify(shadow)}`);
+  assert(shadow.currentTileCode === 'm5', `expected current tile unchanged, got ${JSON.stringify(shadow)}`);
+  assert(shadow.recommendedTileCode === 'z1', `expected shadow safer tile recommendation, got ${JSON.stringify(shadow)}`);
+  assert(shadow.differs === true && shadow.saferAlternative === true && shadow.backstep === true, `expected safer backstep shadow diff, got ${JSON.stringify(shadow)}`);
+  assert(shadow.actionable === true, `expected high-threat safer shadow to be actionable, got ${JSON.stringify(shadow)}`);
+  assert(shadow.actionableReasons.includes('def-shadow-actionable-pressure'), `expected actionable pressure reason, got ${JSON.stringify(shadow)}`);
+  assert(Array.isArray(shadow.top) && shadow.top.length === 2, `expected compact top candidates, got ${JSON.stringify(shadow)}`);
+  assert(!Object.prototype.hasOwnProperty.call(shadow, 'runtime'), `shadow must not contain runtime, got ${JSON.stringify(shadow)}`);
+  assert(!Object.prototype.hasOwnProperty.call(shadow, 'eventLog'), `shadow must not contain eventLog, got ${JSON.stringify(shadow)}`);
+
+  const tenpaiAttack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    safetyRank: 9,
+    defenseTileRank: 94,
+    xiangting: 0,
+    handValue: 72,
+    hardEvScore: 1200,
+    liveTingpaiCount: 5,
+    waitQualityScore: 20,
+    hardContext: {
+      scoreRank: 4,
+      trailingByLeader: 12000
+    }
+  });
+  const tenpaiSafe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    safetyRank: 0,
+    defenseTileRank: 2,
+    safetyReasons: ['safety-genbutsu'],
+    xiangting: 1,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1,
+    hardContext: tenpaiAttack.hardMetrics.hardContext
+  });
+  const tenpaiShadow = hardPushFoldApi.evaluateDefensiveUtilityShadow([tenpaiAttack, tenpaiSafe], tenpaiAttack, {
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(tenpaiShadow && tenpaiShadow.rankDefenseState === 'safe-tenpai', `expected safe-tenpai shadow profile, got ${JSON.stringify(tenpaiShadow)}`);
+  assert(tenpaiShadow.recommendedTileCode === 'm5', `expected safe-tenpai shadow to keep attack, got ${JSON.stringify(tenpaiShadow)}`);
+  assert(tenpaiShadow.backstep === false, `expected no forced backstep in safe-tenpai, got ${JSON.stringify(tenpaiShadow)}`);
+  assert(tenpaiShadow.actionable === false, `expected same-tile safe-tenpai shadow to be non-actionable, got ${JSON.stringify(tenpaiShadow)}`);
+
+  return {
+    name: 'hard-defensive-dev-utility-shadow-smoke',
+    snapshot: {
+      highThreatRecommended: shadow.recommendedTileCode,
+      highThreatSaferAlternative: shadow.saferAlternative,
+      highThreatActionable: shadow.actionable,
+      tenpaiRecommended: tenpaiShadow.recommendedTileCode,
+      tenpaiState: tenpaiShadow.rankDefenseState,
+      tenpaiActionable: tenpaiShadow.actionable
+    }
+  };
+}
+
+function runDefensiveThreatProfileSmoke() {
+  const attack = createPushFoldDecision({
+    categories: ['dora-adjacent']
+  });
+  const childRiichi = hardDefensiveProfileApi.buildThreatProfile(
+    createDefensiveProfileFixtureRuntime({
+      dealerSeat: 'right',
+      riichiSeats: ['top']
+    }),
+    'right',
+    attack,
+    { policy: createDefensiveDevPolicyPatch() }
+  );
+  const dealerRiichi = hardDefensiveProfileApi.buildThreatProfile(
+    createDefensiveProfileFixtureRuntime({
+      dealerSeat: 'top',
+      riichiSeats: ['top']
+    }),
+    'right',
+    attack,
+    { policy: createDefensiveDevPolicyPatch() }
+  );
+  const multiThreat = hardDefensiveProfileApi.buildThreatProfile(
+    createDefensiveProfileFixtureRuntime({
+      dealerSeat: 'top',
+      riichiSeats: ['top', 'left'],
+      fulouBySeat: {
+        left: ['p123-', 'p456-']
+      }
+    }),
+    'right',
+    attack,
+    { policy: createDefensiveDevPolicyPatch() }
+  );
+  assert(dealerRiichi.threatScore > childRiichi.threatScore, `expected dealer riichi to be higher threat than child riichi, got ${JSON.stringify({ childRiichi, dealerRiichi })}`);
+  assert(multiThreat.threatScore > dealerRiichi.threatScore, `expected multi threat to be higher than dealer riichi, got ${JSON.stringify({ dealerRiichi, multiThreat })}`);
+  assert(multiThreat.reasons.includes('threat-multi'), `expected multi threat reason, got ${JSON.stringify(multiThreat)}`);
+  return {
+    name: 'hard-defensive-dev-threat-profile-smoke',
+    snapshot: {
+      childThreat: childRiichi.threatScore,
+      dealerThreat: dealerRiichi.threatScore,
+      multiThreat: multiThreat.threatScore,
+      reasons: multiThreat.reasons
+    }
+  };
+}
+
+function runDefensiveRankAwareFoldSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    xiangting: 1,
+    handValue: 24,
+    hardContext: {
+      scoreRank: 1,
+      leadOverSecond: 9000,
+      isLateRound: true
+    }
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    xiangting: 2,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1,
+    hardContext: attack.hardMetrics.hardContext
+  });
+  const review = hardPushFoldApi.evaluateHardPushFoldCandidates([attack, safe], attack, {
+    policy: hardPolicyApi.createHardPolicy().pushFold,
+    pushFoldState: {
+      state: 'neutral',
+      pressureScore: 0,
+      reasons: ['defensive-dev-profile-only-fixture']
+    },
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review.mode === 'cross-xiangting-fold', `expected defensive-dev rank-aware fold, got ${JSON.stringify(review)}`);
+  assert(review.selectedTileCode === 'z1', `expected safe tile selected, got ${JSON.stringify(review)}`);
+  assert(review.defensiveProfile && review.defensiveProfile.rankDefenseState === 'protect-lead', `expected protect-lead profile, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-rank-aware-fold-smoke',
+    snapshot: {
+      mode: review.mode,
+      selectedTileCode: review.selectedTileCode,
+      rankDefenseState: review.defensiveProfile.rankDefenseState,
+      threatScore: review.defensiveProfile.threatProfile.threatScore,
+      netPushScore: review.netPushScore
+    }
+  };
+}
+
+function runDefensiveSafeTenpaiPushSmoke() {
+  const runtime = createDefensiveProfileFixtureRuntime({
+    dealerSeat: 'top',
+    riichiSeats: ['top'],
+    remaining: 12
+  });
+  const attack = createPushFoldDecision({
+    tileCode: 'm5',
+    dangerScore: 8,
+    xiangting: 0,
+    handValue: 72,
+    liveTingpaiCount: 5,
+    waitQualityScore: 12,
+    hardContext: {
+      scoreRank: 4,
+      trailingByLeader: 12000
+    }
+  });
+  const safe = createPushFoldDecision({
+    tileCode: 'z1',
+    dangerScore: 0,
+    xiangting: 1,
+    handValue: 5,
+    hardEvScore: 10,
+    tileIndex: 1,
+    hardContext: attack.hardMetrics.hardContext
+  });
+  const review = hardPushFoldApi.evaluateHardPushFoldCandidates([attack, safe], attack, {
+    policy: hardPolicyApi.createHardPolicy().pushFold,
+    pushFoldState: {
+      state: 'careful',
+      pressureScore: 14,
+      reasons: ['defensive-dev-safe-tenpai-fixture']
+    },
+    runtime,
+    seatKey: 'right',
+    defensiveProfilePolicy: createDefensiveDevPolicyPatch()
+  });
+  assert(review.mode === 'keep-attack', `expected safe-tenpai push to remain attack, got ${JSON.stringify(review)}`);
+  assert(review.pushProtected === true, `expected pushProtected safe-tenpai, got ${JSON.stringify(review)}`);
+  assert(review.defensiveProfile && review.defensiveProfile.rankDefenseState === 'safe-tenpai', `expected safe-tenpai profile, got ${JSON.stringify(review)}`);
+  return {
+    name: 'hard-defensive-dev-safe-tenpai-push-smoke',
+    snapshot: {
+      mode: review.mode,
+      rankDefenseState: review.defensiveProfile.rankDefenseState,
+      pushProtected: review.pushProtected,
+      netPushScore: review.netPushScore
+    }
+  };
+}
+
+function runDealInAttributionSmoke() {
+  const cases = [
+    [{ threatProfile: { riichiCount: 1 }, xiangting: 1, tileCode: 'm5', closedHandBefore: true }, 'riichi-push'],
+    [{ threatProfile: { dealerThreat: true, riichiCount: 1 }, xiangting: 1, tileCode: 'm5', closedHandBefore: true }, 'dealer-threat'],
+    [{ threatProfile: { multiThreat: true, riichiCount: 2 }, xiangting: 1, tileCode: 'm5', closedHandBefore: true }, 'multi-threat'],
+    [{ threatProfile: { riichiCount: 1 }, xiangting: 0, tileCode: 'm5', closedHandBefore: true }, 'tenpai-push'],
+    [{ threatProfile: { riichiCount: 0 }, xiangting: 2, tileCode: 'p5', closedHandBefore: false, safeTileCode: null }, 'open-hand-no-safe'],
+    [{ threatProfile: { riichiCount: 0 }, xiangting: 2, tileCode: 's5', closedHandBefore: true }, 'no-pressure-middle'],
+    [{ threatProfile: { riichiCount: 1 }, defensiveState: 'comeback', xiangting: 1, tileCode: 'm5' }, 'comeback-push']
+  ];
+  cases.forEach(([snapshot, expected]) => {
+    const actual = hardDefensiveProfileApi.classifyDealInAttribution(snapshot);
+    assert(actual === expected, `expected ${expected}, got ${actual} for ${JSON.stringify(snapshot)}`);
+  });
+  return {
+    name: 'hard-defensive-dev-deal-in-attribution-smoke',
+    snapshot: {
+      categories: cases.map(([, expected]) => expected)
     }
   };
 }
@@ -3216,9 +3973,22 @@ function main() {
     runClosedRouteOpenHandRegressionSmoke(),
     runClosedRouteHighValueCallAllowSmoke(),
     runClosedRouteBalancedPolicySmoke(),
-    runClosedRouteBalancedDevValueOverrideSmoke(),
-    runClosedRouteBalancedDevDirectTenpaiSmoke(),
-    runClosedRouteBalancedDevPressureSmoke(),
+    runClosedRouteBalancedValueOverrideSmoke(),
+    runClosedRouteBalancedDirectTenpaiSmoke(),
+    runClosedRouteBalancedPressureSmoke(),
+    runDefensiveThreatProfileSmoke(),
+    runDefensiveRankAwareFoldSmoke(),
+    runDefensiveSafeTenpaiPushSmoke(),
+    runDefensiveSafetyGateStableOffSmoke(),
+    runDefensiveSafetyGateSameShantenSmoke(),
+    runDefensiveSafetyGateRankProtectBackstepSmoke(),
+    runDefensiveSafetyGateNeutralBackstepBlockedSmoke(),
+    runDefensiveSafetyGatePrefersSameShantenSmoke(),
+    runDefensiveSafetyGateSafeTenpaiProtectedSmoke(),
+    runDefensiveSafetyGateComebackProtectedSmoke(),
+    runDefensiveSafetyGateLowPressureInactiveSmoke(),
+    runDefensiveUtilityShadowSmoke(),
+    runDealInAttributionSmoke(),
     runHardVsNormalComparisonSmoke(cwd)
   ];
 

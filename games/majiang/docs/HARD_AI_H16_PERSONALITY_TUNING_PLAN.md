@@ -2,6 +2,8 @@
 
 Last updated: 2026-06-03
 
+Status note, 2026-06-04: this planning note is historical. The `hard-heavy-dev` branch and `hard-balanced-candidate` clone were later retired, and the successful `hard-balanced-dev` route-state profile was promoted into stable `hard-balanced`. Use `HARD_AI_VARIANTS_V1_V2_V3.md` for current runnable variants.
+
 ## Summary
 
 H16 的目标不是继续给 `hard` 加零散规则，而是把当前四个困难 AI 分支整理成可长期微调的 personality 系统。

@@ -154,8 +154,7 @@ function validateHardPersonalityPresets() {
     'hard-defensive-dev',
     'hard-balanced',
     'hard-balanced-dev',
-    'hard-heavy',
-    'hard-heavy-dev'
+    'hard-heavy'
   ]);
   const byId = variants.reduce((result, variant) => {
     result[variant.id] = variant;
@@ -168,7 +167,6 @@ function validateHardPersonalityPresets() {
   assert(byId['hard-balanced'] && byId['hard-balanced'].policy, `expected hard-balanced policy, got ${JSON.stringify(byId)}`);
   assert(byId['hard-balanced-dev'] && byId['hard-balanced-dev'].policy, `expected hard-balanced-dev policy, got ${JSON.stringify(byId)}`);
   assert(byId['hard-heavy'] && byId['hard-heavy'].policy, `expected hard-heavy policy, got ${JSON.stringify(byId)}`);
-  assert(byId['hard-heavy-dev'] && byId['hard-heavy-dev'].policy, `expected hard-heavy-dev policy, got ${JSON.stringify(byId)}`);
   assert(byId['hard-aggressive'].policy.id === 'hard-aggressive', `expected aggressive policy id, got ${byId['hard-aggressive'].policy.id}`);
   assert(byId['hard-aggressive-dev'].policy.id === 'hard-aggressive-dev', `expected aggressive-dev policy id, got ${byId['hard-aggressive-dev'].policy.id}`);
   assert(byId['hard-defensive'].policy.id === 'hard-defensive', `expected defensive policy id, got ${byId['hard-defensive'].policy.id}`);
@@ -176,7 +174,6 @@ function validateHardPersonalityPresets() {
   assert(byId['hard-balanced'].policy.id === 'hard-balanced', `expected balanced policy id, got ${byId['hard-balanced'].policy.id}`);
   assert(byId['hard-balanced-dev'].policy.id === 'hard-balanced-dev', `expected balanced-dev policy id, got ${byId['hard-balanced-dev'].policy.id}`);
   assert(byId['hard-heavy'].policy.id === 'hard-heavy', `expected heavy policy id, got ${byId['hard-heavy'].policy.id}`);
-  assert(byId['hard-heavy-dev'].policy.id === 'hard-heavy-dev', `expected heavy-dev policy id, got ${byId['hard-heavy-dev'].policy.id}`);
   assert(byId['hard-aggressive'].policy.personality === 'aggressive', `expected aggressive personality, got ${JSON.stringify(byId['hard-aggressive'].policy)}`);
   assert(byId['hard-aggressive-dev'].policy.personality === 'aggressive-dev', `expected aggressive-dev personality, got ${JSON.stringify(byId['hard-aggressive-dev'].policy)}`);
   assert(byId['hard-defensive'].policy.personality === 'defensive', `expected defensive personality, got ${JSON.stringify(byId['hard-defensive'].policy)}`);
@@ -184,27 +181,43 @@ function validateHardPersonalityPresets() {
   assert(byId['hard-balanced'].policy.personality === 'balanced', `expected balanced personality, got ${JSON.stringify(byId['hard-balanced'].policy)}`);
   assert(byId['hard-balanced-dev'].policy.personality === 'balanced-dev', `expected balanced-dev personality, got ${JSON.stringify(byId['hard-balanced-dev'].policy)}`);
   assert(byId['hard-heavy'].policy.personality === 'heavy', `expected heavy personality, got ${JSON.stringify(byId['hard-heavy'].policy)}`);
-  assert(byId['hard-heavy-dev'].policy.personality === 'heavy-dev', `expected heavy-dev personality, got ${JSON.stringify(byId['hard-heavy-dev'].policy)}`);
   assert(byId['hard-aggressive'].policy.discard.enableNoPressureShapeReview === false, 'expected aggressive to use pure speed policy shape gate off');
   assert(byId['hard-aggressive-dev'].policy.devVariant.parent === 'hard-aggressive', `expected aggressive-dev parent, got ${JSON.stringify(byId['hard-aggressive-dev'].policy.devVariant)}`);
   assert(byId['hard-defensive'].policy.defense.enableLowDangerTiebreak === true, 'expected defensive to keep tuned defense gate');
+  assert(byId['hard-defensive'].policy.defense.enableThreatScoreReview !== true, 'stable defensive must keep H17 threat review off');
+  assert(byId['hard-defensive'].policy.defense.enableRankAwarePushFold !== true, 'stable defensive must keep H17 rank-aware push/fold off');
   assert(byId['hard-defensive-dev'].policy.devVariant.parent === 'hard-defensive', `expected defensive-dev parent, got ${JSON.stringify(byId['hard-defensive-dev'].policy.devVariant)}`);
+  assert(byId['hard-defensive-dev'].policy.defense.enableThreatScoreReview === true, 'expected defensive-dev threat review enabled');
+  assert(byId['hard-defensive-dev'].policy.defense.enableRankAwarePushFold === true, 'expected defensive-dev rank-aware push/fold enabled');
+  assert(byId['hard-defensive-dev'].policy.defense.enableDealInAttribution === true, 'expected defensive-dev deal-in attribution enabled');
+  assert(byId['hard-defensive-dev'].policy.defense.enableDefensiveUtilityShadow === true, 'expected defensive-dev utility shadow enabled');
+  assert(byId['hard-defensive'].policy.defense.enableDefensiveUtilityShadow !== true, 'stable defensive must keep H17c utility shadow off');
+  assert(byId['hard-defensive-dev'].policy.route.enableClosedRouteValueRebalance !== true, 'defensive-dev must keep route personality tuning off after H17b cleanup');
+  assert(byId['hard-defensive-dev'].policy.riichi.minWaitQualityScore === byId['hard-defensive'].policy.riichi.minWaitQualityScore, 'defensive-dev must keep stable defensive riichi gate after H17b cleanup');
   assert(byId['hard-balanced'].policy.route.enableClosedRouteValueRebalance === true, 'expected balanced to enable closed route value scoring');
-  assert(byId['hard-balanced'].policy.route.closedRouteMaxXiangting < byId['hard-heavy'].policy.route.closedRouteMaxXiangting, 'expected balanced to review a narrower route range than heavy');
+  assert(byId['hard-balanced'].policy.route.enableBalancedRouteState === true, 'expected promoted balanced to enable balanced route state');
+  assert(byId['hard-balanced'].policy.route.closedRouteMaxXiangting === 2, `expected promoted balanced route range, got ${JSON.stringify(byId['hard-balanced'].policy.route)}`);
+  assert(byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin === 95, `expected promoted balanced route margin, got ${JSON.stringify(byId['hard-balanced'].policy.route)}`);
+  assert(byId['hard-balanced'].policy.route.balancedValueOverrideMinMargin === 85, `expected promoted balanced value margin, got ${JSON.stringify(byId['hard-balanced'].policy.route)}`);
   assert(byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin > byId['hard-heavy'].policy.route.closedRouteOverrideMinMargin, 'expected balanced to use stricter override margin than heavy');
+  assert(byId['hard-balanced'].policy.riichi.minLiveTingpaiCount === 2, `expected promoted balanced riichi live gate, got ${JSON.stringify(byId['hard-balanced'].policy.riichi)}`);
+  assert(byId['hard-balanced'].policy.riichi.minWaitQualityScore === 6, `expected promoted balanced riichi quality gate, got ${JSON.stringify(byId['hard-balanced'].policy.riichi)}`);
   assert(byId['hard-balanced-dev'].policy.devVariant.parent === 'hard-balanced', `expected balanced-dev parent, got ${JSON.stringify(byId['hard-balanced-dev'].policy.devVariant)}`);
-  assert(byId['hard-balanced-dev'].policy.route.enableBalancedRouteState === true, 'expected balanced-dev to enable balanced route state');
-  assert(byId['hard-balanced-dev'].policy.route.closedRouteMaxXiangting > byId['hard-balanced'].policy.route.closedRouteMaxXiangting, 'expected balanced-dev to expand route review range');
+  assert(byId['hard-balanced-dev'].policy.route.enableBalancedRouteState === byId['hard-balanced'].policy.route.enableBalancedRouteState, 'expected balanced-dev to inherit promoted route state');
+  assert(byId['hard-balanced-dev'].policy.route.closedRouteMaxXiangting === byId['hard-balanced'].policy.route.closedRouteMaxXiangting, 'expected balanced-dev to inherit promoted route range');
+  assert(byId['hard-balanced-dev'].policy.route.closedRouteOverrideMinMargin === byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin, 'expected balanced-dev to inherit promoted route margin');
+  assert(byId['hard-balanced-dev'].policy.riichi.minWaitQualityScore === byId['hard-balanced'].policy.riichi.minWaitQualityScore, 'expected balanced-dev to inherit promoted riichi gate');
   assert(byId['hard-heavy'].policy.route.enableClosedRouteValueRebalance === true, 'expected heavy to enable closed route value scoring');
-  assert(byId['hard-heavy-dev'].policy.devVariant.parent === 'hard-heavy', `expected heavy-dev parent, got ${JSON.stringify(byId['hard-heavy-dev'].policy.devVariant)}`);
 
   console.log('[PASS] ai-hanchan-arena-hard-personality-presets-smoke');
   console.log(`  snapshot=${JSON.stringify({
     variants: variants.map((variant) => variant.id),
     policies: variants.map((variant) => variant.policy.id),
+    defensiveDevRouteEnabled: Boolean(byId['hard-defensive-dev'].policy.route.enableClosedRouteValueRebalance),
+    defensiveDevUtilityShadowEnabled: Boolean(byId['hard-defensive-dev'].policy.defense.enableDefensiveUtilityShadow),
     balancedRouteMargin: byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin,
     balancedDevRouteMargin: byId['hard-balanced-dev'].policy.route.closedRouteOverrideMinMargin,
-    heavyRouteEnabled: byId['hard-heavy'].policy.route.enableClosedRouteValueRebalance
+    heavyRouteMargin: byId['hard-heavy'].policy.route.closedRouteOverrideMinMargin
   })}`);
 }
 
@@ -241,7 +254,7 @@ function validateMirrorStructure() {
 }
 
 function validateBalancedStateSummarySmoke() {
-  const variants = arenaApi.resolveVariants(['hard-balanced-dev']);
+  const variants = arenaApi.resolveVariants(['hard-balanced']);
   const summary = arenaApi.summarizeMatchRows([
     {
       completed: true,
@@ -249,7 +262,7 @@ function validateBalancedStateSummarySmoke() {
       seatResults: [
         {
           seat: 'bottom',
-          variant: 'hard-balanced-dev',
+          variant: 'hard-balanced',
           rank: 1,
           score: 32000
         }
@@ -277,7 +290,7 @@ function validateBalancedStateSummarySmoke() {
       }
     }
   ], variants);
-  const stats = summary.variantStats['hard-balanced-dev'];
+  const stats = summary.variantStats['hard-balanced'];
   assert(stats.balancedRouteStateCounts.value === 3, `expected value state count, got ${JSON.stringify(stats.balancedRouteStateCounts)}`);
   assert(stats.balancedRouteStateCounts.speed === 2, `expected speed state count, got ${JSON.stringify(stats.balancedRouteStateCounts)}`);
   assert(stats.balancedRouteStateReasonCounts['balanced-state-riichi-potential'] === 3, `expected balanced reason count, got ${JSON.stringify(stats.balancedRouteStateReasonCounts)}`);
@@ -294,12 +307,145 @@ function validateBalancedStateSummarySmoke() {
   })}`);
 }
 
+function validateDefensiveDiagnosticsSummarySmoke() {
+  const variants = arenaApi.resolveVariants(['hard-defensive-dev']);
+  const summary = arenaApi.summarizeMatchRows([
+    {
+      completed: true,
+      rounds: 10,
+      seatResults: [
+        {
+          seat: 'bottom',
+          variant: 'hard-defensive-dev',
+          rank: 2,
+          score: 28000
+        }
+      ],
+      counters: {
+        drawRounds: 0,
+        defensiveStateCounts: {
+          bottom: {
+            'protect-lead': 2,
+            'neutral-defense': 1
+          }
+        },
+        threatProfileReasonCounts: {
+          bottom: {
+            'threat-riichi': 2,
+            'threat-dealer-riichi': 1
+          }
+        },
+        dealInAttributionCounts: {
+          bottom: {
+            'riichi-push': 1,
+            'open-hand-no-safe': 1
+          }
+        },
+        defensiveShadowReviewedDiscards: {
+          bottom: 4
+        },
+        defensiveShadowDiffDiscards: {
+          bottom: 2
+        },
+        defensiveShadowSaferAltDiscards: {
+          bottom: 1
+        },
+        defensiveShadowBackstepDiscards: {
+          bottom: 1
+        },
+        defensiveShadowActionableDiscards: {
+          bottom: 1
+        },
+        defensiveShadowWouldAvoidDealIns: {
+          bottom: 1
+        },
+        defensiveShadowReasonCounts: {
+          bottom: {
+            'def-shadow-review': 4,
+            'def-shadow-safer-alt': 1
+          }
+        },
+        defensiveShadowActionableReasonCounts: {
+          bottom: {
+            'def-shadow-actionable-pressure': 1,
+            'def-shadow-actionable-safer': 1
+          }
+        },
+        defensiveSafetyGateReviewedDiscards: {
+          bottom: 5
+        },
+        defensiveSafetyGateOverrideDiscards: {
+          bottom: 2
+        },
+        defensiveSafetyGateSameShantenDiscards: {
+          bottom: 1
+        },
+        defensiveSafetyGateBackstepDiscards: {
+          bottom: 1
+        },
+        defensiveSafetyGateProtectedPushDiscards: {
+          bottom: 1
+        },
+        defensiveSafetyGateWouldAvoidDealIns: {
+          bottom: 1
+        },
+        defensiveSafetyGateReasonCounts: {
+          bottom: {
+            'def-safety-gate-review': 5,
+            'def-safety-gate-override': 2
+          }
+        }
+      }
+    }
+  ], variants);
+  const stats = summary.variantStats['hard-defensive-dev'];
+  assert(stats.defensiveStateCounts['protect-lead'] === 2, `expected defensive state count, got ${JSON.stringify(stats.defensiveStateCounts)}`);
+  assert(stats.threatProfileReasonCounts['threat-riichi'] === 2, `expected threat reason count, got ${JSON.stringify(stats.threatProfileReasonCounts)}`);
+  assert(stats.dealInAttributionCounts['riichi-push'] === 1, `expected deal-in attribution count, got ${JSON.stringify(stats.dealInAttributionCounts)}`);
+  assert(stats.defensiveShadowReviewedDiscards === 4, `expected shadow review count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveShadowDiffDiscards === 2, `expected shadow diff count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveShadowSaferAltDiscards === 1, `expected shadow safer alt count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveShadowBackstepDiscards === 1, `expected shadow backstep count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveShadowActionableDiscards === 1, `expected shadow actionable count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveShadowWouldAvoidDealIns === 1, `expected shadow would-avoid deal-in count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveShadowReasonCounts['def-shadow-review'] === 4, `expected shadow reason count, got ${JSON.stringify(stats.defensiveShadowReasonCounts)}`);
+  assert(stats.defensiveShadowActionableReasonCounts['def-shadow-actionable-pressure'] === 1, `expected shadow actionable reason count, got ${JSON.stringify(stats.defensiveShadowActionableReasonCounts)}`);
+  assert(stats.defensiveSafetyGateReviewedDiscards === 5, `expected safety gate review count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveSafetyGateOverrideDiscards === 2, `expected safety gate override count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveSafetyGateSameShantenDiscards === 1, `expected safety gate same-shanten count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveSafetyGateBackstepDiscards === 1, `expected safety gate backstep count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveSafetyGateProtectedPushDiscards === 1, `expected safety gate protected-push count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveSafetyGateWouldAvoidDealIns === 1, `expected safety gate would-avoid deal-in count, got ${JSON.stringify(stats)}`);
+  assert(stats.defensiveSafetyGateReasonCounts['def-safety-gate-review'] === 5, `expected safety gate reason count, got ${JSON.stringify(stats.defensiveSafetyGateReasonCounts)}`);
+  const text = arenaApi.formatArenaSummary('defensive fixture', summary, variants);
+  assert(text.includes('defensiveState=protect-lead:2,neutral-defense:1'), `expected defensive state summary line, got ${text}`);
+  assert(text.includes('threatReason=threat-riichi:2,threat-dealer-riichi:1'), `expected threat reason summary line, got ${text}`);
+  assert(text.includes('dealInAttribution=open-hand-no-safe:1,riichi-push:1'), `expected deal-in attribution summary line, got ${text}`);
+  assert(text.includes('defShadowReview/R=0.4 defShadowDiff/R=0.2 defShadowSaferAlt/R=0.1 defShadowBackstep/R=0.1 defShadowActionable/R=0.1 defShadowWouldAvoidDealIn=0.1'), `expected defensive shadow summary line, got ${text}`);
+  assert(text.includes('defShadowReason=def-shadow-review:4,def-shadow-safer-alt:1'), `expected shadow reason summary line, got ${text}`);
+  assert(text.includes('defShadowActionableReason=def-shadow-actionable-pressure:1,def-shadow-actionable-safer:1'), `expected shadow actionable reason summary line, got ${text}`);
+  assert(text.includes('defSafetyGateReview/R=0.5 defSafetyGateOverride/R=0.2 defSafetyGateSameShanten/R=0.1 defSafetyGateBackstep/R=0.1 defSafetyGateProtectedPush/R=0.1 defSafetyGateWouldAvoidDealIn=0.1'), `expected safety gate summary line, got ${text}`);
+  assert(text.includes('defSafetyGateReason=def-safety-gate-review:5,def-safety-gate-override:2'), `expected safety gate reason summary line, got ${text}`);
+
+  console.log('[PASS] ai-hanchan-arena-defensive-diagnostics-summary-smoke');
+  console.log(`  snapshot=${JSON.stringify({
+    variant: variants[0].id,
+    defensiveStateCounts: stats.defensiveStateCounts,
+    threatProfileReasonCounts: stats.threatProfileReasonCounts,
+    dealInAttributionCounts: stats.dealInAttributionCounts,
+    defensiveShadowReasonCounts: stats.defensiveShadowReasonCounts,
+    defensiveShadowActionableReasonCounts: stats.defensiveShadowActionableReasonCounts,
+    defensiveSafetyGateReasonCounts: stats.defensiveSafetyGateReasonCounts
+  })}`);
+}
+
 function main() {
   validateMixedSmoke();
   validateAnalyzerSmoke();
   validateRepeatedVariantLineup();
   validateHardPersonalityPresets();
   validateBalancedStateSummarySmoke();
+  validateDefensiveDiagnosticsSummarySmoke();
   validateMirrorStructure();
 }
 
@@ -312,5 +458,6 @@ module.exports = {
   validateRepeatedVariantLineup,
   validateHardPersonalityPresets,
   validateBalancedStateSummarySmoke,
+  validateDefensiveDiagnosticsSummarySmoke,
   validateMirrorStructure
 };

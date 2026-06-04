@@ -199,7 +199,6 @@
       || policyId === 'hard-defensive-dev'
       || policyId === 'hard-balanced-dev'
       || policyId === 'hard-heavy'
-      || policyId === 'hard-heavy-dev'
       || policyId === 'hard-experimental'
       || policyId === 'hell';
   }
@@ -492,7 +491,6 @@
         || policyId === 'hard-balanced'
         || policyId === 'hard-balanced-dev'
         || policyId === 'hard-heavy'
-        || policyId === 'hard-heavy-dev'
       );
     const currentXiangting = Number(currentMetrics && currentMetrics.xiangting);
     const nextXiangting = Number(nextMetrics && nextMetrics.xiangting);
@@ -544,7 +542,11 @@
       + lostClosedRouteCost
     );
     const margin = passClosedRouteScore - callOpenRouteScore;
-    const balancedStateReview = policyId === 'hard-balanced-dev' && routePolicy.enableBalancedRouteState === true
+    const usesBalancedRouteState = (
+      (policyId === 'hard-balanced' || policyId === 'hard-balanced-dev')
+      && routePolicy.enableBalancedRouteState === true
+    );
+    const balancedStateReview = usesBalancedRouteState
       ? resolveBalancedRouteState(routePolicy, {
           remainingTiles,
           riichiPressure,

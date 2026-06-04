@@ -17,6 +17,7 @@ const {
   resolveMortalRoot
 } = require('../engine/coach/mortal/mortal-adapter');
 const { getActionPriority } = require('../shared/runtime/reaction/reaction-priority');
+const alphaJongAdapterApi = require('./lib/alphajong-adapter');
 const {
   compareDecisions,
   normalizeActionDecision,
@@ -89,6 +90,7 @@ function parseArgs(argv = []) {
     targetVariant: DEFAULT_TARGET_VARIANT,
     targetVariantProvided: false,
     targetDifficulty: DEFAULT_TARGET_DIFFICULTY,
+    targetExternalAdapter: null,
     opponentDifficulty: DEFAULT_OPPONENT_DIFFICULTY,
     layout: DEFAULT_LAYOUT,
     targetSeat: null,
@@ -200,6 +202,7 @@ function parseArgs(argv = []) {
   args.targetVariant = targetVariant.id;
   args.targetDifficulty = targetVariant.difficulty;
   args.targetPolicy = targetVariant.policy ? clone(targetVariant.policy) : null;
+  args.targetExternalAdapter = targetVariant.externalAdapter || null;
   if (!args.maxRoundsPerSeat) {
     args.maxRoundsPerSeat = Math.max(args.seeds.length, args.samplesPerSeat * 3);
   }
@@ -213,7 +216,7 @@ function printHelp() {
   console.log('Options:');
   console.log('  --smoke                         Use smoke Mortal config and one sample per target seat.');
   console.log('  --out <path>                    Write the JSON report to a file instead of only stdout.');
-  console.log('  --target-variant <name>         easy|normal|hard|hard-aggressive[-dev]|hard-defensive[-dev]|hard-balanced[-dev]|hard-heavy[-dev]|hard-pure|hard-tuned|hard-experimental. Default: target difficulty.');
+  console.log('  --target-variant <name>         easy|normal|alphajong[-discard-only|-core]|hard|hard-aggressive[-dev]|hard-defensive[-dev]|hard-balanced[-dev]|hard-heavy|hard-pure|hard-tuned|hard-experimental. Default: target difficulty.');
   console.log('  --experimental-overlays <a,b>   Overlays for hard-experimental only.');
   console.log('  --target-difficulty <name>      Difficulty for the evaluated seat. Default: hard.');
   console.log('  --opponent-difficulty <name>    Difficulty for the other three seats. Default: normal.');
@@ -240,6 +243,15 @@ function resolveTargetVariant(args = {}) {
   }
   const presets = arenaApi.createVariantPresets();
   const preset = presets[requested];
+  if (preset && preset.externalAdapter) {
+    return {
+      id: requested,
+      label: preset && preset.label ? preset.label : requested,
+      difficulty: preset.difficulty || 'normal',
+      policy: null,
+      externalAdapter: preset.externalAdapter
+    };
+  }
   if (preset && preset.difficulty === 'hard') {
     const policy = preset && typeof preset.createPolicy === 'function'
       ? preset.createPolicy({
@@ -275,6 +287,36 @@ function buildAiDecisionContext(args, seatKey, targetSeat) {
     context.policy = clone(args.targetPolicy);
   }
   return context;
+}
+
+function createExternalTargetAdapter(args = {}) {
+  const externalAdapter = args && args.targetExternalAdapter ? args.targetExternalAdapter : null;
+  if (externalAdapter === 'alphajong-core') {
+    return alphaJongAdapterApi.createAlphaJongAdapter({ mode: 'core' });
+  }
+  if (externalAdapter === 'alphajong-discard-only') {
+    return alphaJongAdapterApi.createAlphaJongAdapter({ mode: 'discard-only' });
+  }
+  return null;
+}
+
+function chooseBenchmarkDiscard(aiController, externalTargetAdapter, runtime, seatKey, targetSeat, args) {
+  const context = {
+    ...buildAiDecisionContext(args, seatKey, targetSeat),
+    includeHardCandidateDiagnostics: true
+  };
+  if (seatKey === targetSeat && externalTargetAdapter) {
+    return externalTargetAdapter.evaluateRuntimeDiscard(runtime, seatKey, context);
+  }
+  return aiController.chooseDiscard(seatKey, context);
+}
+
+function chooseBenchmarkReaction(aiController, externalTargetAdapter, runtime, seatKey, seatActions, targetSeat, args) {
+  const context = buildAiDecisionContext(args, seatKey, targetSeat);
+  if (seatKey === targetSeat && externalTargetAdapter && typeof externalTargetAdapter.evaluateRuntimeReaction === 'function') {
+    return externalTargetAdapter.evaluateRuntimeReaction(runtime, seatKey, seatActions, context);
+  }
+  return aiController.chooseReaction(seatKey, seatActions, context);
 }
 
 function reportProgress(args, message, details = {}) {
@@ -423,7 +465,7 @@ function sortActiveReactionActions(runtime) {
     ));
 }
 
-function handleReaction(runtime, aiController, counters, args, targetSeat) {
+function handleReaction(runtime, aiController, externalTargetAdapter, counters, args, targetSeat) {
   while (runtime && runtime.pendingReaction && getPhase(runtime) === ROUND_PHASES.AWAIT_REACTION) {
     const sortedActions = sortActiveReactionActions(runtime);
     if (!sortedActions.length) {
@@ -446,15 +488,18 @@ function handleReaction(runtime, aiController, counters, args, targetSeat) {
     const seatActions = sortedActions.filter((action) => (
       action && action.payload && action.payload.seat === seatKey
     ));
-    const decision = aiController.chooseReaction(seatKey, seatActions, {
-      ...buildAiDecisionContext(args, seatKey, targetSeat)
-    });
+    const decision = chooseBenchmarkReaction(aiController, externalTargetAdapter, runtime, seatKey, seatActions, targetSeat, args);
 
     if (decision && decision.type === 'hule') {
       runtime.resolveHule(seatKey, {
         ...(decision.payload || {}),
         finalizeImmediately: true
       });
+      return;
+    }
+
+    if (decision && decision.type === 'pass') {
+      passSeat(runtime, seatKey);
       return;
     }
 
@@ -1065,6 +1110,39 @@ function compactDecisionCandidate(candidate = null) {
   };
 }
 
+function compactAlphaJongPriority(priority = null) {
+  if (!priority || typeof priority !== 'object') return null;
+  return {
+    tileCode: priority.tileCode || null,
+    priority: Number.isFinite(Number(priority.priority)) ? Number(priority.priority) : null,
+    shanten: Number.isFinite(Number(priority.shanten)) ? Number(priority.shanten) : null,
+    waits: Number.isFinite(Number(priority.waits)) ? Number(priority.waits) : null,
+    danger: Number.isFinite(Number(priority.danger)) ? Number(priority.danger) : null,
+    scoreOpen: Number.isFinite(Number(priority.scoreOpen)) ? Number(priority.scoreOpen) : null,
+    scoreClosed: Number.isFinite(Number(priority.scoreClosed)) ? Number(priority.scoreClosed) : null
+  };
+}
+
+function compactAlphaJongDecision(localDecisionRaw = null) {
+  const alphaJong = localDecisionRaw && localDecisionRaw.alphaJong && typeof localDecisionRaw.alphaJong === 'object'
+    ? localDecisionRaw.alphaJong
+    : null;
+  if (!alphaJong) return null;
+  return {
+    policyId: localDecisionRaw && localDecisionRaw.policyId ? localDecisionRaw.policyId : null,
+    mode: alphaJong.mode || null,
+    strategy: alphaJong.strategy || null,
+    fold: Boolean(alphaJong.fold),
+    riichi: Boolean(alphaJong.riichi),
+    riichiDiagnostics: alphaJong.riichiDiagnostics ? clone(alphaJong.riichiDiagnostics) : null,
+    stateMemory: alphaJong.stateMemory ? clone(alphaJong.stateMemory) : null,
+    selected: compactAlphaJongPriority(alphaJong.selected),
+    top: Array.isArray(alphaJong.top)
+      ? alphaJong.top.slice(0, 5).map(compactAlphaJongPriority).filter(Boolean)
+      : []
+  };
+}
+
 function buildDecisionContext(runtime = null, seatKey = null, localDecisionRaw = null) {
   if (!runtime || !seatKey) return null;
   const wallState = typeof runtime.getWallState === 'function' ? runtime.getWallState() : null;
@@ -1187,8 +1265,10 @@ function buildDecisionRow(context) {
         }
       : null,
     metrics: clone(localDecisionRaw && localDecisionRaw.metrics ? localDecisionRaw.metrics : null),
+    alphaJongDecision: compactAlphaJongDecision(localDecisionRaw),
     hardMetrics: clone(localDecisionRaw && localDecisionRaw.hardMetrics ? localDecisionRaw.hardMetrics : null),
     hardPushFold: clone(localDecisionRaw && localDecisionRaw.hardPushFold ? localDecisionRaw.hardPushFold : null),
+    hardSafetyGate: clone(localDecisionRaw && localDecisionRaw.hardSafetyGate ? localDecisionRaw.hardSafetyGate : null),
     hardDefenseTiebreak: clone(localDecisionRaw && localDecisionRaw.hardDefenseTiebreak ? localDecisionRaw.hardDefenseTiebreak : null),
     hardCandidateDiagnostics: Array.isArray(localDecisionRaw && localDecisionRaw.hardCandidateDiagnostics)
       ? clone(localDecisionRaw.hardCandidateDiagnostics)
@@ -1227,6 +1307,7 @@ function runOneRoundSamples(options) {
   const config = buildAiConfig(baseConfig, targetSeat, args);
   const runtime = createSeededRuntime(config, seed);
   const aiController = baseAiApi.createAiController(runtime, config);
+  const externalTargetAdapter = createExternalTargetAdapter(args);
   const controller = createCoachController(runtime, {
     perspectiveSeatKey: targetSeat,
     mortalRoot: mortalOptions.mortalRoot,
@@ -1273,10 +1354,7 @@ function runOneRoundSamples(options) {
           break;
         }
 
-        const localDecisionRaw = aiController.chooseDiscard(seatKey, {
-          ...buildAiDecisionContext(args, seatKey, targetSeat),
-          includeHardCandidateDiagnostics: true
-        });
+        const localDecisionRaw = chooseBenchmarkDiscard(aiController, externalTargetAdapter, runtime, seatKey, targetSeat, args);
         if (seatKey === targetSeat && rows.length < remainingSamples) {
           let inference = controller.requestSuggestion();
           let suggestionState = controller.getSuggestionState();
@@ -1319,7 +1397,7 @@ function runOneRoundSamples(options) {
       }
 
       if (phase === ROUND_PHASES.AWAIT_REACTION) {
-        handleReaction(runtime, aiController, counters, args, targetSeat);
+        handleReaction(runtime, aiController, externalTargetAdapter, counters, args, targetSeat);
         continue;
       }
 
@@ -1493,6 +1571,7 @@ function compactDisagreementRow(row = null) {
     bestMortalCandidate: row.bestMortalCandidate ? clone(row.bestMortalCandidate) : null,
     localMortalCandidate: row.localMortalCandidate ? clone(row.localMortalCandidate) : null,
     metrics: row.metrics ? clone(row.metrics) : null,
+    alphaJongDecision: row.alphaJongDecision ? clone(row.alphaJongDecision) : null,
     hardMetrics: row.hardMetrics
       ? {
           liveUkeireCount: row.hardMetrics.liveUkeireCount,
@@ -1509,6 +1588,7 @@ function compactDisagreementRow(row = null) {
     danger: row.danger ? clone(row.danger) : null,
     pushFoldState: row.pushFoldState ? clone(row.pushFoldState) : null,
     hardPushFold: row.hardPushFold ? clone(row.hardPushFold) : null,
+    hardSafetyGate: row.hardSafetyGate ? clone(row.hardSafetyGate) : null,
     hardDefenseTiebreak: row.hardDefenseTiebreak ? clone(row.hardDefenseTiebreak) : null,
     hardCandidateDiagnostics
   };
@@ -1574,6 +1654,7 @@ function buildBenchmarkReport(args, options = {}) {
   resolvedArgs.targetVariant = targetVariant.id;
   resolvedArgs.targetDifficulty = targetVariant.difficulty;
   resolvedArgs.targetPolicy = targetVariant.policy ? clone(targetVariant.policy) : null;
+  resolvedArgs.targetExternalAdapter = targetVariant.externalAdapter || null;
   const mortalRoot = options.mortalRoot || resolveMortalRoot();
   const mortalOptions = {
     mortalRoot,
@@ -1613,6 +1694,7 @@ function buildBenchmarkReport(args, options = {}) {
     decisionKinds: ['discard', 'riichi'],
     targetVariant: resolvedArgs.targetVariant,
     targetDifficulty: resolvedArgs.targetDifficulty,
+    targetExternalAdapter: resolvedArgs.targetExternalAdapter || null,
     opponentDifficulty: resolvedArgs.opponentDifficulty,
     experimentalOverlays: arenaApi.normalizeExperimentalOverlays(resolvedArgs.experimentalOverlays || []),
     targetPolicyPatch: resolvedArgs.targetPolicy

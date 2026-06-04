@@ -1,10 +1,16 @@
 (function(root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory();
+    module.exports = factory(
+      require('./hard-defensive-profile')
+    );
     return;
   }
-  root.AceMahjongAiHardPushFold = factory();
-})(typeof globalThis !== 'undefined' ? globalThis : this, function() {
+  root.AceMahjongAiHardPushFold = factory(
+    root.AceMahjongAiHardDefensiveProfile || null
+  );
+})(typeof globalThis !== 'undefined' ? globalThis : this, function(
+  hardDefensiveProfileApi
+) {
   'use strict';
 
   const DEFAULT_POLICY = Object.freeze({
@@ -149,8 +155,76 @@
       riskScore: numberOr(summary.riskScore, 0),
       netPushScore: numberOr(summary.netPushScore, 0),
       pushProtected: Boolean(summary.pushProtected),
-      reasons: Array.isArray(summary.reasons) ? summary.reasons.slice() : []
+      reasons: Array.isArray(summary.reasons) ? summary.reasons.slice() : [],
+      defensiveProfile: summary.defensiveProfile || null
     };
+  }
+
+  function buildDefensiveProfile(attackDecision, options = {}) {
+    if (
+      !hardDefensiveProfileApi
+      || typeof hardDefensiveProfileApi.buildRankAwareReview !== 'function'
+    ) {
+      return null;
+    }
+    return hardDefensiveProfileApi.buildRankAwareReview(
+      options.runtime || null,
+      options.seatKey || null,
+      attackDecision,
+      {
+        policy: options.defensiveProfilePolicy || {},
+        lateRemainingTiles: options.lateRemainingTiles
+      }
+    );
+  }
+
+  function evaluateDefensiveUtilityShadow(candidates, currentDecision, options = {}) {
+    if (
+      !hardDefensiveProfileApi
+      || typeof hardDefensiveProfileApi.evaluateDefensiveUtilityShadow !== 'function'
+    ) {
+      return null;
+    }
+    return hardDefensiveProfileApi.evaluateDefensiveUtilityShadow(
+      candidates,
+      currentDecision,
+      {
+        policy: options.defensiveProfilePolicy || {},
+        runtime: options.runtime || null,
+        seatKey: options.seatKey || null,
+        defensiveProfile: options.defensiveProfile || null,
+        lateRemainingTiles: options.lateRemainingTiles
+      }
+    );
+  }
+
+  function evaluateSafetyGateRerank(candidates, currentDecision, options = {}) {
+    if (
+      !hardDefensiveProfileApi
+      || typeof hardDefensiveProfileApi.evaluateSafetyGateRerank !== 'function'
+    ) {
+      return null;
+    }
+    return hardDefensiveProfileApi.evaluateSafetyGateRerank(
+      candidates,
+      currentDecision,
+      {
+        policy: options.defensiveProfilePolicy || {},
+        runtime: options.runtime || null,
+        seatKey: options.seatKey || null,
+        defensiveProfile: options.defensiveProfile || null,
+        lateRemainingTiles: options.lateRemainingTiles
+      }
+    );
+  }
+
+  function shouldReviewUnderDefensiveProfile(defensiveProfile, defensiveProfilePolicy = {}) {
+    if (!defensiveProfile || defensiveProfile.enabled !== true) return false;
+    const threatProfile = defensiveProfile.threatProfile || {};
+    const highThreatScore = numberOr(defensiveProfilePolicy.highThreatScore, 14);
+    return numberOr(threatProfile.threatScore, 0) >= highThreatScore
+      || defensiveProfile.rankDefenseState === 'protect-lead'
+      || defensiveProfile.rankDefenseState === 'protect-second';
   }
 
   function evaluateHardPushFoldCandidates(candidates, attackDecision, options = {}) {
@@ -161,27 +235,38 @@
       ? pressureState.state
       : 'neutral';
     const reasons = [];
+    const defensiveProfile = buildDefensiveProfile(attackDecision, options);
 
     if (!attackDecision || !policy.enableHardPushFold || !policy.allowCrossXiangtingFold) {
       return buildResult('keep-attack', attackDecision, attackDecision, null, {
         pressureScore,
+        defensiveProfile,
         reasons: ['hard-push-fold-disabled']
       });
     }
 
-    if (pressureStateName !== 'careful' || pressureScore < policy.minPressureScore) {
+    if (
+      (pressureStateName !== 'careful' || pressureScore < policy.minPressureScore)
+      && !shouldReviewUnderDefensiveProfile(defensiveProfile, options.defensiveProfilePolicy || {})
+    ) {
       return buildResult('keep-attack', attackDecision, attackDecision, null, {
         pressureScore,
+        defensiveProfile,
         reasons: ['hard-push-fold-pressure-too-low']
       });
     }
 
     const safeDecision = selectBestSafeCandidate(candidates, attackDecision, policy);
     const attackDanger = getDangerScore(attackDecision);
-    const attackScore = calculateAttackScore(attackDecision, policy);
-    const riskScore = attackDanger * pressureScore;
+    const attackScore = calculateAttackScore(attackDecision, policy)
+      + numberOr(defensiveProfile && defensiveProfile.attackBias, 0);
+    const riskScore = attackDanger * pressureScore
+      + numberOr(defensiveProfile && defensiveProfile.expectedDealInCost, 0)
+      + numberOr(defensiveProfile && defensiveProfile.riskBias, 0);
     const netPushScore = attackScore - riskScore;
     const pushProtected = isProtectedPush(attackDecision, policy);
+    const foldNetPushMax = policy.foldNetPushMax
+      + numberOr(defensiveProfile && defensiveProfile.foldNetPushBias, 0);
     const attackXiangting = getXiangting(attackDecision);
     const attackHandValue = getContextualHandValue(attackDecision);
     const hardContext = getHardContext(attackDecision);
@@ -194,7 +279,9 @@
     const isLowValue = attackHandValue < policy.tenpaiPushMinHandValue;
     const isFarFromTenpai = attackXiangting >= 2;
     const isDangerousEnough = attackDanger >= policy.dangerousDangerMin;
-    const hasFoldTrigger = isLowValue || isFarFromTenpai || isMultiThreat || isLeaderLate;
+    const isRankProtect = defensiveProfile
+      && ['protect-lead', 'protect-second'].includes(defensiveProfile.rankDefenseState);
+    const hasFoldTrigger = isLowValue || isFarFromTenpai || isMultiThreat || isLeaderLate || isRankProtect;
 
     if (attackDanger <= policy.safeDangerMax) {
       return buildResult('keep-attack', attackDecision, attackDecision, safeDecision, {
@@ -203,10 +290,14 @@
         riskScore,
         netPushScore,
         pushProtected,
+        defensiveProfile,
         reasons: ['hard-push-fold-attack-already-safe']
       });
     }
 
+    if (defensiveProfile && defensiveProfile.enabled === true) {
+      reasons.push('hard-push-fold-defensive-profile-review');
+    }
     if (pushProtected) reasons.push('hard-push-fold-protected-push');
     if (isLowValue) reasons.push('hard-push-fold-low-value');
     if (isFarFromTenpai) reasons.push('hard-push-fold-far-from-tenpai');
@@ -218,8 +309,8 @@
       safeDecision
       && !pushProtected
       && hasFoldTrigger
-      && (isDangerousEnough || isMultiThreat || isLeaderLate || netPushScore <= policy.foldNetPushMax)
-      && netPushScore <= policy.foldNetPushMax
+      && (isDangerousEnough || isMultiThreat || isLeaderLate || isRankProtect || netPushScore <= foldNetPushMax)
+      && netPushScore <= foldNetPushMax
     ) {
       reasons.push('hard-push-fold-cross-xiangting-fold');
       return buildResult('cross-xiangting-fold', safeDecision, attackDecision, safeDecision, {
@@ -228,6 +319,7 @@
         riskScore,
         netPushScore,
         pushProtected,
+        defensiveProfile,
         reasons
       });
     }
@@ -239,12 +331,15 @@
       riskScore,
       netPushScore,
       pushProtected,
+      defensiveProfile,
       reasons
     });
   }
 
   return {
     DEFAULT_POLICY,
-    evaluateHardPushFoldCandidates
+    evaluateHardPushFoldCandidates,
+    evaluateSafetyGateRerank,
+    evaluateDefensiveUtilityShadow
   };
 });
