@@ -14,6 +14,8 @@
     enableDefensiveUtilityShadow: false,
     enableSafetyGateRerank: false,
     enableSafetyGateDiagnostics: false,
+    enableDefensiveCallGate: false,
+    enableDefensiveCallGateDiagnostics: false,
     threatWeights: {
       riichi: 8,
       dealerRiichi: 4,
@@ -94,7 +96,47 @@
     safetyGateBackstepMinThreatScore: 14,
     safetyGateBackstepMinExpectedCostDelta: 140,
     safetyGateProtectedTenpaiMinHandValue: 42,
-    safetyGateProtectedTenpaiMinWaitQuality: 12
+    safetyGateProtectedTenpaiMinWaitQuality: 12,
+    defensiveCallGateMaxClosedXiangting: 3,
+    defensiveCallGateMinRemainingTiles: 14,
+    defensiveCallGateNeutralMargin: 55,
+    defensiveCallGateProtectMargin: 40,
+    defensiveCallGatePressureMargin: 40,
+    defensiveCallGateComebackMargin: 120,
+    defensiveCallGateOpenHandMargin: 140,
+    defensiveCallGateDirectTenpaiMinHandValue: 32,
+    defensiveCallGateDirectTenpaiMinWaitQuality: 8,
+    defensiveCallGateHighValue: 62,
+    defensiveCallGateComebackMinHandValue: 42,
+    defensiveCallGateStrongHardEvDelta: 180,
+    defensiveCallGateStrongLiveUkeireDelta: 14,
+    defensiveCallGateStrongLiveTingpaiDelta: 3,
+    defensiveCallGatePressureThreatScore: 8,
+    defensiveCallGateWeights: {
+      callShantenImprove: 55,
+      callDirectTenpai: 120,
+      callLiveUkeireDelta: 2.5,
+      callLiveTingpaiDelta: 8,
+      callHardEvDelta: 0.11,
+      callContextualHandValue: 1.3,
+      callYakuhai: 16,
+      callAlreadyOpen: 40,
+      callDealerBonus: 18,
+      closedBase: 78,
+      closedNearShanten: 28,
+      closedRemainingTile: 0.8,
+      closedLiveTingpai: 2,
+      closedWaitQuality: 1.4,
+      closedContextualHandValue: 1,
+      closedHardEv: 0.03,
+      exposureFirstOpen: 38,
+      exposureThreat: 5,
+      exposureRiichiPressure: 22,
+      exposureProtectLead: 34,
+      exposureProtectSecond: 22,
+      exposureLate: 10,
+      exposurePoorExit: 32
+    }
   });
 
   function clone(value) {
@@ -122,6 +164,8 @@
       enableDefensiveUtilityShadow: source.enableDefensiveUtilityShadow === true,
       enableSafetyGateRerank: source.enableSafetyGateRerank === true,
       enableSafetyGateDiagnostics: source.enableSafetyGateDiagnostics === true,
+      enableDefensiveCallGate: source.enableDefensiveCallGate === true,
+      enableDefensiveCallGateDiagnostics: source.enableDefensiveCallGateDiagnostics === true,
       threatWeights: resolveSection(source.threatWeights, DEFAULT_POLICY.threatWeights),
       expectedPointLoss: resolveSection(source.expectedPointLoss, DEFAULT_POLICY.expectedPointLoss),
       expectedDealInCostWeight: numberOr(source.expectedDealInCostWeight, DEFAULT_POLICY.expectedDealInCostWeight),
@@ -165,7 +209,28 @@
       safetyGateBackstepMinThreatScore: numberOr(source.safetyGateBackstepMinThreatScore, DEFAULT_POLICY.safetyGateBackstepMinThreatScore),
       safetyGateBackstepMinExpectedCostDelta: numberOr(source.safetyGateBackstepMinExpectedCostDelta, DEFAULT_POLICY.safetyGateBackstepMinExpectedCostDelta),
       safetyGateProtectedTenpaiMinHandValue: numberOr(source.safetyGateProtectedTenpaiMinHandValue, DEFAULT_POLICY.safetyGateProtectedTenpaiMinHandValue),
-      safetyGateProtectedTenpaiMinWaitQuality: numberOr(source.safetyGateProtectedTenpaiMinWaitQuality, DEFAULT_POLICY.safetyGateProtectedTenpaiMinWaitQuality)
+      safetyGateProtectedTenpaiMinWaitQuality: numberOr(source.safetyGateProtectedTenpaiMinWaitQuality, DEFAULT_POLICY.safetyGateProtectedTenpaiMinWaitQuality),
+      defensiveCallGateMaxClosedXiangting: numberOr(source.defensiveCallGateMaxClosedXiangting, DEFAULT_POLICY.defensiveCallGateMaxClosedXiangting),
+      defensiveCallGateMinRemainingTiles: numberOr(source.defensiveCallGateMinRemainingTiles, DEFAULT_POLICY.defensiveCallGateMinRemainingTiles),
+      defensiveCallGateNeutralMargin: numberOr(source.defensiveCallGateNeutralMargin, DEFAULT_POLICY.defensiveCallGateNeutralMargin),
+      defensiveCallGateProtectMargin: numberOr(source.defensiveCallGateProtectMargin, DEFAULT_POLICY.defensiveCallGateProtectMargin),
+      defensiveCallGatePressureMargin: numberOr(source.defensiveCallGatePressureMargin, DEFAULT_POLICY.defensiveCallGatePressureMargin),
+      defensiveCallGateComebackMargin: numberOr(source.defensiveCallGateComebackMargin, DEFAULT_POLICY.defensiveCallGateComebackMargin),
+      defensiveCallGateOpenHandMargin: numberOr(source.defensiveCallGateOpenHandMargin, DEFAULT_POLICY.defensiveCallGateOpenHandMargin),
+      defensiveCallGateDirectTenpaiMinHandValue: numberOr(source.defensiveCallGateDirectTenpaiMinHandValue, DEFAULT_POLICY.defensiveCallGateDirectTenpaiMinHandValue),
+      defensiveCallGateDirectTenpaiMinWaitQuality: numberOr(source.defensiveCallGateDirectTenpaiMinWaitQuality, DEFAULT_POLICY.defensiveCallGateDirectTenpaiMinWaitQuality),
+      defensiveCallGateHighValue: numberOr(source.defensiveCallGateHighValue, DEFAULT_POLICY.defensiveCallGateHighValue),
+      defensiveCallGateComebackMinHandValue: numberOr(source.defensiveCallGateComebackMinHandValue, DEFAULT_POLICY.defensiveCallGateComebackMinHandValue),
+      defensiveCallGateStrongHardEvDelta: numberOr(source.defensiveCallGateStrongHardEvDelta, DEFAULT_POLICY.defensiveCallGateStrongHardEvDelta),
+      defensiveCallGateStrongLiveUkeireDelta: numberOr(source.defensiveCallGateStrongLiveUkeireDelta, DEFAULT_POLICY.defensiveCallGateStrongLiveUkeireDelta),
+      defensiveCallGateStrongLiveTingpaiDelta: numberOr(source.defensiveCallGateStrongLiveTingpaiDelta, DEFAULT_POLICY.defensiveCallGateStrongLiveTingpaiDelta),
+      defensiveCallGatePressureThreatScore: numberOr(source.defensiveCallGatePressureThreatScore, DEFAULT_POLICY.defensiveCallGatePressureThreatScore),
+      defensiveCallGateWeights: {
+        ...DEFAULT_POLICY.defensiveCallGateWeights,
+        ...((source.defensiveCallGateWeights && typeof source.defensiveCallGateWeights === 'object')
+          ? source.defensiveCallGateWeights
+          : {})
+      }
     };
   }
 
@@ -936,6 +1001,257 @@
     };
   }
 
+  function getCallMetric(primary, fallback, key, defaultValue = 0) {
+    if (Number.isFinite(Number(primary && primary[key]))) return Number(primary[key]);
+    if (Number.isFinite(Number(fallback && fallback[key]))) return Number(fallback[key]);
+    return defaultValue;
+  }
+
+  function buildCallGateAttackDecision(hardCallMetrics = {}, currentMetrics = {}) {
+    return {
+      metrics: {
+        xiangting: getCallMetric(hardCallMetrics, currentMetrics, 'currentXiangting', 99),
+        handValueEstimate: getCallMetric(hardCallMetrics, currentMetrics, 'currentContextualHandValueEstimate', 0)
+      },
+      hardMetrics: {
+        contextualHandValueEstimate: getCallMetric(hardCallMetrics, currentMetrics, 'currentContextualHandValueEstimate', 0),
+        liveTingpaiCount: getCallMetric(hardCallMetrics, currentMetrics, 'currentLiveTingpaiCount', 0),
+        waitQualityScore: getCallMetric(hardCallMetrics, currentMetrics, 'currentWaitQualityScore', 0),
+        hardContext: hardCallMetrics && hardCallMetrics.hardContext && typeof hardCallMetrics.hardContext === 'object'
+          ? hardCallMetrics.hardContext
+          : {}
+      },
+      danger: {
+        categories: []
+      }
+    };
+  }
+
+  function getCallGateEffectiveMargin(policy, rankState, pressureRelevant, closedHandBefore) {
+    if (!closedHandBefore) return policy.defensiveCallGateOpenHandMargin;
+    if (rankState === 'comeback') return policy.defensiveCallGateComebackMargin;
+    if (pressureRelevant) return policy.defensiveCallGatePressureMargin;
+    if (rankState === 'protect-lead' || rankState === 'protect-second') return policy.defensiveCallGateProtectMargin;
+    return policy.defensiveCallGateNeutralMargin;
+  }
+
+  function scoreDefensiveCallGate(context, policy) {
+    const weights = policy.defensiveCallGateWeights || DEFAULT_POLICY.defensiveCallGateWeights;
+    const currentXiangting = numberOr(context.currentXiangting, 99);
+    const nextXiangting = numberOr(context.nextXiangting, 99);
+    const shantenImprovesBy = Math.max(0, currentXiangting - nextXiangting);
+    const callOpenUtility = (
+      shantenImprovesBy * numberOr(weights.callShantenImprove, 0)
+      + (context.directTenpai ? numberOr(weights.callDirectTenpai, 0) : 0)
+      + Math.max(0, numberOr(context.liveUkeireDelta, 0)) * numberOr(weights.callLiveUkeireDelta, 0)
+      + Math.max(0, numberOr(context.liveTingpaiDelta, 0)) * numberOr(weights.callLiveTingpaiDelta, 0)
+      + Math.max(0, numberOr(context.hardEvDelta, 0)) * numberOr(weights.callHardEvDelta, 0)
+      + Math.max(0, numberOr(context.nextContextualHandValue, 0)) * numberOr(weights.callContextualHandValue, 0)
+      + (context.isYakuhaiPeng ? numberOr(weights.callYakuhai, 0) : 0)
+      + (!context.closedHandBefore ? numberOr(weights.callAlreadyOpen, 0) : 0)
+      + (context.isDealer ? numberOr(weights.callDealerBonus, 0) : 0)
+    );
+    const closedRiichiPreserveUtility = context.closedHandBefore
+      ? (
+          numberOr(weights.closedBase, 0)
+          + Math.max(0, 4 - currentXiangting) * numberOr(weights.closedNearShanten, 0)
+          + Math.max(0, numberOr(context.remainingTiles, 0)) * numberOr(weights.closedRemainingTile, 0)
+          + Math.max(0, numberOr(context.currentLiveTingpai, 0)) * numberOr(weights.closedLiveTingpai, 0)
+          + Math.max(0, numberOr(context.currentWaitQuality, 0)) * numberOr(weights.closedWaitQuality, 0)
+          + Math.max(0, numberOr(context.currentContextualHandValue, 0)) * numberOr(weights.closedContextualHandValue, 0)
+          + Math.max(0, numberOr(context.currentHardEvScore, 0)) * numberOr(weights.closedHardEv, 0)
+        )
+      : 0;
+    const poorPostCallExit = context.pressureRelevant
+      && nextXiangting > 0
+      && numberOr(context.nextContextualHandValue, 0) < policy.defensiveCallGateHighValue
+      && numberOr(context.nextLiveTingpai, 0) <= numberOr(context.currentLiveTingpai, 0);
+    const defensiveExposureCost = (
+      (context.closedHandBefore ? numberOr(weights.exposureFirstOpen, 0) : 0)
+      + Math.max(0, numberOr(context.threatScore, 0)) * numberOr(weights.exposureThreat, 0)
+      + (numberOr(context.riichiPressure, 0) > 0 ? numberOr(weights.exposureRiichiPressure, 0) : 0)
+      + (context.rankDefenseState === 'protect-lead' ? numberOr(weights.exposureProtectLead, 0) : 0)
+      + (context.rankDefenseState === 'protect-second' ? numberOr(weights.exposureProtectSecond, 0) : 0)
+      + (context.lateRound ? numberOr(weights.exposureLate, 0) : 0)
+      + (poorPostCallExit ? numberOr(weights.exposurePoorExit, 0) : 0)
+    );
+    return {
+      callOpenUtility,
+      closedRiichiPreserveUtility,
+      defensiveExposureCost,
+      poorPostCallExit,
+      margin: closedRiichiPreserveUtility + defensiveExposureCost - callOpenUtility
+    };
+  }
+
+  function compactCallGateScore(score = {}) {
+    return {
+      callOpenUtility: roundMetric(score.callOpenUtility, 1),
+      closedRiichiPreserveUtility: roundMetric(score.closedRiichiPreserveUtility, 1),
+      defensiveExposureCost: roundMetric(score.defensiveExposureCost, 1),
+      margin: roundMetric(score.margin, 1)
+    };
+  }
+
+  function evaluateDefensiveCallGate(runtime, seatKey, currentMetrics = {}, nextMetrics = {}, action = {}, hardCallMetrics = {}, options = {}) {
+    const policy = resolvePolicy(options.policy || {});
+    if (policy.enableDefensiveCallGate !== true) return null;
+    const payload = action && action.payload && typeof action.payload === 'object' ? action.payload : {};
+    const callType = typeof payload.callType === 'string' ? payload.callType : null;
+    if (callType !== 'chi' && callType !== 'peng') return null;
+
+    const currentXiangting = getCallMetric(hardCallMetrics, currentMetrics, 'currentXiangting', numberOr(currentMetrics && currentMetrics.xiangting, 99));
+    const nextXiangting = getCallMetric(hardCallMetrics, nextMetrics, 'nextXiangting', numberOr(nextMetrics && nextMetrics.xiangting, 99));
+    const hardContext = hardCallMetrics && hardCallMetrics.hardContext && typeof hardCallMetrics.hardContext === 'object'
+      ? hardCallMetrics.hardContext
+      : {};
+    const remainingTiles = Math.max(getRemainingTiles(runtime), numberOr(hardContext.remainingTiles, 0));
+    const closedHandBefore = hardCallMetrics.closedHandBefore !== false;
+    const shantenImprovesBy = Number.isFinite(currentXiangting) && Number.isFinite(nextXiangting)
+      ? Math.max(0, currentXiangting - nextXiangting)
+      : 0;
+    const directTenpai = nextXiangting === 0 && shantenImprovesBy > 0;
+    const attackDecision = buildCallGateAttackDecision(hardCallMetrics, currentMetrics);
+    const threatProfile = buildThreatProfile(runtime, seatKey, attackDecision, {
+      policy,
+      lateRemainingTiles: options.lateRemainingTiles
+    });
+    const rankStateReview = resolveRankDefenseState(attackDecision, threatProfile, { policy });
+    const rankDefenseState = rankStateReview.state;
+    const riichiPressure = numberOr(hardCallMetrics && hardCallMetrics.riichiPressure, 0);
+    const pressureRelevant = riichiPressure > 0
+      || numberOr(threatProfile.threatScore, 0) >= policy.defensiveCallGatePressureThreatScore
+      || threatProfile.dealerThreat === true
+      || threatProfile.multiThreat === true;
+    const protectRelevant = rankDefenseState === 'protect-lead' || rankDefenseState === 'protect-second';
+    const active = Number.isFinite(currentXiangting)
+      && Number.isFinite(nextXiangting)
+      && (
+        !closedHandBefore
+        || currentXiangting <= policy.defensiveCallGateMaxClosedXiangting
+      )
+      && (
+        remainingTiles >= policy.defensiveCallGateMinRemainingTiles
+        || pressureRelevant
+        || protectRelevant
+      );
+    const context = {
+      currentXiangting,
+      nextXiangting,
+      directTenpai,
+      closedHandBefore,
+      remainingTiles,
+      rankDefenseState,
+      riichiPressure,
+      pressureRelevant,
+      lateRound: threatProfile.lateRound === true || hardContext.isLateRound === true,
+      isDealer: hardContext.isDealer === true,
+      threatScore: numberOr(threatProfile.threatScore, 0),
+      isYakuhaiPeng: hardCallMetrics && hardCallMetrics.isYakuhaiPeng === true,
+      currentLiveTingpai: numberOr(hardCallMetrics && hardCallMetrics.currentLiveTingpaiCount, 0),
+      nextLiveTingpai: numberOr(hardCallMetrics && hardCallMetrics.nextLiveTingpaiCount, 0),
+      liveTingpaiDelta: numberOr(hardCallMetrics && hardCallMetrics.liveTingpaiDelta, 0),
+      liveUkeireDelta: numberOr(hardCallMetrics && hardCallMetrics.liveUkeireDelta, 0),
+      currentWaitQuality: numberOr(hardCallMetrics && hardCallMetrics.currentWaitQualityScore, 0),
+      nextWaitQuality: numberOr(hardCallMetrics && hardCallMetrics.nextWaitQualityScore, 0),
+      currentHardEvScore: numberOr(hardCallMetrics && hardCallMetrics.currentHardEvScore, 0),
+      hardEvDelta: numberOr(hardCallMetrics && hardCallMetrics.hardEvDelta, 0),
+      currentContextualHandValue: numberOr(hardCallMetrics && hardCallMetrics.currentContextualHandValueEstimate, numberOr(currentMetrics && currentMetrics.handValueEstimate, 0)),
+      nextContextualHandValue: numberOr(hardCallMetrics && hardCallMetrics.nextContextualHandValueEstimate, numberOr(nextMetrics && nextMetrics.handValueEstimate, 0))
+    };
+    const score = scoreDefensiveCallGate(context, policy);
+    const effectiveMargin = getCallGateEffectiveMargin(policy, rankDefenseState, pressureRelevant, closedHandBefore);
+    const baseReasons = ['def-call-gate-review'];
+    const base = {
+      enabled: true,
+      mode: 'defensive-call-gate-v1',
+      active,
+      allowed: true,
+      override: false,
+      reason: active ? 'def-call-gate-call' : 'def-call-gate-inactive',
+      reasons: active ? baseReasons.slice() : baseReasons.concat('def-call-gate-inactive'),
+      callType,
+      closedHandBefore,
+      firstOpen: closedHandBefore,
+      currentXiangting,
+      nextXiangting,
+      remainingTiles,
+      directTenpai,
+      shantenImprovesBy,
+      rankDefenseState,
+      threatScore: roundMetric(threatProfile.threatScore, 1),
+      riichiPressure,
+      pressureRelevant,
+      effectiveMargin,
+      poorPostCallExit: score.poorPostCallExit === true,
+      ...compactCallGateScore(score)
+    };
+    if (!active) return base;
+
+    const highValue = context.nextContextualHandValue >= policy.defensiveCallGateHighValue;
+    const strongImprove = shantenImprovesBy >= 2
+      || context.hardEvDelta >= policy.defensiveCallGateStrongHardEvDelta
+      || context.liveUkeireDelta >= policy.defensiveCallGateStrongLiveUkeireDelta
+      || context.liveTingpaiDelta >= policy.defensiveCallGateStrongLiveTingpaiDelta;
+    if (
+      directTenpai
+      && (
+        context.nextContextualHandValue >= policy.defensiveCallGateDirectTenpaiMinHandValue
+        || context.nextWaitQuality >= policy.defensiveCallGateDirectTenpaiMinWaitQuality
+      )
+    ) {
+      return {
+        ...base,
+        reason: 'def-call-gate-direct-tenpai-allowed',
+        reasons: baseReasons.concat('def-call-gate-direct-tenpai-allowed', 'def-call-gate-allowed-direct-tenpai')
+      };
+    }
+    if (!closedHandBefore && shantenImprovesBy > 0 && score.margin < policy.defensiveCallGateOpenHandMargin) {
+      return {
+        ...base,
+        reason: 'def-call-gate-open-hand-shanten-allowed',
+        reasons: baseReasons.concat('def-call-gate-open-hand-allowed')
+      };
+    }
+    if (rankDefenseState === 'comeback' && shantenImprovesBy > 0 && context.nextContextualHandValue >= policy.defensiveCallGateComebackMinHandValue) {
+      return {
+        ...base,
+        reason: 'def-call-gate-comeback-allowed',
+        reasons: baseReasons.concat('def-call-gate-comeback-allowed')
+      };
+    }
+    if (highValue && shantenImprovesBy > 0 && score.margin < effectiveMargin + 35) {
+      return {
+        ...base,
+        reason: 'def-call-gate-high-value-allowed',
+        reasons: baseReasons.concat('def-call-gate-high-value-allowed')
+      };
+    }
+    if (strongImprove && !pressureRelevant && score.margin < effectiveMargin + 20) {
+      return {
+        ...base,
+        reason: 'def-call-gate-strong-improve-allowed',
+        reasons: baseReasons.concat('def-call-gate-strong-improve-allowed')
+      };
+    }
+    if (score.margin >= effectiveMargin) {
+      const reasons = baseReasons.concat('def-call-gate-block');
+      if (closedHandBefore) reasons.push('def-call-gate-first-open-block');
+      if (closedHandBefore) reasons.push('def-call-gate-closed-route-block');
+      if (pressureRelevant) reasons.push('def-call-gate-pressure-block');
+      if (context.nextContextualHandValue < policy.defensiveCallGateDirectTenpaiMinHandValue) reasons.push('def-call-gate-low-value-block');
+      if (score.poorPostCallExit) reasons.push('def-call-gate-poor-exit-block');
+      return {
+        ...base,
+        allowed: false,
+        override: true,
+        reason: 'def-call-gate-pass',
+        reasons
+      };
+    }
+    return base;
+  }
+
   function isMiddleTile(tileCode) {
     const normalized = normalizeTileCode(tileCode);
     if (!normalized || normalized[0] === 'z') return false;
@@ -961,10 +1277,11 @@
     DEFAULT_POLICY: clone(DEFAULT_POLICY),
     resolvePolicy,
     buildThreatProfile,
-    resolveRankDefenseState,
-    buildRankAwareReview,
-    evaluateSafetyGateRerank,
-    evaluateDefensiveUtilityShadow,
-    classifyDealInAttribution
-  };
+      resolveRankDefenseState,
+      buildRankAwareReview,
+      evaluateSafetyGateRerank,
+      evaluateDefensiveCallGate,
+      evaluateDefensiveUtilityShadow,
+      classifyDealInAttribution
+    };
 });

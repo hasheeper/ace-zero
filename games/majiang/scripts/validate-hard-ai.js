@@ -3230,15 +3230,17 @@ function createPushFoldDecision(overrides = {}) {
   };
 }
 
-function createDefensiveDevPolicyPatch(overrides = {}) {
-  return {
+  function createDefensiveDevPolicyPatch(overrides = {}) {
+    return {
     enableThreatScoreReview: true,
     enableRankAwarePushFold: true,
     enableDealInAttribution: true,
-    enableDefensiveUtilityShadow: true,
-    enableSafetyGateRerank: true,
-    enableSafetyGateDiagnostics: true,
-    highThreatScore: 11,
+      enableDefensiveUtilityShadow: true,
+      enableSafetyGateRerank: true,
+      enableSafetyGateDiagnostics: true,
+      enableDefensiveCallGate: true,
+      enableDefensiveCallGateDiagnostics: true,
+      highThreatScore: 11,
     expectedDealInCostWeight: 0.16,
     safetyGateMinThreatScore: 11,
     safetyGateProtectScore: 8,
@@ -3247,16 +3249,245 @@ function createDefensiveDevPolicyPatch(overrides = {}) {
     safetyGateMinSafetyRankDelta: 2,
     safetyGateMinExpectedCostDelta: 80,
     safetyGateBackstepMinThreatScore: 14,
-    safetyGateBackstepMinExpectedCostDelta: 140,
-    safetyGateProtectedTenpaiMinHandValue: 42,
-    safetyGateProtectedTenpaiMinWaitQuality: 12,
-    protectLeadScore: 5000,
-    comebackTrailingScore: 7000,
-    ...overrides
-  };
-}
+      safetyGateBackstepMinExpectedCostDelta: 140,
+      safetyGateProtectedTenpaiMinHandValue: 42,
+      safetyGateProtectedTenpaiMinWaitQuality: 12,
+      defensiveCallGateMaxClosedXiangting: 3,
+      defensiveCallGateMinRemainingTiles: 14,
+      defensiveCallGateNeutralMargin: 55,
+      defensiveCallGateProtectMargin: 40,
+      defensiveCallGatePressureMargin: 40,
+      defensiveCallGateComebackMargin: 120,
+      defensiveCallGateOpenHandMargin: 140,
+      defensiveCallGateDirectTenpaiMinHandValue: 32,
+      defensiveCallGateDirectTenpaiMinWaitQuality: 8,
+      defensiveCallGateHighValue: 62,
+      defensiveCallGateComebackMinHandValue: 42,
+      defensiveCallGateStrongHardEvDelta: 180,
+      defensiveCallGateStrongLiveUkeireDelta: 14,
+      defensiveCallGateStrongLiveTingpaiDelta: 3,
+      defensiveCallGatePressureThreatScore: 8,
+      protectLeadScore: 5000,
+      comebackTrailingScore: 7000,
+      ...overrides
+    };
+  }
 
-function runDefensiveSafetyGateStableOffSmoke() {
+  function createDefensiveCallGateFixture(overrides = {}) {
+    const currentMetrics = {
+      xiangting: 1,
+      tingpaiCount: 0,
+      ukeireCount: 18,
+      handValueEstimate: 34,
+      ...(overrides.currentMetrics || {})
+    };
+    const nextMetrics = {
+      xiangting: 1,
+      tingpaiCount: 0,
+      ukeireCount: 18,
+      handValueEstimate: 12,
+      ...(overrides.nextMetrics || {})
+    };
+    const hardCallMetrics = {
+      riichiPressure: 0,
+      isYakuhaiPeng: false,
+      closedHandBefore: true,
+      currentXiangting: currentMetrics.xiangting,
+      nextXiangting: nextMetrics.xiangting,
+      currentLiveUkeireCount: 18,
+      nextLiveUkeireCount: 18,
+      liveUkeireDelta: 0,
+      currentLiveTingpaiCount: 5,
+      nextLiveTingpaiCount: 5,
+      liveTingpaiDelta: 0,
+      currentWaitQualityScore: 10,
+      nextWaitQualityScore: 4,
+      waitQualityDelta: -6,
+      currentHardEvScore: 120,
+      nextHardEvScore: 120,
+      hardEvDelta: 0,
+      currentContextualHandValueEstimate: currentMetrics.handValueEstimate,
+      nextContextualHandValueEstimate: nextMetrics.handValueEstimate,
+      hardContext: {},
+      ...(overrides.hardCallMetrics || {})
+    };
+    const runtime = createDefensiveProfileFixtureRuntime({
+      dealerSeat: overrides.dealerSeat || 'bottom',
+      riichiSeats: overrides.riichiSeats || [],
+      remaining: Number.isFinite(Number(overrides.remaining)) ? Number(overrides.remaining) : 34,
+      scores: overrides.scores
+    });
+    const action = overrides.action || {
+      type: 'call',
+      payload: {
+        callType: 'chi',
+        tileCode: 'm3',
+        meldString: 'm123-'
+      }
+    };
+    return hardDefensiveProfileApi.evaluateDefensiveCallGate(
+      runtime,
+      overrides.seatKey || 'right',
+      currentMetrics,
+      nextMetrics,
+      action,
+      hardCallMetrics,
+      {
+        policy: createDefensiveDevPolicyPatch(overrides.policy || {})
+      }
+    );
+  }
+
+  function runDefensiveCallGateStableOffSmoke() {
+    const review = createDefensiveCallGateFixture({
+      policy: {
+        enableDefensiveCallGate: false
+      }
+    });
+    assert(review == null, `expected defensive call gate off to return null, got ${JSON.stringify(review)}`);
+    return {
+      name: 'hard-defensive-dev-call-gate-stable-off-smoke',
+      snapshot: {
+        enabled: false
+      }
+    };
+  }
+
+  function runDefensiveCallGateLowValueClosedBlockSmoke() {
+    const review = createDefensiveCallGateFixture();
+    assert(review && review.enabled === true && review.active === true, `expected active defensive call gate, got ${JSON.stringify(review)}`);
+    assert(review.override === true && review.allowed === false, `expected low-value first-open call to be blocked, got ${JSON.stringify(review)}`);
+    assert(review.reasons.includes('def-call-gate-first-open-block'), `expected first-open block reason, got ${JSON.stringify(review)}`);
+    assert(review.reasons.includes('def-call-gate-closed-route-block'), `expected closed route block reason, got ${JSON.stringify(review)}`);
+    return {
+      name: 'hard-defensive-dev-call-gate-low-value-closed-block-smoke',
+      snapshot: {
+        reason: review.reason,
+        margin: review.margin,
+        effectiveMargin: review.effectiveMargin,
+        reasons: review.reasons
+      }
+    };
+  }
+
+  function runDefensiveCallGateDirectTenpaiAllowSmoke() {
+    const review = createDefensiveCallGateFixture({
+      nextMetrics: {
+        xiangting: 0,
+        tingpaiCount: 4,
+        ukeireCount: 12,
+        handValueEstimate: 34
+      },
+      hardCallMetrics: {
+        nextXiangting: 0,
+        nextLiveTingpaiCount: 4,
+        liveTingpaiDelta: -1,
+        nextWaitQualityScore: 8,
+        nextContextualHandValueEstimate: 34,
+        hardEvDelta: 40
+      }
+    });
+    assert(review && review.allowed === true && review.override === false, `expected direct-tenpai call allowed, got ${JSON.stringify(review)}`);
+    assert(review.reasons.includes('def-call-gate-allowed-direct-tenpai'), `expected direct-tenpai reason, got ${JSON.stringify(review)}`);
+    return {
+      name: 'hard-defensive-dev-call-gate-direct-tenpai-allow-smoke',
+      snapshot: {
+        reason: review.reason,
+        directTenpai: review.directTenpai,
+        reasons: review.reasons
+      }
+    };
+  }
+
+  function runDefensiveCallGateOpenHandShantenAllowSmoke() {
+    const review = createDefensiveCallGateFixture({
+      currentMetrics: {
+        xiangting: 2,
+        handValueEstimate: 20
+      },
+      nextMetrics: {
+        xiangting: 1,
+        handValueEstimate: 20
+      },
+      hardCallMetrics: {
+        closedHandBefore: false,
+        currentXiangting: 2,
+        nextXiangting: 1,
+        nextContextualHandValueEstimate: 20,
+        hardEvDelta: 20
+      }
+    });
+    assert(review && review.allowed === true && review.override === false, `expected open-hand shanten call allowed, got ${JSON.stringify(review)}`);
+    assert(review.reasons.includes('def-call-gate-open-hand-allowed'), `expected open-hand allowed reason, got ${JSON.stringify(review)}`);
+    return {
+      name: 'hard-defensive-dev-call-gate-open-hand-shanten-allow-smoke',
+      snapshot: {
+        reason: review.reason,
+        closedHandBefore: review.closedHandBefore,
+        reasons: review.reasons
+      }
+    };
+  }
+
+  function runDefensiveCallGateComebackHighValueAllowSmoke() {
+    const review = createDefensiveCallGateFixture({
+      scores: {
+        bottom: 38000,
+        right: 18000,
+        top: 27000,
+        left: 17000
+      },
+      currentMetrics: {
+        xiangting: 2,
+        handValueEstimate: 42
+      },
+      nextMetrics: {
+        xiangting: 1,
+        handValueEstimate: 48
+      },
+      hardCallMetrics: {
+        currentXiangting: 2,
+        nextXiangting: 1,
+        nextContextualHandValueEstimate: 48,
+        hardContext: {
+          scoreRank: 3,
+          trailingByLeader: 20000
+        }
+      }
+    });
+    assert(review && review.rankDefenseState === 'comeback', `expected comeback state, got ${JSON.stringify(review)}`);
+    assert(review.allowed === true && review.override === false, `expected comeback high-value call allowed, got ${JSON.stringify(review)}`);
+    assert(review.reasons.includes('def-call-gate-comeback-allowed'), `expected comeback allowed reason, got ${JSON.stringify(review)}`);
+    return {
+      name: 'hard-defensive-dev-call-gate-comeback-high-value-allow-smoke',
+      snapshot: {
+        reason: review.reason,
+        rankDefenseState: review.rankDefenseState,
+        reasons: review.reasons
+      }
+    };
+  }
+
+  function runDefensiveCallGatePressureBlockSmoke() {
+    const review = createDefensiveCallGateFixture({
+      riichiSeats: ['top'],
+      hardCallMetrics: {
+        riichiPressure: 1
+      }
+    });
+    assert(review && review.override === true, `expected pressure low-value call blocked, got ${JSON.stringify(review)}`);
+    assert(review.reasons.includes('def-call-gate-pressure-block'), `expected pressure block reason, got ${JSON.stringify(review)}`);
+    return {
+      name: 'hard-defensive-dev-call-gate-pressure-block-smoke',
+      snapshot: {
+        reason: review.reason,
+        pressureRelevant: review.pressureRelevant,
+        reasons: review.reasons
+      }
+    };
+  }
+
+  function runDefensiveSafetyGateStableOffSmoke() {
   const runtime = createDefensiveProfileFixtureRuntime({
     dealerSeat: 'top',
     riichiSeats: ['top'],
@@ -3974,12 +4205,18 @@ function main() {
     runClosedRouteHighValueCallAllowSmoke(),
     runClosedRouteBalancedPolicySmoke(),
     runClosedRouteBalancedValueOverrideSmoke(),
-    runClosedRouteBalancedDirectTenpaiSmoke(),
-    runClosedRouteBalancedPressureSmoke(),
-    runDefensiveThreatProfileSmoke(),
-    runDefensiveRankAwareFoldSmoke(),
-    runDefensiveSafeTenpaiPushSmoke(),
-    runDefensiveSafetyGateStableOffSmoke(),
+      runClosedRouteBalancedDirectTenpaiSmoke(),
+      runClosedRouteBalancedPressureSmoke(),
+      runDefensiveThreatProfileSmoke(),
+      runDefensiveRankAwareFoldSmoke(),
+      runDefensiveSafeTenpaiPushSmoke(),
+      runDefensiveCallGateStableOffSmoke(),
+      runDefensiveCallGateLowValueClosedBlockSmoke(),
+      runDefensiveCallGateDirectTenpaiAllowSmoke(),
+      runDefensiveCallGateOpenHandShantenAllowSmoke(),
+      runDefensiveCallGateComebackHighValueAllowSmoke(),
+      runDefensiveCallGatePressureBlockSmoke(),
+      runDefensiveSafetyGateStableOffSmoke(),
     runDefensiveSafetyGateSameShantenSmoke(),
     runDefensiveSafetyGateRankProtectBackstepSmoke(),
     runDefensiveSafetyGateNeutralBackstepBlockedSmoke(),

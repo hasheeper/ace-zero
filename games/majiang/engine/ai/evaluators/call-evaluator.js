@@ -7,7 +7,8 @@
       require('../difficulty/normal-policy'),
       require('../difficulty/hard-policy'),
       require('../support/hard-ev'),
-      require('../support/round-context')
+      require('../support/round-context'),
+      require('../support/hard-defensive-profile')
     );
     return;
   }
@@ -18,7 +19,8 @@
     root.AceMahjongNormalDifficultyPolicy || null,
     root.AceMahjongHardDifficultyPolicy || null,
     root.AceMahjongAiHardEv || null,
-    root.AceMahjongAiRoundContext || null
+    root.AceMahjongAiRoundContext || null,
+    root.AceMahjongAiHardDefensiveProfile || null
   );
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(
   coreAdapter,
@@ -27,7 +29,8 @@
   normalPolicyApi,
   hardPolicyApi,
   hardEvApi,
-  roundContextApi
+  roundContextApi,
+  hardDefensiveProfileApi
 ) {
   'use strict';
 
@@ -116,6 +119,14 @@
     if (roundContextApi) return roundContextApi;
     if (typeof globalThis !== 'undefined' && globalThis.AceMahjongAiRoundContext) {
       return globalThis.AceMahjongAiRoundContext;
+    }
+    return null;
+  }
+
+  function getHardDefensiveProfileApi() {
+    if (hardDefensiveProfileApi) return hardDefensiveProfileApi;
+    if (typeof globalThis !== 'undefined' && globalThis.AceMahjongAiHardDefensiveProfile) {
+      return globalThis.AceMahjongAiHardDefensiveProfile;
     }
     return null;
   }
@@ -610,6 +621,7 @@
         reason: 'hard-call-closed-route-direct-tenpai-allowed'
       };
     }
+
     if (balancedStateReview && balancedStateReview.overrideAllowed === false) {
       return {
         ...base,
@@ -633,6 +645,32 @@
       allowed: true,
       reason: 'hard-call-closed-route-value-call'
     };
+  }
+
+  function evaluateDefensiveCallGateReview(runtime, seatKey, currentMetrics, nextMetrics, action, policy = {}, hardCallMetrics = null) {
+    const policyId = typeof policy.id === 'string' ? policy.id : '';
+    const defensePolicy = policy && policy.defense && typeof policy.defense === 'object'
+      ? policy.defense
+      : {};
+    if (policyId !== 'hard-defensive-dev' || defensePolicy.enableDefensiveCallGate !== true) return null;
+    const api = getHardDefensiveProfileApi();
+    if (!api || typeof api.evaluateDefensiveCallGate !== 'function') return null;
+    try {
+      return api.evaluateDefensiveCallGate(
+        runtime,
+        seatKey,
+        currentMetrics,
+        nextMetrics,
+        action,
+        hardCallMetrics || {},
+        {
+          policy: defensePolicy,
+          lateRemainingTiles: policy && policy.context ? policy.context.lateRemainingTiles : undefined
+        }
+      );
+    } catch (error) {
+      return null;
+    }
   }
 
   function buildHardCallRules(runtime, seatKey, currentMetrics, nextMetrics, action, policy = {}, hardCallMetrics = null) {
@@ -767,7 +805,7 @@
     return reasons;
   }
 
-  function findPassAction(actions = [], seatKey) {
+  function findPassAction(actions = [], seatKey, reason = 'hard-call-closed-route-value-pass') {
     const passAction = (Array.isArray(actions) ? actions : []).find((action) => (
       action
       && action.type === 'pass'
@@ -778,7 +816,7 @@
       type: 'pass',
       payload: {
         seat: seatKey,
-        reason: 'hard-call-closed-route-value-pass'
+        reason
       }
     };
   }
@@ -800,6 +838,7 @@
     };
     let best = null;
     let bestRouteOverride = null;
+    let bestDefensiveCallOverride = null;
 
     (Array.isArray(actions) ? actions : []).forEach((action) => {
       const payload = action && action.payload && typeof action.payload === 'object'
@@ -858,6 +897,30 @@
           }
           return;
         }
+        const defensiveCallGateReview = evaluateDefensiveCallGateReview(
+          runtime,
+          seatKey,
+          currentMetrics,
+          metrics,
+          action,
+          policy,
+          hardCallMetrics
+        );
+        hardCallMetrics.defensiveCallGateReview = defensiveCallGateReview;
+        if (defensiveCallGateReview && defensiveCallGateReview.override === true) {
+          const rejected = {
+            action,
+            callType,
+            metrics,
+            reasons: [defensiveCallGateReview.reason],
+            policy,
+            hardCallMetrics
+          };
+          if (compareCallEvaluation(rejected, bestDefensiveCallOverride)) {
+            bestDefensiveCallOverride = rejected;
+          }
+          return;
+        }
       }
 
       const evaluation = {
@@ -877,6 +940,15 @@
     });
 
     if (best) return best;
+    if (bestDefensiveCallOverride) {
+      return {
+        action: findPassAction(actions, seatKey, 'def-call-gate-pass'),
+        policy,
+        reasons: bestDefensiveCallOverride.reasons,
+        metrics: bestDefensiveCallOverride.metrics,
+        hardCallMetrics: bestDefensiveCallOverride.hardCallMetrics
+      };
+    }
     if (bestRouteOverride) {
       return {
         action: findPassAction(actions, seatKey),

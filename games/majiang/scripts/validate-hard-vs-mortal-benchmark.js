@@ -230,10 +230,12 @@ function validateHardPersonalityTargetVariants() {
   assert(balancedDev.id === 'hard-balanced-dev' && balancedDev.policy && balancedDev.policy.id === 'hard-balanced-dev', `expected balanced-dev target policy, got ${JSON.stringify(balancedDev)}`);
   assert(heavy.id === 'hard-heavy' && heavy.policy && heavy.policy.id === 'hard-heavy', `expected heavy target policy, got ${JSON.stringify(heavy)}`);
   assert(aggressive.policy.discard.enableNoPressureShapeReview === false, `expected aggressive/pure shape gate off, got ${JSON.stringify(aggressive.policy.discard)}`);
-  assert(defensive.policy.defense.enableLowDangerTiebreak === true, `expected defensive tuned defense gate, got ${JSON.stringify(defensive.policy.defense)}`);
-  assert(defensive.policy.defense.enableDefensiveUtilityShadow !== true, `expected stable defensive shadow off, got ${JSON.stringify(defensive.policy.defense)}`);
-  assert(defensiveDev.policy.defense.enableDefensiveUtilityShadow === true, `expected defensive-dev utility shadow enabled, got ${JSON.stringify(defensiveDev.policy.defense)}`);
-  assert(balanced.policy.route.enableClosedRouteValueRebalance === true, `expected balanced route scoring, got ${JSON.stringify(balanced.policy.route)}`);
+    assert(defensive.policy.defense.enableLowDangerTiebreak === true, `expected defensive tuned defense gate, got ${JSON.stringify(defensive.policy.defense)}`);
+    assert(defensive.policy.defense.enableDefensiveUtilityShadow !== true, `expected stable defensive shadow off, got ${JSON.stringify(defensive.policy.defense)}`);
+    assert(defensiveDev.policy.defense.enableDefensiveUtilityShadow === true, `expected defensive-dev utility shadow enabled, got ${JSON.stringify(defensiveDev.policy.defense)}`);
+    assert(defensiveDev.policy.defense.enableDefensiveCallGate === true, `expected defensive-dev call gate enabled, got ${JSON.stringify(defensiveDev.policy.defense)}`);
+    assert(defensiveDev.policy.riichi.minWaitQualityScore < defensive.policy.riichi.minWaitQualityScore, `expected defensive-dev lower low-pressure riichi gate, got ${JSON.stringify({ defensive: defensive.policy.riichi, defensiveDev: defensiveDev.policy.riichi })}`);
+    assert(balanced.policy.route.enableClosedRouteValueRebalance === true, `expected balanced route scoring, got ${JSON.stringify(balanced.policy.route)}`);
   assert(balanced.policy.route.enableBalancedRouteState === true, `expected promoted balanced route state, got ${JSON.stringify(balanced.policy.route)}`);
   assert(balanced.policy.route.closedRouteMaxXiangting === 2, `expected promoted balanced route range, got ${JSON.stringify(balanced.policy.route)}`);
   assert(balanced.policy.route.closedRouteOverrideMinMargin === 95, `expected promoted balanced route margin, got ${JSON.stringify(balanced.policy.route)}`);

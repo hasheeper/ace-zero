@@ -189,11 +189,14 @@ function validateHardPersonalityPresets() {
   assert(byId['hard-defensive-dev'].policy.devVariant.parent === 'hard-defensive', `expected defensive-dev parent, got ${JSON.stringify(byId['hard-defensive-dev'].policy.devVariant)}`);
   assert(byId['hard-defensive-dev'].policy.defense.enableThreatScoreReview === true, 'expected defensive-dev threat review enabled');
   assert(byId['hard-defensive-dev'].policy.defense.enableRankAwarePushFold === true, 'expected defensive-dev rank-aware push/fold enabled');
-  assert(byId['hard-defensive-dev'].policy.defense.enableDealInAttribution === true, 'expected defensive-dev deal-in attribution enabled');
-  assert(byId['hard-defensive-dev'].policy.defense.enableDefensiveUtilityShadow === true, 'expected defensive-dev utility shadow enabled');
-  assert(byId['hard-defensive'].policy.defense.enableDefensiveUtilityShadow !== true, 'stable defensive must keep H17c utility shadow off');
-  assert(byId['hard-defensive-dev'].policy.route.enableClosedRouteValueRebalance !== true, 'defensive-dev must keep route personality tuning off after H17b cleanup');
-  assert(byId['hard-defensive-dev'].policy.riichi.minWaitQualityScore === byId['hard-defensive'].policy.riichi.minWaitQualityScore, 'defensive-dev must keep stable defensive riichi gate after H17b cleanup');
+    assert(byId['hard-defensive-dev'].policy.defense.enableDealInAttribution === true, 'expected defensive-dev deal-in attribution enabled');
+    assert(byId['hard-defensive-dev'].policy.defense.enableDefensiveUtilityShadow === true, 'expected defensive-dev utility shadow enabled');
+    assert(byId['hard-defensive-dev'].policy.defense.enableDefensiveCallGate === true, 'expected defensive-dev defensive call gate enabled');
+    assert(byId['hard-defensive'].policy.defense.enableDefensiveUtilityShadow !== true, 'stable defensive must keep H17c utility shadow off');
+    assert(byId['hard-defensive'].policy.defense.enableDefensiveCallGate !== true, 'stable defensive must keep H17e call gate off');
+    assert(byId['hard-defensive-dev'].policy.route.enableClosedRouteValueRebalance !== true, 'defensive-dev must keep route personality tuning off after H17b cleanup');
+    assert(byId['hard-defensive-dev'].policy.riichi.minWaitQualityScore < byId['hard-defensive'].policy.riichi.minWaitQualityScore, 'defensive-dev should use lower no-pressure riichi quality gate after H17e');
+    assert(byId['hard-defensive-dev'].policy.riichi.pressureMinHandValue > byId['hard-defensive'].policy.riichi.pressureMinHandValue, 'defensive-dev should keep pressure riichi stricter after H17e');
   assert(byId['hard-balanced'].policy.route.enableClosedRouteValueRebalance === true, 'expected balanced to enable closed route value scoring');
   assert(byId['hard-balanced'].policy.route.enableBalancedRouteState === true, 'expected promoted balanced to enable balanced route state');
   assert(byId['hard-balanced'].policy.route.closedRouteMaxXiangting === 2, `expected promoted balanced route range, got ${JSON.stringify(byId['hard-balanced'].policy.route)}`);
@@ -213,9 +216,11 @@ function validateHardPersonalityPresets() {
   console.log(`  snapshot=${JSON.stringify({
     variants: variants.map((variant) => variant.id),
     policies: variants.map((variant) => variant.policy.id),
-    defensiveDevRouteEnabled: Boolean(byId['hard-defensive-dev'].policy.route.enableClosedRouteValueRebalance),
-    defensiveDevUtilityShadowEnabled: Boolean(byId['hard-defensive-dev'].policy.defense.enableDefensiveUtilityShadow),
-    balancedRouteMargin: byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin,
+      defensiveDevRouteEnabled: Boolean(byId['hard-defensive-dev'].policy.route.enableClosedRouteValueRebalance),
+      defensiveDevUtilityShadowEnabled: Boolean(byId['hard-defensive-dev'].policy.defense.enableDefensiveUtilityShadow),
+      defensiveDevCallGateEnabled: Boolean(byId['hard-defensive-dev'].policy.defense.enableDefensiveCallGate),
+      defensiveDevRiichiWaitQuality: byId['hard-defensive-dev'].policy.riichi.minWaitQualityScore,
+      balancedRouteMargin: byId['hard-balanced'].policy.route.closedRouteOverrideMinMargin,
     balancedDevRouteMargin: byId['hard-balanced-dev'].policy.route.closedRouteOverrideMinMargin,
     heavyRouteMargin: byId['hard-heavy'].policy.route.closedRouteOverrideMinMargin
   })}`);
@@ -389,15 +394,40 @@ function validateDefensiveDiagnosticsSummarySmoke() {
         defensiveSafetyGateWouldAvoidDealIns: {
           bottom: 1
         },
-        defensiveSafetyGateReasonCounts: {
-          bottom: {
-            'def-safety-gate-review': 5,
-            'def-safety-gate-override': 2
+          defensiveSafetyGateReasonCounts: {
+            bottom: {
+              'def-safety-gate-review': 5,
+              'def-safety-gate-override': 2
+            }
+          },
+          defensiveCallGateReviewedCalls: {
+            bottom: 6
+          },
+          defensiveCallGateBlockedCalls: {
+            bottom: 3
+          },
+          defensiveCallGateFirstOpenBlockedCalls: {
+            bottom: 2
+          },
+          defensiveCallGateClosedRouteBlockedCalls: {
+            bottom: 2
+          },
+          defensiveCallGatePressureBlockedCalls: {
+            bottom: 1
+          },
+          defensiveCallGateAllowedDirectTenpaiCalls: {
+            bottom: 1
+          },
+          defensiveCallGateReasonCounts: {
+            bottom: {
+              'def-call-gate-review': 6,
+              'def-call-gate-block': 3,
+              'def-call-gate-allowed-direct-tenpai': 1
+            }
           }
         }
       }
-    }
-  ], variants);
+    ], variants);
   const stats = summary.variantStats['hard-defensive-dev'];
   assert(stats.defensiveStateCounts['protect-lead'] === 2, `expected defensive state count, got ${JSON.stringify(stats.defensiveStateCounts)}`);
   assert(stats.threatProfileReasonCounts['threat-riichi'] === 2, `expected threat reason count, got ${JSON.stringify(stats.threatProfileReasonCounts)}`);
@@ -414,18 +444,27 @@ function validateDefensiveDiagnosticsSummarySmoke() {
   assert(stats.defensiveSafetyGateOverrideDiscards === 2, `expected safety gate override count, got ${JSON.stringify(stats)}`);
   assert(stats.defensiveSafetyGateSameShantenDiscards === 1, `expected safety gate same-shanten count, got ${JSON.stringify(stats)}`);
   assert(stats.defensiveSafetyGateBackstepDiscards === 1, `expected safety gate backstep count, got ${JSON.stringify(stats)}`);
-  assert(stats.defensiveSafetyGateProtectedPushDiscards === 1, `expected safety gate protected-push count, got ${JSON.stringify(stats)}`);
-  assert(stats.defensiveSafetyGateWouldAvoidDealIns === 1, `expected safety gate would-avoid deal-in count, got ${JSON.stringify(stats)}`);
-  assert(stats.defensiveSafetyGateReasonCounts['def-safety-gate-review'] === 5, `expected safety gate reason count, got ${JSON.stringify(stats.defensiveSafetyGateReasonCounts)}`);
-  const text = arenaApi.formatArenaSummary('defensive fixture', summary, variants);
+    assert(stats.defensiveSafetyGateProtectedPushDiscards === 1, `expected safety gate protected-push count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveSafetyGateWouldAvoidDealIns === 1, `expected safety gate would-avoid deal-in count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveSafetyGateReasonCounts['def-safety-gate-review'] === 5, `expected safety gate reason count, got ${JSON.stringify(stats.defensiveSafetyGateReasonCounts)}`);
+    assert(stats.defensiveCallGateReviewedCalls === 6, `expected defensive call gate review count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveCallGateBlockedCalls === 3, `expected defensive call gate block count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveCallGateFirstOpenBlockedCalls === 2, `expected defensive call gate first-open count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveCallGateClosedRouteBlockedCalls === 2, `expected defensive call gate closed-route count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveCallGatePressureBlockedCalls === 1, `expected defensive call gate pressure count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveCallGateAllowedDirectTenpaiCalls === 1, `expected defensive call gate direct-tenpai count, got ${JSON.stringify(stats)}`);
+    assert(stats.defensiveCallGateReasonCounts['def-call-gate-review'] === 6, `expected defensive call gate reason count, got ${JSON.stringify(stats.defensiveCallGateReasonCounts)}`);
+    const text = arenaApi.formatArenaSummary('defensive fixture', summary, variants);
   assert(text.includes('defensiveState=protect-lead:2,neutral-defense:1'), `expected defensive state summary line, got ${text}`);
   assert(text.includes('threatReason=threat-riichi:2,threat-dealer-riichi:1'), `expected threat reason summary line, got ${text}`);
   assert(text.includes('dealInAttribution=open-hand-no-safe:1,riichi-push:1'), `expected deal-in attribution summary line, got ${text}`);
   assert(text.includes('defShadowReview/R=0.4 defShadowDiff/R=0.2 defShadowSaferAlt/R=0.1 defShadowBackstep/R=0.1 defShadowActionable/R=0.1 defShadowWouldAvoidDealIn=0.1'), `expected defensive shadow summary line, got ${text}`);
   assert(text.includes('defShadowReason=def-shadow-review:4,def-shadow-safer-alt:1'), `expected shadow reason summary line, got ${text}`);
-  assert(text.includes('defShadowActionableReason=def-shadow-actionable-pressure:1,def-shadow-actionable-safer:1'), `expected shadow actionable reason summary line, got ${text}`);
-  assert(text.includes('defSafetyGateReview/R=0.5 defSafetyGateOverride/R=0.2 defSafetyGateSameShanten/R=0.1 defSafetyGateBackstep/R=0.1 defSafetyGateProtectedPush/R=0.1 defSafetyGateWouldAvoidDealIn=0.1'), `expected safety gate summary line, got ${text}`);
-  assert(text.includes('defSafetyGateReason=def-safety-gate-review:5,def-safety-gate-override:2'), `expected safety gate reason summary line, got ${text}`);
+    assert(text.includes('defShadowActionableReason=def-shadow-actionable-pressure:1,def-shadow-actionable-safer:1'), `expected shadow actionable reason summary line, got ${text}`);
+    assert(text.includes('defSafetyGateReview/R=0.5 defSafetyGateOverride/R=0.2 defSafetyGateSameShanten/R=0.1 defSafetyGateBackstep/R=0.1 defSafetyGateProtectedPush/R=0.1 defSafetyGateWouldAvoidDealIn=0.1'), `expected safety gate summary line, got ${text}`);
+    assert(text.includes('defSafetyGateReason=def-safety-gate-review:5,def-safety-gate-override:2'), `expected safety gate reason summary line, got ${text}`);
+    assert(text.includes('defCallGateReview/R=0.6 defCallGateBlock/R=0.3 defCallGateFirstOpenBlock/R=0.2 defCallGateClosedRouteBlock/R=0.2 defCallGatePressureBlock/R=0.1 defCallGateAllowedDirectTenpai/R=0.1'), `expected defensive call gate summary line, got ${text}`);
+    assert(text.includes('defCallGateReason=def-call-gate-review:6,def-call-gate-block:3,def-call-gate-allowed-direct-tenpai:1'), `expected defensive call gate reason summary line, got ${text}`);
 
   console.log('[PASS] ai-hanchan-arena-defensive-diagnostics-summary-smoke');
   console.log(`  snapshot=${JSON.stringify({

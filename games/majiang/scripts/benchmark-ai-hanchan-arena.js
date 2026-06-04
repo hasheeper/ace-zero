@@ -246,10 +246,12 @@ function createDefensiveDevHardPolicy() {
   policy.defense.enableThreatScoreReview = true;
   policy.defense.enableRankAwarePushFold = true;
   policy.defense.enableDealInAttribution = true;
-  policy.defense.enableDefensiveUtilityShadow = true;
-  policy.defense.enableSafetyGateRerank = true;
-  policy.defense.enableSafetyGateDiagnostics = true;
-  policy.defense.highThreatScore = 11;
+    policy.defense.enableDefensiveUtilityShadow = true;
+    policy.defense.enableSafetyGateRerank = true;
+    policy.defense.enableSafetyGateDiagnostics = true;
+    policy.defense.enableDefensiveCallGate = true;
+    policy.defense.enableDefensiveCallGateDiagnostics = true;
+    policy.defense.highThreatScore = 11;
   policy.defense.expectedDealInCostWeight = 0.16;
   policy.defense.safetyGateMinThreatScore = 11;
   policy.defense.safetyGateProtectScore = 8;
@@ -259,9 +261,24 @@ function createDefensiveDevHardPolicy() {
   policy.defense.safetyGateMinExpectedCostDelta = 80;
   policy.defense.safetyGateBackstepMinThreatScore = 14;
   policy.defense.safetyGateBackstepMinExpectedCostDelta = 140;
-  policy.defense.safetyGateProtectedTenpaiMinHandValue = 42;
-  policy.defense.safetyGateProtectedTenpaiMinWaitQuality = 12;
-  policy.defense.protectLeadScore = 5000;
+    policy.defense.safetyGateProtectedTenpaiMinHandValue = 42;
+    policy.defense.safetyGateProtectedTenpaiMinWaitQuality = 12;
+    policy.defense.defensiveCallGateMaxClosedXiangting = 3;
+    policy.defense.defensiveCallGateMinRemainingTiles = 14;
+    policy.defense.defensiveCallGateNeutralMargin = 55;
+    policy.defense.defensiveCallGateProtectMargin = 40;
+    policy.defense.defensiveCallGatePressureMargin = 40;
+    policy.defense.defensiveCallGateComebackMargin = 120;
+    policy.defense.defensiveCallGateOpenHandMargin = 140;
+    policy.defense.defensiveCallGateDirectTenpaiMinHandValue = 32;
+    policy.defense.defensiveCallGateDirectTenpaiMinWaitQuality = 8;
+    policy.defense.defensiveCallGateHighValue = 62;
+    policy.defense.defensiveCallGateComebackMinHandValue = 42;
+    policy.defense.defensiveCallGateStrongHardEvDelta = 180;
+    policy.defense.defensiveCallGateStrongLiveUkeireDelta = 14;
+    policy.defense.defensiveCallGateStrongLiveTingpaiDelta = 3;
+    policy.defense.defensiveCallGatePressureThreatScore = 8;
+    policy.defense.protectLeadScore = 5000;
   policy.defense.comebackTrailingScore = 7000;
   policy.defense.stateRiskBias = {
     'protect-lead': 22,
@@ -277,17 +294,28 @@ function createDefensiveDevHardPolicy() {
     comeback: 16,
     'safe-tenpai': 18
   };
-  policy.defense.stateFoldNetPushBias = {
-    'protect-lead': 18,
-    'protect-second': 10,
-    'neutral-defense': 2,
-    comeback: -20,
-    'safe-tenpai': -24
-  };
-  policy.devVariant = {
-    parent: 'hard-defensive',
-    note: 'H17 dev variant. Keeps scored threat, rank-aware push/fold, and deal-in attribution on top of stable hard-defensive. Route/riichi personality tuning is intentionally left to balanced/heavy dev variants.'
-  };
+    policy.defense.stateFoldNetPushBias = {
+      'protect-lead': 18,
+      'protect-second': 10,
+      'neutral-defense': 2,
+      comeback: -20,
+      'safe-tenpai': -24
+    };
+    policy.riichi = policy.riichi && typeof policy.riichi === 'object' ? policy.riichi : {};
+    policy.riichi.minLiveTingpaiCount = 2;
+    policy.riichi.minWaitQualityScore = 5;
+    policy.riichi.badWaitMinHandValue = 28;
+    policy.riichi.badWaitMinRemainingTiles = 14;
+    policy.riichi.thinRiichiAllowedWaitTypes = ['tanki', 'kanchan', 'penchan'];
+    policy.riichi.thinRiichiMinRemainingTiles = 20;
+    policy.riichi.thinRiichiMinLiveTingpai = 2;
+    policy.riichi.thinRiichiMinHandValue = 18;
+    policy.riichi.pressureMinHandValue = 52;
+    policy.riichi.maxPressureDiscardDanger = 2;
+    policy.devVariant = {
+      parent: 'hard-defensive',
+      note: 'H17e dev variant. Repositions defensive as a closed-hand defense profile with defensive call gate and lower-pressure riichi preservation.'
+    };
   return policy;
 }
 
@@ -457,16 +485,21 @@ function summarizeVariantConfig(variant) {
             enableEqualSafeBackstep: Boolean(policy.defense.enableEqualSafeBackstep),
             enableThreatScoreReview: Boolean(policy.defense.enableThreatScoreReview),
             enableRankAwarePushFold: Boolean(policy.defense.enableRankAwarePushFold),
-            enableDealInAttribution: Boolean(policy.defense.enableDealInAttribution),
-            enableSafetyGateRerank: Boolean(policy.defense.enableSafetyGateRerank),
-            highThreatScore: policy.defense.highThreatScore,
-            safetyGateMinThreatScore: policy.defense.safetyGateMinThreatScore,
-            safetyGateBackstepMinThreatScore: policy.defense.safetyGateBackstepMinThreatScore,
-            expectedDealInCostWeight: policy.defense.expectedDealInCostWeight
-          } : null,
-          riichi: policy.riichi ? {
-            allowNoPressureThinRiichi: Boolean(policy.riichi.allowNoPressureThinRiichi)
-          } : null,
+              enableDealInAttribution: Boolean(policy.defense.enableDealInAttribution),
+              enableSafetyGateRerank: Boolean(policy.defense.enableSafetyGateRerank),
+              enableDefensiveCallGate: Boolean(policy.defense.enableDefensiveCallGate),
+              highThreatScore: policy.defense.highThreatScore,
+              safetyGateMinThreatScore: policy.defense.safetyGateMinThreatScore,
+              defensiveCallGateNeutralMargin: policy.defense.defensiveCallGateNeutralMargin,
+              safetyGateBackstepMinThreatScore: policy.defense.safetyGateBackstepMinThreatScore,
+              expectedDealInCostWeight: policy.defense.expectedDealInCostWeight
+            } : null,
+            riichi: policy.riichi ? {
+              allowNoPressureThinRiichi: Boolean(policy.riichi.allowNoPressureThinRiichi),
+              minLiveTingpaiCount: policy.riichi.minLiveTingpaiCount,
+              minWaitQualityScore: policy.riichi.minWaitQualityScore,
+              pressureMinHandValue: policy.riichi.pressureMinHandValue
+            } : null,
           call: policy.call ? {
             enableHardCallReview: Boolean(policy.call.enableHardCallReview),
             allowYakuhaiPeng: Boolean(policy.call.allowYakuhaiPeng),
@@ -717,23 +750,30 @@ function createRoundCounters() {
     defensiveSafetyGateReviewedDiscards: createCountersBySeat(),
     defensiveSafetyGateOverrideDiscards: createCountersBySeat(),
     defensiveSafetyGateSameShantenDiscards: createCountersBySeat(),
-    defensiveSafetyGateBackstepDiscards: createCountersBySeat(),
-    defensiveSafetyGateProtectedPushDiscards: createCountersBySeat(),
-    defensiveSafetyGateReasonCounts: createReasonCountersBySeat(),
-	    alphaJongRiichiReviews: createCountersBySeat(),
-	    alphaJongRiichiLegalDiscards: createCountersBySeat(),
-	    alphaJongRiichiSelectedLegalDiscards: createCountersBySeat(),
-	    alphaJongCallMetricSamples: createCountersBySeat(),
-	    alphaJongCallSimulationFailures: createCountersBySeat(),
-	    alphaJongCallMissingXiangting: createCountersBySeat(),
-	    alphaJongKanReviews: createCountersBySeat(),
-	    alphaJongKanAccepts: createCountersBySeat(),
-	    alphaJongKanSimulationFailures: createCountersBySeat(),
-	    alphaJongRiichiReasonCounts: createReasonCountersBySeat(),
-	    alphaJongKanReasonCounts: createReasonCountersBySeat(),
-	    riichiOpportunities: createCountersBySeat(),
-	    reactions: createCountersBySeat(),
-	    callReasonCounts: createReasonCountersBySeat(),
+      defensiveSafetyGateBackstepDiscards: createCountersBySeat(),
+      defensiveSafetyGateProtectedPushDiscards: createCountersBySeat(),
+      defensiveSafetyGateReasonCounts: createReasonCountersBySeat(),
+      defensiveCallGateReviewedCalls: createCountersBySeat(),
+      defensiveCallGateBlockedCalls: createCountersBySeat(),
+      defensiveCallGateFirstOpenBlockedCalls: createCountersBySeat(),
+      defensiveCallGateClosedRouteBlockedCalls: createCountersBySeat(),
+      defensiveCallGatePressureBlockedCalls: createCountersBySeat(),
+      defensiveCallGateAllowedDirectTenpaiCalls: createCountersBySeat(),
+      defensiveCallGateReasonCounts: createReasonCountersBySeat(),
+        alphaJongRiichiReviews: createCountersBySeat(),
+      alphaJongRiichiLegalDiscards: createCountersBySeat(),
+      alphaJongRiichiSelectedLegalDiscards: createCountersBySeat(),
+      alphaJongCallMetricSamples: createCountersBySeat(),
+      alphaJongCallSimulationFailures: createCountersBySeat(),
+      alphaJongCallMissingXiangting: createCountersBySeat(),
+      alphaJongKanReviews: createCountersBySeat(),
+      alphaJongKanAccepts: createCountersBySeat(),
+      alphaJongKanSimulationFailures: createCountersBySeat(),
+      alphaJongRiichiReasonCounts: createReasonCountersBySeat(),
+      alphaJongKanReasonCounts: createReasonCountersBySeat(),
+      riichiOpportunities: createCountersBySeat(),
+      reactions: createCountersBySeat(),
+      callReasonCounts: createReasonCountersBySeat(),
     riichiRejectReasonCounts: createReasonCountersBySeat(),
     lastDiscardSnapshots: {},
     errors: []
@@ -773,29 +813,36 @@ function createMatchCounters() {
     defensiveShadowSaferAltDiscards: createCountersBySeat(),
     defensiveShadowBackstepDiscards: createCountersBySeat(),
     defensiveShadowActionableDiscards: createCountersBySeat(),
-	    defensiveShadowWouldAvoidDealIns: createCountersBySeat(),
-	    defensiveShadowReasonCounts: createReasonCountersBySeat(),
-	    defensiveShadowActionableReasonCounts: createReasonCountersBySeat(),
+      defensiveShadowWouldAvoidDealIns: createCountersBySeat(),
+      defensiveShadowReasonCounts: createReasonCountersBySeat(),
+      defensiveShadowActionableReasonCounts: createReasonCountersBySeat(),
     defensiveSafetyGateReviewedDiscards: createCountersBySeat(),
     defensiveSafetyGateOverrideDiscards: createCountersBySeat(),
     defensiveSafetyGateSameShantenDiscards: createCountersBySeat(),
-    defensiveSafetyGateBackstepDiscards: createCountersBySeat(),
-    defensiveSafetyGateProtectedPushDiscards: createCountersBySeat(),
-    defensiveSafetyGateWouldAvoidDealIns: createCountersBySeat(),
-    defensiveSafetyGateReasonCounts: createReasonCountersBySeat(),
-	    alphaJongRiichiReviews: createCountersBySeat(),
-	    alphaJongRiichiLegalDiscards: createCountersBySeat(),
-	    alphaJongRiichiSelectedLegalDiscards: createCountersBySeat(),
-	    alphaJongCallMetricSamples: createCountersBySeat(),
-	    alphaJongCallSimulationFailures: createCountersBySeat(),
-	    alphaJongCallMissingXiangting: createCountersBySeat(),
-	    alphaJongKanReviews: createCountersBySeat(),
-	    alphaJongKanAccepts: createCountersBySeat(),
-	    alphaJongKanSimulationFailures: createCountersBySeat(),
-	    alphaJongRiichiReasonCounts: createReasonCountersBySeat(),
-	    alphaJongKanReasonCounts: createReasonCountersBySeat(),
-	    riichiOpportunities: createCountersBySeat(),
-	    reactions: createCountersBySeat(),
+      defensiveSafetyGateBackstepDiscards: createCountersBySeat(),
+      defensiveSafetyGateProtectedPushDiscards: createCountersBySeat(),
+      defensiveSafetyGateWouldAvoidDealIns: createCountersBySeat(),
+      defensiveSafetyGateReasonCounts: createReasonCountersBySeat(),
+      defensiveCallGateReviewedCalls: createCountersBySeat(),
+      defensiveCallGateBlockedCalls: createCountersBySeat(),
+      defensiveCallGateFirstOpenBlockedCalls: createCountersBySeat(),
+      defensiveCallGateClosedRouteBlockedCalls: createCountersBySeat(),
+      defensiveCallGatePressureBlockedCalls: createCountersBySeat(),
+      defensiveCallGateAllowedDirectTenpaiCalls: createCountersBySeat(),
+      defensiveCallGateReasonCounts: createReasonCountersBySeat(),
+        alphaJongRiichiReviews: createCountersBySeat(),
+      alphaJongRiichiLegalDiscards: createCountersBySeat(),
+      alphaJongRiichiSelectedLegalDiscards: createCountersBySeat(),
+      alphaJongCallMetricSamples: createCountersBySeat(),
+      alphaJongCallSimulationFailures: createCountersBySeat(),
+      alphaJongCallMissingXiangting: createCountersBySeat(),
+      alphaJongKanReviews: createCountersBySeat(),
+      alphaJongKanAccepts: createCountersBySeat(),
+      alphaJongKanSimulationFailures: createCountersBySeat(),
+      alphaJongRiichiReasonCounts: createReasonCountersBySeat(),
+      alphaJongKanReasonCounts: createReasonCountersBySeat(),
+      riichiOpportunities: createCountersBySeat(),
+      reactions: createCountersBySeat(),
     callReasonCounts: createReasonCountersBySeat(),
     riichiRejectReasonCounts: createReasonCountersBySeat(),
     wins: createCountersBySeat(),
@@ -843,26 +890,32 @@ function mergeRoundCounters(matchCounters, roundCounters) {
     'closedRouteScoreSamples',
     'defensiveShadowReviewedDiscards',
     'defensiveShadowDiffDiscards',
-	    'defensiveShadowSaferAltDiscards',
-	    'defensiveShadowBackstepDiscards',
-	    'defensiveShadowActionableDiscards',
+      'defensiveShadowSaferAltDiscards',
+      'defensiveShadowBackstepDiscards',
+      'defensiveShadowActionableDiscards',
     'defensiveSafetyGateReviewedDiscards',
     'defensiveSafetyGateOverrideDiscards',
-    'defensiveSafetyGateSameShantenDiscards',
-    'defensiveSafetyGateBackstepDiscards',
-    'defensiveSafetyGateProtectedPushDiscards',
-	    'alphaJongRiichiReviews',
-	    'alphaJongRiichiLegalDiscards',
-	    'alphaJongRiichiSelectedLegalDiscards',
-	    'alphaJongCallMetricSamples',
-	    'alphaJongCallSimulationFailures',
-	    'alphaJongCallMissingXiangting',
-	    'alphaJongKanReviews',
-	    'alphaJongKanAccepts',
-	    'alphaJongKanSimulationFailures',
-	    'riichiOpportunities',
-	    'reactions'
-	  ].forEach((key) => {
+      'defensiveSafetyGateSameShantenDiscards',
+      'defensiveSafetyGateBackstepDiscards',
+      'defensiveSafetyGateProtectedPushDiscards',
+      'defensiveCallGateReviewedCalls',
+      'defensiveCallGateBlockedCalls',
+      'defensiveCallGateFirstOpenBlockedCalls',
+      'defensiveCallGateClosedRouteBlockedCalls',
+      'defensiveCallGatePressureBlockedCalls',
+      'defensiveCallGateAllowedDirectTenpaiCalls',
+        'alphaJongRiichiReviews',
+      'alphaJongRiichiLegalDiscards',
+      'alphaJongRiichiSelectedLegalDiscards',
+      'alphaJongCallMetricSamples',
+      'alphaJongCallSimulationFailures',
+      'alphaJongCallMissingXiangting',
+      'alphaJongKanReviews',
+      'alphaJongKanAccepts',
+      'alphaJongKanSimulationFailures',
+      'riichiOpportunities',
+      'reactions'
+    ].forEach((key) => {
     addSeatCounters(matchCounters[key], roundCounters[key]);
   });
   addReasonCountersBySeat(matchCounters.callReasonCounts, roundCounters.callReasonCounts);
@@ -871,11 +924,12 @@ function mergeRoundCounters(matchCounters, roundCounters) {
   addReasonCountersBySeat(matchCounters.balancedRouteStateReasonCounts, roundCounters.balancedRouteStateReasonCounts);
   addReasonCountersBySeat(matchCounters.defensiveStateCounts, roundCounters.defensiveStateCounts);
   addReasonCountersBySeat(matchCounters.threatProfileReasonCounts, roundCounters.threatProfileReasonCounts);
-	  addReasonCountersBySeat(matchCounters.defensiveShadowReasonCounts, roundCounters.defensiveShadowReasonCounts);
-	  addReasonCountersBySeat(matchCounters.defensiveShadowActionableReasonCounts, roundCounters.defensiveShadowActionableReasonCounts);
-  addReasonCountersBySeat(matchCounters.defensiveSafetyGateReasonCounts, roundCounters.defensiveSafetyGateReasonCounts);
-	  addReasonCountersBySeat(matchCounters.alphaJongRiichiReasonCounts, roundCounters.alphaJongRiichiReasonCounts);
-	  addReasonCountersBySeat(matchCounters.alphaJongKanReasonCounts, roundCounters.alphaJongKanReasonCounts);
+    addReasonCountersBySeat(matchCounters.defensiveShadowReasonCounts, roundCounters.defensiveShadowReasonCounts);
+    addReasonCountersBySeat(matchCounters.defensiveShadowActionableReasonCounts, roundCounters.defensiveShadowActionableReasonCounts);
+    addReasonCountersBySeat(matchCounters.defensiveSafetyGateReasonCounts, roundCounters.defensiveSafetyGateReasonCounts);
+    addReasonCountersBySeat(matchCounters.defensiveCallGateReasonCounts, roundCounters.defensiveCallGateReasonCounts);
+      addReasonCountersBySeat(matchCounters.alphaJongRiichiReasonCounts, roundCounters.alphaJongRiichiReasonCounts);
+    addReasonCountersBySeat(matchCounters.alphaJongKanReasonCounts, roundCounters.alphaJongKanReasonCounts);
   SEATS.forEach((seatKey) => {
     if (Number(roundCounters && roundCounters.calls && roundCounters.calls[seatKey] || 0) > 0) {
       matchCounters.callRounds[seatKey] += 1;
@@ -1240,9 +1294,9 @@ function finiteMetricNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function recordAlphaJongCallDiagnostics(roundCounters, seatKey, hardCallMetrics) {
-  if (!roundCounters || !seatKey || !hardCallMetrics || hardCallMetrics.adapter !== 'alphajong-core') return;
-  roundCounters.alphaJongCallMetricSamples[seatKey] += 1;
+  function recordAlphaJongCallDiagnostics(roundCounters, seatKey, hardCallMetrics) {
+    if (!roundCounters || !seatKey || !hardCallMetrics || hardCallMetrics.adapter !== 'alphajong-core') return;
+    roundCounters.alphaJongCallMetricSamples[seatKey] += 1;
   if (hardCallMetrics.simulationOk !== true) {
     roundCounters.alphaJongCallSimulationFailures[seatKey] += 1;
   }
@@ -1250,10 +1304,32 @@ function recordAlphaJongCallDiagnostics(roundCounters, seatKey, hardCallMetrics)
   const nextXiangting = finiteMetricNumber(hardCallMetrics.nextXiangting);
   if (currentXiangting == null || nextXiangting == null) {
     roundCounters.alphaJongCallMissingXiangting[seatKey] += 1;
+    }
   }
-}
 
-function recordAlphaJongKanDiagnostics(roundCounters, seatKey, hardKanMetrics, reasons = []) {
+  function recordDefensiveCallGateDiagnostics(roundCounters, seatKey, decision) {
+    if (!roundCounters || !seatKey || !decision) return;
+    const aiDecision = decision.aiDecision && typeof decision.aiDecision === 'object'
+      ? decision.aiDecision
+      : {};
+    const hardCallMetrics = aiDecision.hardCallMetrics && typeof aiDecision.hardCallMetrics === 'object'
+      ? aiDecision.hardCallMetrics
+      : {};
+    const review = hardCallMetrics.defensiveCallGateReview && typeof hardCallMetrics.defensiveCallGateReview === 'object'
+      ? hardCallMetrics.defensiveCallGateReview
+      : null;
+    if (!review || review.enabled !== true) return;
+    const reasons = Array.isArray(review.reasons) ? review.reasons : [];
+    roundCounters.defensiveCallGateReviewedCalls[seatKey] += 1;
+    if (review.override === true || review.allowed === false) roundCounters.defensiveCallGateBlockedCalls[seatKey] += 1;
+    if (reasons.includes('def-call-gate-first-open-block')) roundCounters.defensiveCallGateFirstOpenBlockedCalls[seatKey] += 1;
+    if (reasons.includes('def-call-gate-closed-route-block')) roundCounters.defensiveCallGateClosedRouteBlockedCalls[seatKey] += 1;
+    if (reasons.includes('def-call-gate-pressure-block')) roundCounters.defensiveCallGatePressureBlockedCalls[seatKey] += 1;
+    if (reasons.includes('def-call-gate-allowed-direct-tenpai')) roundCounters.defensiveCallGateAllowedDirectTenpaiCalls[seatKey] += 1;
+    reasons.forEach((reason) => incrementReasonCounter(roundCounters.defensiveCallGateReasonCounts, seatKey, reason));
+  }
+
+  function recordAlphaJongKanDiagnostics(roundCounters, seatKey, hardKanMetrics, reasons = []) {
   if (!roundCounters || !seatKey || !hardKanMetrics || hardKanMetrics.adapter !== 'alphajong-core') return;
   roundCounters.alphaJongKanAccepts[seatKey] += 1;
   if (hardKanMetrics.simulationOk !== true) {
@@ -1326,17 +1402,18 @@ function recordCallDiagnostics(runtime, roundCounters, seatKey, decision) {
   if (closedBefore) {
     roundCounters.closedCalls[seatKey] += 1;
   }
-	  if (Number.isFinite(currentXiangting) && Number.isFinite(nextXiangting)) {
-	    if (nextXiangting < currentXiangting) roundCounters.shantenImproveCalls[seatKey] += 1;
-	    if (nextXiangting === currentXiangting) roundCounters.flatCalls[seatKey] += 1;
+    if (Number.isFinite(currentXiangting) && Number.isFinite(nextXiangting)) {
+      if (nextXiangting < currentXiangting) roundCounters.shantenImproveCalls[seatKey] += 1;
+      if (nextXiangting === currentXiangting) roundCounters.flatCalls[seatKey] += 1;
   } else {
     if (reasonText.includes('improves-xiangting')) roundCounters.shantenImproveCalls[seatKey] += 1;
     if (reasonText.includes('flat-speed-up')) roundCounters.flatCalls[seatKey] += 1;
-	  }
-	  recordAlphaJongCallDiagnostics(roundCounters, seatKey, hardCallMetrics);
-	  recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision);
-	  reasons.forEach((reason) => incrementReasonCounter(roundCounters.callReasonCounts, seatKey, reason));
-	}
+      }
+      recordAlphaJongCallDiagnostics(roundCounters, seatKey, hardCallMetrics);
+      recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision);
+      recordDefensiveCallGateDiagnostics(roundCounters, seatKey, decision);
+      reasons.forEach((reason) => incrementReasonCounter(roundCounters.callReasonCounts, seatKey, reason));
+    }
 
 function recordAlphaJongRiichiDiagnostics(roundCounters, seatKey, decision) {
   if (!roundCounters || !seatKey || !decision || !decision.alphaJong) return;
@@ -1548,9 +1625,10 @@ function handleReaction(runtime, aiController, assignments, roundCounters) {
       return;
     }
 
-    if (decision && decision.type === 'pass') {
-      recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision, { recordReasons: true });
-    }
+      if (decision && decision.type === 'pass') {
+        recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision, { recordReasons: true });
+        recordDefensiveCallGateDiagnostics(roundCounters, seatKey, decision);
+      }
     passSeat(runtime, seatKey);
   }
 }
@@ -1618,11 +1696,11 @@ function runOneRound(baseConfig, matchState, assignments, options = {}) {
 
         const decision = aiController.chooseDiscard(seatKey, decisionContextForSeat(assignments, seatKey));
         const tileCode = normalizeDiscardTile(decision, runtime, seatKey);
-	        const shouldRiichi = Boolean(decision && decision.shouldRiichi);
-	        const closedHandBeforeDiscard = isSeatClosed(runtime, seatKey);
-	        recordRiichiOpportunity(runtime, seatKey, decision, counters);
-	        recordAlphaJongRiichiDiagnostics(counters, seatKey, decision);
-	        recordDefensiveProfileDiagnostics(runtime, counters, seatKey, decision, tileCode, closedHandBeforeDiscard);
+          const shouldRiichi = Boolean(decision && decision.shouldRiichi);
+          const closedHandBeforeDiscard = isSeatClosed(runtime, seatKey);
+          recordRiichiOpportunity(runtime, seatKey, decision, counters);
+          recordAlphaJongRiichiDiagnostics(counters, seatKey, decision);
+          recordDefensiveProfileDiagnostics(runtime, counters, seatKey, decision, tileCode, closedHandBeforeDiscard);
         runtime.discardTile(seatKey, tileCode, {
           riichi: shouldRiichi
         });
@@ -1961,30 +2039,37 @@ function createEmptyVariantStats() {
     defensiveShadowSaferAltDiscards: 0,
     defensiveShadowBackstepDiscards: 0,
     defensiveShadowActionableDiscards: 0,
-	    defensiveShadowWouldAvoidDealIns: 0,
-	    defensiveShadowReasonCounts: {},
-	    defensiveShadowActionableReasonCounts: {},
+      defensiveShadowWouldAvoidDealIns: 0,
+      defensiveShadowReasonCounts: {},
+      defensiveShadowActionableReasonCounts: {},
     defensiveSafetyGateReviewedDiscards: 0,
     defensiveSafetyGateOverrideDiscards: 0,
     defensiveSafetyGateSameShantenDiscards: 0,
     defensiveSafetyGateBackstepDiscards: 0,
-    defensiveSafetyGateProtectedPushDiscards: 0,
-    defensiveSafetyGateWouldAvoidDealIns: 0,
-    defensiveSafetyGateReasonCounts: {},
-	    alphaJongRiichiReviews: 0,
-	    alphaJongRiichiLegalDiscards: 0,
-	    alphaJongRiichiSelectedLegalDiscards: 0,
-	    alphaJongCallMetricSamples: 0,
-	    alphaJongCallSimulationFailures: 0,
-	    alphaJongCallMissingXiangting: 0,
-	    alphaJongKanReviews: 0,
-	    alphaJongKanAccepts: 0,
-	    alphaJongKanSimulationFailures: 0,
-	    alphaJongRiichiReasonCounts: {},
-	    alphaJongKanReasonCounts: {},
-	    riichiOpportunities: 0,
-	    callReasonCounts: {},
-	    riichiRejectReasonCounts: {},
+      defensiveSafetyGateProtectedPushDiscards: 0,
+      defensiveSafetyGateWouldAvoidDealIns: 0,
+      defensiveSafetyGateReasonCounts: {},
+      defensiveCallGateReviewedCalls: 0,
+      defensiveCallGateBlockedCalls: 0,
+      defensiveCallGateFirstOpenBlockedCalls: 0,
+      defensiveCallGateClosedRouteBlockedCalls: 0,
+      defensiveCallGatePressureBlockedCalls: 0,
+      defensiveCallGateAllowedDirectTenpaiCalls: 0,
+      defensiveCallGateReasonCounts: {},
+        alphaJongRiichiReviews: 0,
+      alphaJongRiichiLegalDiscards: 0,
+      alphaJongRiichiSelectedLegalDiscards: 0,
+      alphaJongCallMetricSamples: 0,
+      alphaJongCallSimulationFailures: 0,
+      alphaJongCallMissingXiangting: 0,
+      alphaJongKanReviews: 0,
+      alphaJongKanAccepts: 0,
+      alphaJongKanSimulationFailures: 0,
+      alphaJongRiichiReasonCounts: {},
+      alphaJongKanReasonCounts: {},
+      riichiOpportunities: 0,
+      callReasonCounts: {},
+      riichiRejectReasonCounts: {},
     winTurnSum: 0,
     winTurnSamples: 0,
     winPointSum: 0,
@@ -2034,18 +2119,18 @@ function createEmptyVariantStats() {
     defensiveSafetyGateBackstepPerRound: 0,
     defensiveSafetyGateProtectedPushPerRound: 0,
     defensiveSafetyGateWouldAvoidDealInPerRound: 0,
-	    alphaJongRiichiReviewPerRound: 0,
-	    alphaJongRiichiLegalPerRound: 0,
-	    alphaJongRiichiSelectedLegalPerRound: 0,
-	    alphaJongRiichiSelectedLegalRate: 0,
-	    alphaJongCallSimulationFailurePerRound: 0,
-	    alphaJongCallSimulationFailureRate: 0,
-	    alphaJongCallMissingXiangtingPerRound: 0,
-	    alphaJongKanReviewPerRound: 0,
-	    alphaJongKanAcceptPerRound: 0,
-	    alphaJongKanSimulationFailurePerRound: 0,
-	    alphaJongKanSimulationFailureRate: 0,
-	    averageCallOpenRouteScore: 0,
+      alphaJongRiichiReviewPerRound: 0,
+      alphaJongRiichiLegalPerRound: 0,
+      alphaJongRiichiSelectedLegalPerRound: 0,
+      alphaJongRiichiSelectedLegalRate: 0,
+      alphaJongCallSimulationFailurePerRound: 0,
+      alphaJongCallSimulationFailureRate: 0,
+      alphaJongCallMissingXiangtingPerRound: 0,
+      alphaJongKanReviewPerRound: 0,
+      alphaJongKanAcceptPerRound: 0,
+      alphaJongKanSimulationFailurePerRound: 0,
+      alphaJongKanSimulationFailureRate: 0,
+      averageCallOpenRouteScore: 0,
     averagePassClosedRouteScore: 0,
     closedRouteMarginAverage: 0,
     averageWinTurn: 0,
@@ -2133,27 +2218,33 @@ function finalizeVariantStats(stats) {
   stats.defensiveShadowReviewPerRound = safeRate(stats.defensiveShadowReviewedDiscards, stats.roundsSeen);
   stats.defensiveShadowDiffPerRound = safeRate(stats.defensiveShadowDiffDiscards, stats.roundsSeen);
   stats.defensiveShadowSaferAltPerRound = safeRate(stats.defensiveShadowSaferAltDiscards, stats.roundsSeen);
-	  stats.defensiveShadowBackstepPerRound = safeRate(stats.defensiveShadowBackstepDiscards, stats.roundsSeen);
-	  stats.defensiveShadowActionablePerRound = safeRate(stats.defensiveShadowActionableDiscards, stats.roundsSeen);
-	  stats.defensiveShadowWouldAvoidDealInPerRound = safeRate(stats.defensiveShadowWouldAvoidDealIns, stats.roundsSeen);
+    stats.defensiveShadowBackstepPerRound = safeRate(stats.defensiveShadowBackstepDiscards, stats.roundsSeen);
+    stats.defensiveShadowActionablePerRound = safeRate(stats.defensiveShadowActionableDiscards, stats.roundsSeen);
+    stats.defensiveShadowWouldAvoidDealInPerRound = safeRate(stats.defensiveShadowWouldAvoidDealIns, stats.roundsSeen);
   stats.defensiveSafetyGateReviewPerRound = safeRate(stats.defensiveSafetyGateReviewedDiscards, stats.roundsSeen);
   stats.defensiveSafetyGateOverridePerRound = safeRate(stats.defensiveSafetyGateOverrideDiscards, stats.roundsSeen);
   stats.defensiveSafetyGateSameShantenPerRound = safeRate(stats.defensiveSafetyGateSameShantenDiscards, stats.roundsSeen);
-  stats.defensiveSafetyGateBackstepPerRound = safeRate(stats.defensiveSafetyGateBackstepDiscards, stats.roundsSeen);
-  stats.defensiveSafetyGateProtectedPushPerRound = safeRate(stats.defensiveSafetyGateProtectedPushDiscards, stats.roundsSeen);
-  stats.defensiveSafetyGateWouldAvoidDealInPerRound = safeRate(stats.defensiveSafetyGateWouldAvoidDealIns, stats.roundsSeen);
-	  stats.alphaJongRiichiReviewPerRound = safeRate(stats.alphaJongRiichiReviews, stats.roundsSeen);
-	  stats.alphaJongRiichiLegalPerRound = safeRate(stats.alphaJongRiichiLegalDiscards, stats.roundsSeen);
-	  stats.alphaJongRiichiSelectedLegalPerRound = safeRate(stats.alphaJongRiichiSelectedLegalDiscards, stats.roundsSeen);
-	  stats.alphaJongRiichiSelectedLegalRate = safeRate(stats.alphaJongRiichiSelectedLegalDiscards, stats.alphaJongRiichiLegalDiscards);
-	  stats.alphaJongCallSimulationFailurePerRound = safeRate(stats.alphaJongCallSimulationFailures, stats.roundsSeen);
-	  stats.alphaJongCallSimulationFailureRate = safeRate(stats.alphaJongCallSimulationFailures, stats.alphaJongCallMetricSamples);
-	  stats.alphaJongCallMissingXiangtingPerRound = safeRate(stats.alphaJongCallMissingXiangting, stats.roundsSeen);
-	  stats.alphaJongKanReviewPerRound = safeRate(stats.alphaJongKanReviews, stats.roundsSeen);
-	  stats.alphaJongKanAcceptPerRound = safeRate(stats.alphaJongKanAccepts, stats.roundsSeen);
-	  stats.alphaJongKanSimulationFailurePerRound = safeRate(stats.alphaJongKanSimulationFailures, stats.roundsSeen);
-	  stats.alphaJongKanSimulationFailureRate = safeRate(stats.alphaJongKanSimulationFailures, stats.alphaJongKanAccepts);
-	  stats.averageCallOpenRouteScore = safeRate(stats.closedRouteCallOpenScoreSum, stats.closedRouteScoreSamples);
+    stats.defensiveSafetyGateBackstepPerRound = safeRate(stats.defensiveSafetyGateBackstepDiscards, stats.roundsSeen);
+    stats.defensiveSafetyGateProtectedPushPerRound = safeRate(stats.defensiveSafetyGateProtectedPushDiscards, stats.roundsSeen);
+    stats.defensiveSafetyGateWouldAvoidDealInPerRound = safeRate(stats.defensiveSafetyGateWouldAvoidDealIns, stats.roundsSeen);
+    stats.defensiveCallGateReviewPerRound = safeRate(stats.defensiveCallGateReviewedCalls, stats.roundsSeen);
+    stats.defensiveCallGateBlockPerRound = safeRate(stats.defensiveCallGateBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGateFirstOpenBlockPerRound = safeRate(stats.defensiveCallGateFirstOpenBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGateClosedRouteBlockPerRound = safeRate(stats.defensiveCallGateClosedRouteBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGatePressureBlockPerRound = safeRate(stats.defensiveCallGatePressureBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGateAllowedDirectTenpaiPerRound = safeRate(stats.defensiveCallGateAllowedDirectTenpaiCalls, stats.roundsSeen);
+      stats.alphaJongRiichiReviewPerRound = safeRate(stats.alphaJongRiichiReviews, stats.roundsSeen);
+    stats.alphaJongRiichiLegalPerRound = safeRate(stats.alphaJongRiichiLegalDiscards, stats.roundsSeen);
+    stats.alphaJongRiichiSelectedLegalPerRound = safeRate(stats.alphaJongRiichiSelectedLegalDiscards, stats.roundsSeen);
+    stats.alphaJongRiichiSelectedLegalRate = safeRate(stats.alphaJongRiichiSelectedLegalDiscards, stats.alphaJongRiichiLegalDiscards);
+    stats.alphaJongCallSimulationFailurePerRound = safeRate(stats.alphaJongCallSimulationFailures, stats.roundsSeen);
+    stats.alphaJongCallSimulationFailureRate = safeRate(stats.alphaJongCallSimulationFailures, stats.alphaJongCallMetricSamples);
+    stats.alphaJongCallMissingXiangtingPerRound = safeRate(stats.alphaJongCallMissingXiangting, stats.roundsSeen);
+    stats.alphaJongKanReviewPerRound = safeRate(stats.alphaJongKanReviews, stats.roundsSeen);
+    stats.alphaJongKanAcceptPerRound = safeRate(stats.alphaJongKanAccepts, stats.roundsSeen);
+    stats.alphaJongKanSimulationFailurePerRound = safeRate(stats.alphaJongKanSimulationFailures, stats.roundsSeen);
+    stats.alphaJongKanSimulationFailureRate = safeRate(stats.alphaJongKanSimulationFailures, stats.alphaJongKanAccepts);
+    stats.averageCallOpenRouteScore = safeRate(stats.closedRouteCallOpenScoreSum, stats.closedRouteScoreSamples);
   stats.averagePassClosedRouteScore = safeRate(stats.closedRoutePassScoreSum, stats.closedRouteScoreSamples);
   stats.closedRouteMarginAverage = safeRate(stats.closedRouteMarginSum, stats.closedRouteScoreSamples);
   stats.averageWinTurn = safeRate(stats.winTurnSum, stats.winTurnSamples);
@@ -2232,38 +2323,45 @@ function summarizeMatchRows(rows, variants) {
       stats.closedRouteScoreSamples += Number(counters.closedRouteScoreSamples && counters.closedRouteScoreSamples[seatKey] || 0);
       stats.defensiveShadowReviewedDiscards += Number(counters.defensiveShadowReviewedDiscards && counters.defensiveShadowReviewedDiscards[seatKey] || 0);
       stats.defensiveShadowDiffDiscards += Number(counters.defensiveShadowDiffDiscards && counters.defensiveShadowDiffDiscards[seatKey] || 0);
-	      stats.defensiveShadowSaferAltDiscards += Number(counters.defensiveShadowSaferAltDiscards && counters.defensiveShadowSaferAltDiscards[seatKey] || 0);
-	      stats.defensiveShadowBackstepDiscards += Number(counters.defensiveShadowBackstepDiscards && counters.defensiveShadowBackstepDiscards[seatKey] || 0);
-	      stats.defensiveShadowActionableDiscards += Number(counters.defensiveShadowActionableDiscards && counters.defensiveShadowActionableDiscards[seatKey] || 0);
-	      stats.defensiveShadowWouldAvoidDealIns += Number(counters.defensiveShadowWouldAvoidDealIns && counters.defensiveShadowWouldAvoidDealIns[seatKey] || 0);
+        stats.defensiveShadowSaferAltDiscards += Number(counters.defensiveShadowSaferAltDiscards && counters.defensiveShadowSaferAltDiscards[seatKey] || 0);
+        stats.defensiveShadowBackstepDiscards += Number(counters.defensiveShadowBackstepDiscards && counters.defensiveShadowBackstepDiscards[seatKey] || 0);
+        stats.defensiveShadowActionableDiscards += Number(counters.defensiveShadowActionableDiscards && counters.defensiveShadowActionableDiscards[seatKey] || 0);
+        stats.defensiveShadowWouldAvoidDealIns += Number(counters.defensiveShadowWouldAvoidDealIns && counters.defensiveShadowWouldAvoidDealIns[seatKey] || 0);
       stats.defensiveSafetyGateReviewedDiscards += Number(counters.defensiveSafetyGateReviewedDiscards && counters.defensiveSafetyGateReviewedDiscards[seatKey] || 0);
       stats.defensiveSafetyGateOverrideDiscards += Number(counters.defensiveSafetyGateOverrideDiscards && counters.defensiveSafetyGateOverrideDiscards[seatKey] || 0);
       stats.defensiveSafetyGateSameShantenDiscards += Number(counters.defensiveSafetyGateSameShantenDiscards && counters.defensiveSafetyGateSameShantenDiscards[seatKey] || 0);
-      stats.defensiveSafetyGateBackstepDiscards += Number(counters.defensiveSafetyGateBackstepDiscards && counters.defensiveSafetyGateBackstepDiscards[seatKey] || 0);
-      stats.defensiveSafetyGateProtectedPushDiscards += Number(counters.defensiveSafetyGateProtectedPushDiscards && counters.defensiveSafetyGateProtectedPushDiscards[seatKey] || 0);
-      stats.defensiveSafetyGateWouldAvoidDealIns += Number(counters.defensiveSafetyGateWouldAvoidDealIns && counters.defensiveSafetyGateWouldAvoidDealIns[seatKey] || 0);
-	      stats.alphaJongRiichiReviews += Number(counters.alphaJongRiichiReviews && counters.alphaJongRiichiReviews[seatKey] || 0);
-	      stats.alphaJongRiichiLegalDiscards += Number(counters.alphaJongRiichiLegalDiscards && counters.alphaJongRiichiLegalDiscards[seatKey] || 0);
-	      stats.alphaJongRiichiSelectedLegalDiscards += Number(counters.alphaJongRiichiSelectedLegalDiscards && counters.alphaJongRiichiSelectedLegalDiscards[seatKey] || 0);
-	      stats.alphaJongCallMetricSamples += Number(counters.alphaJongCallMetricSamples && counters.alphaJongCallMetricSamples[seatKey] || 0);
-	      stats.alphaJongCallSimulationFailures += Number(counters.alphaJongCallSimulationFailures && counters.alphaJongCallSimulationFailures[seatKey] || 0);
-	      stats.alphaJongCallMissingXiangting += Number(counters.alphaJongCallMissingXiangting && counters.alphaJongCallMissingXiangting[seatKey] || 0);
-	      stats.alphaJongKanReviews += Number(counters.alphaJongKanReviews && counters.alphaJongKanReviews[seatKey] || 0);
-	      stats.alphaJongKanAccepts += Number(counters.alphaJongKanAccepts && counters.alphaJongKanAccepts[seatKey] || 0);
-	      stats.alphaJongKanSimulationFailures += Number(counters.alphaJongKanSimulationFailures && counters.alphaJongKanSimulationFailures[seatKey] || 0);
-	      stats.riichiOpportunities += Number(counters.riichiOpportunities && counters.riichiOpportunities[seatKey] || 0);
-	      addReasonCounters(stats.callReasonCounts, counters.callReasonCounts && counters.callReasonCounts[seatKey]);
-	      addReasonCounters(stats.riichiRejectReasonCounts, counters.riichiRejectReasonCounts && counters.riichiRejectReasonCounts[seatKey]);
-	      addReasonCounters(stats.balancedRouteStateCounts, counters.balancedRouteStateCounts && counters.balancedRouteStateCounts[seatKey]);
-	      addReasonCounters(stats.balancedRouteStateReasonCounts, counters.balancedRouteStateReasonCounts && counters.balancedRouteStateReasonCounts[seatKey]);
-	      addReasonCounters(stats.defensiveStateCounts, counters.defensiveStateCounts && counters.defensiveStateCounts[seatKey]);
-	      addReasonCounters(stats.threatProfileReasonCounts, counters.threatProfileReasonCounts && counters.threatProfileReasonCounts[seatKey]);
-	      addReasonCounters(stats.dealInAttributionCounts, counters.dealInAttributionCounts && counters.dealInAttributionCounts[seatKey]);
-	      addReasonCounters(stats.defensiveShadowReasonCounts, counters.defensiveShadowReasonCounts && counters.defensiveShadowReasonCounts[seatKey]);
-	      addReasonCounters(stats.defensiveShadowActionableReasonCounts, counters.defensiveShadowActionableReasonCounts && counters.defensiveShadowActionableReasonCounts[seatKey]);
-      addReasonCounters(stats.defensiveSafetyGateReasonCounts, counters.defensiveSafetyGateReasonCounts && counters.defensiveSafetyGateReasonCounts[seatKey]);
-	      addReasonCounters(stats.alphaJongKanReasonCounts, counters.alphaJongKanReasonCounts && counters.alphaJongKanReasonCounts[seatKey]);
-	      addReasonCounters(stats.alphaJongRiichiReasonCounts, counters.alphaJongRiichiReasonCounts && counters.alphaJongRiichiReasonCounts[seatKey]);
+        stats.defensiveSafetyGateBackstepDiscards += Number(counters.defensiveSafetyGateBackstepDiscards && counters.defensiveSafetyGateBackstepDiscards[seatKey] || 0);
+        stats.defensiveSafetyGateProtectedPushDiscards += Number(counters.defensiveSafetyGateProtectedPushDiscards && counters.defensiveSafetyGateProtectedPushDiscards[seatKey] || 0);
+        stats.defensiveSafetyGateWouldAvoidDealIns += Number(counters.defensiveSafetyGateWouldAvoidDealIns && counters.defensiveSafetyGateWouldAvoidDealIns[seatKey] || 0);
+        stats.defensiveCallGateReviewedCalls += Number(counters.defensiveCallGateReviewedCalls && counters.defensiveCallGateReviewedCalls[seatKey] || 0);
+        stats.defensiveCallGateBlockedCalls += Number(counters.defensiveCallGateBlockedCalls && counters.defensiveCallGateBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGateFirstOpenBlockedCalls += Number(counters.defensiveCallGateFirstOpenBlockedCalls && counters.defensiveCallGateFirstOpenBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGateClosedRouteBlockedCalls += Number(counters.defensiveCallGateClosedRouteBlockedCalls && counters.defensiveCallGateClosedRouteBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGatePressureBlockedCalls += Number(counters.defensiveCallGatePressureBlockedCalls && counters.defensiveCallGatePressureBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGateAllowedDirectTenpaiCalls += Number(counters.defensiveCallGateAllowedDirectTenpaiCalls && counters.defensiveCallGateAllowedDirectTenpaiCalls[seatKey] || 0);
+          stats.alphaJongRiichiReviews += Number(counters.alphaJongRiichiReviews && counters.alphaJongRiichiReviews[seatKey] || 0);
+        stats.alphaJongRiichiLegalDiscards += Number(counters.alphaJongRiichiLegalDiscards && counters.alphaJongRiichiLegalDiscards[seatKey] || 0);
+        stats.alphaJongRiichiSelectedLegalDiscards += Number(counters.alphaJongRiichiSelectedLegalDiscards && counters.alphaJongRiichiSelectedLegalDiscards[seatKey] || 0);
+        stats.alphaJongCallMetricSamples += Number(counters.alphaJongCallMetricSamples && counters.alphaJongCallMetricSamples[seatKey] || 0);
+        stats.alphaJongCallSimulationFailures += Number(counters.alphaJongCallSimulationFailures && counters.alphaJongCallSimulationFailures[seatKey] || 0);
+        stats.alphaJongCallMissingXiangting += Number(counters.alphaJongCallMissingXiangting && counters.alphaJongCallMissingXiangting[seatKey] || 0);
+        stats.alphaJongKanReviews += Number(counters.alphaJongKanReviews && counters.alphaJongKanReviews[seatKey] || 0);
+        stats.alphaJongKanAccepts += Number(counters.alphaJongKanAccepts && counters.alphaJongKanAccepts[seatKey] || 0);
+        stats.alphaJongKanSimulationFailures += Number(counters.alphaJongKanSimulationFailures && counters.alphaJongKanSimulationFailures[seatKey] || 0);
+        stats.riichiOpportunities += Number(counters.riichiOpportunities && counters.riichiOpportunities[seatKey] || 0);
+        addReasonCounters(stats.callReasonCounts, counters.callReasonCounts && counters.callReasonCounts[seatKey]);
+        addReasonCounters(stats.riichiRejectReasonCounts, counters.riichiRejectReasonCounts && counters.riichiRejectReasonCounts[seatKey]);
+        addReasonCounters(stats.balancedRouteStateCounts, counters.balancedRouteStateCounts && counters.balancedRouteStateCounts[seatKey]);
+        addReasonCounters(stats.balancedRouteStateReasonCounts, counters.balancedRouteStateReasonCounts && counters.balancedRouteStateReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveStateCounts, counters.defensiveStateCounts && counters.defensiveStateCounts[seatKey]);
+        addReasonCounters(stats.threatProfileReasonCounts, counters.threatProfileReasonCounts && counters.threatProfileReasonCounts[seatKey]);
+        addReasonCounters(stats.dealInAttributionCounts, counters.dealInAttributionCounts && counters.dealInAttributionCounts[seatKey]);
+        addReasonCounters(stats.defensiveShadowReasonCounts, counters.defensiveShadowReasonCounts && counters.defensiveShadowReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveShadowActionableReasonCounts, counters.defensiveShadowActionableReasonCounts && counters.defensiveShadowActionableReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveSafetyGateReasonCounts, counters.defensiveSafetyGateReasonCounts && counters.defensiveSafetyGateReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveCallGateReasonCounts, counters.defensiveCallGateReasonCounts && counters.defensiveCallGateReasonCounts[seatKey]);
+          addReasonCounters(stats.alphaJongKanReasonCounts, counters.alphaJongKanReasonCounts && counters.alphaJongKanReasonCounts[seatKey]);
+        addReasonCounters(stats.alphaJongRiichiReasonCounts, counters.alphaJongRiichiReasonCounts && counters.alphaJongRiichiReasonCounts[seatKey]);
       stats.winTurnSum += Number(counters.winTurnSum && counters.winTurnSum[seatKey] || 0);
       stats.winTurnSamples += Number(counters.winTurnSamples && counters.winTurnSamples[seatKey] || 0);
       stats.winPointSum += Number(counters.winPointSum && counters.winPointSum[seatKey] || 0);
@@ -2397,21 +2495,27 @@ function buildVariantRecordPanel(stats = {}) {
     defensiveSafetyGateReviewPerRound: metricValue(stats, 'defensiveSafetyGateReviewPerRound'),
     defensiveSafetyGateOverridePerRound: metricValue(stats, 'defensiveSafetyGateOverridePerRound'),
     defensiveSafetyGateSameShantenPerRound: metricValue(stats, 'defensiveSafetyGateSameShantenPerRound'),
-    defensiveSafetyGateBackstepPerRound: metricValue(stats, 'defensiveSafetyGateBackstepPerRound'),
-    defensiveSafetyGateProtectedPushPerRound: metricValue(stats, 'defensiveSafetyGateProtectedPushPerRound'),
-    defensiveSafetyGateWouldAvoidDealInPerRound: metricValue(stats, 'defensiveSafetyGateWouldAvoidDealInPerRound'),
-	    alphaJongRiichiReviewPerRound: metricValue(stats, 'alphaJongRiichiReviewPerRound'),
-	    alphaJongRiichiLegalPerRound: metricValue(stats, 'alphaJongRiichiLegalPerRound'),
-	    alphaJongRiichiSelectedLegalPerRound: metricValue(stats, 'alphaJongRiichiSelectedLegalPerRound'),
-	    alphaJongRiichiSelectedLegalRate: metricValue(stats, 'alphaJongRiichiSelectedLegalRate'),
-	    alphaJongCallSimulationFailurePerRound: metricValue(stats, 'alphaJongCallSimulationFailurePerRound'),
-	    alphaJongCallSimulationFailureRate: metricValue(stats, 'alphaJongCallSimulationFailureRate'),
-	    alphaJongCallMissingXiangtingPerRound: metricValue(stats, 'alphaJongCallMissingXiangtingPerRound'),
-	    alphaJongKanReviewPerRound: metricValue(stats, 'alphaJongKanReviewPerRound'),
-	    alphaJongKanAcceptPerRound: metricValue(stats, 'alphaJongKanAcceptPerRound'),
-	    alphaJongKanSimulationFailurePerRound: metricValue(stats, 'alphaJongKanSimulationFailurePerRound'),
-	    alphaJongKanSimulationFailureRate: metricValue(stats, 'alphaJongKanSimulationFailureRate'),
-	    averageCallOpenRouteScore: metricValue(stats, 'averageCallOpenRouteScore'),
+      defensiveSafetyGateBackstepPerRound: metricValue(stats, 'defensiveSafetyGateBackstepPerRound'),
+      defensiveSafetyGateProtectedPushPerRound: metricValue(stats, 'defensiveSafetyGateProtectedPushPerRound'),
+      defensiveSafetyGateWouldAvoidDealInPerRound: metricValue(stats, 'defensiveSafetyGateWouldAvoidDealInPerRound'),
+      defensiveCallGateReviewPerRound: metricValue(stats, 'defensiveCallGateReviewPerRound'),
+      defensiveCallGateBlockPerRound: metricValue(stats, 'defensiveCallGateBlockPerRound'),
+      defensiveCallGateFirstOpenBlockPerRound: metricValue(stats, 'defensiveCallGateFirstOpenBlockPerRound'),
+      defensiveCallGateClosedRouteBlockPerRound: metricValue(stats, 'defensiveCallGateClosedRouteBlockPerRound'),
+      defensiveCallGatePressureBlockPerRound: metricValue(stats, 'defensiveCallGatePressureBlockPerRound'),
+      defensiveCallGateAllowedDirectTenpaiPerRound: metricValue(stats, 'defensiveCallGateAllowedDirectTenpaiPerRound'),
+        alphaJongRiichiReviewPerRound: metricValue(stats, 'alphaJongRiichiReviewPerRound'),
+      alphaJongRiichiLegalPerRound: metricValue(stats, 'alphaJongRiichiLegalPerRound'),
+      alphaJongRiichiSelectedLegalPerRound: metricValue(stats, 'alphaJongRiichiSelectedLegalPerRound'),
+      alphaJongRiichiSelectedLegalRate: metricValue(stats, 'alphaJongRiichiSelectedLegalRate'),
+      alphaJongCallSimulationFailurePerRound: metricValue(stats, 'alphaJongCallSimulationFailurePerRound'),
+      alphaJongCallSimulationFailureRate: metricValue(stats, 'alphaJongCallSimulationFailureRate'),
+      alphaJongCallMissingXiangtingPerRound: metricValue(stats, 'alphaJongCallMissingXiangtingPerRound'),
+      alphaJongKanReviewPerRound: metricValue(stats, 'alphaJongKanReviewPerRound'),
+      alphaJongKanAcceptPerRound: metricValue(stats, 'alphaJongKanAcceptPerRound'),
+      alphaJongKanSimulationFailurePerRound: metricValue(stats, 'alphaJongKanSimulationFailurePerRound'),
+      alphaJongKanSimulationFailureRate: metricValue(stats, 'alphaJongKanSimulationFailureRate'),
+      averageCallOpenRouteScore: metricValue(stats, 'averageCallOpenRouteScore'),
     averagePassClosedRouteScore: metricValue(stats, 'averagePassClosedRouteScore'),
     closedRouteMarginAverage: metricValue(stats, 'closedRouteMarginAverage'),
     drawTenpaiRate: metricValue(stats, 'drawTenpaiRate'),
@@ -2445,40 +2549,47 @@ function buildVariantRecordPanel(stats = {}) {
       closedRouteScoreSamples: metricValue(stats, 'closedRouteScoreSamples'),
       defensiveShadowReviewedDiscards: metricValue(stats, 'defensiveShadowReviewedDiscards'),
       defensiveShadowDiffDiscards: metricValue(stats, 'defensiveShadowDiffDiscards'),
-	      defensiveShadowSaferAltDiscards: metricValue(stats, 'defensiveShadowSaferAltDiscards'),
-	      defensiveShadowBackstepDiscards: metricValue(stats, 'defensiveShadowBackstepDiscards'),
-	      defensiveShadowActionableDiscards: metricValue(stats, 'defensiveShadowActionableDiscards'),
-	      defensiveShadowWouldAvoidDealIns: metricValue(stats, 'defensiveShadowWouldAvoidDealIns'),
+        defensiveShadowSaferAltDiscards: metricValue(stats, 'defensiveShadowSaferAltDiscards'),
+        defensiveShadowBackstepDiscards: metricValue(stats, 'defensiveShadowBackstepDiscards'),
+        defensiveShadowActionableDiscards: metricValue(stats, 'defensiveShadowActionableDiscards'),
+        defensiveShadowWouldAvoidDealIns: metricValue(stats, 'defensiveShadowWouldAvoidDealIns'),
       defensiveSafetyGateReviewedDiscards: metricValue(stats, 'defensiveSafetyGateReviewedDiscards'),
       defensiveSafetyGateOverrideDiscards: metricValue(stats, 'defensiveSafetyGateOverrideDiscards'),
       defensiveSafetyGateSameShantenDiscards: metricValue(stats, 'defensiveSafetyGateSameShantenDiscards'),
-      defensiveSafetyGateBackstepDiscards: metricValue(stats, 'defensiveSafetyGateBackstepDiscards'),
-      defensiveSafetyGateProtectedPushDiscards: metricValue(stats, 'defensiveSafetyGateProtectedPushDiscards'),
-      defensiveSafetyGateWouldAvoidDealIns: metricValue(stats, 'defensiveSafetyGateWouldAvoidDealIns'),
-	      alphaJongRiichiReviews: metricValue(stats, 'alphaJongRiichiReviews'),
-	      alphaJongRiichiLegalDiscards: metricValue(stats, 'alphaJongRiichiLegalDiscards'),
-	      alphaJongRiichiSelectedLegalDiscards: metricValue(stats, 'alphaJongRiichiSelectedLegalDiscards'),
-	      alphaJongCallMetricSamples: metricValue(stats, 'alphaJongCallMetricSamples'),
-	      alphaJongCallSimulationFailures: metricValue(stats, 'alphaJongCallSimulationFailures'),
-	      alphaJongCallMissingXiangting: metricValue(stats, 'alphaJongCallMissingXiangting'),
-	      alphaJongKanReviews: metricValue(stats, 'alphaJongKanReviews'),
-	      alphaJongKanAccepts: metricValue(stats, 'alphaJongKanAccepts'),
-	      alphaJongKanSimulationFailures: metricValue(stats, 'alphaJongKanSimulationFailures'),
-	      roundsSeen: metricValue(stats, 'roundsSeen')
-	    },
+        defensiveSafetyGateBackstepDiscards: metricValue(stats, 'defensiveSafetyGateBackstepDiscards'),
+        defensiveSafetyGateProtectedPushDiscards: metricValue(stats, 'defensiveSafetyGateProtectedPushDiscards'),
+        defensiveSafetyGateWouldAvoidDealIns: metricValue(stats, 'defensiveSafetyGateWouldAvoidDealIns'),
+        defensiveCallGateReviewedCalls: metricValue(stats, 'defensiveCallGateReviewedCalls'),
+        defensiveCallGateBlockedCalls: metricValue(stats, 'defensiveCallGateBlockedCalls'),
+        defensiveCallGateFirstOpenBlockedCalls: metricValue(stats, 'defensiveCallGateFirstOpenBlockedCalls'),
+        defensiveCallGateClosedRouteBlockedCalls: metricValue(stats, 'defensiveCallGateClosedRouteBlockedCalls'),
+        defensiveCallGatePressureBlockedCalls: metricValue(stats, 'defensiveCallGatePressureBlockedCalls'),
+        defensiveCallGateAllowedDirectTenpaiCalls: metricValue(stats, 'defensiveCallGateAllowedDirectTenpaiCalls'),
+          alphaJongRiichiReviews: metricValue(stats, 'alphaJongRiichiReviews'),
+        alphaJongRiichiLegalDiscards: metricValue(stats, 'alphaJongRiichiLegalDiscards'),
+        alphaJongRiichiSelectedLegalDiscards: metricValue(stats, 'alphaJongRiichiSelectedLegalDiscards'),
+        alphaJongCallMetricSamples: metricValue(stats, 'alphaJongCallMetricSamples'),
+        alphaJongCallSimulationFailures: metricValue(stats, 'alphaJongCallSimulationFailures'),
+        alphaJongCallMissingXiangting: metricValue(stats, 'alphaJongCallMissingXiangting'),
+        alphaJongKanReviews: metricValue(stats, 'alphaJongKanReviews'),
+        alphaJongKanAccepts: metricValue(stats, 'alphaJongKanAccepts'),
+        alphaJongKanSimulationFailures: metricValue(stats, 'alphaJongKanSimulationFailures'),
+        roundsSeen: metricValue(stats, 'roundsSeen')
+      },
     callReasonCounts: stats.callReasonCounts || {},
     riichiRejectReasonCounts: stats.riichiRejectReasonCounts || {},
     balancedRouteStateCounts: stats.balancedRouteStateCounts || {},
     balancedRouteStateReasonCounts: stats.balancedRouteStateReasonCounts || {},
     defensiveStateCounts: stats.defensiveStateCounts || {},
     threatProfileReasonCounts: stats.threatProfileReasonCounts || {},
-	    dealInAttributionCounts: stats.dealInAttributionCounts || {},
-	    defensiveShadowReasonCounts: stats.defensiveShadowReasonCounts || {},
-	    defensiveShadowActionableReasonCounts: stats.defensiveShadowActionableReasonCounts || {},
-    defensiveSafetyGateReasonCounts: stats.defensiveSafetyGateReasonCounts || {},
-	    alphaJongRiichiReasonCounts: stats.alphaJongRiichiReasonCounts || {},
-	    alphaJongKanReasonCounts: stats.alphaJongKanReasonCounts || {},
-	    uncertainty: stats.uncertainty || null,
+      dealInAttributionCounts: stats.dealInAttributionCounts || {},
+        defensiveShadowReasonCounts: stats.defensiveShadowReasonCounts || {},
+        defensiveShadowActionableReasonCounts: stats.defensiveShadowActionableReasonCounts || {},
+      defensiveSafetyGateReasonCounts: stats.defensiveSafetyGateReasonCounts || {},
+      defensiveCallGateReasonCounts: stats.defensiveCallGateReasonCounts || {},
+        alphaJongRiichiReasonCounts: stats.alphaJongRiichiReasonCounts || {},
+      alphaJongKanReasonCounts: stats.alphaJongKanReasonCounts || {},
+      uncertainty: stats.uncertainty || null,
     availability: {
       drawStats: drawRate != null,
       nonRiichiWinStats: nonRiichiWinRate != null,
@@ -2544,13 +2655,19 @@ function formatVariantRecordPanel(variant, stats = {}) {
       + ` defShadowBackstep/R=${formatMaybeNumber(panel.defensiveShadowBackstepPerRound, 2)}`
       + ` defShadowActionable/R=${formatMaybeNumber(panel.defensiveShadowActionablePerRound, 2)}`
       + ` defShadowWouldAvoidDealIn=${formatMaybeNumber(panel.defensiveShadowWouldAvoidDealInPerRound, 2)}`,
-    `[arena]     defSafetyGateReview/R=${formatMaybeNumber(panel.defensiveSafetyGateReviewPerRound, 2)}`
-      + ` defSafetyGateOverride/R=${formatMaybeNumber(panel.defensiveSafetyGateOverridePerRound, 2)}`
-      + ` defSafetyGateSameShanten/R=${formatMaybeNumber(panel.defensiveSafetyGateSameShantenPerRound, 2)}`
-      + ` defSafetyGateBackstep/R=${formatMaybeNumber(panel.defensiveSafetyGateBackstepPerRound, 2)}`
-      + ` defSafetyGateProtectedPush/R=${formatMaybeNumber(panel.defensiveSafetyGateProtectedPushPerRound, 2)}`
-      + ` defSafetyGateWouldAvoidDealIn=${formatMaybeNumber(panel.defensiveSafetyGateWouldAvoidDealInPerRound, 2)}`
-  ];
+      `[arena]     defSafetyGateReview/R=${formatMaybeNumber(panel.defensiveSafetyGateReviewPerRound, 2)}`
+        + ` defSafetyGateOverride/R=${formatMaybeNumber(panel.defensiveSafetyGateOverridePerRound, 2)}`
+        + ` defSafetyGateSameShanten/R=${formatMaybeNumber(panel.defensiveSafetyGateSameShantenPerRound, 2)}`
+        + ` defSafetyGateBackstep/R=${formatMaybeNumber(panel.defensiveSafetyGateBackstepPerRound, 2)}`
+        + ` defSafetyGateProtectedPush/R=${formatMaybeNumber(panel.defensiveSafetyGateProtectedPushPerRound, 2)}`
+        + ` defSafetyGateWouldAvoidDealIn=${formatMaybeNumber(panel.defensiveSafetyGateWouldAvoidDealInPerRound, 2)}`,
+      `[arena]     defCallGateReview/R=${formatMaybeNumber(panel.defensiveCallGateReviewPerRound, 2)}`
+        + ` defCallGateBlock/R=${formatMaybeNumber(panel.defensiveCallGateBlockPerRound, 2)}`
+        + ` defCallGateFirstOpenBlock/R=${formatMaybeNumber(panel.defensiveCallGateFirstOpenBlockPerRound, 2)}`
+        + ` defCallGateClosedRouteBlock/R=${formatMaybeNumber(panel.defensiveCallGateClosedRouteBlockPerRound, 2)}`
+        + ` defCallGatePressureBlock/R=${formatMaybeNumber(panel.defensiveCallGatePressureBlockPerRound, 2)}`
+        + ` defCallGateAllowedDirectTenpai/R=${formatMaybeNumber(panel.defensiveCallGateAllowedDirectTenpaiPerRound, 2)}`
+    ];
   const balancedStates = formatCompactReasonCounts(panel.balancedRouteStateCounts);
   if (balancedStates) {
     lines.push(`[arena]     balancedState=${balancedStates}`);
@@ -2575,45 +2692,49 @@ function formatVariantRecordPanel(variant, stats = {}) {
   if (defensiveShadowReasons) {
     lines.push(`[arena]     defShadowReason=${defensiveShadowReasons}`);
   }
-	  const defensiveShadowActionableReasons = formatCompactReasonCounts(panel.defensiveShadowActionableReasonCounts);
-	  if (defensiveShadowActionableReasons) {
-	    lines.push(`[arena]     defShadowActionableReason=${defensiveShadowActionableReasons}`);
-	  }
-  const defensiveSafetyGateReasons = formatCompactReasonCounts(panel.defensiveSafetyGateReasonCounts);
-  if (defensiveSafetyGateReasons) {
-    lines.push(`[arena]     defSafetyGateReason=${defensiveSafetyGateReasons}`);
+    const defensiveShadowActionableReasons = formatCompactReasonCounts(panel.defensiveShadowActionableReasonCounts);
+    if (defensiveShadowActionableReasons) {
+      lines.push(`[arena]     defShadowActionableReason=${defensiveShadowActionableReasons}`);
+    }
+    const defensiveSafetyGateReasons = formatCompactReasonCounts(panel.defensiveSafetyGateReasonCounts);
+    if (defensiveSafetyGateReasons) {
+      lines.push(`[arena]     defSafetyGateReason=${defensiveSafetyGateReasons}`);
+    }
+    const defensiveCallGateReasons = formatCompactReasonCounts(panel.defensiveCallGateReasonCounts);
+    if (defensiveCallGateReasons) {
+      lines.push(`[arena]     defCallGateReason=${defensiveCallGateReasons}`);
+    }
+    const hasAlphaJongDiagnostics = Number(panel.alphaJongRiichiReviewPerRound || 0) > 0
+      || Number(panel.alphaJongCallSimulationFailurePerRound || 0) > 0
+      || Number(panel.alphaJongKanReviewPerRound || 0) > 0
+      || Object.keys(panel.alphaJongRiichiReasonCounts || {}).some((key) => Number(panel.alphaJongRiichiReasonCounts[key] || 0) > 0);
+    if (hasAlphaJongDiagnostics) {
+      lines.push(
+        `[arena]     alphaRiichiReview/R=${formatMaybeNumber(panel.alphaJongRiichiReviewPerRound, 2)}`
+        + ` alphaRiichiLegal/R=${formatMaybeNumber(panel.alphaJongRiichiLegalPerRound, 2)}`
+        + ` alphaRiichiSelectedLegal/R=${formatMaybeNumber(panel.alphaJongRiichiSelectedLegalPerRound, 2)}`
+        + ` alphaRiichiSelectedLegal=${formatMaybePercent(panel.alphaJongRiichiSelectedLegalRate)}`
+        + ` alphaCallSimFail/R=${formatMaybeNumber(panel.alphaJongCallSimulationFailurePerRound, 2)}`
+        + ` alphaCallSimFail=${formatMaybePercent(panel.alphaJongCallSimulationFailureRate)}`
+        + ` alphaCallMissingXiangting/R=${formatMaybeNumber(panel.alphaJongCallMissingXiangtingPerRound, 2)}`
+      );
+      lines.push(
+        `[arena]     alphaKanReview/R=${formatMaybeNumber(panel.alphaJongKanReviewPerRound, 2)}`
+        + ` alphaKanAccept/R=${formatMaybeNumber(panel.alphaJongKanAcceptPerRound, 2)}`
+        + ` alphaKanSimFail/R=${formatMaybeNumber(panel.alphaJongKanSimulationFailurePerRound, 2)}`
+        + ` alphaKanSimFail=${formatMaybePercent(panel.alphaJongKanSimulationFailureRate)}`
+      );
+    }
+    const alphaJongRiichiReasons = formatCompactReasonCounts(panel.alphaJongRiichiReasonCounts);
+    if (alphaJongRiichiReasons) {
+      lines.push(`[arena]     alphaRiichiReason=${alphaJongRiichiReasons}`);
+    }
+    const alphaJongKanReasons = formatCompactReasonCounts(panel.alphaJongKanReasonCounts);
+    if (alphaJongKanReasons) {
+      lines.push(`[arena]     alphaKanReason=${alphaJongKanReasons}`);
+    }
+    return lines;
   }
-	  const hasAlphaJongDiagnostics = Number(panel.alphaJongRiichiReviewPerRound || 0) > 0
-	    || Number(panel.alphaJongCallSimulationFailurePerRound || 0) > 0
-	    || Number(panel.alphaJongKanReviewPerRound || 0) > 0
-	    || Object.keys(panel.alphaJongRiichiReasonCounts || {}).some((key) => Number(panel.alphaJongRiichiReasonCounts[key] || 0) > 0);
-	  if (hasAlphaJongDiagnostics) {
-	    lines.push(
-	      `[arena]     alphaRiichiReview/R=${formatMaybeNumber(panel.alphaJongRiichiReviewPerRound, 2)}`
-	      + ` alphaRiichiLegal/R=${formatMaybeNumber(panel.alphaJongRiichiLegalPerRound, 2)}`
-	      + ` alphaRiichiSelectedLegal/R=${formatMaybeNumber(panel.alphaJongRiichiSelectedLegalPerRound, 2)}`
-	      + ` alphaRiichiSelectedLegal=${formatMaybePercent(panel.alphaJongRiichiSelectedLegalRate)}`
-	      + ` alphaCallSimFail/R=${formatMaybeNumber(panel.alphaJongCallSimulationFailurePerRound, 2)}`
-	      + ` alphaCallSimFail=${formatMaybePercent(panel.alphaJongCallSimulationFailureRate)}`
-	      + ` alphaCallMissingXiangting/R=${formatMaybeNumber(panel.alphaJongCallMissingXiangtingPerRound, 2)}`
-	    );
-	    lines.push(
-	      `[arena]     alphaKanReview/R=${formatMaybeNumber(panel.alphaJongKanReviewPerRound, 2)}`
-	      + ` alphaKanAccept/R=${formatMaybeNumber(panel.alphaJongKanAcceptPerRound, 2)}`
-	      + ` alphaKanSimFail/R=${formatMaybeNumber(panel.alphaJongKanSimulationFailurePerRound, 2)}`
-	      + ` alphaKanSimFail=${formatMaybePercent(panel.alphaJongKanSimulationFailureRate)}`
-	    );
-	  }
-	  const alphaJongRiichiReasons = formatCompactReasonCounts(panel.alphaJongRiichiReasonCounts);
-	  if (alphaJongRiichiReasons) {
-	    lines.push(`[arena]     alphaRiichiReason=${alphaJongRiichiReasons}`);
-	  }
-	  const alphaJongKanReasons = formatCompactReasonCounts(panel.alphaJongKanReasonCounts);
-	  if (alphaJongKanReasons) {
-	    lines.push(`[arena]     alphaKanReason=${alphaJongKanReasons}`);
-	  }
-	  return lines;
-	}
 
 function formatArenaSummary(label, summary, variants) {
   const totals = summary && summary.totals ? summary.totals : {};
