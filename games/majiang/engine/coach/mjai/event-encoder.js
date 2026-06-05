@@ -43,6 +43,8 @@ class MjaiEventEncoder {
         return this.encodeDrawEvent(event);
       case 'tile:discard':
         return this.encodeDiscardEvent(event);
+      case 'reaction:pass':
+        return this.encodeReactionPassEvent(event);
       case 'meld:call':
         return this.encodeCallEvent(event);
       case 'meld:kan':
@@ -110,6 +112,12 @@ class MjaiEventEncoder {
     };
 
     return result;
+  }
+
+  encodeReactionPassEvent(event) {
+    const seatKey = event && event.payload ? event.payload.seat : null;
+    if (seatKey !== this.perspectiveSeatKey) return [];
+    return [{ type: 'none' }];
   }
 
   encodeCallEvent(event) {

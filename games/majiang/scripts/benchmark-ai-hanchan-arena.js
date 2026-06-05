@@ -1,0 +1,2758 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const coreAdapter = require('../engine/base/majiang-core-adapter');
+const { SingleRoundRuntime, ROUND_PHASES } = require('../engine/runtime/single-round-runtime');
+const baseAiApi = require('../engine/ai/base-ai');
+const hardVariantApi = require('../engine/ai/difficulty/hard-variants');
+const hardDefensiveProfileApi = require('../engine/ai/support/hard-defensive-profile');
+const alphaJongAdapterApi = require('./lib/alphajong-adapter');
+const createMatchStateHelpers = require('../shared/match/match-state');
+const createRoundTransitionHelpers = require('../shared/match/round-transition');
+const { getActionPriority } = require('../shared/runtime/reaction/reaction-priority');
+
+const SEATS = Object.freeze(['bottom', 'right', 'top', 'left']);
+const DEFAULT_SEED = 20260603;
+const DEFAULT_MATCHES = 1000;
+const SMOKE_MATCHES = 2;
+const DEFAULT_MAX_STEPS_PER_ROUND = 700;
+const DEFAULT_MAX_ROUNDS_PER_MATCH = 64;
+const DEFAULT_CHECKPOINT_INTERVAL = 25;
+const DEFAULT_STDOUT_FORMAT = 'json';
+const EXPERIMENTAL_OVERLAYS = hardVariantApi.EXPERIMENTAL_OVERLAYS;
+
+const matchStateHelpers = createMatchStateHelpers();
+const roundTransitionHelpers = createRoundTransitionHelpers();
+
+function clone(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function loadBaseConfig() {
+  return JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'game-config.json'), 'utf8'));
+}
+
+function createSeededRandom(seed) {
+  let state = seed >>> 0;
+  return function nextRandom() {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function buildTileWall(seed) {
+  const tiles = [];
+  ['m', 'p', 's'].forEach((suit) => {
+    for (let rank = 1; rank <= 9; rank += 1) {
+      for (let copy = 0; copy < 4; copy += 1) {
+        tiles.push(`${suit}${rank}`);
+      }
+    }
+  });
+  for (let rank = 1; rank <= 7; rank += 1) {
+    for (let copy = 0; copy < 4; copy += 1) {
+      tiles.push(`z${rank}`);
+    }
+  }
+
+  const random = createSeededRandom(seed);
+  for (let index = tiles.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    const current = tiles[index];
+    tiles[index] = tiles[swapIndex];
+    tiles[swapIndex] = current;
+  }
+  return tiles;
+}
+
+function createPureHardPolicy() {
+  return hardVariantApi.createPureHardPolicy();
+}
+
+function createTunedHardPolicy() {
+  return hardVariantApi.createTunedHardPolicy();
+}
+
+function normalizeExperimentalOverlays(value = []) {
+  return hardVariantApi.normalizeExperimentalOverlays(value);
+}
+
+function applyExperimentalOverlay(policy, overlayName) {
+  return hardVariantApi.applyExperimentalOverlay(policy, overlayName);
+}
+
+function createExperimentalHardPolicy(options = {}) {
+  return hardVariantApi.createExperimentalHardPolicy(options);
+}
+
+function createStandardHardPolicy() {
+  return hardVariantApi.createStandardHardPolicy();
+}
+
+function createValueClassicHardPolicy() {
+  return hardVariantApi.createValueClassicHardPolicy();
+}
+
+function createPureDevHardPolicy() {
+  return hardVariantApi.createPureDevHardPolicy();
+}
+
+function createClosedDefenseHardPolicy() {
+  return hardVariantApi.createClosedDefenseHardPolicy();
+}
+
+function createStandardDevHardPolicy() {
+  return hardVariantApi.createStandardDevHardPolicy();
+}
+
+function createVariantPresets() {
+  const presets = {
+    alphajong: {
+      id: 'alphajong',
+      label: 'AlphaJong（外部弃牌）',
+      difficulty: 'normal',
+      externalAdapter: 'alphajong-discard-only',
+      description: 'External GPL-3.0 AlphaJong adapter. Benchmark-only alias for alphajong-discard-only; calls are passed.'
+    },
+    'alphajong-discard-only': {
+      id: 'alphajong-discard-only',
+      label: 'AlphaJong（弃牌-only）',
+      difficulty: 'normal',
+      externalAdapter: 'alphajong-discard-only',
+      description: 'External GPL-3.0 AlphaJong adapter. Uses AlphaJong discard scoring only; calls are passed.'
+    },
+    'alphajong-core': {
+      id: 'alphajong-core',
+      label: 'AlphaJong（core）',
+      difficulty: 'normal',
+      externalAdapter: 'alphajong-core',
+      description: 'External GPL-3.0 AlphaJong core adapter. Uses discard, riichi, chi/peng, and kan decision core; browser automation and kita are not loaded.'
+    },
+    easy: {
+      id: 'easy',
+      label: '简单 AI',
+      difficulty: 'easy',
+      description: 'Formal easy scripted AI.'
+    },
+    normal: {
+      id: 'normal',
+      label: '普通 AI',
+      difficulty: 'normal',
+      description: 'Formal normal scripted AI.'
+    }
+  };
+  const hardPresets = hardVariantApi.createHardVariantPresets();
+  Object.keys(hardPresets).forEach((id) => {
+    const hardPreset = hardPresets[id];
+    presets[id] = {
+      id: hardPreset.id,
+      label: hardPreset.label,
+      difficulty: hardPreset.difficulty,
+      description: hardPreset.description,
+      group: hardPreset.group || null,
+      aliasOf: hardPreset.aliasOf || null,
+      deprecated: hardPreset.deprecated === true,
+      createPolicy(options = {}) {
+        return hardVariantApi.createHardVariantPolicy(id, options);
+      }
+    };
+  });
+  return presets;
+}
+
+function resolveVariants(ids = null, options = {}) {
+  const presets = createVariantPresets();
+  const requested = Array.isArray(ids) && ids.length ? ids : ['easy', 'normal', 'hard-pure-v1', 'hard-tuned-v2'];
+  return requested.map((id) => {
+    const preset = presets[id];
+    if (!preset) throw new Error(`Unknown arena AI variant: ${id}`);
+    const variant = {
+      id: preset.id,
+      label: preset.label,
+      difficulty: preset.difficulty,
+      description: preset.description,
+      group: preset.group || null,
+      aliasOf: preset.aliasOf || null,
+      deprecated: preset.deprecated === true,
+      externalAdapter: preset.externalAdapter || null
+    };
+    if (typeof preset.createPolicy === 'function') {
+      variant.policy = preset.createPolicy({
+        experimentalOverlays: id === 'hard-experimental'
+          ? normalizeExperimentalOverlays(options.experimentalOverlays || [])
+          : []
+      });
+    }
+    return variant;
+  });
+}
+
+function summarizeVariantConfig(variant) {
+  const policy = variant && variant.policy ? variant.policy : null;
+  return {
+    id: variant.id,
+    label: variant.label,
+    difficulty: variant.difficulty,
+    description: variant.description,
+    group: variant.group || null,
+    aliasOf: variant.aliasOf || null,
+    deprecated: variant.deprecated === true,
+    externalAdapter: variant.externalAdapter || null,
+    policyId: policy && policy.id ? policy.id : variant.difficulty,
+    personality: policy && policy.personality ? policy.personality : null,
+    hardPolicyPatch: policy && variant.difficulty === 'hard'
+      ? {
+          discard: policy.discard ? {
+            enableNoPressureShapeReview: Boolean(policy.discard.enableNoPressureShapeReview),
+            shapeStrongOverrideEnabled: Boolean(policy.discard.shapeStrongOverrideEnabled),
+            enableNoPressureCleanupGuard: Boolean(policy.discard.enableNoPressureCleanupGuard),
+            enableNoPressureSameXiangtingRerank: Boolean(policy.discard.enableNoPressureSameXiangtingRerank)
+          } : null,
+          defense: policy.defense ? {
+            enableLowDangerTiebreak: Boolean(policy.defense.enableLowDangerTiebreak),
+            enableEqualSafeBackstep: Boolean(policy.defense.enableEqualSafeBackstep),
+            enableThreatScoreReview: Boolean(policy.defense.enableThreatScoreReview),
+            enableRankAwarePushFold: Boolean(policy.defense.enableRankAwarePushFold),
+            enableDealInAttribution: Boolean(policy.defense.enableDealInAttribution),
+            enableSafetyGateRerank: Boolean(policy.defense.enableSafetyGateRerank),
+            enableDefensiveCallGate: Boolean(policy.defense.enableDefensiveCallGate),
+            highThreatScore: policy.defense.highThreatScore,
+            safetyGateMinThreatScore: policy.defense.safetyGateMinThreatScore,
+            defensiveCallGateNeutralMargin: policy.defense.defensiveCallGateNeutralMargin,
+            safetyGateBackstepMinThreatScore: policy.defense.safetyGateBackstepMinThreatScore,
+            expectedDealInCostWeight: policy.defense.expectedDealInCostWeight
+          } : null,
+          riichi: policy.riichi ? {
+            allowNoPressureThinRiichi: Boolean(policy.riichi.allowNoPressureThinRiichi),
+            minLiveTingpaiCount: policy.riichi.minLiveTingpaiCount,
+            minWaitQualityScore: policy.riichi.minWaitQualityScore,
+            pressureMinHandValue: policy.riichi.pressureMinHandValue
+          } : null,
+          call: policy.call ? {
+            enableHardCallReview: Boolean(policy.call.enableHardCallReview),
+            allowYakuhaiPeng: Boolean(policy.call.allowYakuhaiPeng),
+            allowShantenImprovement: Boolean(policy.call.allowShantenImprovement),
+            allowFlatSpeedUp: Boolean(policy.call.allowFlatSpeedUp)
+          } : null,
+          route: policy.route ? {
+            enableClosedRouteValueRebalance: Boolean(policy.route.enableClosedRouteValueRebalance),
+            enableBalancedRouteState: Boolean(policy.route.enableBalancedRouteState),
+            closedRouteMaxXiangting: policy.route.closedRouteMaxXiangting,
+            closedRouteMinRemainingTiles: policy.route.closedRouteMinRemainingTiles,
+            closedRouteOverrideMinMargin: policy.route.closedRouteOverrideMinMargin,
+            balancedValueOverrideMinMargin: policy.route.balancedValueOverrideMinMargin,
+            balancedNeutralOverrideMinMargin: policy.route.balancedNeutralOverrideMinMargin,
+            weights: policy.route.weights ? clone(policy.route.weights) : null
+          } : null,
+          devVariant: policy.devVariant ? clone(policy.devVariant) : null,
+          candidateVariant: policy.candidateVariant ? clone(policy.candidateVariant) : null,
+          experimentalOverlay: policy.experimentalOverlay ? {
+            enabled: Boolean(policy.experimentalOverlay.enabled),
+            overlays: Array.isArray(policy.experimentalOverlay.overlays) ? policy.experimentalOverlay.overlays.slice() : []
+          } : null
+        }
+      : null
+  };
+}
+
+function uniqueVariantsById(variants = []) {
+  const seen = new Set();
+  return (variants || []).filter((variant) => {
+    const id = variant && variant.id ? variant.id : null;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseArgs(argv) {
+  const args = {
+    mode: 'mixed',
+    matches: DEFAULT_MATCHES,
+    seed: DEFAULT_SEED,
+    variants: null,
+    out: null,
+    smoke: false,
+    progress: false,
+    includeRows: false,
+    stdout: DEFAULT_STDOUT_FORMAT,
+    checkpointInterval: DEFAULT_CHECKPOINT_INTERVAL,
+    maxStepsPerRound: DEFAULT_MAX_STEPS_PER_ROUND,
+    maxRoundsPerMatch: DEFAULT_MAX_ROUNDS_PER_MATCH,
+    experimentalOverlays: []
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === '--help' || token === '-h') {
+      args.help = true;
+      continue;
+    }
+    if (token === '--mode') {
+      args.mode = String(argv[index + 1] || '').trim() || args.mode;
+      index += 1;
+      continue;
+    }
+    if (token === '--matches') {
+      args.matches = parsePositiveInteger(argv[index + 1], args.matches);
+      index += 1;
+      continue;
+    }
+    if (token === '--seed') {
+      args.seed = parsePositiveInteger(argv[index + 1], args.seed);
+      index += 1;
+      continue;
+    }
+    if (token === '--variants') {
+      args.variants = String(argv[index + 1] || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      index += 1;
+      continue;
+    }
+    if (token === '--experimental-overlays') {
+      args.experimentalOverlays = normalizeExperimentalOverlays(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (token === '--out') {
+      args.out = String(argv[index + 1] || '').trim() || null;
+      index += 1;
+      continue;
+    }
+    if (token === '--stdout') {
+      args.stdout = String(argv[index + 1] || '').trim() || args.stdout;
+      index += 1;
+      continue;
+    }
+    if (token === '--max-steps-per-round') {
+      args.maxStepsPerRound = parsePositiveInteger(argv[index + 1], args.maxStepsPerRound);
+      index += 1;
+      continue;
+    }
+    if (token === '--max-rounds-per-match') {
+      args.maxRoundsPerMatch = parsePositiveInteger(argv[index + 1], args.maxRoundsPerMatch);
+      index += 1;
+      continue;
+    }
+    if (token === '--checkpoint-interval') {
+      const parsed = Number(argv[index + 1]);
+      args.checkpointInterval = Number.isFinite(parsed) && parsed >= 0
+        ? Math.floor(parsed)
+        : args.checkpointInterval;
+      index += 1;
+      continue;
+    }
+    if (token === '--include-rows') {
+      args.includeRows = true;
+      continue;
+    }
+    if (token === '--progress') {
+      args.progress = true;
+      continue;
+    }
+    if (token === '--summary') {
+      args.stdout = 'summary';
+      continue;
+    }
+    if (token === '--smoke') {
+      args.smoke = true;
+      args.matches = SMOKE_MATCHES;
+      args.mode = 'mixed';
+    }
+  }
+
+  if (!['mirror', 'mixed', 'both'].includes(args.mode)) {
+    throw new Error(`Unsupported arena mode: ${args.mode}`);
+  }
+  if (!['json', 'summary', 'both'].includes(args.stdout)) {
+    throw new Error(`Unsupported stdout format: ${args.stdout}`);
+  }
+  if (args.variants && args.variants.length < 2 && args.mode !== 'mirror') {
+    throw new Error('Mixed arena mode requires at least two variants.');
+  }
+  return args;
+}
+
+function printHelp() {
+  console.log('Usage: node games/majiang/scripts/benchmark-ai-hanchan-arena.js [options]');
+  console.log('');
+  console.log('Options:');
+  console.log('  --mode <mixed|mirror|both>       Default: mixed.');
+  console.log('  --matches <n>                    Mixed: total hanchan. Mirror: hanchan per variant. Default: 1000.');
+  console.log('  --variants <a,b,c,d>             Default: easy,normal,hard-pure-v1,hard-tuned-v2. Legacy aliases still work.');
+  console.log('  --experimental-overlays <a,b>    Overlays for hard-experimental only.');
+  console.log('  --seed <n>                       Deterministic base seed. Default: 20260603.');
+  console.log('  --out <path>                     Write JSON report.');
+  console.log('  --stdout <json|summary|both>     What to print to stdout. Default: json.');
+  console.log('  --summary                        Shortcut for --stdout summary.');
+  console.log('  --checkpoint-interval <n>        Update rolling summary every n hanchan. 0 disables. Default: 25.');
+  console.log('  --include-rows                   Include compact match rows in the JSON report.');
+  console.log('  --progress                       Print progress to stderr.');
+  console.log('  --smoke                          Fast mixed-mode structure smoke.');
+}
+
+function createCountersBySeat() {
+  return SEATS.reduce((result, seatKey) => {
+    result[seatKey] = 0;
+    return result;
+  }, {});
+}
+
+function addSeatCounters(target, source) {
+  SEATS.forEach((seatKey) => {
+    target[seatKey] = Number(target[seatKey] || 0) + Number(source && source[seatKey] || 0);
+  });
+  return target;
+}
+
+function createReasonCountersBySeat() {
+  return SEATS.reduce((result, seatKey) => {
+    result[seatKey] = {};
+    return result;
+  }, {});
+}
+
+function incrementReasonCounter(container, seatKey, reason) {
+  if (!container || !seatKey || !reason) return;
+  if (!container[seatKey] || typeof container[seatKey] !== 'object') {
+    container[seatKey] = {};
+  }
+  container[seatKey][reason] = Number(container[seatKey][reason] || 0) + 1;
+}
+
+function addReasonCounters(target, source) {
+  Object.entries(source || {}).forEach(([reason, count]) => {
+    target[reason] = Number(target[reason] || 0) + Number(count || 0);
+  });
+  return target;
+}
+
+function addReasonCountersBySeat(target, source) {
+  SEATS.forEach((seatKey) => {
+    if (!target[seatKey] || typeof target[seatKey] !== 'object') target[seatKey] = {};
+    addReasonCounters(target[seatKey], source && source[seatKey]);
+  });
+  return target;
+}
+
+function createRoundCounters() {
+  return {
+    draws: createCountersBySeat(),
+    discards: createCountersBySeat(),
+    riichi: createCountersBySeat(),
+    calls: createCountersBySeat(),
+    kanReviews: createCountersBySeat(),
+    kanActions: createCountersBySeat(),
+    openKanActions: createCountersBySeat(),
+    closedKanActions: createCountersBySeat(),
+    addedKanActions: createCountersBySeat(),
+    chiCalls: createCountersBySeat(),
+    pengCalls: createCountersBySeat(),
+    yakuhaiPengCalls: createCountersBySeat(),
+    shantenImproveCalls: createCountersBySeat(),
+    flatCalls: createCountersBySeat(),
+    closedCalls: createCountersBySeat(),
+    closedRouteValueReviewedCalls: createCountersBySeat(),
+    closedRouteValueOverrideCalls: createCountersBySeat(),
+    closedRouteCallOpenScoreSum: createCountersBySeat(),
+    closedRoutePassScoreSum: createCountersBySeat(),
+    closedRouteMarginSum: createCountersBySeat(),
+    closedRouteScoreSamples: createCountersBySeat(),
+    balancedRouteStateCounts: createReasonCountersBySeat(),
+    balancedRouteStateReasonCounts: createReasonCountersBySeat(),
+    defensiveStateCounts: createReasonCountersBySeat(),
+    threatProfileReasonCounts: createReasonCountersBySeat(),
+    defensiveShadowReviewedDiscards: createCountersBySeat(),
+    defensiveShadowDiffDiscards: createCountersBySeat(),
+    defensiveShadowSaferAltDiscards: createCountersBySeat(),
+    defensiveShadowBackstepDiscards: createCountersBySeat(),
+    defensiveShadowActionableDiscards: createCountersBySeat(),
+    defensiveShadowReasonCounts: createReasonCountersBySeat(),
+    defensiveShadowActionableReasonCounts: createReasonCountersBySeat(),
+    defensiveSafetyGateReviewedDiscards: createCountersBySeat(),
+    defensiveSafetyGateOverrideDiscards: createCountersBySeat(),
+    defensiveSafetyGateSameShantenDiscards: createCountersBySeat(),
+    defensiveSafetyGateBackstepDiscards: createCountersBySeat(),
+    defensiveSafetyGateProtectedPushDiscards: createCountersBySeat(),
+    defensiveSafetyGateReasonCounts: createReasonCountersBySeat(),
+    defensiveCallGateReviewedCalls: createCountersBySeat(),
+    defensiveCallGateBlockedCalls: createCountersBySeat(),
+    defensiveCallGateFirstOpenBlockedCalls: createCountersBySeat(),
+    defensiveCallGateClosedRouteBlockedCalls: createCountersBySeat(),
+    defensiveCallGatePressureBlockedCalls: createCountersBySeat(),
+    defensiveCallGateAllowedDirectTenpaiCalls: createCountersBySeat(),
+    defensiveCallGateReasonCounts: createReasonCountersBySeat(),
+    alphaJongRiichiReviews: createCountersBySeat(),
+    alphaJongRiichiLegalDiscards: createCountersBySeat(),
+    alphaJongRiichiSelectedLegalDiscards: createCountersBySeat(),
+    alphaJongCallMetricSamples: createCountersBySeat(),
+    alphaJongCallSimulationFailures: createCountersBySeat(),
+    alphaJongCallMissingXiangting: createCountersBySeat(),
+    alphaJongKanReviews: createCountersBySeat(),
+    alphaJongKanAccepts: createCountersBySeat(),
+    alphaJongKanSimulationFailures: createCountersBySeat(),
+    kanReasonCounts: createReasonCountersBySeat(),
+    alphaJongRiichiReasonCounts: createReasonCountersBySeat(),
+    alphaJongKanReasonCounts: createReasonCountersBySeat(),
+    riichiOpportunities: createCountersBySeat(),
+    reactions: createCountersBySeat(),
+    callReasonCounts: createReasonCountersBySeat(),
+    riichiRejectReasonCounts: createReasonCountersBySeat(),
+    lastDiscardSnapshots: {},
+    errors: []
+  };
+}
+
+function createMatchCounters() {
+  return {
+    drawRounds: 0,
+    draws: createCountersBySeat(),
+    discards: createCountersBySeat(),
+    riichi: createCountersBySeat(),
+    calls: createCountersBySeat(),
+    kanReviews: createCountersBySeat(),
+    kanActions: createCountersBySeat(),
+    openKanActions: createCountersBySeat(),
+    closedKanActions: createCountersBySeat(),
+    addedKanActions: createCountersBySeat(),
+    chiCalls: createCountersBySeat(),
+    pengCalls: createCountersBySeat(),
+    yakuhaiPengCalls: createCountersBySeat(),
+    shantenImproveCalls: createCountersBySeat(),
+    flatCalls: createCountersBySeat(),
+    closedCalls: createCountersBySeat(),
+    closedRouteValueReviewedCalls: createCountersBySeat(),
+    closedRouteValueOverrideCalls: createCountersBySeat(),
+    closedRouteCallOpenScoreSum: createCountersBySeat(),
+    closedRoutePassScoreSum: createCountersBySeat(),
+    closedRouteMarginSum: createCountersBySeat(),
+    closedRouteScoreSamples: createCountersBySeat(),
+    balancedRouteStateCounts: createReasonCountersBySeat(),
+    balancedRouteStateReasonCounts: createReasonCountersBySeat(),
+    defensiveStateCounts: createReasonCountersBySeat(),
+    threatProfileReasonCounts: createReasonCountersBySeat(),
+    dealInAttributionCounts: createReasonCountersBySeat(),
+    defensiveShadowReviewedDiscards: createCountersBySeat(),
+    defensiveShadowDiffDiscards: createCountersBySeat(),
+    defensiveShadowSaferAltDiscards: createCountersBySeat(),
+    defensiveShadowBackstepDiscards: createCountersBySeat(),
+    defensiveShadowActionableDiscards: createCountersBySeat(),
+    defensiveShadowWouldAvoidDealIns: createCountersBySeat(),
+    defensiveShadowReasonCounts: createReasonCountersBySeat(),
+    defensiveShadowActionableReasonCounts: createReasonCountersBySeat(),
+    defensiveSafetyGateReviewedDiscards: createCountersBySeat(),
+    defensiveSafetyGateOverrideDiscards: createCountersBySeat(),
+    defensiveSafetyGateSameShantenDiscards: createCountersBySeat(),
+    defensiveSafetyGateBackstepDiscards: createCountersBySeat(),
+    defensiveSafetyGateProtectedPushDiscards: createCountersBySeat(),
+    defensiveSafetyGateWouldAvoidDealIns: createCountersBySeat(),
+    defensiveSafetyGateReasonCounts: createReasonCountersBySeat(),
+    defensiveCallGateReviewedCalls: createCountersBySeat(),
+    defensiveCallGateBlockedCalls: createCountersBySeat(),
+    defensiveCallGateFirstOpenBlockedCalls: createCountersBySeat(),
+    defensiveCallGateClosedRouteBlockedCalls: createCountersBySeat(),
+    defensiveCallGatePressureBlockedCalls: createCountersBySeat(),
+    defensiveCallGateAllowedDirectTenpaiCalls: createCountersBySeat(),
+    defensiveCallGateReasonCounts: createReasonCountersBySeat(),
+    alphaJongRiichiReviews: createCountersBySeat(),
+    alphaJongRiichiLegalDiscards: createCountersBySeat(),
+    alphaJongRiichiSelectedLegalDiscards: createCountersBySeat(),
+    alphaJongCallMetricSamples: createCountersBySeat(),
+    alphaJongCallSimulationFailures: createCountersBySeat(),
+    alphaJongCallMissingXiangting: createCountersBySeat(),
+    alphaJongKanReviews: createCountersBySeat(),
+    alphaJongKanAccepts: createCountersBySeat(),
+    alphaJongKanSimulationFailures: createCountersBySeat(),
+    kanReasonCounts: createReasonCountersBySeat(),
+    alphaJongRiichiReasonCounts: createReasonCountersBySeat(),
+    alphaJongKanReasonCounts: createReasonCountersBySeat(),
+    riichiOpportunities: createCountersBySeat(),
+    reactions: createCountersBySeat(),
+    callReasonCounts: createReasonCountersBySeat(),
+    riichiRejectReasonCounts: createReasonCountersBySeat(),
+    wins: createCountersBySeat(),
+    riichiWins: createCountersBySeat(),
+    nonRiichiWins: createCountersBySeat(),
+    tsumoWins: createCountersBySeat(),
+    ronWins: createCountersBySeat(),
+    dealIns: createCountersBySeat(),
+    dealInRounds: createCountersBySeat(),
+    drawTenpai: createCountersBySeat(),
+    drawNoten: createCountersBySeat(),
+    winTurnSum: createCountersBySeat(),
+    winTurnSamples: createCountersBySeat(),
+    winPointSum: createCountersBySeat(),
+    winPointSamples: createCountersBySeat(),
+    dealInPointSum: createCountersBySeat(),
+    dealInPointSamples: createCountersBySeat(),
+    callRounds: createCountersBySeat(),
+    riichiRounds: createCountersBySeat(),
+    errors: []
+  };
+}
+
+function mergeRoundCounters(matchCounters, roundCounters) {
+  [
+    'draws',
+    'discards',
+    'riichi',
+    'calls',
+    'kanReviews',
+    'kanActions',
+    'openKanActions',
+    'closedKanActions',
+    'addedKanActions',
+    'chiCalls',
+    'pengCalls',
+    'yakuhaiPengCalls',
+    'shantenImproveCalls',
+    'flatCalls',
+    'closedCalls',
+    'closedRouteValueReviewedCalls',
+    'closedRouteValueOverrideCalls',
+    'closedRouteCallOpenScoreSum',
+    'closedRoutePassScoreSum',
+    'closedRouteMarginSum',
+    'closedRouteScoreSamples',
+    'defensiveShadowReviewedDiscards',
+    'defensiveShadowDiffDiscards',
+    'defensiveShadowSaferAltDiscards',
+    'defensiveShadowBackstepDiscards',
+    'defensiveShadowActionableDiscards',
+    'defensiveSafetyGateReviewedDiscards',
+    'defensiveSafetyGateOverrideDiscards',
+    'defensiveSafetyGateSameShantenDiscards',
+    'defensiveSafetyGateBackstepDiscards',
+    'defensiveSafetyGateProtectedPushDiscards',
+    'defensiveCallGateReviewedCalls',
+    'defensiveCallGateBlockedCalls',
+    'defensiveCallGateFirstOpenBlockedCalls',
+    'defensiveCallGateClosedRouteBlockedCalls',
+    'defensiveCallGatePressureBlockedCalls',
+    'defensiveCallGateAllowedDirectTenpaiCalls',
+    'alphaJongRiichiReviews',
+    'alphaJongRiichiLegalDiscards',
+    'alphaJongRiichiSelectedLegalDiscards',
+    'alphaJongCallMetricSamples',
+    'alphaJongCallSimulationFailures',
+    'alphaJongCallMissingXiangting',
+    'alphaJongKanReviews',
+    'alphaJongKanAccepts',
+    'alphaJongKanSimulationFailures',
+    'riichiOpportunities',
+    'reactions'
+  ].forEach((key) => {
+    addSeatCounters(matchCounters[key], roundCounters[key]);
+  });
+  addReasonCountersBySeat(matchCounters.callReasonCounts, roundCounters.callReasonCounts);
+  addReasonCountersBySeat(matchCounters.riichiRejectReasonCounts, roundCounters.riichiRejectReasonCounts);
+  addReasonCountersBySeat(matchCounters.balancedRouteStateCounts, roundCounters.balancedRouteStateCounts);
+  addReasonCountersBySeat(matchCounters.balancedRouteStateReasonCounts, roundCounters.balancedRouteStateReasonCounts);
+  addReasonCountersBySeat(matchCounters.defensiveStateCounts, roundCounters.defensiveStateCounts);
+  addReasonCountersBySeat(matchCounters.threatProfileReasonCounts, roundCounters.threatProfileReasonCounts);
+  addReasonCountersBySeat(matchCounters.defensiveShadowReasonCounts, roundCounters.defensiveShadowReasonCounts);
+  addReasonCountersBySeat(matchCounters.defensiveShadowActionableReasonCounts, roundCounters.defensiveShadowActionableReasonCounts);
+  addReasonCountersBySeat(matchCounters.defensiveSafetyGateReasonCounts, roundCounters.defensiveSafetyGateReasonCounts);
+  addReasonCountersBySeat(matchCounters.defensiveCallGateReasonCounts, roundCounters.defensiveCallGateReasonCounts);
+  addReasonCountersBySeat(matchCounters.kanReasonCounts, roundCounters.kanReasonCounts);
+  addReasonCountersBySeat(matchCounters.alphaJongRiichiReasonCounts, roundCounters.alphaJongRiichiReasonCounts);
+  addReasonCountersBySeat(matchCounters.alphaJongKanReasonCounts, roundCounters.alphaJongKanReasonCounts);
+  SEATS.forEach((seatKey) => {
+    if (Number(roundCounters && roundCounters.calls && roundCounters.calls[seatKey] || 0) > 0) {
+      matchCounters.callRounds[seatKey] += 1;
+    }
+    if (Number(roundCounters && roundCounters.riichi && roundCounters.riichi[seatKey] || 0) > 0) {
+      matchCounters.riichiRounds[seatKey] += 1;
+    }
+  });
+  if (Array.isArray(roundCounters.errors) && roundCounters.errors.length) {
+    matchCounters.errors.push(...roundCounters.errors);
+  }
+  return matchCounters;
+}
+
+function deriveRoundSeed(baseSeed, matchIndex, roundIndex, salt = 0) {
+  return (
+    (Number(baseSeed) >>> 0)
+    + Math.imul(Number(matchIndex + 1) >>> 0, 1000003)
+    + Math.imul(Number(roundIndex + 1) >>> 0, 9176)
+    + Math.imul(Number(salt + 1) >>> 0, 131)
+  ) >>> 0;
+}
+
+function createSeededRuntime(config, seed) {
+  const rule = coreAdapter.createRule(config.ruleOverrides || {});
+  const shan = new coreAdapter.Majiang.Shan(rule);
+  shan._pai = buildTileWall(seed);
+  return new SingleRoundRuntime({
+    ...config,
+    shan,
+    logger: () => {}
+  });
+}
+
+function getPhase(runtime) {
+  return runtime && runtime.stateMachine && typeof runtime.stateMachine.getPhase === 'function'
+    ? runtime.stateMachine.getPhase()
+    : null;
+}
+
+function buildPlayers(assignments) {
+  return SEATS.map((seatKey) => {
+    const variant = assignments[seatKey];
+    return {
+      seat: seatKey,
+      title: seatKey,
+      name: variant ? variant.label : seatKey,
+      human: false,
+      ai: {
+        enabled: true,
+        difficulty: variant ? variant.difficulty : 'normal',
+        profile: 'default'
+      }
+    };
+  });
+}
+
+function buildRuntimeConfig(baseConfig, matchState, assignments) {
+  const roundConfig = {
+    ...(baseConfig.round || {}),
+    zhuangfeng: Number(matchState.zhuangfeng || 0),
+    jushu: Number(matchState.jushu || 0),
+    changbang: Number(matchState.changbang || 0),
+    lizhibang: Number(matchState.lizhibang || 0),
+    ruleset: matchState.ruleset || baseConfig.ruleset || 'riichi-4p',
+    defen: SEATS.map((seatKey) => Number(matchState.scores && matchState.scores[seatKey] != null
+      ? matchState.scores[seatKey]
+      : 25000))
+  };
+  return {
+    ...baseConfig,
+    mode: 'single-round',
+    tableSize: 4,
+    ruleset: 'riichi-4p',
+    players: buildPlayers(assignments),
+    ai: {
+      ...(baseConfig.ai || {}),
+      defaultDifficulty: 'normal'
+    },
+    ruleOverrides: clone(matchState.ruleConfig || baseConfig.ruleOverrides || {}),
+    round: roundConfig,
+    engine: {
+      ...(baseConfig.engine || {}),
+      wall: {
+        ...((baseConfig.engine && baseConfig.engine.wall) || {}),
+        preset: false
+      }
+    }
+  };
+}
+
+function decisionContextForSeat(assignments, seatKey) {
+  const variant = assignments[seatKey];
+  const context = {
+    benchmark: 'ai-hanchan-arena',
+    arenaVariant: variant ? variant.id : null
+  };
+  if (variant && variant.policy) {
+    context.policy = clone(variant.policy);
+  }
+  return context;
+}
+
+function isExternalAlphaJongAdapter(id) {
+  return id === 'alphajong-discard-only' || id === 'alphajong-core';
+}
+
+function isAlphaJongCoreSeat(assignments, seatKey) {
+  return Boolean(
+    assignments
+      && assignments[seatKey]
+      && assignments[seatKey].externalAdapter === 'alphajong-core'
+  );
+}
+
+function getExternalAlphaJongAdapters(assignments = {}) {
+  return Array.from(new Set(SEATS.map((seatKey) => (
+    assignments[seatKey] && isExternalAlphaJongAdapter(assignments[seatKey].externalAdapter)
+      ? assignments[seatKey].externalAdapter
+      : null
+  )).filter(Boolean)));
+}
+
+function createArenaAiController(runtime, runtimeConfig, assignments) {
+  const baseController = baseAiApi.createAiController(runtime, runtimeConfig);
+  const alphaJongAdapters = new Map(getExternalAlphaJongAdapters(assignments).map((id) => [
+    id,
+    alphaJongAdapterApi.createAlphaJongAdapter({ mode: id === 'alphajong-core' ? 'core' : 'discard-only' })
+  ]));
+
+  function isAlphaJongSeat(seatKey) {
+    return Boolean(
+      assignments
+        && assignments[seatKey]
+        && isExternalAlphaJongAdapter(assignments[seatKey].externalAdapter)
+    );
+  }
+
+  function getAlphaJongAdapterForSeat(seatKey) {
+    const id = assignments && assignments[seatKey] ? assignments[seatKey].externalAdapter : null;
+    return alphaJongAdapters.get(id) || null;
+  }
+
+  return {
+    difficultyTiers: baseController.difficultyTiers,
+    implementedDifficulties: baseController.implementedDifficulties,
+    getSeatConfig(seatKey) {
+      return baseController.getSeatConfig(seatKey);
+    },
+    isAiSeat(seatKey) {
+      return baseController.isAiSeat(seatKey);
+    },
+    chooseDiscard(seatKey, decisionContext = {}) {
+      if (isAlphaJongSeat(seatKey)) {
+        const adapter = getAlphaJongAdapterForSeat(seatKey);
+        return adapter ? adapter.evaluateRuntimeDiscard(runtime, seatKey, decisionContext) : null;
+      }
+      return baseController.chooseDiscard(seatKey, decisionContext);
+    },
+    chooseTurnAction(seatKey, availableActions = [], decisionContext = {}) {
+      if (isAlphaJongSeat(seatKey)) {
+        const adapter = getAlphaJongAdapterForSeat(seatKey);
+        return adapter && typeof adapter.evaluateRuntimeTurnAction === 'function'
+          ? adapter.evaluateRuntimeTurnAction(runtime, seatKey, availableActions, decisionContext)
+          : null;
+      }
+      return typeof baseController.chooseTurnAction === 'function'
+        ? baseController.chooseTurnAction(seatKey, availableActions, decisionContext)
+        : null;
+    },
+    chooseReaction(seatKey, availableActions = [], decisionContext = {}) {
+      if (isAlphaJongSeat(seatKey)) {
+        const adapter = getAlphaJongAdapterForSeat(seatKey);
+        const reaction = adapter && typeof adapter.evaluateRuntimeReaction === 'function'
+          ? adapter.evaluateRuntimeReaction(runtime, seatKey, availableActions, decisionContext)
+          : null;
+        if (reaction) return reaction;
+        return {
+          type: 'pass',
+          seatKey,
+          payload: { seat: seatKey },
+          aiDecision: {
+            difficulty: 'external',
+            policyId: adapter && adapter.id ? adapter.id : 'alphajong-discard-only',
+            reasons: [`${adapter && adapter.id ? adapter.id : 'alphajong-discard-only'}-pass-reaction`],
+            metrics: null
+          }
+        };
+      }
+      return baseController.chooseReaction(seatKey, availableActions, decisionContext);
+    }
+  };
+}
+
+function getReactionSeats(runtime) {
+  const actions = runtime && runtime.pendingReaction && Array.isArray(runtime.pendingReaction.actions)
+    ? runtime.pendingReaction.actions
+    : [];
+  return Array.from(new Set(actions.map((action) => (
+    action && action.payload && action.payload.seat
+      ? action.payload.seat
+      : null
+  )).filter(Boolean)));
+}
+
+function sortActiveReactionActions(runtime) {
+  const pending = runtime && runtime.pendingReaction ? runtime.pendingReaction : null;
+  const passedSeats = pending && Array.isArray(pending.passedSeats) ? pending.passedSeats : [];
+  const actions = pending && Array.isArray(pending.actions) ? pending.actions : [];
+  return actions
+    .filter((action) => (
+      action
+      && action.type !== 'pass'
+      && action.payload
+      && !passedSeats.includes(action.payload.seat)
+    ))
+    .sort((left, right) => (
+      getActionPriority(right) - getActionPriority(left)
+      || Number(left.reactionOrder || 0) - Number(right.reactionOrder || 0)
+      || String(left.key || '').localeCompare(String(right.key || ''))
+    ));
+}
+
+function passSeat(runtime, seatKey) {
+  if (runtime && runtime.pendingReaction && seatKey) {
+    runtime.passReaction(seatKey, { reason: 'ai-hanchan-arena-pass' });
+  }
+}
+
+function handleHuleReactions(runtime, huleActions, roundCounters) {
+  if (!Array.isArray(huleActions) || !huleActions.length) return false;
+  if (huleActions.length === 1) {
+    const action = huleActions[0];
+    const seatKey = action && action.payload ? action.payload.seat : null;
+    if (seatKey) roundCounters.reactions[seatKey] += 1;
+    runtime.resolveHule(seatKey, {
+      ...(action.payload || {}),
+      finalizeImmediately: true
+    });
+    return true;
+  }
+
+  huleActions.forEach((action) => {
+    const seatKey = action && action.payload ? action.payload.seat : null;
+    if (!seatKey || !runtime.pendingReaction) return;
+    roundCounters.reactions[seatKey] += 1;
+    runtime.dispatch(action);
+  });
+  getReactionSeats(runtime).forEach((seatKey) => passSeat(runtime, seatKey));
+  return true;
+}
+
+function isSeatClosed(runtime, seatKey) {
+  const seatIndex = runtime && typeof runtime.getSeatIndex === 'function'
+    ? runtime.getSeatIndex(seatKey)
+    : -1;
+  const shoupai = seatIndex >= 0 && runtime && runtime.board && Array.isArray(runtime.board.shoupai)
+    ? runtime.board.shoupai[seatIndex]
+    : null;
+  return Boolean(shoupai && Array.isArray(shoupai._fulou) && shoupai._fulou.length === 0);
+}
+
+function inferKanType(meldString, isReactionKan = false) {
+  const normalized = String(meldString || '');
+  if (!normalized) return isReactionKan ? 'kan-open' : 'kan-concealed';
+  if (/\d{3}[\+\=\-]\d$/.test(normalized)) return 'kan-added';
+  if (isReactionKan || /[\+\=\-]/.test(normalized)) return 'kan-open';
+  return 'kan-concealed';
+}
+
+function countRuntimeKanMelds(runtime) {
+  if (!runtime || !runtime.board || !Array.isArray(runtime.board.shoupai)) return 0;
+  return runtime.board.shoupai.reduce((count, shoupai) => {
+    const melds = shoupai && Array.isArray(shoupai._fulou) ? shoupai._fulou : [];
+    return count + melds.filter((meld) => (String(meld || '').match(/\d/g) || []).length === 4).length;
+  }, 0);
+}
+
+function buildSelfKanActions(runtime, seatKey) {
+  if (!runtime || !seatKey || !runtime.board || !Array.isArray(runtime.board.shoupai)) return [];
+  const seatIndex = typeof runtime.getSeatIndex === 'function' ? runtime.getSeatIndex(seatKey) : -1;
+  const shoupai = seatIndex >= 0 ? runtime.board.shoupai[seatIndex] : null;
+  if (!shoupai || typeof shoupai.clone !== 'function') return [];
+  const wallState = typeof runtime.getWallState === 'function' ? runtime.getWallState() : {};
+  const paishu = Number.isFinite(Number(wallState && wallState.remaining))
+    ? Number(wallState.remaining)
+    : 0;
+  let kanChoices = [];
+  try {
+    kanChoices = coreAdapter.Majiang.Game.get_gang_mianzi(
+      runtime.rule,
+      shoupai.clone(),
+      null,
+      paishu,
+      countRuntimeKanMelds(runtime)
+    ) || [];
+  } catch {
+    kanChoices = [];
+  }
+  return kanChoices.map((meldString, index) => {
+    const kanType = inferKanType(meldString, false);
+    return {
+      type: 'kan',
+      key: `kan:${seatKey}:self:${index}`,
+      payload: {
+        seat: seatKey,
+        meld: meldString,
+        meldString,
+        kanType
+      }
+    };
+  });
+}
+
+function recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision, options = {}) {
+  if (!roundCounters || !seatKey || !decision) return;
+  const aiDecision = decision.aiDecision && typeof decision.aiDecision === 'object'
+    ? decision.aiDecision
+    : {};
+  const hardCallMetrics = aiDecision.hardCallMetrics && typeof aiDecision.hardCallMetrics === 'object'
+    ? aiDecision.hardCallMetrics
+    : {};
+  const review = hardCallMetrics.closedRouteValueReview && typeof hardCallMetrics.closedRouteValueReview === 'object'
+    ? hardCallMetrics.closedRouteValueReview
+    : null;
+  if (!review || review.active !== true) return;
+
+  roundCounters.closedRouteValueReviewedCalls[seatKey] += 1;
+  if (review.override === true) {
+    roundCounters.closedRouteValueOverrideCalls[seatKey] += 1;
+  }
+
+  const callOpenRouteScore = Number(review.callOpenRouteScore);
+  const passClosedRouteScore = Number(review.passClosedRouteScore);
+  const margin = Number(review.margin);
+  if (
+    Number.isFinite(callOpenRouteScore)
+    && Number.isFinite(passClosedRouteScore)
+    && Number.isFinite(margin)
+  ) {
+    roundCounters.closedRouteCallOpenScoreSum[seatKey] += callOpenRouteScore;
+    roundCounters.closedRoutePassScoreSum[seatKey] += passClosedRouteScore;
+    roundCounters.closedRouteMarginSum[seatKey] += margin;
+    roundCounters.closedRouteScoreSamples[seatKey] += 1;
+  }
+  if (typeof review.balancedState === 'string' && review.balancedState) {
+    incrementReasonCounter(roundCounters.balancedRouteStateCounts, seatKey, review.balancedState);
+  }
+  if (Array.isArray(review.balancedStateReasons)) {
+    review.balancedStateReasons.forEach((reason) => (
+      incrementReasonCounter(roundCounters.balancedRouteStateReasonCounts, seatKey, reason)
+    ));
+  }
+
+  if (options.recordReasons === true) {
+    const reasons = Array.isArray(aiDecision.reasons) ? aiDecision.reasons : [];
+    reasons.forEach((reason) => incrementReasonCounter(roundCounters.callReasonCounts, seatKey, reason));
+  }
+}
+
+function finiteMetricNumber(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function recordAlphaJongCallDiagnostics(roundCounters, seatKey, hardCallMetrics) {
+  if (!roundCounters || !seatKey || !hardCallMetrics || hardCallMetrics.adapter !== 'alphajong-core') return;
+  roundCounters.alphaJongCallMetricSamples[seatKey] += 1;
+  if (hardCallMetrics.simulationOk !== true) {
+    roundCounters.alphaJongCallSimulationFailures[seatKey] += 1;
+  }
+  const currentXiangting = finiteMetricNumber(hardCallMetrics.currentXiangting);
+  const nextXiangting = finiteMetricNumber(hardCallMetrics.nextXiangting);
+  if (currentXiangting == null || nextXiangting == null) {
+    roundCounters.alphaJongCallMissingXiangting[seatKey] += 1;
+  }
+}
+
+function recordDefensiveCallGateDiagnostics(roundCounters, seatKey, decision) {
+  if (!roundCounters || !seatKey || !decision) return;
+  const aiDecision = decision.aiDecision && typeof decision.aiDecision === 'object'
+    ? decision.aiDecision
+    : {};
+  const hardCallMetrics = aiDecision.hardCallMetrics && typeof aiDecision.hardCallMetrics === 'object'
+    ? aiDecision.hardCallMetrics
+    : {};
+  const review = hardCallMetrics.defensiveCallGateReview && typeof hardCallMetrics.defensiveCallGateReview === 'object'
+    ? hardCallMetrics.defensiveCallGateReview
+    : null;
+  if (!review || review.enabled !== true) return;
+  const reasons = Array.isArray(review.reasons) ? review.reasons : [];
+  roundCounters.defensiveCallGateReviewedCalls[seatKey] += 1;
+  if (review.override === true || review.allowed === false) roundCounters.defensiveCallGateBlockedCalls[seatKey] += 1;
+  if (reasons.includes('def-call-gate-first-open-block')) roundCounters.defensiveCallGateFirstOpenBlockedCalls[seatKey] += 1;
+  if (reasons.includes('def-call-gate-closed-route-block')) roundCounters.defensiveCallGateClosedRouteBlockedCalls[seatKey] += 1;
+  if (reasons.includes('def-call-gate-pressure-block')) roundCounters.defensiveCallGatePressureBlockedCalls[seatKey] += 1;
+  if (reasons.includes('def-call-gate-allowed-direct-tenpai')) roundCounters.defensiveCallGateAllowedDirectTenpaiCalls[seatKey] += 1;
+  reasons.forEach((reason) => incrementReasonCounter(roundCounters.defensiveCallGateReasonCounts, seatKey, reason));
+}
+
+function recordAlphaJongKanDiagnostics(roundCounters, seatKey, hardKanMetrics, reasons = []) {
+  if (!roundCounters || !seatKey || !hardKanMetrics || hardKanMetrics.adapter !== 'alphajong-core') return;
+  roundCounters.alphaJongKanAccepts[seatKey] += 1;
+  if (hardKanMetrics.simulationOk !== true) {
+    roundCounters.alphaJongKanSimulationFailures[seatKey] += 1;
+  }
+  reasons.forEach((reason) => incrementReasonCounter(roundCounters.alphaJongKanReasonCounts, seatKey, reason));
+}
+
+function recordAlphaJongKanReviewCandidates(roundCounters, seatKey, actions = []) {
+  if (!roundCounters || !seatKey || !Array.isArray(actions) || !actions.length) return;
+  const kanActions = actions.filter((action) => action && (action.type === 'kan' || action.type === 'gang'));
+  if (!kanActions.length) return;
+  roundCounters.alphaJongKanReviews[seatKey] += kanActions.length;
+  kanActions.forEach((action) => {
+    const payload = action && action.payload && typeof action.payload === 'object' ? action.payload : {};
+    const kanType = typeof payload.kanType === 'string' && payload.kanType
+      ? payload.kanType
+      : inferKanType(payload.meldString || payload.meld, Boolean(payload.fromSeat));
+    incrementReasonCounter(roundCounters.alphaJongKanReasonCounts, seatKey, 'alphajong-kan-reviewed');
+    incrementReasonCounter(roundCounters.alphaJongKanReasonCounts, seatKey, `alphajong-${kanType}-reviewed`);
+  });
+}
+
+function recordKanReviewCandidates(roundCounters, seatKey, actions = []) {
+  if (!roundCounters || !seatKey || !Array.isArray(actions) || !actions.length) return;
+  const kanActions = actions.filter((action) => action && (action.type === 'kan' || action.type === 'gang'));
+  if (!kanActions.length) return;
+  roundCounters.kanReviews[seatKey] += kanActions.length;
+  kanActions.forEach((action) => {
+    const payload = action && action.payload && typeof action.payload === 'object' ? action.payload : {};
+    const kanType = typeof payload.kanType === 'string' && payload.kanType
+      ? payload.kanType
+      : inferKanType(payload.meldString || payload.meld, Boolean(payload.fromSeat));
+    incrementReasonCounter(roundCounters.kanReasonCounts, seatKey, 'kan-reviewed');
+    incrementReasonCounter(roundCounters.kanReasonCounts, seatKey, `kan-${kanType}-reviewed`);
+  });
+}
+
+function recordKanDiagnostics(roundCounters, seatKey, decision) {
+  if (!roundCounters || !seatKey || !decision || !decision.payload) return;
+  const payload = decision.payload && typeof decision.payload === 'object' ? decision.payload : {};
+  const kanType = typeof payload.kanType === 'string' && payload.kanType
+    ? payload.kanType
+    : inferKanType(payload.meldString || payload.meld, Boolean(payload.fromSeat));
+  roundCounters.kanActions[seatKey] += 1;
+  if (kanType === 'kan-open') roundCounters.openKanActions[seatKey] += 1;
+  else if (kanType === 'kan-added') roundCounters.addedKanActions[seatKey] += 1;
+  else roundCounters.closedKanActions[seatKey] += 1;
+
+  const aiDecision = decision.aiDecision && typeof decision.aiDecision === 'object'
+    ? decision.aiDecision
+    : {};
+  const hardKanMetrics = aiDecision.hardKanMetrics && typeof aiDecision.hardKanMetrics === 'object'
+    ? aiDecision.hardKanMetrics
+    : {};
+  const reasons = Array.isArray(aiDecision.reasons) ? aiDecision.reasons : [];
+  reasons.forEach((reason) => incrementReasonCounter(roundCounters.kanReasonCounts, seatKey, reason));
+  recordAlphaJongKanDiagnostics(roundCounters, seatKey, hardKanMetrics, reasons);
+}
+
+function recordCallDiagnostics(runtime, roundCounters, seatKey, decision) {
+  if (!roundCounters || !seatKey || !decision || !decision.payload) return;
+  const callType = typeof decision.payload.callType === 'string' ? decision.payload.callType : null;
+  const aiDecision = decision.aiDecision && typeof decision.aiDecision === 'object'
+    ? decision.aiDecision
+    : {};
+  const reasons = Array.isArray(aiDecision.reasons) ? aiDecision.reasons : [];
+  const metrics = aiDecision.metrics && typeof aiDecision.metrics === 'object' ? aiDecision.metrics : {};
+  const hardCallMetrics = aiDecision.hardCallMetrics && typeof aiDecision.hardCallMetrics === 'object'
+    ? aiDecision.hardCallMetrics
+    : {};
+  const currentXiangting = finiteMetricNumber(hardCallMetrics.currentXiangting);
+  const metricXiangting = finiteMetricNumber(metrics.xiangting);
+  const nextXiangting = metricXiangting != null
+    ? metricXiangting
+    : finiteMetricNumber(hardCallMetrics.nextXiangting);
+  const closedBefore = hardCallMetrics.closedHandBefore === true
+    || (!Object.prototype.hasOwnProperty.call(hardCallMetrics, 'closedHandBefore') && isSeatClosed(runtime, seatKey));
+  const reasonText = reasons.join(' ');
+
+  if (callType === 'chi') roundCounters.chiCalls[seatKey] += 1;
+  if (callType === 'peng') roundCounters.pengCalls[seatKey] += 1;
+  if (callType === 'peng' && (hardCallMetrics.isYakuhaiPeng === true || reasonText.includes('yakuhai-peng'))) {
+    roundCounters.yakuhaiPengCalls[seatKey] += 1;
+  }
+  if (closedBefore) {
+    roundCounters.closedCalls[seatKey] += 1;
+  }
+    if (Number.isFinite(currentXiangting) && Number.isFinite(nextXiangting)) {
+      if (nextXiangting < currentXiangting) roundCounters.shantenImproveCalls[seatKey] += 1;
+      if (nextXiangting === currentXiangting) roundCounters.flatCalls[seatKey] += 1;
+  } else {
+    if (reasonText.includes('improves-xiangting')) roundCounters.shantenImproveCalls[seatKey] += 1;
+    if (reasonText.includes('flat-speed-up')) roundCounters.flatCalls[seatKey] += 1;
+      }
+      recordAlphaJongCallDiagnostics(roundCounters, seatKey, hardCallMetrics);
+      recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision);
+      recordDefensiveCallGateDiagnostics(roundCounters, seatKey, decision);
+      reasons.forEach((reason) => incrementReasonCounter(roundCounters.callReasonCounts, seatKey, reason));
+    }
+
+function recordAlphaJongRiichiDiagnostics(roundCounters, seatKey, decision) {
+  if (!roundCounters || !seatKey || !decision || !decision.alphaJong) return;
+  const diagnostics = decision.alphaJong.riichiDiagnostics && typeof decision.alphaJong.riichiDiagnostics === 'object'
+    ? decision.alphaJong.riichiDiagnostics
+    : null;
+  if (!diagnostics) return;
+
+  roundCounters.alphaJongRiichiReviews[seatKey] += 1;
+  if (Number(diagnostics.legalChoiceCount || 0) > 0) {
+    roundCounters.alphaJongRiichiLegalDiscards[seatKey] += 1;
+  }
+  if (diagnostics.selectedIsLegalRiichiChoice === true) {
+    roundCounters.alphaJongRiichiSelectedLegalDiscards[seatKey] += 1;
+  }
+  const reason = diagnostics.rejectReason
+    || (diagnostics.alphaJongRiichi === true ? 'alphajong-riichi-accepted' : 'alphajong-riichi-no-reject-reason');
+  incrementReasonCounter(roundCounters.alphaJongRiichiReasonCounts, seatKey, reason);
+}
+
+function recordRiichiOpportunity(runtime, seatKey, decision, roundCounters) {
+  if (!runtime || !seatKey || !decision || !roundCounters) return;
+  if (!isSeatClosed(runtime, seatKey)) return;
+  const metrics = decision.metrics && typeof decision.metrics === 'object' ? decision.metrics : {};
+  if (Number(metrics.xiangting) !== 0) return;
+  const riichiDecision = decision.riichiDecision && typeof decision.riichiDecision === 'object'
+    ? decision.riichiDecision
+    : null;
+  const reasons = Array.isArray(riichiDecision && riichiDecision.reasons) ? riichiDecision.reasons : [];
+  const illegalReasons = new Set([
+    'riichi-not-tenpai',
+    'riichi-illegal-discard-choice',
+    'riichi-disabled-by-ruleset',
+    'riichi-invalid-seat',
+    'riichi-missing-context'
+  ]);
+  if (reasons.some((reason) => illegalReasons.has(reason))) return;
+  roundCounters.riichiOpportunities[seatKey] += 1;
+  if (!decision.shouldRiichi) {
+    const reason = reasons[0] || 'riichi-rejected-unknown';
+    incrementReasonCounter(roundCounters.riichiRejectReasonCounts, seatKey, reason);
+  }
+}
+
+function compactThreatProfile(threatProfile = {}) {
+  return {
+    threatScore: Number(threatProfile.threatScore || 0),
+    expectedPointLoss: Number(threatProfile.expectedPointLoss || 0),
+    riichiCount: Number(threatProfile.riichiCount || 0),
+    dealerThreat: threatProfile.dealerThreat === true,
+    multiThreat: threatProfile.multiThreat === true,
+    lateRound: threatProfile.lateRound === true,
+    openThreatCount: Number(threatProfile.openThreatCount || 0),
+    maxOpenMeldCount: Number(threatProfile.maxOpenMeldCount || 0),
+    doraRisk: threatProfile.doraRisk === true,
+    doraAdjacentRisk: threatProfile.doraAdjacentRisk === true,
+    reasons: Array.isArray(threatProfile.reasons) ? threatProfile.reasons.slice(0, 8) : []
+  };
+}
+
+function compactDefensiveUtilityShadow(shadow = {}) {
+  const current = shadow.current && typeof shadow.current === 'object' ? shadow.current : {};
+  const recommended = shadow.recommended && typeof shadow.recommended === 'object' ? shadow.recommended : {};
+  return {
+    enabled: shadow.enabled === true,
+    differs: shadow.differs === true,
+    saferAlternative: shadow.saferAlternative === true,
+    backstep: shadow.backstep === true,
+    actionable: shadow.actionable === true,
+    currentTileCode: shadow.currentTileCode || current.tileCode || null,
+    recommendedTileCode: shadow.recommendedTileCode || recommended.tileCode || null,
+    scoreDelta: Number(shadow.scoreDelta || 0),
+    dangerDelta: Number(shadow.dangerDelta || 0),
+    safetyRankDelta: Number(shadow.safetyRankDelta || 0),
+    currentDangerScore: Number(current.dangerScore || 0),
+    recommendedDangerScore: Number(recommended.dangerScore || 0),
+    currentSafetyRank: Number(current.safetyRank || 0),
+    recommendedSafetyRank: Number(recommended.safetyRank || 0),
+    reasons: Array.isArray(shadow.reasons) ? shadow.reasons.slice(0, 8) : [],
+    actionableReasons: Array.isArray(shadow.actionableReasons) ? shadow.actionableReasons.slice(0, 8) : []
+  };
+}
+
+function compactDefensiveSafetyGate(review = {}) {
+  const current = review.current && typeof review.current === 'object' ? review.current : {};
+  const recommended = review.recommended && typeof review.recommended === 'object' ? review.recommended : {};
+  return {
+    enabled: review.enabled === true,
+    active: review.active === true,
+    override: review.override === true,
+    saferAlternative: review.saferAlternative === true,
+    sameShanten: review.sameShanten === true,
+    backstep: review.backstep === true,
+    protectedPush: review.protectedPush === true,
+    currentTileCode: review.currentTileCode || current.tileCode || null,
+    recommendedTileCode: review.recommendedTileCode || recommended.tileCode || null,
+    currentDangerScore: Number(current.dangerScore || 0),
+    recommendedDangerScore: Number(recommended.dangerScore || 0),
+    currentSafetyRank: Number(current.safetyRank || 0),
+    recommendedSafetyRank: Number(recommended.safetyRank || 0),
+    currentSafetyClass: current.safetyClass || null,
+    recommendedSafetyClass: recommended.safetyClass || null,
+    reasons: Array.isArray(review.reasons) ? review.reasons.slice(0, 10) : []
+  };
+}
+
+function recordDefensiveProfileDiagnostics(runtime, roundCounters, seatKey, decision, tileCode, closedHandBefore) {
+  if (!roundCounters || !seatKey || !decision) return;
+  const hardPushFold = decision.hardPushFold && typeof decision.hardPushFold === 'object'
+    ? decision.hardPushFold
+    : {};
+  const defensiveProfile = hardPushFold.defensiveProfile && typeof hardPushFold.defensiveProfile === 'object'
+    ? hardPushFold.defensiveProfile
+    : null;
+  const threatProfile = defensiveProfile && defensiveProfile.threatProfile
+    ? compactThreatProfile(defensiveProfile.threatProfile)
+    : {};
+  const defensiveState = defensiveProfile && typeof defensiveProfile.rankDefenseState === 'string'
+    ? defensiveProfile.rankDefenseState
+    : null;
+  const defensiveShadow = decision.defensiveUtilityShadow && typeof decision.defensiveUtilityShadow === 'object'
+    ? compactDefensiveUtilityShadow(decision.defensiveUtilityShadow)
+    : null;
+  const defensiveSafetyGate = decision.hardSafetyGate && typeof decision.hardSafetyGate === 'object'
+    ? compactDefensiveSafetyGate(decision.hardSafetyGate)
+    : null;
+
+  if (defensiveProfile && defensiveProfile.enabled === true) {
+    if (defensiveState) incrementReasonCounter(roundCounters.defensiveStateCounts, seatKey, defensiveState);
+    (Array.isArray(threatProfile.reasons) ? threatProfile.reasons : []).forEach((reason) => (
+      incrementReasonCounter(roundCounters.threatProfileReasonCounts, seatKey, reason)
+    ));
+  }
+  if (defensiveShadow && defensiveShadow.enabled === true) {
+    roundCounters.defensiveShadowReviewedDiscards[seatKey] += 1;
+    if (defensiveShadow.differs) roundCounters.defensiveShadowDiffDiscards[seatKey] += 1;
+    if (defensiveShadow.saferAlternative) roundCounters.defensiveShadowSaferAltDiscards[seatKey] += 1;
+    if (defensiveShadow.backstep) roundCounters.defensiveShadowBackstepDiscards[seatKey] += 1;
+    if (defensiveShadow.actionable) roundCounters.defensiveShadowActionableDiscards[seatKey] += 1;
+    defensiveShadow.reasons.forEach((reason) => incrementReasonCounter(roundCounters.defensiveShadowReasonCounts, seatKey, reason));
+    if (defensiveShadow.actionable) {
+      defensiveShadow.actionableReasons.forEach((reason) => incrementReasonCounter(roundCounters.defensiveShadowActionableReasonCounts, seatKey, reason));
+    }
+  }
+  if (defensiveSafetyGate && defensiveSafetyGate.enabled === true) {
+    roundCounters.defensiveSafetyGateReviewedDiscards[seatKey] += 1;
+    if (defensiveSafetyGate.override) roundCounters.defensiveSafetyGateOverrideDiscards[seatKey] += 1;
+    if (defensiveSafetyGate.sameShanten) roundCounters.defensiveSafetyGateSameShantenDiscards[seatKey] += 1;
+    if (defensiveSafetyGate.backstep) roundCounters.defensiveSafetyGateBackstepDiscards[seatKey] += 1;
+    if (defensiveSafetyGate.protectedPush) roundCounters.defensiveSafetyGateProtectedPushDiscards[seatKey] += 1;
+    defensiveSafetyGate.reasons.forEach((reason) => incrementReasonCounter(roundCounters.defensiveSafetyGateReasonCounts, seatKey, reason));
+  }
+
+  const metrics = decision.metrics && typeof decision.metrics === 'object' ? decision.metrics : {};
+  const danger = decision.danger && typeof decision.danger === 'object' ? decision.danger : {};
+  roundCounters.lastDiscardSnapshots[seatKey] = {
+    tileCode: tileCode || decision.tileCode || null,
+    xiangting: Number.isFinite(Number(metrics.xiangting)) ? Number(metrics.xiangting) : null,
+    dangerScore: Number.isFinite(Number(danger.dangerScore)) ? Number(danger.dangerScore) : null,
+    safetyRank: Number.isFinite(Number(danger.safetyRank)) ? Number(danger.safetyRank) : null,
+    closedHandBefore: Boolean(closedHandBefore),
+    hardPushFoldMode: typeof hardPushFold.mode === 'string' ? hardPushFold.mode : null,
+    safeTileCode: hardPushFold.safeTileCode || null,
+    dealInAttributionEnabled: Boolean(defensiveProfile && defensiveProfile.enabled === true),
+    defensiveState,
+    threatProfile,
+    defensiveUtilityShadow: defensiveShadow,
+    hardSafetyGate: defensiveSafetyGate
+  };
+}
+
+function handleReaction(runtime, aiController, assignments, roundCounters) {
+  while (runtime && runtime.pendingReaction && getPhase(runtime) === ROUND_PHASES.AWAIT_REACTION) {
+    const sortedActions = sortActiveReactionActions(runtime);
+    if (!sortedActions.length) {
+      getReactionSeats(runtime).forEach((seatKey) => passSeat(runtime, seatKey));
+      return;
+    }
+
+    const huleActions = sortedActions.filter((action) => action && action.type === 'hule');
+    if (huleActions.length) {
+      handleHuleReactions(runtime, huleActions, roundCounters);
+      return;
+    }
+
+    const topAction = sortedActions[0];
+    const seatKey = topAction && topAction.payload ? topAction.payload.seat : null;
+    if (!seatKey) return;
+    const seatActions = sortedActions.filter((action) => (
+      action && action.payload && action.payload.seat === seatKey
+    ));
+    recordKanReviewCandidates(roundCounters, seatKey, seatActions);
+    if (isAlphaJongCoreSeat(assignments, seatKey)) {
+      recordAlphaJongKanReviewCandidates(roundCounters, seatKey, seatActions);
+    }
+    const decision = aiController.chooseReaction(
+      seatKey,
+      seatActions,
+      decisionContextForSeat(assignments, seatKey)
+    );
+    if (decision && decision.type !== 'pass') {
+      if (decision.type === 'kan' || decision.type === 'gang') {
+        recordKanDiagnostics(roundCounters, seatKey, decision);
+      } else {
+        roundCounters.calls[seatKey] += 1;
+        recordCallDiagnostics(runtime, roundCounters, seatKey, decision);
+      }
+      runtime.dispatch(decision);
+      roundCounters.reactions[seatKey] += 1;
+      return;
+    }
+
+      if (decision && decision.type === 'pass') {
+        recordClosedRouteValueDiagnostics(roundCounters, seatKey, decision, { recordReasons: true });
+        recordDefensiveCallGateDiagnostics(roundCounters, seatKey, decision);
+      }
+    passSeat(runtime, seatKey);
+  }
+}
+
+function normalizeDiscardTile(decision, runtime, seatKey) {
+  if (decision && typeof decision.tileCode === 'string' && decision.tileCode) {
+    return decision.tileCode;
+  }
+  const handCodes = runtime.getSeatHandCodes(seatKey);
+  return handCodes[handCodes.length - 1];
+}
+
+function runOneRound(baseConfig, matchState, assignments, options = {}) {
+  const seed = Number(options.seed || DEFAULT_SEED);
+  const runtimeConfig = buildRuntimeConfig(baseConfig, matchState, assignments);
+  const runtime = createSeededRuntime(runtimeConfig, seed);
+  const aiController = createArenaAiController(runtime, runtimeConfig, assignments);
+  const counters = createRoundCounters();
+
+  runtime.start();
+
+  for (let step = 0; step < Number(options.maxStepsPerRound || DEFAULT_MAX_STEPS_PER_ROUND); step += 1) {
+    const phase = getPhase(runtime);
+    if (phase === ROUND_PHASES.ROUND_END) break;
+
+    try {
+      if (phase === ROUND_PHASES.AWAIT_DRAW) {
+        const seatKey = runtime.getCurrentTurnSeat();
+        if (runtime.getWallState().remaining <= 0) {
+          runtime.resolveDraw('exhaustive-draw');
+          break;
+        }
+        runtime.drawTile(seatKey);
+        counters.draws[seatKey] += 1;
+        if (runtime.canSeatHule(seatKey, {})) {
+          runtime.resolveHule(seatKey, { finalizeImmediately: true });
+          break;
+        }
+        continue;
+      }
+
+      if (phase === ROUND_PHASES.AWAIT_DISCARD) {
+        const seatKey = runtime.getCurrentTurnSeat();
+        if (runtime.canSeatHule(seatKey, {})) {
+          runtime.resolveHule(seatKey, { finalizeImmediately: true });
+          break;
+        }
+
+        const turnActions = buildSelfKanActions(runtime, seatKey);
+        if (turnActions.length && typeof aiController.chooseTurnAction === 'function') {
+          recordKanReviewCandidates(counters, seatKey, turnActions);
+          if (isAlphaJongCoreSeat(assignments, seatKey)) {
+            recordAlphaJongKanReviewCandidates(counters, seatKey, turnActions);
+          }
+          const turnDecision = aiController.chooseTurnAction(
+            seatKey,
+            turnActions,
+            decisionContextForSeat(assignments, seatKey)
+          );
+          if (turnDecision && (turnDecision.type === 'kan' || turnDecision.type === 'gang')) {
+            recordKanDiagnostics(counters, seatKey, turnDecision);
+            runtime.dispatch(turnDecision);
+            continue;
+          }
+        }
+
+        const decision = aiController.chooseDiscard(seatKey, decisionContextForSeat(assignments, seatKey));
+        const tileCode = normalizeDiscardTile(decision, runtime, seatKey);
+        const shouldRiichi = Boolean(decision && decision.shouldRiichi);
+        const closedHandBeforeDiscard = isSeatClosed(runtime, seatKey);
+        recordRiichiOpportunity(runtime, seatKey, decision, counters);
+        recordAlphaJongRiichiDiagnostics(counters, seatKey, decision);
+        recordDefensiveProfileDiagnostics(runtime, counters, seatKey, decision, tileCode, closedHandBeforeDiscard);
+        runtime.discardTile(seatKey, tileCode, {
+          riichi: shouldRiichi
+        });
+        counters.discards[seatKey] += 1;
+        if (shouldRiichi) counters.riichi[seatKey] += 1;
+        continue;
+      }
+
+      if (phase === ROUND_PHASES.AWAIT_REACTION) {
+        handleReaction(runtime, aiController, assignments, counters);
+        continue;
+      }
+
+      counters.errors.push(`unsupported phase: ${phase}`);
+      break;
+    } catch (error) {
+      counters.errors.push(error && error.message ? error.message : String(error));
+      break;
+    }
+  }
+
+  if (getPhase(runtime) !== ROUND_PHASES.ROUND_END && !counters.errors.length) {
+    counters.errors.push(`round-step-limit:${getPhase(runtime)}`);
+  }
+
+  return {
+    seed,
+    completed: getPhase(runtime) === ROUND_PHASES.ROUND_END,
+    phase: getPhase(runtime),
+    counters,
+    scores: runtime.getScoreMap(),
+    roundResult: runtime.roundResult || null
+  };
+}
+
+function getRoundTurnEstimate(roundCounters) {
+  const totalDiscards = SEATS.reduce((sum, seatKey) => (
+    sum + Number(roundCounters && roundCounters.discards && roundCounters.discards[seatKey] || 0)
+  ), 0);
+  return totalDiscards > 0 ? Math.max(1, Math.ceil(totalDiscards / SEATS.length)) : 0;
+}
+
+function getScoreDelta(scoresBefore, scoresAfter, seatKey) {
+  return Number(scoresAfter && scoresAfter[seatKey] || 0) - Number(scoresBefore && scoresBefore[seatKey] || 0);
+}
+
+function getSettlementResult(entry, roundResult) {
+  if (entry && entry.result && typeof entry.result === 'object') return entry.result;
+  if (roundResult && roundResult.result && typeof roundResult.result === 'object') return roundResult.result;
+  return null;
+}
+
+function getWinPoint(entry, roundResult, scoresBefore, scoresAfter, winnerSeat) {
+  const scoreDelta = getScoreDelta(scoresBefore, scoresAfter, winnerSeat);
+  if (scoreDelta > 0) return scoreDelta;
+  const result = getSettlementResult(entry, roundResult);
+  const defen = Number(result && result.defen);
+  return Number.isFinite(defen) && defen > 0 ? defen : 0;
+}
+
+function getDealInPoint(entry, roundResult, scoresBefore, scoresAfter, fromSeat) {
+  const result = getSettlementResult(entry, roundResult);
+  const defen = Number(result && result.defen);
+  if (Number.isFinite(defen) && defen > 0) return defen;
+  const scoreDelta = getScoreDelta(scoresBefore, scoresAfter, fromSeat);
+  return scoreDelta < 0 ? Math.abs(scoreDelta) : 0;
+}
+
+function recordDrawOutcome(matchCounters, roundResult) {
+  if (!roundResult || roundResult.type !== 'draw') return;
+  matchCounters.drawRounds += 1;
+  const tenpaiSeats = new Set(Array.isArray(roundResult.tenpaiSeats) ? roundResult.tenpaiSeats : []);
+  const notenSeats = new Set(Array.isArray(roundResult.notenSeats) ? roundResult.notenSeats : []);
+  SEATS.forEach((seatKey) => {
+    if (tenpaiSeats.has(seatKey)) matchCounters.drawTenpai[seatKey] += 1;
+    if (notenSeats.has(seatKey)) matchCounters.drawNoten[seatKey] += 1;
+  });
+}
+
+function recordRoundOutcome(matchCounters, roundResult, scoresBefore, scoresAfter, roundCounters) {
+  if (!roundResult) return;
+  recordDrawOutcome(matchCounters, roundResult);
+  if (roundResult.type !== 'hule') return;
+  const winTurn = getRoundTurnEstimate(roundCounters);
+  const dealInSeatsThisRound = new Set();
+  const winners = Array.isArray(roundResult.winners) && roundResult.winners.length
+    ? roundResult.winners
+    : [{
+        winnerSeat: roundResult.winnerSeat,
+        fromSeat: roundResult.fromSeat || null,
+        result: roundResult.result || null,
+        riichi: Boolean(roundResult.riichi)
+      }];
+  winners.forEach((entry) => {
+    const winnerSeat = entry && entry.winnerSeat ? entry.winnerSeat : null;
+    const fromSeat = entry && entry.fromSeat ? entry.fromSeat : roundResult.fromSeat || null;
+    if (winnerSeat && matchCounters.wins[winnerSeat] != null) {
+      matchCounters.wins[winnerSeat] += 1;
+      const winnerRiichi = Boolean(entry && entry.riichi != null ? entry.riichi : roundResult.riichi);
+      if (winnerRiichi) matchCounters.riichiWins[winnerSeat] += 1;
+      else matchCounters.nonRiichiWins[winnerSeat] += 1;
+      if (fromSeat) matchCounters.ronWins[winnerSeat] += 1;
+      else matchCounters.tsumoWins[winnerSeat] += 1;
+      const winPoint = getWinPoint(entry, roundResult, scoresBefore, scoresAfter, winnerSeat);
+      if (winPoint > 0) {
+        matchCounters.winPointSum[winnerSeat] += winPoint;
+        matchCounters.winPointSamples[winnerSeat] += 1;
+      }
+      if (winTurn > 0) {
+        matchCounters.winTurnSum[winnerSeat] += winTurn;
+        matchCounters.winTurnSamples[winnerSeat] += 1;
+      }
+    }
+    if (fromSeat && matchCounters.dealIns[fromSeat] != null) {
+      matchCounters.dealIns[fromSeat] += 1;
+      dealInSeatsThisRound.add(fromSeat);
+      const snapshot = roundCounters && roundCounters.lastDiscardSnapshots
+        ? roundCounters.lastDiscardSnapshots[fromSeat] || {}
+        : {};
+      if (
+        snapshot.dealInAttributionEnabled === true
+        && matchCounters.dealInAttributionCounts
+        && matchCounters.dealInAttributionCounts[fromSeat]
+      ) {
+        const attribution = hardDefensiveProfileApi.classifyDealInAttribution(snapshot);
+        incrementReasonCounter(matchCounters.dealInAttributionCounts, fromSeat, attribution);
+      }
+      if (
+        snapshot.defensiveUtilityShadow
+        && snapshot.defensiveUtilityShadow.enabled === true
+        && snapshot.defensiveUtilityShadow.differs === true
+        && snapshot.defensiveUtilityShadow.saferAlternative === true
+        && snapshot.defensiveUtilityShadow.actionable === true
+        && matchCounters.defensiveShadowWouldAvoidDealIns
+        && matchCounters.defensiveShadowWouldAvoidDealIns[fromSeat] != null
+      ) {
+        matchCounters.defensiveShadowWouldAvoidDealIns[fromSeat] += 1;
+      }
+      if (
+        snapshot.hardSafetyGate
+        && snapshot.hardSafetyGate.enabled === true
+        && snapshot.hardSafetyGate.saferAlternative === true
+        && snapshot.hardSafetyGate.recommendedTileCode
+        && snapshot.hardSafetyGate.recommendedTileCode !== snapshot.tileCode
+        && matchCounters.defensiveSafetyGateWouldAvoidDealIns
+        && matchCounters.defensiveSafetyGateWouldAvoidDealIns[fromSeat] != null
+      ) {
+        matchCounters.defensiveSafetyGateWouldAvoidDealIns[fromSeat] += 1;
+      }
+      const dealInPoint = getDealInPoint(entry, roundResult, scoresBefore, scoresAfter, fromSeat);
+      if (dealInPoint > 0) {
+        matchCounters.dealInPointSum[fromSeat] += dealInPoint;
+        matchCounters.dealInPointSamples[fromSeat] += 1;
+      }
+    }
+  });
+  dealInSeatsThisRound.forEach((seatKey) => {
+    if (matchCounters.dealInRounds[seatKey] != null) {
+      matchCounters.dealInRounds[seatKey] += 1;
+    }
+  });
+}
+
+function computeRanks(scores) {
+  const ordered = SEATS
+    .map((seatKey) => ({
+      seatKey,
+      score: Number(scores && scores[seatKey] || 0)
+    }))
+    .sort((left, right) => (
+      right.score - left.score
+      || SEATS.indexOf(left.seatKey) - SEATS.indexOf(right.seatKey)
+    ));
+  return ordered.reduce((result, entry, index) => {
+    result[entry.seatKey] = index + 1;
+    return result;
+  }, {});
+}
+
+function createInitialMatchState(baseConfig) {
+  return matchStateHelpers.createInitialMatchState({
+    ruleset: 'riichi-4p',
+    seatKeys: SEATS.slice(),
+    ruleConfig: baseConfig.ruleOverrides || {},
+    gameLength: baseConfig.gameLength || 'east-south',
+    startingScore: 25000,
+    targetScore: Number(baseConfig.targetScore || 30000),
+    qijia: 0,
+    zhuangfeng: 0,
+    jushu: 0
+  });
+}
+
+function runOneMatch(baseConfig, assignments, options = {}) {
+  let matchState = createInitialMatchState(baseConfig);
+  const counters = createMatchCounters();
+  const roundRows = [];
+  const mode = options.mode || 'mixed';
+  const matchIndex = Number(options.matchIndex || 0);
+
+  for (let roundIndex = 0; roundIndex < Number(options.maxRoundsPerMatch || DEFAULT_MAX_ROUNDS_PER_MATCH); roundIndex += 1) {
+    if (matchState.finished) break;
+    const roundSeed = deriveRoundSeed(options.seed || DEFAULT_SEED, matchIndex, roundIndex, options.seedSalt || 0);
+    const scoresBeforeRound = clone(matchState.scores || {});
+    const row = runOneRound(baseConfig, matchState, assignments, {
+      seed: roundSeed,
+      maxStepsPerRound: options.maxStepsPerRound
+    });
+    roundRows.push({
+      seed: row.seed,
+      completed: row.completed,
+      phase: row.phase,
+      roundLabel: matchStateHelpers.getRoundLabel(matchState.zhuangfeng, matchState.jushu),
+      resultType: row.roundResult ? row.roundResult.type : null,
+      winnerSeat: row.roundResult ? row.roundResult.winnerSeat || null : null,
+      winnerSeats: row.roundResult && Array.isArray(row.roundResult.winnerSeats)
+        ? row.roundResult.winnerSeats.slice()
+        : [],
+      fromSeat: row.roundResult ? row.roundResult.fromSeat || null : null,
+      scores: clone(row.scores),
+      errorCount: row.counters.errors.length
+    });
+    mergeRoundCounters(counters, row.counters);
+    recordRoundOutcome(counters, row.roundResult, scoresBeforeRound, row.scores, row.counters);
+
+    if (!row.completed || !row.roundResult) {
+      counters.errors.push(`match-round-incomplete:${roundIndex}:${row.phase}`);
+      break;
+    }
+
+    const transitionDecision = roundTransitionHelpers.resolveRoundTransition(matchState, row.roundResult);
+    matchState = roundTransitionHelpers.applyTransitionToMatchState(matchState, transitionDecision);
+  }
+
+  if (!matchState.finished && roundRows.length >= Number(options.maxRoundsPerMatch || DEFAULT_MAX_ROUNDS_PER_MATCH)) {
+    counters.errors.push(`match-round-limit:${roundRows.length}`);
+  }
+
+  const finalScores = clone(matchState.scores || {});
+  const ranks = computeRanks(finalScores);
+  const seatResults = SEATS.map((seatKey) => ({
+    seat: seatKey,
+    variant: assignments[seatKey] ? assignments[seatKey].id : null,
+    score: Number(finalScores[seatKey] || 0),
+    rank: ranks[seatKey]
+  }));
+
+  return {
+    mode,
+    matchIndex,
+    completed: Boolean(matchState.finished) && counters.errors.length === 0,
+    finishReason: matchState.finishReason || (matchState.finished ? 'finished' : 'not-finished'),
+    rounds: roundRows.length,
+    finalScores,
+    ranks,
+    seatVariants: SEATS.reduce((result, seatKey) => {
+      result[seatKey] = assignments[seatKey] ? assignments[seatKey].id : null;
+      return result;
+    }, {}),
+    seatResults,
+    counters,
+    roundRows
+  };
+}
+
+function buildMixedAssignments(variants, matchIndex) {
+  return SEATS.reduce((result, seatKey, seatIndex) => {
+    result[seatKey] = variants[(seatIndex + matchIndex) % variants.length];
+    return result;
+  }, {});
+}
+
+function buildMirrorAssignments(variant) {
+  return SEATS.reduce((result, seatKey) => {
+    result[seatKey] = variant;
+    return result;
+  }, {});
+}
+
+function createEmptyVariantStats() {
+  return {
+    appearances: 0,
+    matchWins: 0,
+    rankSum: 0,
+    averageRank: 0,
+    averageScore: 0,
+    scoreSum: 0,
+    finalScoreDeltaSum: 0,
+    firstRate: 0,
+    secondRate: 0,
+    thirdRate: 0,
+    fourthRate: 0,
+    rankCounts: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    seatAppearances: createCountersBySeat(),
+    roundsSeen: 0,
+    drawRounds: 0,
+    huleWins: 0,
+    riichiWins: 0,
+    nonRiichiWins: 0,
+    tsumoWins: 0,
+    ronWins: 0,
+    dealIns: 0,
+    dealInRounds: 0,
+    drawTenpai: 0,
+    drawNoten: 0,
+    flownCount: 0,
+    draws: 0,
+    discards: 0,
+    riichi: 0,
+    riichiRounds: 0,
+    calls: 0,
+    kanReviews: 0,
+    kanActions: 0,
+    openKanActions: 0,
+    closedKanActions: 0,
+    addedKanActions: 0,
+    callRounds: 0,
+    chiCalls: 0,
+    pengCalls: 0,
+    yakuhaiPengCalls: 0,
+    shantenImproveCalls: 0,
+    flatCalls: 0,
+    closedCalls: 0,
+    closedRouteValueReviewedCalls: 0,
+    closedRouteValueOverrideCalls: 0,
+    closedRouteCallOpenScoreSum: 0,
+    closedRoutePassScoreSum: 0,
+    closedRouteMarginSum: 0,
+    closedRouteScoreSamples: 0,
+    balancedRouteStateCounts: {},
+    balancedRouteStateReasonCounts: {},
+    defensiveStateCounts: {},
+    threatProfileReasonCounts: {},
+    dealInAttributionCounts: {},
+    defensiveShadowReviewedDiscards: 0,
+    defensiveShadowDiffDiscards: 0,
+    defensiveShadowSaferAltDiscards: 0,
+    defensiveShadowBackstepDiscards: 0,
+    defensiveShadowActionableDiscards: 0,
+      defensiveShadowWouldAvoidDealIns: 0,
+      defensiveShadowReasonCounts: {},
+      defensiveShadowActionableReasonCounts: {},
+    defensiveSafetyGateReviewedDiscards: 0,
+    defensiveSafetyGateOverrideDiscards: 0,
+    defensiveSafetyGateSameShantenDiscards: 0,
+    defensiveSafetyGateBackstepDiscards: 0,
+      defensiveSafetyGateProtectedPushDiscards: 0,
+      defensiveSafetyGateWouldAvoidDealIns: 0,
+      defensiveSafetyGateReasonCounts: {},
+      defensiveCallGateReviewedCalls: 0,
+      defensiveCallGateBlockedCalls: 0,
+      defensiveCallGateFirstOpenBlockedCalls: 0,
+      defensiveCallGateClosedRouteBlockedCalls: 0,
+      defensiveCallGatePressureBlockedCalls: 0,
+      defensiveCallGateAllowedDirectTenpaiCalls: 0,
+      defensiveCallGateReasonCounts: {},
+        alphaJongRiichiReviews: 0,
+      alphaJongRiichiLegalDiscards: 0,
+      alphaJongRiichiSelectedLegalDiscards: 0,
+      alphaJongCallMetricSamples: 0,
+      alphaJongCallSimulationFailures: 0,
+      alphaJongCallMissingXiangting: 0,
+      alphaJongKanReviews: 0,
+      alphaJongKanAccepts: 0,
+      alphaJongKanSimulationFailures: 0,
+      kanReasonCounts: {},
+      alphaJongRiichiReasonCounts: {},
+      alphaJongKanReasonCounts: {},
+      riichiOpportunities: 0,
+      callReasonCounts: {},
+      riichiRejectReasonCounts: {},
+    winTurnSum: 0,
+    winTurnSamples: 0,
+    winPointSum: 0,
+    winPointSamples: 0,
+    dealInPointSum: 0,
+    dealInPointSamples: 0,
+    winRatePerRound: 0,
+    dealInRatePerRound: 0,
+    dealInPaymentRatePerRound: 0,
+    tsumoRatePerRound: 0,
+    tsumoShareOfWins: 0,
+    ronRatePerRound: 0,
+    ronShareOfWins: 0,
+    drawRatePerRound: 0,
+    drawTenpaiRate: 0,
+    nonRiichiWinRate: 0,
+    riichiWinRate: 0,
+    riichiRatePerRound: 0,
+    riichiRoundRate: 0,
+    riichiPerDiscard: 0,
+    riichiOpportunityPerRound: 0,
+    riichiOpportunityTakeRate: 0,
+    callRoundRate: 0,
+    callRatePerDiscard: 0,
+    callPerRound: 0,
+    kanPerRound: 0,
+    openKanPerRound: 0,
+    closedKanPerRound: 0,
+    addedKanPerRound: 0,
+    chiCallPerRound: 0,
+    pengCallPerRound: 0,
+    closedCallPerRound: 0,
+    flatCallPerRound: 0,
+    shantenImproveCallPerRound: 0,
+    yakuhaiPengCallPerRound: 0,
+    closedRouteReviewPerRound: 0,
+    closedRouteOverridePerRound: 0,
+    defensiveShadowReviewPerRound: 0,
+    defensiveShadowDiffPerRound: 0,
+    defensiveShadowSaferAltPerRound: 0,
+    defensiveShadowBackstepPerRound: 0,
+    defensiveShadowActionablePerRound: 0,
+    defensiveShadowWouldAvoidDealInPerRound: 0,
+    defensiveSafetyGateReviewPerRound: 0,
+    defensiveSafetyGateOverridePerRound: 0,
+    defensiveSafetyGateSameShantenPerRound: 0,
+    defensiveSafetyGateBackstepPerRound: 0,
+    defensiveSafetyGateProtectedPushPerRound: 0,
+    defensiveSafetyGateWouldAvoidDealInPerRound: 0,
+      alphaJongRiichiReviewPerRound: 0,
+      alphaJongRiichiLegalPerRound: 0,
+      alphaJongRiichiSelectedLegalPerRound: 0,
+      alphaJongRiichiSelectedLegalRate: 0,
+      alphaJongCallSimulationFailurePerRound: 0,
+      alphaJongCallSimulationFailureRate: 0,
+      alphaJongCallMissingXiangtingPerRound: 0,
+      alphaJongKanReviewPerRound: 0,
+      alphaJongKanAcceptPerRound: 0,
+      alphaJongKanSimulationFailurePerRound: 0,
+      alphaJongKanSimulationFailureRate: 0,
+      averageCallOpenRouteScore: 0,
+    averagePassClosedRouteScore: 0,
+    closedRouteMarginAverage: 0,
+    averageWinTurn: 0,
+    averageWinPoints: 0,
+    averageDealInPoints: 0,
+    flownRate: 0,
+    uncertainty: {},
+    recordPanel: {}
+  };
+}
+
+function safeRate(count, total) {
+  return total > 0 ? count / total : 0;
+}
+
+function binomialStandardError(rate, total) {
+  const number = Number(rate);
+  const denominator = Number(total);
+  if (!Number.isFinite(number) || !Number.isFinite(denominator) || denominator <= 0) return 0;
+  return Math.sqrt(Math.max(0, number * (1 - number)) / denominator);
+}
+
+function computeAverageRankStandardError(stats) {
+  const appearances = Number(stats && stats.appearances || 0);
+  if (appearances <= 0) return 0;
+  const mean = Number(stats.averageRank || 0);
+  const rankCounts = stats.rankCounts || {};
+  const secondMoment = [1, 2, 3, 4].reduce((sum, rank) => (
+    sum + (rank * rank * Number(rankCounts[rank] || 0))
+  ), 0) / appearances;
+  const variance = Math.max(0, secondMoment - mean * mean);
+  return Math.sqrt(variance / appearances);
+}
+
+function addUncertainty(stats) {
+  stats.uncertainty = {
+    averageRankStandardError: computeAverageRankStandardError(stats),
+    firstRateStandardError: binomialStandardError(stats.firstRate, stats.appearances),
+    fourthRateStandardError: binomialStandardError(stats.fourthRate, stats.appearances),
+    winRatePerRoundStandardError: binomialStandardError(stats.winRatePerRound, stats.roundsSeen),
+    dealInRatePerRoundStandardError: binomialStandardError(stats.dealInRatePerRound, stats.roundsSeen)
+  };
+  return stats;
+}
+
+function finalizeVariantStats(stats) {
+  stats.averageRank = safeRate(stats.rankSum, stats.appearances);
+  stats.averageScore = safeRate(stats.scoreSum, stats.appearances);
+  stats.averageFinalScoreDelta = safeRate(stats.finalScoreDeltaSum, stats.appearances);
+  stats.firstRate = safeRate(stats.rankCounts[1], stats.appearances);
+  stats.secondRate = safeRate(stats.rankCounts[2], stats.appearances);
+  stats.thirdRate = safeRate(stats.rankCounts[3], stats.appearances);
+  stats.fourthRate = safeRate(stats.rankCounts[4], stats.appearances);
+  stats.winRatePerRound = safeRate(stats.huleWins, stats.roundsSeen);
+  stats.dealInRatePerRound = safeRate(stats.dealInRounds || stats.dealIns, stats.roundsSeen);
+  stats.dealInPaymentRatePerRound = safeRate(stats.dealIns, stats.roundsSeen);
+  stats.tsumoRatePerRound = safeRate(stats.tsumoWins, stats.roundsSeen);
+  stats.tsumoShareOfWins = safeRate(stats.tsumoWins, stats.huleWins);
+  stats.ronRatePerRound = safeRate(stats.ronWins, stats.roundsSeen);
+  stats.ronShareOfWins = safeRate(stats.ronWins, stats.huleWins);
+  stats.drawRatePerRound = safeRate(stats.drawRounds, stats.roundsSeen);
+  stats.drawTenpaiRate = safeRate(stats.drawTenpai, stats.drawRounds);
+  stats.nonRiichiWinRate = safeRate(stats.nonRiichiWins, stats.huleWins);
+  stats.riichiWinRate = safeRate(stats.riichiWins, stats.huleWins);
+  stats.riichiRatePerRound = safeRate(stats.riichi, stats.roundsSeen);
+  stats.riichiRoundRate = safeRate(stats.riichiRounds || stats.riichi, stats.roundsSeen);
+  stats.riichiPerDiscard = safeRate(stats.riichi, stats.discards);
+  stats.riichiOpportunityPerRound = safeRate(stats.riichiOpportunities, stats.roundsSeen);
+  stats.riichiOpportunityTakeRate = safeRate(stats.riichi, stats.riichiOpportunities);
+  stats.callRoundRate = safeRate(stats.callRounds, stats.roundsSeen);
+  stats.callRatePerDiscard = safeRate(stats.calls, stats.discards + stats.calls);
+  stats.callPerRound = safeRate(stats.calls, stats.roundsSeen);
+  stats.kanReviewPerRound = safeRate(stats.kanReviews, stats.roundsSeen);
+  stats.kanPerRound = safeRate(stats.kanActions, stats.roundsSeen);
+  stats.openKanPerRound = safeRate(stats.openKanActions, stats.roundsSeen);
+  stats.closedKanPerRound = safeRate(stats.closedKanActions, stats.roundsSeen);
+  stats.addedKanPerRound = safeRate(stats.addedKanActions, stats.roundsSeen);
+  stats.chiCallPerRound = safeRate(stats.chiCalls, stats.roundsSeen);
+  stats.pengCallPerRound = safeRate(stats.pengCalls, stats.roundsSeen);
+  stats.closedCallPerRound = safeRate(stats.closedCalls, stats.roundsSeen);
+  stats.flatCallPerRound = safeRate(stats.flatCalls, stats.roundsSeen);
+  stats.shantenImproveCallPerRound = safeRate(stats.shantenImproveCalls, stats.roundsSeen);
+  stats.yakuhaiPengCallPerRound = safeRate(stats.yakuhaiPengCalls, stats.roundsSeen);
+  stats.closedRouteReviewPerRound = safeRate(stats.closedRouteValueReviewedCalls, stats.roundsSeen);
+  stats.closedRouteOverridePerRound = safeRate(stats.closedRouteValueOverrideCalls, stats.roundsSeen);
+  stats.defensiveShadowReviewPerRound = safeRate(stats.defensiveShadowReviewedDiscards, stats.roundsSeen);
+  stats.defensiveShadowDiffPerRound = safeRate(stats.defensiveShadowDiffDiscards, stats.roundsSeen);
+  stats.defensiveShadowSaferAltPerRound = safeRate(stats.defensiveShadowSaferAltDiscards, stats.roundsSeen);
+    stats.defensiveShadowBackstepPerRound = safeRate(stats.defensiveShadowBackstepDiscards, stats.roundsSeen);
+    stats.defensiveShadowActionablePerRound = safeRate(stats.defensiveShadowActionableDiscards, stats.roundsSeen);
+    stats.defensiveShadowWouldAvoidDealInPerRound = safeRate(stats.defensiveShadowWouldAvoidDealIns, stats.roundsSeen);
+  stats.defensiveSafetyGateReviewPerRound = safeRate(stats.defensiveSafetyGateReviewedDiscards, stats.roundsSeen);
+  stats.defensiveSafetyGateOverridePerRound = safeRate(stats.defensiveSafetyGateOverrideDiscards, stats.roundsSeen);
+  stats.defensiveSafetyGateSameShantenPerRound = safeRate(stats.defensiveSafetyGateSameShantenDiscards, stats.roundsSeen);
+    stats.defensiveSafetyGateBackstepPerRound = safeRate(stats.defensiveSafetyGateBackstepDiscards, stats.roundsSeen);
+    stats.defensiveSafetyGateProtectedPushPerRound = safeRate(stats.defensiveSafetyGateProtectedPushDiscards, stats.roundsSeen);
+    stats.defensiveSafetyGateWouldAvoidDealInPerRound = safeRate(stats.defensiveSafetyGateWouldAvoidDealIns, stats.roundsSeen);
+    stats.defensiveCallGateReviewPerRound = safeRate(stats.defensiveCallGateReviewedCalls, stats.roundsSeen);
+    stats.defensiveCallGateBlockPerRound = safeRate(stats.defensiveCallGateBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGateFirstOpenBlockPerRound = safeRate(stats.defensiveCallGateFirstOpenBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGateClosedRouteBlockPerRound = safeRate(stats.defensiveCallGateClosedRouteBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGatePressureBlockPerRound = safeRate(stats.defensiveCallGatePressureBlockedCalls, stats.roundsSeen);
+    stats.defensiveCallGateAllowedDirectTenpaiPerRound = safeRate(stats.defensiveCallGateAllowedDirectTenpaiCalls, stats.roundsSeen);
+      stats.alphaJongRiichiReviewPerRound = safeRate(stats.alphaJongRiichiReviews, stats.roundsSeen);
+    stats.alphaJongRiichiLegalPerRound = safeRate(stats.alphaJongRiichiLegalDiscards, stats.roundsSeen);
+    stats.alphaJongRiichiSelectedLegalPerRound = safeRate(stats.alphaJongRiichiSelectedLegalDiscards, stats.roundsSeen);
+    stats.alphaJongRiichiSelectedLegalRate = safeRate(stats.alphaJongRiichiSelectedLegalDiscards, stats.alphaJongRiichiLegalDiscards);
+    stats.alphaJongCallSimulationFailurePerRound = safeRate(stats.alphaJongCallSimulationFailures, stats.roundsSeen);
+    stats.alphaJongCallSimulationFailureRate = safeRate(stats.alphaJongCallSimulationFailures, stats.alphaJongCallMetricSamples);
+    stats.alphaJongCallMissingXiangtingPerRound = safeRate(stats.alphaJongCallMissingXiangting, stats.roundsSeen);
+    stats.alphaJongKanReviewPerRound = safeRate(stats.alphaJongKanReviews, stats.roundsSeen);
+    stats.alphaJongKanAcceptPerRound = safeRate(stats.alphaJongKanAccepts, stats.roundsSeen);
+    stats.alphaJongKanSimulationFailurePerRound = safeRate(stats.alphaJongKanSimulationFailures, stats.roundsSeen);
+    stats.alphaJongKanSimulationFailureRate = safeRate(stats.alphaJongKanSimulationFailures, stats.alphaJongKanAccepts);
+    stats.averageCallOpenRouteScore = safeRate(stats.closedRouteCallOpenScoreSum, stats.closedRouteScoreSamples);
+  stats.averagePassClosedRouteScore = safeRate(stats.closedRoutePassScoreSum, stats.closedRouteScoreSamples);
+  stats.closedRouteMarginAverage = safeRate(stats.closedRouteMarginSum, stats.closedRouteScoreSamples);
+  stats.averageWinTurn = safeRate(stats.winTurnSum, stats.winTurnSamples);
+  stats.averageWinPoints = safeRate(stats.winPointSum, stats.winPointSamples);
+  stats.averageDealInPoints = safeRate(stats.dealInPointSum, stats.dealInPointSamples);
+  stats.flownRate = safeRate(stats.flownCount, stats.appearances);
+  addUncertainty(stats);
+  stats.recordPanel = buildVariantRecordPanel(stats);
+  return stats;
+}
+
+function summarizeMatchRows(rows, variants) {
+  const variantStats = variants.reduce((result, variant) => {
+    result[variant.id] = createEmptyVariantStats();
+    return result;
+  }, {});
+  const totals = {
+    matches: rows.length,
+    completedMatches: rows.filter((row) => row.completed).length,
+    rounds: rows.reduce((sum, row) => sum + Number(row.rounds || 0), 0),
+    drawRounds: rows.reduce((sum, row) => sum + Number(row.counters && row.counters.drawRounds || 0), 0),
+    errorCount: rows.reduce((sum, row) => (
+      sum + (row.counters && Array.isArray(row.counters.errors) ? row.counters.errors.length : 0)
+    ), 0),
+    finishReasons: {}
+  };
+
+  rows.forEach((row) => {
+    const reason = row.finishReason || 'unknown';
+    totals.finishReasons[reason] = (totals.finishReasons[reason] || 0) + 1;
+    (row.seatResults || []).forEach((seatResult) => {
+      const stats = variantStats[seatResult.variant];
+      if (!stats) return;
+      const seatKey = seatResult.seat;
+      stats.appearances += 1;
+      stats.rankSum += Number(seatResult.rank || 0);
+      stats.scoreSum += Number(seatResult.score || 0);
+      stats.finalScoreDeltaSum += Number(seatResult.score || 0) - 25000;
+      if (seatResult.rank === 1) stats.matchWins += 1;
+      if (stats.rankCounts[seatResult.rank] != null) stats.rankCounts[seatResult.rank] += 1;
+      if (stats.seatAppearances[seatKey] != null) stats.seatAppearances[seatKey] += 1;
+      if (Number(seatResult.score || 0) < 0) stats.flownCount += 1;
+      stats.roundsSeen += Number(row.rounds || 0);
+      const counters = row.counters || {};
+      stats.drawRounds += Number(counters.drawRounds || 0);
+      stats.huleWins += Number(counters.wins && counters.wins[seatKey] || 0);
+      stats.riichiWins += Number(counters.riichiWins && counters.riichiWins[seatKey] || 0);
+      stats.nonRiichiWins += Number(counters.nonRiichiWins && counters.nonRiichiWins[seatKey] || 0);
+      stats.tsumoWins += Number(counters.tsumoWins && counters.tsumoWins[seatKey] || 0);
+      stats.ronWins += Number(counters.ronWins && counters.ronWins[seatKey] || 0);
+      stats.dealIns += Number(counters.dealIns && counters.dealIns[seatKey] || 0);
+      stats.dealInRounds += Number(counters.dealInRounds && counters.dealInRounds[seatKey] || 0);
+      stats.drawTenpai += Number(counters.drawTenpai && counters.drawTenpai[seatKey] || 0);
+      stats.drawNoten += Number(counters.drawNoten && counters.drawNoten[seatKey] || 0);
+      stats.draws += Number(counters.draws && counters.draws[seatKey] || 0);
+      stats.discards += Number(counters.discards && counters.discards[seatKey] || 0);
+      stats.riichi += Number(counters.riichi && counters.riichi[seatKey] || 0);
+      stats.riichiRounds += Number(counters.riichiRounds && counters.riichiRounds[seatKey] || 0);
+      stats.calls += Number(counters.calls && counters.calls[seatKey] || 0);
+      stats.kanReviews += Number(counters.kanReviews && counters.kanReviews[seatKey] || 0);
+      stats.kanActions += Number(counters.kanActions && counters.kanActions[seatKey] || 0);
+      stats.openKanActions += Number(counters.openKanActions && counters.openKanActions[seatKey] || 0);
+      stats.closedKanActions += Number(counters.closedKanActions && counters.closedKanActions[seatKey] || 0);
+      stats.addedKanActions += Number(counters.addedKanActions && counters.addedKanActions[seatKey] || 0);
+      stats.callRounds += Number(counters.callRounds && counters.callRounds[seatKey] || 0);
+      stats.chiCalls += Number(counters.chiCalls && counters.chiCalls[seatKey] || 0);
+      stats.pengCalls += Number(counters.pengCalls && counters.pengCalls[seatKey] || 0);
+      stats.yakuhaiPengCalls += Number(counters.yakuhaiPengCalls && counters.yakuhaiPengCalls[seatKey] || 0);
+      stats.shantenImproveCalls += Number(counters.shantenImproveCalls && counters.shantenImproveCalls[seatKey] || 0);
+      stats.flatCalls += Number(counters.flatCalls && counters.flatCalls[seatKey] || 0);
+      stats.closedCalls += Number(counters.closedCalls && counters.closedCalls[seatKey] || 0);
+      stats.closedRouteValueReviewedCalls += Number(counters.closedRouteValueReviewedCalls && counters.closedRouteValueReviewedCalls[seatKey] || 0);
+      stats.closedRouteValueOverrideCalls += Number(counters.closedRouteValueOverrideCalls && counters.closedRouteValueOverrideCalls[seatKey] || 0);
+      stats.closedRouteCallOpenScoreSum += Number(counters.closedRouteCallOpenScoreSum && counters.closedRouteCallOpenScoreSum[seatKey] || 0);
+      stats.closedRoutePassScoreSum += Number(counters.closedRoutePassScoreSum && counters.closedRoutePassScoreSum[seatKey] || 0);
+      stats.closedRouteMarginSum += Number(counters.closedRouteMarginSum && counters.closedRouteMarginSum[seatKey] || 0);
+      stats.closedRouteScoreSamples += Number(counters.closedRouteScoreSamples && counters.closedRouteScoreSamples[seatKey] || 0);
+      stats.defensiveShadowReviewedDiscards += Number(counters.defensiveShadowReviewedDiscards && counters.defensiveShadowReviewedDiscards[seatKey] || 0);
+      stats.defensiveShadowDiffDiscards += Number(counters.defensiveShadowDiffDiscards && counters.defensiveShadowDiffDiscards[seatKey] || 0);
+        stats.defensiveShadowSaferAltDiscards += Number(counters.defensiveShadowSaferAltDiscards && counters.defensiveShadowSaferAltDiscards[seatKey] || 0);
+        stats.defensiveShadowBackstepDiscards += Number(counters.defensiveShadowBackstepDiscards && counters.defensiveShadowBackstepDiscards[seatKey] || 0);
+        stats.defensiveShadowActionableDiscards += Number(counters.defensiveShadowActionableDiscards && counters.defensiveShadowActionableDiscards[seatKey] || 0);
+        stats.defensiveShadowWouldAvoidDealIns += Number(counters.defensiveShadowWouldAvoidDealIns && counters.defensiveShadowWouldAvoidDealIns[seatKey] || 0);
+      stats.defensiveSafetyGateReviewedDiscards += Number(counters.defensiveSafetyGateReviewedDiscards && counters.defensiveSafetyGateReviewedDiscards[seatKey] || 0);
+      stats.defensiveSafetyGateOverrideDiscards += Number(counters.defensiveSafetyGateOverrideDiscards && counters.defensiveSafetyGateOverrideDiscards[seatKey] || 0);
+      stats.defensiveSafetyGateSameShantenDiscards += Number(counters.defensiveSafetyGateSameShantenDiscards && counters.defensiveSafetyGateSameShantenDiscards[seatKey] || 0);
+        stats.defensiveSafetyGateBackstepDiscards += Number(counters.defensiveSafetyGateBackstepDiscards && counters.defensiveSafetyGateBackstepDiscards[seatKey] || 0);
+        stats.defensiveSafetyGateProtectedPushDiscards += Number(counters.defensiveSafetyGateProtectedPushDiscards && counters.defensiveSafetyGateProtectedPushDiscards[seatKey] || 0);
+        stats.defensiveSafetyGateWouldAvoidDealIns += Number(counters.defensiveSafetyGateWouldAvoidDealIns && counters.defensiveSafetyGateWouldAvoidDealIns[seatKey] || 0);
+        stats.defensiveCallGateReviewedCalls += Number(counters.defensiveCallGateReviewedCalls && counters.defensiveCallGateReviewedCalls[seatKey] || 0);
+        stats.defensiveCallGateBlockedCalls += Number(counters.defensiveCallGateBlockedCalls && counters.defensiveCallGateBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGateFirstOpenBlockedCalls += Number(counters.defensiveCallGateFirstOpenBlockedCalls && counters.defensiveCallGateFirstOpenBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGateClosedRouteBlockedCalls += Number(counters.defensiveCallGateClosedRouteBlockedCalls && counters.defensiveCallGateClosedRouteBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGatePressureBlockedCalls += Number(counters.defensiveCallGatePressureBlockedCalls && counters.defensiveCallGatePressureBlockedCalls[seatKey] || 0);
+        stats.defensiveCallGateAllowedDirectTenpaiCalls += Number(counters.defensiveCallGateAllowedDirectTenpaiCalls && counters.defensiveCallGateAllowedDirectTenpaiCalls[seatKey] || 0);
+          stats.alphaJongRiichiReviews += Number(counters.alphaJongRiichiReviews && counters.alphaJongRiichiReviews[seatKey] || 0);
+        stats.alphaJongRiichiLegalDiscards += Number(counters.alphaJongRiichiLegalDiscards && counters.alphaJongRiichiLegalDiscards[seatKey] || 0);
+        stats.alphaJongRiichiSelectedLegalDiscards += Number(counters.alphaJongRiichiSelectedLegalDiscards && counters.alphaJongRiichiSelectedLegalDiscards[seatKey] || 0);
+        stats.alphaJongCallMetricSamples += Number(counters.alphaJongCallMetricSamples && counters.alphaJongCallMetricSamples[seatKey] || 0);
+        stats.alphaJongCallSimulationFailures += Number(counters.alphaJongCallSimulationFailures && counters.alphaJongCallSimulationFailures[seatKey] || 0);
+        stats.alphaJongCallMissingXiangting += Number(counters.alphaJongCallMissingXiangting && counters.alphaJongCallMissingXiangting[seatKey] || 0);
+        stats.alphaJongKanReviews += Number(counters.alphaJongKanReviews && counters.alphaJongKanReviews[seatKey] || 0);
+        stats.alphaJongKanAccepts += Number(counters.alphaJongKanAccepts && counters.alphaJongKanAccepts[seatKey] || 0);
+        stats.alphaJongKanSimulationFailures += Number(counters.alphaJongKanSimulationFailures && counters.alphaJongKanSimulationFailures[seatKey] || 0);
+        stats.riichiOpportunities += Number(counters.riichiOpportunities && counters.riichiOpportunities[seatKey] || 0);
+        addReasonCounters(stats.callReasonCounts, counters.callReasonCounts && counters.callReasonCounts[seatKey]);
+        addReasonCounters(stats.riichiRejectReasonCounts, counters.riichiRejectReasonCounts && counters.riichiRejectReasonCounts[seatKey]);
+        addReasonCounters(stats.balancedRouteStateCounts, counters.balancedRouteStateCounts && counters.balancedRouteStateCounts[seatKey]);
+        addReasonCounters(stats.balancedRouteStateReasonCounts, counters.balancedRouteStateReasonCounts && counters.balancedRouteStateReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveStateCounts, counters.defensiveStateCounts && counters.defensiveStateCounts[seatKey]);
+        addReasonCounters(stats.threatProfileReasonCounts, counters.threatProfileReasonCounts && counters.threatProfileReasonCounts[seatKey]);
+        addReasonCounters(stats.dealInAttributionCounts, counters.dealInAttributionCounts && counters.dealInAttributionCounts[seatKey]);
+        addReasonCounters(stats.defensiveShadowReasonCounts, counters.defensiveShadowReasonCounts && counters.defensiveShadowReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveShadowActionableReasonCounts, counters.defensiveShadowActionableReasonCounts && counters.defensiveShadowActionableReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveSafetyGateReasonCounts, counters.defensiveSafetyGateReasonCounts && counters.defensiveSafetyGateReasonCounts[seatKey]);
+        addReasonCounters(stats.defensiveCallGateReasonCounts, counters.defensiveCallGateReasonCounts && counters.defensiveCallGateReasonCounts[seatKey]);
+        addReasonCounters(stats.kanReasonCounts, counters.kanReasonCounts && counters.kanReasonCounts[seatKey]);
+          addReasonCounters(stats.alphaJongKanReasonCounts, counters.alphaJongKanReasonCounts && counters.alphaJongKanReasonCounts[seatKey]);
+        addReasonCounters(stats.alphaJongRiichiReasonCounts, counters.alphaJongRiichiReasonCounts && counters.alphaJongRiichiReasonCounts[seatKey]);
+      stats.winTurnSum += Number(counters.winTurnSum && counters.winTurnSum[seatKey] || 0);
+      stats.winTurnSamples += Number(counters.winTurnSamples && counters.winTurnSamples[seatKey] || 0);
+      stats.winPointSum += Number(counters.winPointSum && counters.winPointSum[seatKey] || 0);
+      stats.winPointSamples += Number(counters.winPointSamples && counters.winPointSamples[seatKey] || 0);
+      stats.dealInPointSum += Number(counters.dealInPointSum && counters.dealInPointSum[seatKey] || 0);
+      stats.dealInPointSamples += Number(counters.dealInPointSamples && counters.dealInPointSamples[seatKey] || 0);
+    });
+  });
+
+  Object.values(variantStats).forEach(finalizeVariantStats);
+  totals.completedRate = safeRate(totals.completedMatches, totals.matches);
+  totals.averageRoundsPerMatch = safeRate(totals.rounds, totals.matches);
+  totals.drawRate = safeRate(totals.drawRounds, totals.rounds);
+  return {
+    totals,
+    variantStats
+  };
+}
+
+function progressLog(args, message) {
+  if (args && args.progress) {
+    console.error(`[arena] ${message}`);
+  }
+}
+
+function roundMetric(value, digits = 3) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  const factor = 10 ** digits;
+  return Math.round(number * factor) / factor;
+}
+
+function formatPercent(value) {
+  return `${roundMetric(Number(value || 0) * 100, 1)}%`;
+}
+
+function hasOwnMetric(stats, key) {
+  return Boolean(stats && Object.prototype.hasOwnProperty.call(stats, key));
+}
+
+function metricValue(stats, key, fallbackKey = null) {
+  if (hasOwnMetric(stats, key)) {
+    const value = Number(stats[key]);
+    return Number.isFinite(value) ? value : null;
+  }
+  if (fallbackKey && hasOwnMetric(stats, fallbackKey)) {
+    const value = Number(stats[fallbackKey]);
+    return Number.isFinite(value) ? value : null;
+  }
+  return null;
+}
+
+function metricRatio(stats, countKey, totalKey) {
+  if (!hasOwnMetric(stats, countKey) || !hasOwnMetric(stats, totalKey)) return null;
+  const count = Number(stats[countKey]);
+  const total = Number(stats[totalKey]);
+  if (!Number.isFinite(count) || !Number.isFinite(total) || total <= 0) return null;
+  return count / total;
+}
+
+function formatMaybeNumber(value, digits = 2) {
+  return value == null ? 'n/a' : String(roundMetric(value, digits));
+}
+
+function formatMaybeInteger(value) {
+  return value == null ? 'n/a' : String(roundMetric(value, 0));
+}
+
+function formatMaybePercent(value) {
+  return value == null ? 'n/a' : formatPercent(value);
+}
+
+function formatCompactReasonCounts(counts = {}) {
+  const entries = Object.entries(counts || {})
+    .filter(([, count]) => Number(count || 0) > 0)
+    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0) || String(left[0]).localeCompare(String(right[0])));
+  if (!entries.length) return '';
+  return entries.map(([key, count]) => `${key}:${Number(count || 0)}`).join(',');
+}
+
+function buildVariantRecordPanel(stats = {}) {
+  const callRoundRate = metricValue(stats, 'callRoundRate');
+  const callPerRound = metricValue(stats, 'callPerRound');
+  const drawRate = metricValue(stats, 'drawRatePerRound');
+  const nonRiichiWinRate = metricValue(stats, 'nonRiichiWinRate');
+  const tsumoShareOfWins = metricValue(stats, 'tsumoShareOfWins') ?? metricRatio(stats, 'tsumoWins', 'huleWins');
+  const dealInRate = metricValue(stats, 'dealInRatePerRound');
+  return {
+    records: metricValue(stats, 'appearances'),
+    averageRank: metricValue(stats, 'averageRank'),
+    averageScore: metricValue(stats, 'averageScore'),
+    averageFinalScoreDelta: metricValue(stats, 'averageFinalScoreDelta'),
+    firstRate: metricValue(stats, 'firstRate'),
+    secondRate: metricValue(stats, 'secondRate'),
+    thirdRate: metricValue(stats, 'thirdRate'),
+    fourthRate: metricValue(stats, 'fourthRate'),
+    flownRate: metricValue(stats, 'flownRate'),
+    huleRate: metricValue(stats, 'winRatePerRound'),
+    dealInRate,
+    dealInPaymentRate: metricValue(stats, 'dealInPaymentRatePerRound'),
+    nonRiichiWinRate,
+    drawRate,
+    tsumoRate: tsumoShareOfWins,
+    tsumoRatePerRound: metricValue(stats, 'tsumoRatePerRound'),
+    ronRatePerRound: metricValue(stats, 'ronRatePerRound'),
+    riichiRate: metricValue(stats, 'riichiRoundRate', 'riichiRatePerRound'),
+    riichiPerDiscard: metricValue(stats, 'riichiPerDiscard'),
+    riichiOpportunityPerRound: metricValue(stats, 'riichiOpportunityPerRound'),
+    riichiOpportunityTakeRate: metricValue(stats, 'riichiOpportunityTakeRate'),
+    callRate: callRoundRate,
+    callsPerRound: callPerRound,
+    callRatePerDiscard: metricValue(stats, 'callRatePerDiscard'),
+    kanReviewPerRound: metricValue(stats, 'kanReviewPerRound'),
+    kanPerRound: metricValue(stats, 'kanPerRound'),
+    openKanPerRound: metricValue(stats, 'openKanPerRound'),
+    closedKanPerRound: metricValue(stats, 'closedKanPerRound'),
+    addedKanPerRound: metricValue(stats, 'addedKanPerRound'),
+    chiCallsPerRound: metricValue(stats, 'chiCallPerRound'),
+    pengCallsPerRound: metricValue(stats, 'pengCallPerRound'),
+    closedCallsPerRound: metricValue(stats, 'closedCallPerRound'),
+    flatCallsPerRound: metricValue(stats, 'flatCallPerRound'),
+    shantenImproveCallsPerRound: metricValue(stats, 'shantenImproveCallPerRound'),
+    yakuhaiPengCallsPerRound: metricValue(stats, 'yakuhaiPengCallPerRound'),
+    closedRouteReviewPerRound: metricValue(stats, 'closedRouteReviewPerRound'),
+    closedRouteOverridePerRound: metricValue(stats, 'closedRouteOverridePerRound'),
+    defensiveShadowReviewPerRound: metricValue(stats, 'defensiveShadowReviewPerRound'),
+    defensiveShadowDiffPerRound: metricValue(stats, 'defensiveShadowDiffPerRound'),
+    defensiveShadowSaferAltPerRound: metricValue(stats, 'defensiveShadowSaferAltPerRound'),
+    defensiveShadowBackstepPerRound: metricValue(stats, 'defensiveShadowBackstepPerRound'),
+    defensiveShadowActionablePerRound: metricValue(stats, 'defensiveShadowActionablePerRound'),
+    defensiveShadowWouldAvoidDealInPerRound: metricValue(stats, 'defensiveShadowWouldAvoidDealInPerRound'),
+    defensiveSafetyGateReviewPerRound: metricValue(stats, 'defensiveSafetyGateReviewPerRound'),
+    defensiveSafetyGateOverridePerRound: metricValue(stats, 'defensiveSafetyGateOverridePerRound'),
+    defensiveSafetyGateSameShantenPerRound: metricValue(stats, 'defensiveSafetyGateSameShantenPerRound'),
+      defensiveSafetyGateBackstepPerRound: metricValue(stats, 'defensiveSafetyGateBackstepPerRound'),
+      defensiveSafetyGateProtectedPushPerRound: metricValue(stats, 'defensiveSafetyGateProtectedPushPerRound'),
+      defensiveSafetyGateWouldAvoidDealInPerRound: metricValue(stats, 'defensiveSafetyGateWouldAvoidDealInPerRound'),
+      defensiveCallGateReviewPerRound: metricValue(stats, 'defensiveCallGateReviewPerRound'),
+      defensiveCallGateBlockPerRound: metricValue(stats, 'defensiveCallGateBlockPerRound'),
+      defensiveCallGateFirstOpenBlockPerRound: metricValue(stats, 'defensiveCallGateFirstOpenBlockPerRound'),
+      defensiveCallGateClosedRouteBlockPerRound: metricValue(stats, 'defensiveCallGateClosedRouteBlockPerRound'),
+      defensiveCallGatePressureBlockPerRound: metricValue(stats, 'defensiveCallGatePressureBlockPerRound'),
+      defensiveCallGateAllowedDirectTenpaiPerRound: metricValue(stats, 'defensiveCallGateAllowedDirectTenpaiPerRound'),
+        alphaJongRiichiReviewPerRound: metricValue(stats, 'alphaJongRiichiReviewPerRound'),
+      alphaJongRiichiLegalPerRound: metricValue(stats, 'alphaJongRiichiLegalPerRound'),
+      alphaJongRiichiSelectedLegalPerRound: metricValue(stats, 'alphaJongRiichiSelectedLegalPerRound'),
+      alphaJongRiichiSelectedLegalRate: metricValue(stats, 'alphaJongRiichiSelectedLegalRate'),
+      alphaJongCallSimulationFailurePerRound: metricValue(stats, 'alphaJongCallSimulationFailurePerRound'),
+      alphaJongCallSimulationFailureRate: metricValue(stats, 'alphaJongCallSimulationFailureRate'),
+      alphaJongCallMissingXiangtingPerRound: metricValue(stats, 'alphaJongCallMissingXiangtingPerRound'),
+      alphaJongKanReviewPerRound: metricValue(stats, 'alphaJongKanReviewPerRound'),
+      alphaJongKanAcceptPerRound: metricValue(stats, 'alphaJongKanAcceptPerRound'),
+      alphaJongKanSimulationFailurePerRound: metricValue(stats, 'alphaJongKanSimulationFailurePerRound'),
+      alphaJongKanSimulationFailureRate: metricValue(stats, 'alphaJongKanSimulationFailureRate'),
+      averageCallOpenRouteScore: metricValue(stats, 'averageCallOpenRouteScore'),
+    averagePassClosedRouteScore: metricValue(stats, 'averagePassClosedRouteScore'),
+    closedRouteMarginAverage: metricValue(stats, 'closedRouteMarginAverage'),
+    drawTenpaiRate: metricValue(stats, 'drawTenpaiRate'),
+    averageWinTurn: metricValue(stats, 'averageWinTurn'),
+    averageWinPoints: metricValue(stats, 'averageWinPoints'),
+    averageDealInPoints: metricValue(stats, 'averageDealInPoints'),
+    rawCounts: {
+      huleWins: metricValue(stats, 'huleWins'),
+      tsumoWins: metricValue(stats, 'tsumoWins'),
+      ronWins: metricValue(stats, 'ronWins'),
+      dealIns: metricValue(stats, 'dealIns'),
+      dealInRounds: metricValue(stats, 'dealInRounds'),
+      drawRounds: metricValue(stats, 'drawRounds'),
+      drawTenpai: metricValue(stats, 'drawTenpai'),
+      riichi: metricValue(stats, 'riichi'),
+      riichiOpportunities: metricValue(stats, 'riichiOpportunities'),
+      calls: metricValue(stats, 'calls'),
+      kanReviews: metricValue(stats, 'kanReviews'),
+      kanActions: metricValue(stats, 'kanActions'),
+      openKanActions: metricValue(stats, 'openKanActions'),
+      closedKanActions: metricValue(stats, 'closedKanActions'),
+      addedKanActions: metricValue(stats, 'addedKanActions'),
+      callRounds: metricValue(stats, 'callRounds'),
+      chiCalls: metricValue(stats, 'chiCalls'),
+      pengCalls: metricValue(stats, 'pengCalls'),
+      yakuhaiPengCalls: metricValue(stats, 'yakuhaiPengCalls'),
+      shantenImproveCalls: metricValue(stats, 'shantenImproveCalls'),
+      flatCalls: metricValue(stats, 'flatCalls'),
+      closedCalls: metricValue(stats, 'closedCalls'),
+      closedRouteValueReviewedCalls: metricValue(stats, 'closedRouteValueReviewedCalls'),
+      closedRouteValueOverrideCalls: metricValue(stats, 'closedRouteValueOverrideCalls'),
+      closedRouteScoreSamples: metricValue(stats, 'closedRouteScoreSamples'),
+      defensiveShadowReviewedDiscards: metricValue(stats, 'defensiveShadowReviewedDiscards'),
+      defensiveShadowDiffDiscards: metricValue(stats, 'defensiveShadowDiffDiscards'),
+        defensiveShadowSaferAltDiscards: metricValue(stats, 'defensiveShadowSaferAltDiscards'),
+        defensiveShadowBackstepDiscards: metricValue(stats, 'defensiveShadowBackstepDiscards'),
+        defensiveShadowActionableDiscards: metricValue(stats, 'defensiveShadowActionableDiscards'),
+        defensiveShadowWouldAvoidDealIns: metricValue(stats, 'defensiveShadowWouldAvoidDealIns'),
+      defensiveSafetyGateReviewedDiscards: metricValue(stats, 'defensiveSafetyGateReviewedDiscards'),
+      defensiveSafetyGateOverrideDiscards: metricValue(stats, 'defensiveSafetyGateOverrideDiscards'),
+      defensiveSafetyGateSameShantenDiscards: metricValue(stats, 'defensiveSafetyGateSameShantenDiscards'),
+        defensiveSafetyGateBackstepDiscards: metricValue(stats, 'defensiveSafetyGateBackstepDiscards'),
+        defensiveSafetyGateProtectedPushDiscards: metricValue(stats, 'defensiveSafetyGateProtectedPushDiscards'),
+        defensiveSafetyGateWouldAvoidDealIns: metricValue(stats, 'defensiveSafetyGateWouldAvoidDealIns'),
+        defensiveCallGateReviewedCalls: metricValue(stats, 'defensiveCallGateReviewedCalls'),
+        defensiveCallGateBlockedCalls: metricValue(stats, 'defensiveCallGateBlockedCalls'),
+        defensiveCallGateFirstOpenBlockedCalls: metricValue(stats, 'defensiveCallGateFirstOpenBlockedCalls'),
+        defensiveCallGateClosedRouteBlockedCalls: metricValue(stats, 'defensiveCallGateClosedRouteBlockedCalls'),
+        defensiveCallGatePressureBlockedCalls: metricValue(stats, 'defensiveCallGatePressureBlockedCalls'),
+        defensiveCallGateAllowedDirectTenpaiCalls: metricValue(stats, 'defensiveCallGateAllowedDirectTenpaiCalls'),
+          alphaJongRiichiReviews: metricValue(stats, 'alphaJongRiichiReviews'),
+        alphaJongRiichiLegalDiscards: metricValue(stats, 'alphaJongRiichiLegalDiscards'),
+        alphaJongRiichiSelectedLegalDiscards: metricValue(stats, 'alphaJongRiichiSelectedLegalDiscards'),
+        alphaJongCallMetricSamples: metricValue(stats, 'alphaJongCallMetricSamples'),
+        alphaJongCallSimulationFailures: metricValue(stats, 'alphaJongCallSimulationFailures'),
+        alphaJongCallMissingXiangting: metricValue(stats, 'alphaJongCallMissingXiangting'),
+        alphaJongKanReviews: metricValue(stats, 'alphaJongKanReviews'),
+        alphaJongKanAccepts: metricValue(stats, 'alphaJongKanAccepts'),
+        alphaJongKanSimulationFailures: metricValue(stats, 'alphaJongKanSimulationFailures'),
+        roundsSeen: metricValue(stats, 'roundsSeen')
+      },
+    callReasonCounts: stats.callReasonCounts || {},
+    riichiRejectReasonCounts: stats.riichiRejectReasonCounts || {},
+    balancedRouteStateCounts: stats.balancedRouteStateCounts || {},
+    balancedRouteStateReasonCounts: stats.balancedRouteStateReasonCounts || {},
+    defensiveStateCounts: stats.defensiveStateCounts || {},
+    threatProfileReasonCounts: stats.threatProfileReasonCounts || {},
+      dealInAttributionCounts: stats.dealInAttributionCounts || {},
+        defensiveShadowReasonCounts: stats.defensiveShadowReasonCounts || {},
+        defensiveShadowActionableReasonCounts: stats.defensiveShadowActionableReasonCounts || {},
+    defensiveSafetyGateReasonCounts: stats.defensiveSafetyGateReasonCounts || {},
+    defensiveCallGateReasonCounts: stats.defensiveCallGateReasonCounts || {},
+    kanReasonCounts: stats.kanReasonCounts || {},
+        alphaJongRiichiReasonCounts: stats.alphaJongRiichiReasonCounts || {},
+      alphaJongKanReasonCounts: stats.alphaJongKanReasonCounts || {},
+      uncertainty: stats.uncertainty || null,
+    availability: {
+      drawStats: drawRate != null,
+      nonRiichiWinStats: nonRiichiWinRate != null,
+      tsumoShareStats: tsumoShareOfWins != null,
+      callRoundStats: callRoundRate != null,
+      dealInRoundStats: dealInRate != null
+    }
+  };
+}
+
+function formatVariantRecordPanel(variant, stats = {}) {
+  const panel = stats.recordPanel || buildVariantRecordPanel(stats);
+  const rankSe = stats.uncertainty && Number.isFinite(Number(stats.uncertainty.averageRankStandardError))
+    ? `±${roundMetric(stats.uncertainty.averageRankStandardError, 3)}`
+    : '';
+  const title = variant && variant.id ? variant.id : 'unknown';
+  const lines = [
+    `[arena]   ${title}`
+      + ` rec=${formatMaybeInteger(panel.records)}`
+      + ` avgRank=${formatMaybeNumber(panel.averageRank, 2)}${rankSe}`
+      + ` avgScore=${formatMaybeInteger(panel.averageScore)}`
+      + ` delta=${formatMaybeInteger(panel.averageFinalScoreDelta)}`
+      + ` 1st=${formatMaybePercent(panel.firstRate)}`
+      + ` 2nd=${formatMaybePercent(panel.secondRate)}`
+      + ` 3rd=${formatMaybePercent(panel.thirdRate)}`
+      + ` 4th=${formatMaybePercent(panel.fourthRate)}`
+      + ` flown=${formatMaybePercent(panel.flownRate)}`,
+    `[arena]     hule=${formatMaybePercent(panel.huleRate)}`
+      + ` dealIn=${formatMaybePercent(panel.dealInRate)}`
+      + ` nonRiichiWin=${formatMaybePercent(panel.nonRiichiWinRate)}`
+      + ` draw=${formatMaybePercent(panel.drawRate)}`
+      + ` tsumoWin=${formatMaybePercent(panel.tsumoRate)}`
+      + ` call=${formatMaybePercent(panel.callRate)}`
+      + ` riichi=${formatMaybePercent(panel.riichiRate)}`
+      + ` drawTenpai=${formatMaybePercent(panel.drawTenpaiRate)}`,
+    `[arena]     winTurn=${formatMaybeNumber(panel.averageWinTurn, 2)}`
+      + ` avgWin=${formatMaybeInteger(panel.averageWinPoints)}`
+      + ` avgDealIn=${formatMaybeInteger(panel.averageDealInPoints)}`
+      + ` ron/R=${formatMaybePercent(panel.ronRatePerRound)}`
+      + ` tsumo/R=${formatMaybePercent(panel.tsumoRatePerRound)}`
+      + ` calls/R=${formatMaybeNumber(panel.callsPerRound, 2)}`
+      + ` riichi/discard=${formatMaybePercent(panel.riichiPerDiscard)}`,
+    `[arena]     chi/R=${formatMaybeNumber(panel.chiCallsPerRound, 2)}`
+      + ` peng/R=${formatMaybeNumber(panel.pengCallsPerRound, 2)}`
+      + ` closedCall/R=${formatMaybeNumber(panel.closedCallsPerRound, 2)}`
+      + ` flatCall/R=${formatMaybeNumber(panel.flatCallsPerRound, 2)}`
+      + ` improveCall/R=${formatMaybeNumber(panel.shantenImproveCallsPerRound, 2)}`
+      + ` yakuhai/R=${formatMaybeNumber(panel.yakuhaiPengCallsPerRound, 2)}`
+      + ` riichiOpp/R=${formatMaybeNumber(panel.riichiOpportunityPerRound, 2)}`
+      + ` riichiOppTake=${formatMaybePercent(panel.riichiOpportunityTakeRate)}`,
+    `[arena]     kanReview/R=${formatMaybeNumber(panel.kanReviewPerRound, 2)}`
+      + ` kan/R=${formatMaybeNumber(panel.kanPerRound, 2)}`
+      + ` openKan/R=${formatMaybeNumber(panel.openKanPerRound, 2)}`
+      + ` closedKan/R=${formatMaybeNumber(panel.closedKanPerRound, 2)}`
+      + ` addedKan/R=${formatMaybeNumber(panel.addedKanPerRound, 2)}`,
+    `[arena]     closedRouteReview/R=${formatMaybeNumber(panel.closedRouteReviewPerRound, 2)}`
+      + ` closedRouteOverride/R=${formatMaybeNumber(panel.closedRouteOverridePerRound, 2)}`
+      + ` callRouteScore=${formatMaybeNumber(panel.averageCallOpenRouteScore, 1)}`
+      + ` passRouteScore=${formatMaybeNumber(panel.averagePassClosedRouteScore, 1)}`
+      + ` routeMargin=${formatMaybeNumber(panel.closedRouteMarginAverage, 1)}`,
+    `[arena]     defShadowReview/R=${formatMaybeNumber(panel.defensiveShadowReviewPerRound, 2)}`
+      + ` defShadowDiff/R=${formatMaybeNumber(panel.defensiveShadowDiffPerRound, 2)}`
+      + ` defShadowSaferAlt/R=${formatMaybeNumber(panel.defensiveShadowSaferAltPerRound, 2)}`
+      + ` defShadowBackstep/R=${formatMaybeNumber(panel.defensiveShadowBackstepPerRound, 2)}`
+      + ` defShadowActionable/R=${formatMaybeNumber(panel.defensiveShadowActionablePerRound, 2)}`
+      + ` defShadowWouldAvoidDealIn=${formatMaybeNumber(panel.defensiveShadowWouldAvoidDealInPerRound, 2)}`,
+      `[arena]     defSafetyGateReview/R=${formatMaybeNumber(panel.defensiveSafetyGateReviewPerRound, 2)}`
+        + ` defSafetyGateOverride/R=${formatMaybeNumber(panel.defensiveSafetyGateOverridePerRound, 2)}`
+        + ` defSafetyGateSameShanten/R=${formatMaybeNumber(panel.defensiveSafetyGateSameShantenPerRound, 2)}`
+        + ` defSafetyGateBackstep/R=${formatMaybeNumber(panel.defensiveSafetyGateBackstepPerRound, 2)}`
+        + ` defSafetyGateProtectedPush/R=${formatMaybeNumber(panel.defensiveSafetyGateProtectedPushPerRound, 2)}`
+        + ` defSafetyGateWouldAvoidDealIn=${formatMaybeNumber(panel.defensiveSafetyGateWouldAvoidDealInPerRound, 2)}`,
+      `[arena]     defCallGateReview/R=${formatMaybeNumber(panel.defensiveCallGateReviewPerRound, 2)}`
+        + ` defCallGateBlock/R=${formatMaybeNumber(panel.defensiveCallGateBlockPerRound, 2)}`
+        + ` defCallGateFirstOpenBlock/R=${formatMaybeNumber(panel.defensiveCallGateFirstOpenBlockPerRound, 2)}`
+        + ` defCallGateClosedRouteBlock/R=${formatMaybeNumber(panel.defensiveCallGateClosedRouteBlockPerRound, 2)}`
+        + ` defCallGatePressureBlock/R=${formatMaybeNumber(panel.defensiveCallGatePressureBlockPerRound, 2)}`
+        + ` defCallGateAllowedDirectTenpai/R=${formatMaybeNumber(panel.defensiveCallGateAllowedDirectTenpaiPerRound, 2)}`
+    ];
+  const balancedStates = formatCompactReasonCounts(panel.balancedRouteStateCounts);
+  if (balancedStates) {
+    lines.push(`[arena]     balancedState=${balancedStates}`);
+  }
+  const balancedReasons = formatCompactReasonCounts(panel.balancedRouteStateReasonCounts);
+  if (balancedReasons) {
+    lines.push(`[arena]     balancedStateReason=${balancedReasons}`);
+  }
+  const defensiveStates = formatCompactReasonCounts(panel.defensiveStateCounts);
+  if (defensiveStates) {
+    lines.push(`[arena]     defensiveState=${defensiveStates}`);
+  }
+  const threatReasons = formatCompactReasonCounts(panel.threatProfileReasonCounts);
+  if (threatReasons) {
+    lines.push(`[arena]     threatReason=${threatReasons}`);
+  }
+  const dealInAttributions = formatCompactReasonCounts(panel.dealInAttributionCounts);
+  if (dealInAttributions) {
+    lines.push(`[arena]     dealInAttribution=${dealInAttributions}`);
+  }
+  const defensiveShadowReasons = formatCompactReasonCounts(panel.defensiveShadowReasonCounts);
+  if (defensiveShadowReasons) {
+    lines.push(`[arena]     defShadowReason=${defensiveShadowReasons}`);
+  }
+    const defensiveShadowActionableReasons = formatCompactReasonCounts(panel.defensiveShadowActionableReasonCounts);
+    if (defensiveShadowActionableReasons) {
+      lines.push(`[arena]     defShadowActionableReason=${defensiveShadowActionableReasons}`);
+    }
+    const defensiveSafetyGateReasons = formatCompactReasonCounts(panel.defensiveSafetyGateReasonCounts);
+    if (defensiveSafetyGateReasons) {
+      lines.push(`[arena]     defSafetyGateReason=${defensiveSafetyGateReasons}`);
+    }
+    const defensiveCallGateReasons = formatCompactReasonCounts(panel.defensiveCallGateReasonCounts);
+    if (defensiveCallGateReasons) {
+      lines.push(`[arena]     defCallGateReason=${defensiveCallGateReasons}`);
+    }
+    const kanReasons = formatCompactReasonCounts(panel.kanReasonCounts);
+    if (kanReasons) {
+      lines.push(`[arena]     kanReason=${kanReasons}`);
+    }
+    const hasAlphaJongDiagnostics = Number(panel.alphaJongRiichiReviewPerRound || 0) > 0
+      || Number(panel.alphaJongCallSimulationFailurePerRound || 0) > 0
+      || Number(panel.alphaJongKanReviewPerRound || 0) > 0
+      || Object.keys(panel.alphaJongRiichiReasonCounts || {}).some((key) => Number(panel.alphaJongRiichiReasonCounts[key] || 0) > 0);
+    if (hasAlphaJongDiagnostics) {
+      lines.push(
+        `[arena]     alphaRiichiReview/R=${formatMaybeNumber(panel.alphaJongRiichiReviewPerRound, 2)}`
+        + ` alphaRiichiLegal/R=${formatMaybeNumber(panel.alphaJongRiichiLegalPerRound, 2)}`
+        + ` alphaRiichiSelectedLegal/R=${formatMaybeNumber(panel.alphaJongRiichiSelectedLegalPerRound, 2)}`
+        + ` alphaRiichiSelectedLegal=${formatMaybePercent(panel.alphaJongRiichiSelectedLegalRate)}`
+        + ` alphaCallSimFail/R=${formatMaybeNumber(panel.alphaJongCallSimulationFailurePerRound, 2)}`
+        + ` alphaCallSimFail=${formatMaybePercent(panel.alphaJongCallSimulationFailureRate)}`
+        + ` alphaCallMissingXiangting/R=${formatMaybeNumber(panel.alphaJongCallMissingXiangtingPerRound, 2)}`
+      );
+      lines.push(
+        `[arena]     alphaKanReview/R=${formatMaybeNumber(panel.alphaJongKanReviewPerRound, 2)}`
+        + ` alphaKanAccept/R=${formatMaybeNumber(panel.alphaJongKanAcceptPerRound, 2)}`
+        + ` alphaKanSimFail/R=${formatMaybeNumber(panel.alphaJongKanSimulationFailurePerRound, 2)}`
+        + ` alphaKanSimFail=${formatMaybePercent(panel.alphaJongKanSimulationFailureRate)}`
+      );
+    }
+    const alphaJongRiichiReasons = formatCompactReasonCounts(panel.alphaJongRiichiReasonCounts);
+    if (alphaJongRiichiReasons) {
+      lines.push(`[arena]     alphaRiichiReason=${alphaJongRiichiReasons}`);
+    }
+    const alphaJongKanReasons = formatCompactReasonCounts(panel.alphaJongKanReasonCounts);
+    if (alphaJongKanReasons) {
+      lines.push(`[arena]     alphaKanReason=${alphaJongKanReasons}`);
+    }
+    return lines;
+  }
+
+function formatArenaSummary(label, summary, variants) {
+  const totals = summary && summary.totals ? summary.totals : {};
+  const lines = [
+    `[arena] ${label} completed=${Number(totals.completedMatches || 0)}/${Number(totals.matches || 0)}`
+      + ` rounds=${Number(totals.rounds || 0)}`
+      + ` draw=${formatMaybePercent(metricValue(totals, 'drawRate'))}`
+      + ` errors=${Number(totals.errorCount || 0)}`
+  ];
+  uniqueVariantsById(variants || []).forEach((variant) => {
+    const stats = summary && summary.variantStats && summary.variantStats[variant.id]
+      ? summary.variantStats[variant.id]
+      : {};
+    lines.push(...formatVariantRecordPanel(variant, stats));
+  });
+  return lines.join('\n');
+}
+
+function buildReportHeader(args, variants, status, completedMatches) {
+  return {
+    source: 'benchmark-ai-hanchan-arena',
+    scope: 'scripted-ai-headless-hanchan',
+    note: 'No Mortal inference is used. Mixed mode is the primary strength-gradient signal; mirror mode is mainly stability telemetry.',
+    status,
+    generatedAt: new Date().toISOString(),
+    seed: args.seed,
+    mode: args.mode,
+    matches: args.matches,
+    completedMatches: Number(completedMatches || 0),
+    checkpointInterval: Number(args.checkpointInterval || 0),
+    experimentalOverlays: normalizeExperimentalOverlays(args.experimentalOverlays || []),
+    variantOrder: variants.map((variant) => variant.id),
+    variants: uniqueVariantsById(variants).map(summarizeVariantConfig)
+  };
+}
+
+function writeJsonReport(outPath, report) {
+  if (!outPath) return;
+  fs.writeFileSync(path.resolve(outPath), `${JSON.stringify(report, null, 2)}\n`);
+}
+
+function logRollingSummary(args, label, summary, variants) {
+  if (!args || !args.progress || !summary) return;
+  console.error(formatArenaSummary(label, summary, variants));
+}
+
+function shouldEmitCheckpoint(args, completedCount, totalCount) {
+  const interval = Number(args && args.checkpointInterval || 0);
+  if (!Number.isFinite(interval) || interval <= 0) return false;
+  return completedCount === totalCount || completedCount % interval === 0;
+}
+
+function emitMixedCheckpoint(args, variants, rows, status = 'running') {
+  const summary = summarizeMatchRows(rows, variants);
+  const report = buildReportHeader(args, variants, status, rows.length);
+  report.mixed = stripRows({ summary, rows }, args.includeRows);
+  writeJsonReport(args.out, report);
+  logRollingSummary(args, `mixed ${rows.length}/${args.matches}`, summary, variants);
+}
+
+function emitMirrorCheckpoint(args, variants, byVariant, status = 'running', label = 'mirror') {
+  const completedMatches = Object.values(byVariant).reduce((sum, section) => (
+    sum + (section && Array.isArray(section.rows) ? section.rows.length : 0)
+  ), 0);
+  const report = buildReportHeader(args, variants, status, completedMatches);
+  report.mirror = stripRows(byVariant, args.includeRows);
+  writeJsonReport(args.out, report);
+  if (!args.progress) return;
+  progressLog(args, `${label} checkpoint matches=${completedMatches}`);
+  Object.keys(byVariant).forEach((variantId) => {
+    const section = byVariant[variantId];
+    const variant = variants.find((entry) => entry.id === variantId);
+    if (section && section.summary && variant) {
+      logRollingSummary(args, `mirror:${variantId} ${section.rows.length}/${args.matches}`, section.summary, [variant]);
+    }
+  });
+}
+
+function runMixedArena(baseConfig, variants, args) {
+  const rows = [];
+  for (let matchIndex = 0; matchIndex < args.matches; matchIndex += 1) {
+    const assignments = buildMixedAssignments(variants, matchIndex);
+    rows.push(runOneMatch(baseConfig, assignments, {
+      mode: 'mixed',
+      matchIndex,
+      seed: args.seed,
+      seedSalt: 17,
+      maxStepsPerRound: args.maxStepsPerRound,
+      maxRoundsPerMatch: args.maxRoundsPerMatch
+    }));
+    if (shouldEmitCheckpoint(args, matchIndex + 1, args.matches)) {
+      emitMixedCheckpoint(args, variants, rows, matchIndex + 1 === args.matches ? 'complete' : 'running');
+    }
+  }
+  const summary = summarizeMatchRows(rows, variants);
+  return {
+    summary,
+    rows
+  };
+}
+
+function runMirrorArena(baseConfig, variants, args) {
+  const byVariant = {};
+  variants.forEach((variant, variantIndex) => {
+    const rows = [];
+    byVariant[variant.id] = {
+      summary: summarizeMatchRows(rows, [variant]),
+      rows
+    };
+    for (let matchIndex = 0; matchIndex < args.matches; matchIndex += 1) {
+      rows.push(runOneMatch(baseConfig, buildMirrorAssignments(variant), {
+        mode: 'mirror',
+        matchIndex,
+        seed: args.seed,
+        seedSalt: 101 + variantIndex,
+        maxStepsPerRound: args.maxStepsPerRound,
+        maxRoundsPerMatch: args.maxRoundsPerMatch
+      }));
+      byVariant[variant.id].summary = summarizeMatchRows(rows, [variant]);
+      if (shouldEmitCheckpoint(args, matchIndex + 1, args.matches)) {
+        const isComplete = variantIndex === variants.length - 1 && matchIndex + 1 === args.matches;
+        emitMirrorCheckpoint(
+          args,
+          variants,
+          byVariant,
+          isComplete ? 'complete' : 'running',
+          `mirror:${variant.id} ${matchIndex + 1}/${args.matches}`
+        );
+      }
+    }
+  });
+  return byVariant;
+}
+
+function stripRows(section, includeRows) {
+  if (!section) return section;
+  if (Array.isArray(section.rows)) {
+    return includeRows ? section : { summary: section.summary };
+  }
+  return Object.keys(section).reduce((result, key) => {
+    const value = section[key];
+    result[key] = value && Array.isArray(value.rows)
+      ? (includeRows ? value : { summary: value.summary })
+      : value;
+    return result;
+  }, {});
+}
+
+function buildArenaReport(argsInput = {}) {
+  const args = {
+    ...parseArgs([]),
+    ...argsInput
+  };
+  const baseConfig = loadBaseConfig();
+  const variants = resolveVariants(args.variants, args);
+  const startedAt = Date.now();
+  const report = buildReportHeader(args, variants, 'complete', 0);
+
+  if (args.mode === 'mixed' || args.mode === 'both') {
+    const mixed = runMixedArena(baseConfig, variants, args);
+    report.mixed = stripRows(mixed, args.includeRows);
+    report.completedMatches += Number(mixed.summary && mixed.summary.totals
+      ? mixed.summary.totals.completedMatches || 0
+      : 0);
+  }
+  if (args.mode === 'mirror' || args.mode === 'both') {
+    const mirror = runMirrorArena(baseConfig, variants, args);
+    report.mirror = stripRows(mirror, args.includeRows);
+    report.completedMatches += Object.values(mirror).reduce((sum, section) => (
+      sum + Number(section && section.summary && section.summary.totals
+        ? section.summary.totals.completedMatches || 0
+        : 0)
+    ), 0);
+  }
+  report.elapsedMs = Date.now() - startedAt;
+
+  return report;
+}
+
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    printHelp();
+    return;
+  }
+
+  const report = buildArenaReport(args);
+  const json = JSON.stringify(report, null, 2);
+  if (args.out) {
+    fs.writeFileSync(path.resolve(args.out), `${json}\n`);
+  }
+  if (args.stdout === 'summary') {
+    if (report.mixed && report.mixed.summary) {
+      console.log(formatArenaSummary(`mixed ${report.completedMatches}/${args.matches}`, report.mixed.summary, resolveVariants(args.variants, args)));
+    }
+    if (report.mirror) {
+      const variants = resolveVariants(args.variants, args);
+      Object.keys(report.mirror).forEach((variantId) => {
+        const variant = variants.find((entry) => entry.id === variantId) || { id: variantId };
+        console.log(formatArenaSummary(`mirror:${variantId}`, report.mirror[variantId].summary, [variant]));
+      });
+    }
+    return;
+  }
+  if (args.stdout === 'both') {
+    if (report.mixed && report.mixed.summary) {
+      console.log(formatArenaSummary(`mixed ${report.completedMatches}/${args.matches}`, report.mixed.summary, resolveVariants(args.variants, args)));
+    }
+    console.log(json);
+    return;
+  }
+  console.log(json);
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  SEATS,
+  DEFAULT_MATCHES,
+  parseArgs,
+  createVariantPresets,
+  resolveVariants,
+  normalizeExperimentalOverlays,
+  applyExperimentalOverlay,
+  uniqueVariantsById,
+  buildMixedAssignments,
+  buildMirrorAssignments,
+  createPureHardPolicy,
+  createTunedHardPolicy,
+  createExperimentalHardPolicy,
+  createStandardHardPolicy,
+  buildArenaReport,
+  runOneRound,
+  runOneMatch,
+  summarizeMatchRows,
+  buildVariantRecordPanel,
+  formatVariantRecordPanel,
+  formatArenaSummary,
+  createValueClassicHardPolicy,
+  createPureDevHardPolicy,
+  createClosedDefenseHardPolicy,
+  createStandardDevHardPolicy,
+  createAggressiveHardPolicy: createPureHardPolicy,
+  createDefensiveHardPolicy: createTunedHardPolicy,
+  createAggressiveDevHardPolicy: createPureDevHardPolicy,
+  createBalancedHardPolicy: createStandardHardPolicy,
+  createHeavyHardPolicy: createValueClassicHardPolicy,
+  createDefensiveDevHardPolicy: createClosedDefenseHardPolicy,
+  createBalancedDevHardPolicy: createStandardDevHardPolicy
+};

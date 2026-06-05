@@ -17,7 +17,7 @@
   "advancedMode": true,
   "ai": {
     "difficultyTiers": ["easy", "normal", "hard", "hell"],
-    "implementedDifficulties": ["easy"],
+    "implementedDifficulties": ["easy", "normal", "hard"],
     "defaultDifficulty": "easy"
   },
   "ui": {
@@ -27,9 +27,9 @@
   },
   "players": [
     { "seat": "bottom", "title": "自家", "name": "南宫", "human": true, "ai": { "enabled": false, "difficulty": "easy" } },
-    { "seat": "right", "title": "下家", "name": "隐僧", "human": false, "ai": { "enabled": true, "difficulty": "easy", "profile": "default" } },
-    { "seat": "top", "title": "对家", "name": "赤羽", "human": false, "ai": { "enabled": true, "difficulty": "easy", "profile": "default" } },
-    { "seat": "left", "title": "上家", "name": "白川", "human": false, "ai": { "enabled": true, "difficulty": "easy", "profile": "default" } }
+    { "seat": "right", "title": "下家", "name": "隐僧", "human": false, "ai": { "enabled": true, "difficulty": "hard", "variant": "hard-closed-defense", "profile": "hard-closed-defense" } },
+    { "seat": "top", "title": "对家", "name": "赤羽", "human": false, "ai": { "enabled": true, "difficulty": "hard", "variant": "hard-standard", "profile": "hard-standard" } },
+    { "seat": "left", "title": "上家", "name": "白川", "human": false, "ai": { "enabled": true, "difficulty": "hard", "variant": "hard-value-classic", "profile": "hard-value-classic" } }
   ],
   "round": {
     "title": "AceZero Mahjong Four-Player",

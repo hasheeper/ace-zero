@@ -12,7 +12,7 @@ where should new Mahjong features go so the project stays layered and does not d
 
 Read this together with:
 
-- [`/Users/liuhang/Documents/acezero/majiang/CURRENT_FRAMEWORK_REFERENCE.md`](/Users/liuhang/Documents/acezero/majiang/CURRENT_FRAMEWORK_REFERENCE.md)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/CURRENT_FRAMEWORK_REFERENCE.md`](/Users/liuhang/Documents/ace-zero/games/majiang/CURRENT_FRAMEWORK_REFERENCE.md)
 
 ---
 
@@ -45,37 +45,37 @@ If a feature changes round truth, it should land in `engine/` or `shared/`, not 
 
 ### Truth and rules
 
-- [`/Users/liuhang/Documents/acezero/majiang/engine/runtime/single-round-runtime.js`](/Users/liuhang/Documents/acezero/majiang/engine/runtime/single-round-runtime.js)
-- [`/Users/liuhang/Documents/acezero/majiang/shared/runtime`](/Users/liuhang/Documents/acezero/majiang/shared/runtime)
-- [`/Users/liuhang/Documents/acezero/majiang/shared/core/adapter-factory.js`](/Users/liuhang/Documents/acezero/majiang/shared/core/adapter-factory.js)
-- [`/Users/liuhang/Documents/acezero/majiang/shared/core/session-adapter.js`](/Users/liuhang/Documents/acezero/majiang/shared/core/session-adapter.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/runtime/single-round-runtime.js`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/runtime/single-round-runtime.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/runtime`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/runtime)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/core/adapter-factory.js`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/core/adapter-factory.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/core/session-adapter.js`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/core/session-adapter.js)
 
 ### Session and multi-round
 
-- [`/Users/liuhang/Documents/acezero/majiang/shared/match/match-state.js`](/Users/liuhang/Documents/acezero/majiang/shared/match/match-state.js)
-- [`/Users/liuhang/Documents/acezero/majiang/shared/match/round-transition.js`](/Users/liuhang/Documents/acezero/majiang/shared/match/round-transition.js)
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/session/game-session-runtime.js`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/session/game-session-runtime.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/match-state.js`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/match-state.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/round-transition.js`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/round-transition.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/session/game-session-runtime.js`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/session/game-session-runtime.js)
 
 ### Browser runtime and UI
 
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/formal`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/formal)
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/bridge`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/bridge)
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/ui`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/ui)
-- [`/Users/liuhang/Documents/acezero/majiang/index.html`](/Users/liuhang/Documents/acezero/majiang/index.html)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/formal`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/formal)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/bridge`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/bridge)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/ui`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/ui)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/index.html`](/Users/liuhang/Documents/ace-zero/games/majiang/index.html)
 
 ### AI and extensions
 
-- [`/Users/liuhang/Documents/acezero/majiang/engine/ai/base-ai.js`](/Users/liuhang/Documents/acezero/majiang/engine/ai/base-ai.js)
-- [`/Users/liuhang/Documents/acezero/majiang/engine/ai/discard-evaluator.js`](/Users/liuhang/Documents/acezero/majiang/engine/ai/discard-evaluator.js)
-- [`/Users/liuhang/Documents/acezero/majiang/engine/extensions/extension-manager.js`](/Users/liuhang/Documents/acezero/majiang/engine/extensions/extension-manager.js)
-- [`/Users/liuhang/Documents/acezero/majiang/engine/extensions/extensions.md`](/Users/liuhang/Documents/acezero/majiang/engine/extensions/extensions.md)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/base-ai.js`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/base-ai.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/discard-evaluator.js`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/discard-evaluator.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/extensions/extension-manager.js`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/extensions/extension-manager.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/extensions/extensions.md`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/extensions/extensions.md)
 
 ### Debug, smoke, and logs
 
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/debug/debug-panel.js`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/debug/debug-panel.js)
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/debug/dev-log.js`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/debug/dev-log.js)
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/bridge/browser-smoke-tests.js`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/bridge/browser-smoke-tests.js)
-- [`/Users/liuhang/Documents/acezero/majiang/test/TESTS.md`](/Users/liuhang/Documents/acezero/majiang/test/TESTS.md)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/debug/debug-panel.js`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/debug/debug-panel.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/debug/dev-log.js`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/debug/dev-log.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/bridge/browser-smoke-tests.js`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/bridge/browser-smoke-tests.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/test/TESTS.md`](/Users/liuhang/Documents/ace-zero/games/majiang/test/TESTS.md)
 
 ---
 
@@ -178,9 +178,9 @@ Best fit:
 
 Current foundation:
 
-- [`/Users/liuhang/Documents/acezero/majiang/engine/ai/base-ai.js`](/Users/liuhang/Documents/acezero/majiang/engine/ai/base-ai.js)
-- [`/Users/liuhang/Documents/acezero/majiang/engine/ai/discard-evaluator.js`](/Users/liuhang/Documents/acezero/majiang/engine/ai/discard-evaluator.js)
-- [`/Users/liuhang/Documents/acezero/majiang/docs/AI_PLAN.md`](/Users/liuhang/Documents/acezero/majiang/docs/AI_PLAN.md)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/base-ai.js`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/base-ai.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/discard-evaluator.js`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/discard-evaluator.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/docs/AI_PLAN.md`](/Users/liuhang/Documents/ace-zero/games/majiang/docs/AI_PLAN.md)
 
 Suggested upgrade path:
 
@@ -206,7 +206,7 @@ Best fit:
 
 Current hook direction is already documented in:
 
-- [`/Users/liuhang/Documents/acezero/majiang/engine/extensions/extensions.md`](/Users/liuhang/Documents/acezero/majiang/engine/extensions/extensions.md)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/extensions/extensions.md`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/extensions/extensions.md)
 
 Recommended split:
 

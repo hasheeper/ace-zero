@@ -101,6 +101,68 @@ function runChiExecutionSmoke(cwd) {
   };
 }
 
+function runReactionPriorityBlockingPassSmoke(cwd) {
+  const configPath = path.join(cwd, 'test', 'game-config.ai-easy-call-smoke.json');
+  const config = loadJson(configPath);
+  const runtime = createRuntimeFromConfig(config);
+  const aiController = createAiController(runtime, config);
+
+  runtime.start();
+  runtime.drawTile('bottom');
+  runtime.discardTile('bottom', 'm4');
+
+  const rightActions = getReactionActionsForSeat(runtime, 'right');
+  const decision = aiController.chooseReaction('right', rightActions);
+  assert(decision && decision.type === 'call', `expected right chi call, got ${JSON.stringify(decision)}`);
+
+  runtime.pendingReaction.actions.unshift({
+    type: 'kan',
+    key: 'kan:left:blocking-smoke',
+    label: '杠',
+    priority: 300,
+    reactionOrder: 3,
+    payload: {
+      seat: 'left',
+      meld: 'm444=',
+      meldString: 'm444=',
+      tileCode: 'm4',
+      fromSeat: 'bottom'
+    }
+  });
+
+  const blockingAction = runtime.getBlockingReactionAction('call', 'right');
+  assert(
+    blockingAction && blockingAction.type === 'kan' && blockingAction.payload.seat === 'left',
+    `expected left kan to block right chi, got ${JSON.stringify(blockingAction)}`
+  );
+
+  let blocked = false;
+  try {
+    runtime.dispatch(decision);
+  } catch (error) {
+    blocked = /higher-priority kan/.test(error && error.message ? error.message : String(error));
+  }
+  assert(blocked, 'expected right chi to be rejected before higher-priority kan seat passes');
+
+  runtime.passReaction('left', { reason: 'validate-reaction-priority-blocking-pass' });
+  assert(!runtime.getBlockingReactionAction('call', 'right'), 'expected right chi to be unblocked after left pass');
+  runtime.dispatch(decision);
+
+  const melds = getSeatMelds(runtime, 'right');
+  assert(melds.includes('m234-'), `expected right meld list to contain m234- after blocking pass, got ${JSON.stringify(melds)}`);
+
+  return {
+    name: 'reaction-priority-blocking-pass-smoke',
+    snapshot: {
+      blockedBeforePass: blocked,
+      passedSeats: runtime.pendingReaction ? runtime.pendingReaction.passedSeats.slice() : [],
+      melds,
+      turnSeat: runtime.getCurrentTurnSeat(),
+      phase: runtime.stateMachine.getPhase()
+    }
+  };
+}
+
 function runPengExecutionSmoke(cwd) {
   const configPath = path.join(cwd, 'test', 'game-config.ai-easy-yakuhai-call-smoke.json');
   const config = loadJson(configPath);
@@ -157,6 +219,7 @@ function main() {
   const cwd = path.resolve(__dirname, '..');
   const results = [
     runChiExecutionSmoke(cwd),
+    runReactionPriorityBlockingPassSmoke(cwd),
     runPengExecutionSmoke(cwd)
   ];
 

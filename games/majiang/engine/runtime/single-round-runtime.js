@@ -1496,7 +1496,8 @@ class SingleRoundRuntime {
       this.stateMachine.setPhase(ROUND_PHASES.ROUND_END);
       this.roundResult = buildMultiHuleRoundResult(this, settlements, {
         qianggang: Boolean(orderedSelections.some((entry) => entry.options && entry.options.qianggang)),
-        lingshang: false
+        lingshang: false,
+        fenpei: totalFenpei
       });
       this.emit('round:hule', {
         seat: settlements[0] ? settlements[0].winnerSeat : null,

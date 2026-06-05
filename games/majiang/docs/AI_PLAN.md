@@ -22,7 +22,7 @@
 
 这层的边界文档见：
 
-- [EASY_AI_V1.md](/Users/liuhang/Documents/acezero/majiang/docs/EASY_AI_V1.md)
+- [EASY_AI_V1.md](/Users/liuhang/Documents/ace-zero/games/majiang/docs/EASY_AI_V1.md)
 
 这里特别强调：
 

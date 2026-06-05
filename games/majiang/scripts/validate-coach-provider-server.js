@@ -2,8 +2,12 @@
 
 const http = require('http');
 const path = require('path');
-const { createCoachServer, validateMortalConfigAssets } = require('./coach-provider-server');
-const { resolveMortalConfigPath } = require('../engine/coach/mortal/mortal-adapter');
+const { createCoachServer } = require('./coach-provider-server');
+const {
+  resolveMortalCondaEnvPath,
+  resolveMortalConfigPath,
+  resolveMortalRoot
+} = require('../engine/coach/mortal/mortal-adapter');
 
 function assert(condition, message) {
   if (!condition) {
@@ -92,8 +96,17 @@ function createCoachSession() {
 
 async function main() {
   const port = 14527;
-  const smokeConfigPath = path.join(__dirname, '..', '..', 'third_party', 'Mortal', 'mortal', 'config.smoke.toml');
-  const service = createCoachServer({ port, configPath: smokeConfigPath });
+  const mortalRoot = resolveMortalRoot();
+  const smokeConfigPath = resolveMortalConfigPath({
+    mortalRoot,
+    configPath: path.join(mortalRoot, 'mortal', 'config.smoke.toml')
+  });
+  const service = createCoachServer({
+    port,
+    mortalRoot,
+    condaEnvPath: resolveMortalCondaEnvPath({ mortalRoot }),
+    configPath: smokeConfigPath
+  });
   await new Promise((resolve) => service.listen(resolve));
 
   try {

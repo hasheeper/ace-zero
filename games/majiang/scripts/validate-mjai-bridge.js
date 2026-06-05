@@ -6,16 +6,24 @@ const path = require('path');
 const { SingleRoundRuntime } = require('../engine/runtime/single-round-runtime');
 const { createScriptedDrawPolicy } = require('../engine/base/draw-policy');
 const baseAiApi = require('../engine/ai/base-ai');
-const { createMortalCoachAdapter } = require('../engine/coach/mortal/mortal-adapter');
+const {
+  createMortalCoachAdapter,
+  resolveMortalCondaEnvPath,
+  resolveMortalConfigPath,
+  resolveMortalRoot
+} = require('../engine/coach/mortal/mortal-adapter');
 const { createCoachController } = require('../engine/coach/review/coach-controller');
 const { buildCoachSuggestion } = require('../engine/coach/review/suggestion-format');
 
-const DEFAULT_MORTAL_ROOT = '/Users/liuhang/Documents/acezero/third_party/Mortal';
-const MORTAL_ROOT = process.env.MORTAL_ROOT || DEFAULT_MORTAL_ROOT;
+const MORTAL_ROOT = resolveMortalRoot();
 const SMOKE_CONFIG_PATH = process.env.MORTAL_CFG_PATH
-  || path.join(MORTAL_ROOT, 'mortal', 'config.smoke.toml');
-const MORTAL_CONDA_ENV_PATH = process.env.MORTAL_CONDA_ENV_PATH
-  || path.join(MORTAL_ROOT, '.conda/envs/mortal');
+  || resolveMortalConfigPath({
+    mortalRoot: MORTAL_ROOT,
+    configPath: path.join(MORTAL_ROOT, 'mortal', 'config.smoke.toml')
+  });
+const MORTAL_CONDA_ENV_PATH = resolveMortalCondaEnvPath({
+  mortalRoot: MORTAL_ROOT
+});
 
 function createMortalOptions(options = {}) {
   return {

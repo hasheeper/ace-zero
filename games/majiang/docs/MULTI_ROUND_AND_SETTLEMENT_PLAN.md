@@ -12,11 +12,11 @@ It is not a dated regression log.
 
 Already in place:
 
-- single-round runtime truth in [`/Users/liuhang/Documents/acezero/majiang/engine/runtime/single-round-runtime.js`](/Users/liuhang/Documents/acezero/majiang/engine/runtime/single-round-runtime.js)
-- browser table entry at [`/Users/liuhang/Documents/acezero/majiang/index.html`](/Users/liuhang/Documents/acezero/majiang/index.html)
-- session/match support in [`/Users/liuhang/Documents/acezero/majiang/shared/match`](/Users/liuhang/Documents/acezero/majiang/shared/match)
-- browser session runtime in [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/session/game-session-runtime.js`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/session/game-session-runtime.js)
-- retained round-end/scoring regressions in [`/Users/liuhang/Documents/acezero/majiang/test/TESTS.md`](/Users/liuhang/Documents/acezero/majiang/test/TESTS.md)
+- single-round runtime truth in [`/Users/liuhang/Documents/ace-zero/games/majiang/engine/runtime/single-round-runtime.js`](/Users/liuhang/Documents/ace-zero/games/majiang/engine/runtime/single-round-runtime.js)
+- browser table entry at [`/Users/liuhang/Documents/ace-zero/games/majiang/index.html`](/Users/liuhang/Documents/ace-zero/games/majiang/index.html)
+- session/match support in [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/match`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/match)
+- browser session runtime in [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/session/game-session-runtime.js`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/session/game-session-runtime.js)
+- retained round-end/scoring regressions in [`/Users/liuhang/Documents/ace-zero/games/majiang/test/TESTS.md`](/Users/liuhang/Documents/ace-zero/games/majiang/test/TESTS.md)
 
 Not yet fully productized:
 
@@ -54,7 +54,7 @@ Need a single stable container for:
 
 Primary home:
 
-- [`/Users/liuhang/Documents/acezero/majiang/shared/match/match-state.js`](/Users/liuhang/Documents/acezero/majiang/shared/match/match-state.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/match-state.js`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/match-state.js)
 
 ### Transition policy
 
@@ -67,7 +67,7 @@ Need deterministic round transition logic for:
 
 Primary home:
 
-- [`/Users/liuhang/Documents/acezero/majiang/shared/match/round-transition.js`](/Users/liuhang/Documents/acezero/majiang/shared/match/round-transition.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/round-transition.js`](/Users/liuhang/Documents/ace-zero/games/majiang/shared/match/round-transition.js)
 
 ### Settlement presentation
 
@@ -91,7 +91,7 @@ Browser session flow should own:
 
 Primary home:
 
-- [`/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/session/game-session-runtime.js`](/Users/liuhang/Documents/acezero/majiang/frontend/scripts/runtime/session/game-session-runtime.js)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/session/game-session-runtime.js`](/Users/liuhang/Documents/ace-zero/games/majiang/frontend/scripts/runtime/session/game-session-runtime.js)
 
 ---
 
@@ -139,5 +139,5 @@ Preferred coverage:
 
 Current regression entry references remain:
 
-- [`/Users/liuhang/Documents/acezero/majiang/test/TESTS.md`](/Users/liuhang/Documents/acezero/majiang/test/TESTS.md)
-- [`/Users/liuhang/Documents/acezero/majiang/TEST_SCENARIO_GUIDE.md`](/Users/liuhang/Documents/acezero/majiang/TEST_SCENARIO_GUIDE.md)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/test/TESTS.md`](/Users/liuhang/Documents/ace-zero/games/majiang/test/TESTS.md)
+- [`/Users/liuhang/Documents/ace-zero/games/majiang/TEST_SCENARIO_GUIDE.md`](/Users/liuhang/Documents/ace-zero/games/majiang/TEST_SCENARIO_GUIDE.md)

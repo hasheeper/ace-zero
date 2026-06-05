@@ -3,6 +3,7 @@
     module.exports = factory(
       require('../support/tile-danger'),
       require('../support/push-fold'),
+      require('../support/danger-model'),
       require('../difficulty/easy-policy'),
       require('../difficulty/normal-policy'),
       require('../difficulty/hard-policy')
@@ -12,6 +13,7 @@
   root.AceMahjongDefenseEvaluator = factory(
     root.AceMahjongAiTileDanger || null,
     root.AceMahjongAiPushFold || null,
+    root.AceMahjongAiDangerModel || null,
     root.AceMahjongEasyDifficultyPolicy || null,
     root.AceMahjongNormalDifficultyPolicy || null,
     root.AceMahjongHardDifficultyPolicy || null
@@ -19,6 +21,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(
   tileDangerApi,
   pushFoldApi,
+  hardDangerModelApi,
   easyPolicyApi,
   normalPolicyApi,
   hardPolicyApi
@@ -64,13 +67,21 @@
   }
 
   function evaluateRuntimeDefense(runtime, seatKey, tileCode, handMetrics = {}, options = {}) {
+    const difficulty = normalizeDifficulty(options.difficulty);
     const policy = resolvePolicy(options);
     const defensePolicy = policy && policy.defense && typeof policy.defense === 'object'
       ? policy.defense
       : {};
     const reasons = [];
 
-    const danger = tileDangerApi && typeof tileDangerApi.evaluateRuntimeTileDanger === 'function'
+    const useHardDangerModel = difficulty === 'hard'
+      && defensePolicy.dangerModel === 'hard-v1'
+      && hardDangerModelApi
+      && typeof hardDangerModelApi.evaluateRuntimeHardTileDanger === 'function';
+
+    const danger = useHardDangerModel
+      ? hardDangerModelApi.evaluateRuntimeHardTileDanger(runtime, seatKey, tileCode, handMetrics, options)
+      : tileDangerApi && typeof tileDangerApi.evaluateRuntimeTileDanger === 'function'
       ? tileDangerApi.evaluateRuntimeTileDanger(runtime, seatKey, tileCode)
       : {
           tileCode,
@@ -89,6 +100,9 @@
 
     if (defensePolicy.enableTileDanger !== false) {
       reasons.push('defense-tile-danger');
+    }
+    if (useHardDangerModel) {
+      reasons.push('defense-hard-danger-model');
     }
     if (defensePolicy.usePushFoldState !== false) {
       reasons.push('defense-push-fold');

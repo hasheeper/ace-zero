@@ -120,19 +120,19 @@
 全量跑第一版 benchmark：
 
 ```bash
-node /Users/liuhang/Documents/acezero/majiang/scripts/benchmark-ai-vs-mortal.js
+node /Users/liuhang/Documents/ace-zero/games/majiang/scripts/benchmark-ai-vs-mortal.js
 ```
 
 跑 smoke：
 
 ```bash
-node /Users/liuhang/Documents/acezero/majiang/scripts/validate-ai-benchmark.js
+node /Users/liuhang/Documents/ace-zero/games/majiang/scripts/validate-ai-benchmark.js
 ```
 
 只跑某一个 case：
 
 ```bash
-node /Users/liuhang/Documents/acezero/majiang/scripts/benchmark-ai-vs-mortal.js easy-defense-smoke
+node /Users/liuhang/Documents/ace-zero/games/majiang/scripts/benchmark-ai-vs-mortal.js easy-defense-smoke
 ```
 
 ## Next Step

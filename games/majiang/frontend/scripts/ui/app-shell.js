@@ -234,7 +234,9 @@
       if (!roundResult || !roundResult.type) return {};
       const fenpei = roundResult.type === 'draw'
         ? (Array.isArray(roundResult.fenpei) ? roundResult.fenpei : null)
-        : (roundResult.result && Array.isArray(roundResult.result.fenpei) ? roundResult.result.fenpei : null);
+        : (roundResult.multiHule && Array.isArray(roundResult.fenpei) ? roundResult.fenpei : null);
+      const resolvedFenpei = fenpei
+        || (roundResult.result && Array.isArray(roundResult.result.fenpei) ? roundResult.result.fenpei : null);
       const seatWinds = snapshot && snapshot.info && snapshot.info.seatWinds && typeof snapshot.info.seatWinds === 'object'
         ? snapshot.info.seatWinds
         : null;
@@ -243,7 +245,7 @@
       return seatOrder.reduce((result, seatKey, fallbackIndex) => {
         const windState = seatWinds && seatWinds[seatKey] ? seatWinds[seatKey] : null;
         const windIndex = Number.isInteger(windState && windState.index) ? windState.index : fallbackIndex;
-        result[seatKey] = Array.isArray(fenpei) ? Number(fenpei[windIndex] || 0) : 0;
+        result[seatKey] = Array.isArray(resolvedFenpei) ? Number(resolvedFenpei[windIndex] || 0) : 0;
         return result;
       }, {});
     }

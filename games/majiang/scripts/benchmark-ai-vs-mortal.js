@@ -1,8 +1,8 @@
 'use strict';
 
-const path = require('path');
 const {
   ROOT,
+  DEFAULT_MORTAL_ROOT,
   buildEasyBenchmarkCases,
   evaluateCase,
   summarizeBenchmarkResults
@@ -29,7 +29,7 @@ function formatDecision(decision = null) {
 function main() {
   const scenarioIds = process.argv.slice(2);
   const configPath = resolveMortalConfigPath({
-    mortalRoot: path.resolve(ROOT, '..', 'third_party', 'Mortal')
+    mortalRoot: DEFAULT_MORTAL_ROOT
   });
   const cases = buildEasyBenchmarkCases(ROOT).filter((entry) => (
     scenarioIds.length ? scenarioIds.includes(entry.id) : true

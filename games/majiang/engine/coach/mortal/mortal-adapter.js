@@ -7,8 +7,42 @@ const { spawnSync } = require('child_process');
 const { MjaiEventEncoder } = require('../mjai/event-encoder');
 const { MjaiActionDecoder } = require('../mjai/action-decoder');
 
+const MORTAL_ROOT_CANDIDATES = [
+  '/Users/liuhang/Documents/Mortal',
+  '/Users/liuhang/Documents/ace-zero/third_party/Mortal'
+];
+
+function isMortalRoot(rootPath) {
+  return Boolean(
+    rootPath
+      && fs.existsSync(path.join(rootPath, 'mortal', 'mortal.py'))
+      && fs.existsSync(path.join(rootPath, 'mortal', 'config.py'))
+  );
+}
+
+function resolveMortalRoot(options = {}) {
+  if (typeof options.mortalRoot === 'string' && options.mortalRoot.trim()) {
+    return options.mortalRoot.trim();
+  }
+  if (typeof process.env.MORTAL_ROOT === 'string' && process.env.MORTAL_ROOT.trim()) {
+    return process.env.MORTAL_ROOT.trim();
+  }
+  const detectedRoot = MORTAL_ROOT_CANDIDATES.find(isMortalRoot);
+  return detectedRoot || MORTAL_ROOT_CANDIDATES[0];
+}
+
+function resolveMortalCondaEnvPath(options = {}) {
+  if (typeof options.condaEnvPath === 'string' && options.condaEnvPath.trim()) {
+    return options.condaEnvPath.trim();
+  }
+  if (typeof process.env.MORTAL_CONDA_ENV_PATH === 'string' && process.env.MORTAL_CONDA_ENV_PATH.trim()) {
+    return process.env.MORTAL_CONDA_ENV_PATH.trim();
+  }
+  return path.join(resolveMortalRoot(options), '.conda/envs/mortal');
+}
+
 function resolveMortalConfigPath(options = {}) {
-  const mortalRoot = options.mortalRoot || '/Users/liuhang/Documents/acezero/third_party/Mortal';
+  const mortalRoot = resolveMortalRoot(options);
   if (typeof options.configPath === 'string' && options.configPath.trim()) {
     return options.configPath.trim();
   }
@@ -28,8 +62,11 @@ function createMortalCoachAdapter(runtime, options = {}) {
   let currentRuntime = runtime;
   let encoder = new MjaiEventEncoder(currentRuntime, options);
   let decoder = new MjaiActionDecoder(currentRuntime, options);
-  const mortalRoot = options.mortalRoot || '/Users/liuhang/Documents/acezero/third_party/Mortal';
-  const condaEnvPath = options.condaEnvPath || path.join(mortalRoot, '.conda/envs/mortal');
+  const mortalRoot = resolveMortalRoot(options);
+  const condaEnvPath = resolveMortalCondaEnvPath({
+    ...options,
+    mortalRoot
+  });
   const configPath = resolveMortalConfigPath({
     mortalRoot,
     configPath: options.configPath
@@ -150,5 +187,7 @@ function createMortalCoachAdapter(runtime, options = {}) {
 
 module.exports = {
   createMortalCoachAdapter,
-  resolveMortalConfigPath
+  resolveMortalConfigPath,
+  resolveMortalCondaEnvPath,
+  resolveMortalRoot
 };

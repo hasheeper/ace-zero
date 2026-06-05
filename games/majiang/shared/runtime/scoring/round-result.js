@@ -113,6 +113,17 @@
       const normalizedSettlements = Array.isArray(settlements) ? settlements.map((entry) => safeClone(entry)) : [];
       const primary = normalizedSettlements[0] || null;
       const primaryWinnerSeat = primary && primary.winnerSeat ? primary.winnerSeat : null;
+      const totalFenpei = Array.isArray(options.fenpei)
+        ? options.fenpei.slice()
+        : normalizedSettlements.reduce((result, entry) => {
+            const fenpei = entry && entry.result && Array.isArray(entry.result.fenpei)
+              ? entry.result.fenpei
+              : [];
+            fenpei.forEach((value, index) => {
+              result[index] = Number(result[index] || 0) + Number(value || 0);
+            });
+            return result;
+          }, [0, 0, 0, 0]);
       const riichiResult = primaryWinnerSeat
         ? getSeatRiichiResult(runtime, primaryWinnerSeat)
         : {
@@ -146,6 +157,7 @@
         })),
         result: primary && primary.result ? primary.result : null,
         results: normalizedSettlements.map((entry) => entry && entry.result ? entry.result : null),
+        fenpei: totalFenpei,
         multiHule: true,
         winnerCount: normalizedSettlements.length,
         qianggang: Boolean(options.qianggang),

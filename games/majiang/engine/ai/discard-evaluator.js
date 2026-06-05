@@ -2,20 +2,34 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(
       require('../base/majiang-core-adapter'),
-      require('./support/hand-metrics'),
       require('./evaluators/riichi-evaluator'),
-      require('./evaluators/defense-evaluator')
+      require('./support/discard-candidates'),
+      require('./support/discard-ranking'),
+      require('./support/hard-discard-review'),
+      require('./support/hard-candidate-diagnostics'),
+      require('./difficulty/hard-policy')
     );
     return;
   }
 
   root.AceMahjongDiscardEvaluator = factory(
     root.AceMahjongBrowserCoreAdapter || null,
-    root.AceMahjongAiHandMetrics || null,
     root.AceMahjongRiichiEvaluator || null,
-    root.AceMahjongDefenseEvaluator || null
+    root.AceMahjongAiDiscardCandidates || null,
+    root.AceMahjongAiDiscardRanking || null,
+    root.AceMahjongAiHardDiscardReview || null,
+    root.AceMahjongAiHardCandidateDiagnostics || null,
+    root.AceMahjongHardDifficultyPolicy || null
   );
-})(typeof globalThis !== 'undefined' ? globalThis : this, function(coreAdapter, handMetricsApi, riichiEvaluatorApi, defenseEvaluatorApi) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function(
+  coreAdapter,
+  riichiEvaluatorApi,
+  discardCandidatesApi,
+  discardRankingApi,
+  hardDiscardReviewApi,
+  hardCandidateDiagnosticsApi,
+  hardPolicyApi
+) {
   'use strict';
 
   function getCoreAdapter() {
@@ -27,8 +41,8 @@
   }
 
   function buildHandMetrics(input = {}) {
-    if (handMetricsApi && typeof handMetricsApi.buildHandMetrics === 'function') {
-      return handMetricsApi.buildHandMetrics(input);
+    if (discardCandidatesApi && typeof discardCandidatesApi.buildHandMetrics === 'function') {
+      return discardCandidatesApi.buildHandMetrics(input);
     }
     return {
       xiangting: Number.isFinite(Number(input.xiangting)) ? Number(input.xiangting) : null,
@@ -38,67 +52,47 @@
     };
   }
 
-  function normalizeCandidate(code) {
-    return String(code || '').replace(/\*$/, '');
+  function normalizeDifficulty(value) {
+    const difficulty = typeof value === 'string' ? value.toLowerCase() : 'normal';
+    if (difficulty === 'easy') return 'easy';
+    if (difficulty === 'hard') return 'hard';
+    if (difficulty === 'hell') return 'hell';
+    return 'normal';
   }
 
-  function findTileIndex(handCodes, tileCode, preferNonDrawn) {
-    if (!Array.isArray(handCodes) || !handCodes.length) return -1;
-    if (preferNonDrawn) {
-      const index = handCodes.findIndex((code, handIndex) => code === tileCode && handIndex !== handCodes.length - 1);
-      if (index >= 0) return index;
+  function resolvePolicyId(options = {}) {
+    if (options.policy && typeof options.policy.id === 'string' && options.policy.id) {
+      return options.policy.id;
     }
-    return handCodes.findIndex((code) => code === tileCode);
+    return normalizeDifficulty(options.difficulty);
   }
 
-  function estimateUkeireCount(adapter, shoupai) {
-    if (handMetricsApi && typeof handMetricsApi.estimateUkeireCount === 'function') {
-      return handMetricsApi.estimateUkeireCount(adapter, shoupai);
+  function resolveHardPolicy(options = {}) {
+    if (options.policy && typeof options.policy === 'object') {
+      return options.policy;
     }
-    return 0;
-  }
-
-  function estimateHandShapeValue(shoupai) {
-    if (handMetricsApi && typeof handMetricsApi.estimateHandShapeValue === 'function') {
-      return handMetricsApi.estimateHandShapeValue(shoupai);
+    if (hardPolicyApi && typeof hardPolicyApi.createHardPolicy === 'function') {
+      return hardPolicyApi.createHardPolicy();
     }
-    return 0;
+    return {};
   }
 
-  function compareDiscardDecisionCore(next, best) {
-    if (!best) return true;
-    if (next.metrics.xiangting < best.metrics.xiangting) return true;
-    if (next.metrics.xiangting > best.metrics.xiangting) return false;
-    if (next.metrics.tingpaiCount > best.metrics.tingpaiCount) return true;
-    if (next.metrics.tingpaiCount < best.metrics.tingpaiCount) return false;
-    if (next.metrics.ukeireCount > best.metrics.ukeireCount) return true;
-    if (next.metrics.ukeireCount < best.metrics.ukeireCount) return false;
-    if (next.metrics.handValueEstimate > best.metrics.handValueEstimate) return true;
-    if (next.metrics.handValueEstimate < best.metrics.handValueEstimate) return false;
-    return null;
-  }
-
-  function compareDiscardDecisionWithContext(next, best, pushFoldState) {
-    const coreResult = compareDiscardDecisionCore(next, best);
-    if (coreResult === true) return true;
-    if (coreResult === false) return false;
-
-    if (pushFoldState && pushFoldState.pressureScore > 0) {
-      const nextDanger = Number(next.danger && next.danger.dangerScore) || 0;
-      const bestDanger = Number(best.danger && best.danger.dangerScore) || 0;
-      if (nextDanger < bestDanger) return true;
-      if (nextDanger > bestDanger) return false;
+  function resolveHardDiscardPolicy(options = {}) {
+    if (options.policy && options.policy.discard && typeof options.policy.discard === 'object') {
+      return options.policy.discard;
     }
-
-    if (best.isDrawDiscard && !next.isDrawDiscard) return true;
-    if (!best.isDrawDiscard && next.isDrawDiscard) return false;
-
-    return next.tileIndex < best.tileIndex;
+    if (hardPolicyApi && typeof hardPolicyApi.createHardPolicy === 'function') {
+      const policy = hardPolicyApi.createHardPolicy();
+      return policy && policy.discard && typeof policy.discard === 'object'
+        ? policy.discard
+        : {};
+    }
+    return {};
   }
 
   function evaluateDefense(runtime, seatKey, tileCode, handMetrics, options = {}) {
-    if (defenseEvaluatorApi && typeof defenseEvaluatorApi.evaluateRuntimeDefense === 'function') {
-      return defenseEvaluatorApi.evaluateRuntimeDefense(runtime, seatKey, tileCode, handMetrics, options);
+    if (discardCandidatesApi && typeof discardCandidatesApi.evaluateDefense === 'function') {
+      return discardCandidatesApi.evaluateDefense(runtime, seatKey, tileCode, handMetrics, options);
     }
     return {
       tileCode,
@@ -130,8 +124,66 @@
     };
   }
 
+  function buildDiscardCandidateDecision(input = {}) {
+    if (discardCandidatesApi && typeof discardCandidatesApi.buildDiscardCandidateDecision === 'function') {
+      return discardCandidatesApi.buildDiscardCandidateDecision(input);
+    }
+    return null;
+  }
+
+  function buildExpandedCandidateDecisions(candidateDecisions, input = {}) {
+    if (discardCandidatesApi && typeof discardCandidatesApi.buildExpandedCandidateDecisions === 'function') {
+      return discardCandidatesApi.buildExpandedCandidateDecisions(candidateDecisions, input);
+    }
+    return Array.isArray(candidateDecisions) ? candidateDecisions : [];
+  }
+
+  function selectBestDiscardDecision(candidateDecisions, input = {}) {
+    if (discardRankingApi && typeof discardRankingApi.selectBestDiscardDecision === 'function') {
+      return discardRankingApi.selectBestDiscardDecision(candidateDecisions, input);
+    }
+    return Array.isArray(candidateDecisions) && candidateDecisions.length ? candidateDecisions[0] : null;
+  }
+
+  function applyHardDiscardReview(candidateDecisions, bestDecision, input = {}) {
+    if (hardDiscardReviewApi && typeof hardDiscardReviewApi.applyHardDiscardReview === 'function') {
+      return hardDiscardReviewApi.applyHardDiscardReview(candidateDecisions, bestDecision, input);
+    }
+    return {
+      selectedDecision: bestDecision || null,
+      hardPushFold: null
+    };
+  }
+
+  function buildHardCandidateDiagnostics(candidateDecisions, initialDecision, finalDecision, input = {}) {
+    if (hardCandidateDiagnosticsApi && typeof hardCandidateDiagnosticsApi.buildHardCandidateDiagnostics === 'function') {
+      return hardCandidateDiagnosticsApi.buildHardCandidateDiagnostics(candidateDecisions, initialDecision, finalDecision, input);
+    }
+    return [];
+  }
+
+  function buildNoCandidateDecision(seatKey, handCodes, difficulty, policyId) {
+    const tileCode = handCodes[handCodes.length - 1];
+    return {
+      type: 'discard',
+      seatKey,
+      tileCode,
+      tileIndex: handCodes.length - 1,
+      shouldRiichi: false,
+      difficulty,
+      policyId,
+      metrics: buildHandMetrics({
+        xiangting: null,
+        tingpaiCount: 0
+      }),
+      reasons: ['no-discard-candidates']
+    };
+  }
+
   function evaluateRuntimeDiscard(runtime, seatKey, options = {}) {
     const adapter = getCoreAdapter();
+    const difficulty = normalizeDifficulty(options.difficulty);
+    const policyId = resolvePolicyId(options);
     if (!runtime || typeof runtime.getSeatIndex !== 'function') return null;
 
     const seatIndex = runtime.getSeatIndex(seatKey);
@@ -145,6 +197,21 @@
       ? String(shoupai._zimo)
       : null;
     const currentXiangting = adapter.calculateXiangting(shoupai.clone());
+    const hardPolicy = difficulty === 'hard' ? resolveHardPolicy(options) : {};
+    const hardDiscardPolicy = difficulty === 'hard'
+      ? (hardPolicy && hardPolicy.discard && typeof hardPolicy.discard === 'object'
+          ? hardPolicy.discard
+          : resolveHardDiscardPolicy(options))
+      : {};
+    const hardPushFoldPolicy = difficulty === 'hard' && hardPolicy && hardPolicy.pushFold && typeof hardPolicy.pushFold === 'object'
+      ? hardPolicy.pushFold
+      : {};
+    const hardDefensePolicy = difficulty === 'hard' && hardPolicy && hardPolicy.defense && typeof hardPolicy.defense === 'object'
+      ? hardPolicy.defense
+      : {};
+    const hardContextPolicy = difficulty === 'hard' && hardPolicy && hardPolicy.context && typeof hardPolicy.context === 'object'
+      ? hardPolicy.context
+      : {};
     const rootDefense = evaluateDefense(runtime, seatKey, null, {
       xiangting: currentXiangting
     }, options);
@@ -157,68 +224,70 @@
       .filter(Boolean);
 
     if (!discardCandidates.length) {
-      const tileCode = handCodes[handCodes.length - 1];
-      return {
-        type: 'discard',
-        seatKey,
-        tileCode,
-        tileIndex: handCodes.length - 1,
-        shouldRiichi: false,
-        metrics: buildHandMetrics({
-          xiangting: null,
-          tingpaiCount: 0
-        }),
-        reasons: ['no-discard-candidates']
-      };
+      return buildNoCandidateDecision(seatKey, handCodes, difficulty, policyId);
     }
 
-    let bestDecision = null;
-    discardCandidates.forEach((candidate) => {
-      const normalizedCandidate = normalizeCandidate(candidate);
-      const simulated = shoupai.clone().dapai(normalizedCandidate);
-      const xiangting = adapter.calculateXiangting(simulated);
-      const tingpaiCount = adapter.getTingpai(simulated).length;
-      const ukeireCount = estimateUkeireCount(adapter, simulated);
-      const handValueEstimate = estimateHandShapeValue(simulated);
-      const isDrawDiscard = normalizedCandidate === drawnCode;
-      const tileIndex = findTileIndex(handCodes, normalizedCandidate, !isDrawDiscard);
-      const defense = evaluateDefense(runtime, seatKey, normalizedCandidate, {
-        xiangting,
-        tingpaiCount,
-        ukeireCount,
-        handValueEstimate
-      }, options);
-      const nextDecision = {
-        type: 'discard',
-        seatKey,
-        tileCode: normalizedCandidate,
-        tileIndex: tileIndex >= 0 ? tileIndex : handCodes.length - 1,
-        shouldRiichi: false,
-        isDrawDiscard,
-        danger: defense.danger,
-        pushFoldState: defense.pushFoldState,
-        metrics: buildHandMetrics({
-          xiangting,
-          tingpaiCount,
-          ukeireCount,
-          handValueEstimate
-        }),
-        reasons: ['simple-4p-discard']
-      };
-      if (compareDiscardDecisionWithContext(nextDecision, bestDecision, pushFoldState)) {
-        bestDecision = nextDecision;
-      }
+    const candidateInput = {
+      adapter,
+      runtime,
+      seatKey,
+      shoupai,
+      handCodes,
+      drawnCode,
+      difficulty,
+      policyId,
+      hardDiscardPolicy,
+      hardContextPolicy,
+      pushFoldState,
+      options
+    };
+    let candidateDecisions = discardCandidates
+      .map((candidate) => buildDiscardCandidateDecision({
+        ...candidateInput,
+        candidate
+      }))
+      .filter(Boolean);
+    if (difficulty === 'hard') {
+      candidateDecisions = buildExpandedCandidateDecisions(candidateDecisions, candidateInput);
+    }
+    let bestDecision = selectBestDiscardDecision(candidateDecisions, {
+      difficulty,
+      hardDiscardPolicy,
+      pushFoldState
     });
 
-    if (bestDecision) {
-      const riichiDecision = evaluateRiichi(runtime, seatKey, shoupai, bestDecision, options);
-      bestDecision.shouldRiichi = Boolean(riichiDecision && riichiDecision.shouldRiichi);
-      bestDecision.riichiDecision = riichiDecision;
-      if (bestDecision.shouldRiichi) {
-        bestDecision.reasons = ['simple-4p-discard', 'simple-4p-riichi'].concat(
-          Array.isArray(riichiDecision && riichiDecision.reasons) ? riichiDecision.reasons : []
-        );
-      }
+    if (!bestDecision) return null;
+
+    const initialBestDecision = bestDecision;
+    const hardReview = applyHardDiscardReview(candidateDecisions, bestDecision, {
+      difficulty,
+      hardPushFoldPolicy,
+      hardDefensePolicy,
+      pushFoldState,
+      runtime,
+      seatKey
+    });
+    bestDecision = hardReview && hardReview.selectedDecision ? hardReview.selectedDecision : bestDecision;
+
+    if (difficulty === 'hard' && options.includeHardCandidateDiagnostics === true) {
+      bestDecision.hardCandidateDiagnostics = buildHardCandidateDiagnostics(
+        candidateDecisions,
+        initialBestDecision,
+        bestDecision,
+        candidateInput
+      );
+    }
+
+    const riichiDecision = evaluateRiichi(runtime, seatKey, shoupai, bestDecision, options);
+    bestDecision.shouldRiichi = Boolean(riichiDecision && riichiDecision.shouldRiichi);
+    bestDecision.riichiDecision = riichiDecision;
+    bestDecision.policyId = riichiDecision && riichiDecision.policy && riichiDecision.policy.id
+      ? riichiDecision.policy.id
+      : bestDecision.policyId;
+    if (bestDecision.shouldRiichi) {
+      bestDecision.reasons = [`${difficulty}-4p-discard`, `${difficulty}-4p-riichi`].concat(
+        Array.isArray(riichiDecision && riichiDecision.reasons) ? riichiDecision.reasons : []
+      );
     }
 
     return bestDecision || null;

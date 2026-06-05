@@ -16,7 +16,7 @@ node scripts/validate.mjs mortal
 - `ci`: deterministic GitHub Actions gate. It is intentionally equivalent to `quick` and must not require browsers, CDP, servers, bundlers, or TypeScript.
 - `full`: extended deterministic gate. It includes `quick`, then adds broader ST bridge and Mahjong scenario regressions. It still skips browser/CDP-only tests and external Mortal/conda inference checks.
 - `cdp`: Texas browser regression gate. It only runs CDP-backed Texas scripts and requires a local Chrome/Chromium remote-debugging endpoint.
-- `mortal`: Mahjong coach inference gate. It only runs Mortal/conda-backed scripts and requires a local Mortal checkout, smoke config, and conda environment.
+- `mortal`: Mahjong coach inference gate. It only runs Mortal/conda-backed scripts and requires a local Mortal checkout, smoke config, and conda environment. It includes the MJAI bridge smoke and the Hard-vs-Mortal offline benchmark smoke.
 
 ## CDP Setup
 
@@ -37,7 +37,7 @@ Mortal/conda-backed Mahjong coach inference scripts are also treated as environm
 
 The `mortal` suite checks:
 
-- `MORTAL_ROOT`, defaulting to `/Users/liuhang/Documents/acezero/third_party/Mortal`
+- `MORTAL_ROOT`, defaulting to the first detected local Mortal checkout, usually `/Users/liuhang/Documents/Mortal`
 - `MORTAL_CFG_PATH`, defaulting to `$MORTAL_ROOT/mortal/config.smoke.toml`
 - `MORTAL_CONDA_ENV_PATH`, defaulting to `$MORTAL_ROOT/.conda/envs/mortal`
 

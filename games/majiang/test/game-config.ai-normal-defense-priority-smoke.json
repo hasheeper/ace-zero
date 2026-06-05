@@ -1,0 +1,41 @@
+{
+  "mode": "single-round",
+  "tableSize": 4,
+  "ruleset": "riichi-4p",
+  "advancedMode": true,
+  "ai": {
+    "difficultyTiers": ["easy", "normal", "hard", "hell"],
+    "implementedDifficulties": ["easy", "normal"],
+    "defaultDifficulty": "normal"
+  },
+  "players": [
+    { "seat": "bottom", "title": "测试者", "name": "底家", "human": true, "ai": { "enabled": false, "difficulty": "normal" } },
+    { "seat": "right", "title": "测试者", "name": "普通 AI", "human": false, "ai": { "enabled": true, "difficulty": "normal", "profile": "default" } },
+    { "seat": "top", "title": "测试者", "name": "立直压力位", "human": false, "ai": { "enabled": false, "difficulty": "normal" } },
+    { "seat": "left", "title": "测试者", "name": "上家", "human": false, "ai": { "enabled": false, "difficulty": "normal" } }
+  ],
+  "round": {
+    "title": "AceZero Mahjong AI Normal Defense Priority Smoke",
+    "zhuangfeng": 0,
+    "jushu": 0,
+    "changbang": 0,
+    "lizhibang": 0
+  },
+  "engine": {
+    "wall": {
+      "preset": false,
+      "scripted": {
+        "id": "ai-normal-defense-priority-smoke",
+        "name": "AI Normal Defense Priority Smoke",
+        "initialHands": [
+          ["m1", "m2", "m3", "p1", "p2", "p3", "s1", "s2", "s3", "z1", "z2", "z3", "z4"],
+          ["m8", "z5", "m1", "p6", "m8", "m6", "s3", "p8", "z5", "s8", "p5", "m7", "s4"],
+          ["p5", "p5", "p6", "p6", "s4", "s5", "s6", "z1", "z1", "z2", "z2", "z4", "z4"],
+          ["m7", "m8", "m9", "p7", "p8", "p9", "s4", "s5", "s6", "z5", "z6", "z6", "z7"]
+        ],
+        "draws": ["z5", "s9"],
+        "gangDraws": []
+      }
+    }
+  }
+}

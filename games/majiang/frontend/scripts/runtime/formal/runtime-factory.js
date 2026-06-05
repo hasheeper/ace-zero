@@ -332,7 +332,7 @@
         : false;
     }
 
-    function createBottomKanActions(seatKey, seatIndex) {
+    function createSelfKanActions(seatKey, seatIndex) {
       const kanChoices = getKanChoices(runtime, seatIndex);
       const groupedCounts = kanChoices.reduce((counts, meldString) => {
         const kanType = inferKanType(meldString);
@@ -392,6 +392,49 @@
       return [sorted[0]];
     }
 
+    function passBlockingReactionSeats(action, contextLabel) {
+      if (!runtime.pendingReaction || typeof runtime.getBlockingReactionAction !== 'function') {
+        return runtime.getSnapshot();
+      }
+
+      const actionType = inferActionType(action);
+      const seatKey = action && action.payload ? action.payload.seat : null;
+      if (!actionType || !seatKey) return runtime.getSnapshot();
+
+      let snapshot = runtime.getSnapshot();
+      const passedSeats = new Set();
+      const maxPassCount = Array.isArray(runtime.activeSeats) && runtime.activeSeats.length
+        ? runtime.activeSeats.length
+        : 4;
+      for (let guard = 0; guard < maxPassCount; guard += 1) {
+        if (!runtime.pendingReaction) break;
+        const blockingAction = runtime.getBlockingReactionAction(actionType, seatKey);
+        if (!blockingAction || blockingAction.reason === 'missing-action') break;
+
+        const blockingSeat = blockingAction && blockingAction.payload ? blockingAction.payload.seat : null;
+        if (!blockingSeat || blockingSeat === seatKey || passedSeats.has(blockingSeat)) break;
+
+        passedSeats.add(blockingSeat);
+        logRuntime('debug', 'AI 反应动作执行前补登记高优先级 pass', {
+          context: contextLabel || 'reaction-dispatch',
+          actionKey: action && action.key ? action.key : null,
+          actionSeat: seatKey,
+          blockingKey: blockingAction.key || null,
+          blockingType: blockingAction.type || null,
+          blockingSeat
+        });
+        snapshot = runtime.passReaction(blockingSeat, {
+          reason: `${contextLabel || 'reaction-dispatch'}-blocking-pass`
+        });
+      }
+      return snapshot;
+    }
+
+    function dispatchResolvedReactionAction(action, contextLabel) {
+      passBlockingReactionSeats(action, contextLabel);
+      return dispatchActionSafely(action, contextLabel);
+    }
+
     function collectSeatReactionActions(seatKey) {
       if (!runtime.pendingReaction || !Array.isArray(runtime.pendingReaction.actions)) return [];
       return runtime.pendingReaction.actions.filter((action) => (
@@ -449,7 +492,7 @@
         runtime.isResolvingReactionDecision = true;
         try {
           chosenActions.forEach((action) => {
-            snapshot = dispatchActionSafely(action, 'finalize-reaction-decisions');
+            snapshot = dispatchResolvedReactionAction(action, 'finalize-reaction-decisions');
           });
         } finally {
           runtime.isResolvingReactionDecision = false;
@@ -545,7 +588,7 @@
         const dispatchChosenActions = () => {
           let snapshot = runtime.getSnapshot();
           chosenActions.forEach((action) => {
-            snapshot = dispatchActionSafely(action, 'resolve-ai-only-reactions');
+            snapshot = dispatchResolvedReactionAction(action, 'resolve-ai-only-reactions');
           });
           if (typeof options.onResolved === 'function') options.onResolved(snapshot);
           return snapshot;
@@ -625,6 +668,59 @@
               runtime.refreshActionWindow();
               scheduleAiDiscardTurn(seatKey, nextStepIndex);
               return;
+            }
+            const seatIndex = runtime.getSeatIndex(seatKey);
+            const turnActions = seatIndex >= 0 ? createSelfKanActions(seatKey, seatIndex) : [];
+            if (turnActions.length) {
+              const turnDecision = runtime.chooseAutoTurnAction(seatKey, turnActions);
+              if (turnDecision && (turnDecision.type === 'kan' || turnDecision.type === 'gang')) {
+                const payload = turnDecision.payload && typeof turnDecision.payload === 'object' ? turnDecision.payload : {};
+                logRuntime('info', 'AI 选择自家动作', {
+                  seat: seatKey,
+                  decisionKey: turnDecision.key || null,
+                  decisionType: turnDecision.type,
+                  availableActions: turnActions.map((action) => action.key),
+                  decision: turnDecision ? clone(turnDecision) : null
+                });
+                const kanSnapshot = typeof runtime.resolveKanSequence === 'function'
+                  ? runtime.resolveKanSequence(seatKey, payload.meld || payload.meldString, payload)
+                  : runtime.declareKan(seatKey, payload.meld || payload.meldString);
+                runtime.refreshActionWindow();
+
+                const continueAfterKan = (snapshot) => {
+                  const progressedSnapshot = advanceAfterStateChange(snapshot || runtime.getSnapshot() || kanSnapshot);
+                  if (runtime.pendingReaction || isBottomInteractionPhase(progressedSnapshot) || progressedSnapshot.phase === 'round_end') {
+                    return;
+                  }
+                  if (progressedSnapshot.phase === 'await_discard' && runtime.turnSeat === seatKey) {
+                    scheduleAiDiscardTurn(seatKey, nextStepIndex);
+                    return;
+                  }
+                  if ((progressedSnapshot.phase === 'await_draw' || progressedSnapshot.phase === 'await_discard')
+                    && runtime.turnSeat
+                    && runtime.turnSeat !== 'bottom') {
+                    const aiSeatIndex = seats.indexOf(runtime.turnSeat);
+                    if (progressedSnapshot.phase === 'await_draw') {
+                      runtime.drawForSeat(runtime.turnSeat);
+                    }
+                    scheduleAiDiscardTurn(runtime.turnSeat, aiSeatIndex >= 0 ? aiSeatIndex + 1 : nextStepIndex);
+                    return;
+                  }
+                  runtime.autoTurnTimer = window.setTimeout(() => runStep(nextStepIndex), stepDelay);
+                };
+
+                if (runtime.pendingReaction && !collectSeatReactionActions('bottom').length) {
+                  scheduleAiReactionAfterDiscard(() => {
+                    resolveNonBottomAiReactions({
+                      animateMeldCapture: true,
+                      onResolved: continueAfterKan
+                    });
+                  });
+                  return;
+                }
+                continueAfterKan(kanSnapshot);
+                return;
+              }
             }
             const discardDecision = runtime.chooseAutoDiscard(seatKey);
             if (!discardDecision || typeof discardDecision.tileCode !== 'string') {
@@ -808,7 +904,7 @@
       }
 
       if (hasDrawnTile) {
-        actions.push(...createBottomKanActions('bottom', bottomIndex));
+        actions.push(...createSelfKanActions('bottom', bottomIndex));
       }
       if (hasDrawnTile && runtime.canDeclareKita('bottom')) {
         actions.push(createBottomKitaAction('bottom'));
@@ -895,6 +991,21 @@
         });
       }
       return chooseAutoDiscardDecision(runtime, seatKey);
+    };
+
+    runtime.chooseAutoTurnAction = function(seatKey, actions) {
+      if (runtime.aiController && typeof runtime.aiController.chooseTurnAction === 'function' && runtime.aiController.isAiSeat(seatKey)) {
+        return runtime.aiController.chooseTurnAction(seatKey, actions, {
+          view: runtime.getSnapshot().views.aiViews[seatKey],
+          availableActions: actions,
+          decisionContext: {
+            phase: runtime.phase,
+            turnSeat: runtime.turnSeat,
+            seat: seatKey
+          }
+        });
+      }
+      return null;
     };
 
     runtime.chooseAutoReaction = function(seatKey, actions) {
