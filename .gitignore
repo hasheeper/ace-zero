@@ -9,3 +9,5 @@ coverage/
 __pycache__/
 !assets/deck-of-cards/dist/
 !assets/deck-of-cards/dist/**
+!games/majiang/majiang-core/dist/
+!games/majiang/majiang-core/dist/**
