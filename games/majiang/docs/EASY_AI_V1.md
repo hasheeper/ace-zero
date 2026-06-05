@@ -56,11 +56,11 @@
 
 对应文件：
 
-- [discard-evaluator.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/discard-evaluator.js)
-- [hand-metrics.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/support/hand-metrics.js)
-- [defense-evaluator.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/evaluators/defense-evaluator.js)
-- [tile-danger.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/support/tile-danger.js)
-- [push-fold.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/support/push-fold.js)
+- [discard-evaluator.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/discard-evaluator.js)
+- [hand-metrics.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/support/hand-metrics.js)
+- [defense-evaluator.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/evaluators/defense-evaluator.js)
+- [tile-danger.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/support/tile-danger.js)
+- [push-fold.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/support/push-fold.js)
 
 ### 2.2 立直
 
@@ -75,8 +75,8 @@
 
 当前这部分已经从弃牌排序里拆出基础层入口：
 
-- [riichi-evaluator.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/evaluators/riichi-evaluator.js)
-- [easy-policy.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/difficulty/easy-policy.js)
+- [riichi-evaluator.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/evaluators/riichi-evaluator.js)
+- [easy-policy.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/difficulty/easy-policy.js)
 
 ### 2.3 反应
 
@@ -106,7 +106,7 @@
 
 对应文件：
 
-- [call-evaluator.js](/Users/liuhang/Documents/acezero/majiang/engine/ai/evaluators/call-evaluator.js)
+- [call-evaluator.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/ai/evaluators/call-evaluator.js)
 
 ---
 
@@ -153,7 +153,7 @@
 
 `easy v1` 当前已经有正式 smoke 基线，集中在：
 
-- [validate-easy-ai.js](/Users/liuhang/Documents/acezero/majiang/scripts/validate-easy-ai.js)
+- [validate-easy-ai.js](/Users/liuhang/Documents/ace-zero/games/majiang/scripts/validate-easy-ai.js)
 
 当前保留的 smoke：
 

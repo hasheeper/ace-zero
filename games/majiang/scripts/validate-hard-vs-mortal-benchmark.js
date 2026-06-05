@@ -194,69 +194,75 @@ function validateFreshMortalPrimarySelection() {
 }
 
 function validateHardPersonalityTargetVariants() {
-  const aggressive = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+  const pure = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
     '--target-variant',
-    'hard-aggressive'
+    'hard-pure-v1'
   ]));
-  const defensive = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+  const tuned = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
     '--target-variant',
-    'hard-defensive'
+    'hard-tuned-v2'
   ]));
-  const defensiveDev = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+  const closedDefense = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-closed-defense'
+  ]));
+  const standard = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-standard'
+  ]));
+  const standardDev = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-standard-dev'
+  ]));
+  const valueClassic = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
+    '--target-variant',
+    'hard-value-classic'
+  ]));
+  const legacyDefensiveDev = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
     '--target-variant',
     'hard-defensive-dev'
-  ]));
-  const balanced = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
-    '--target-variant',
-    'hard-balanced'
-  ]));
-  const balancedDev = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
-    '--target-variant',
-    'hard-balanced-dev'
-  ]));
-  const heavy = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
-    '--target-variant',
-    'hard-heavy'
   ]));
   const alphaJongCore = benchmarkApi.resolveTargetVariant(benchmarkApi.parseArgs([
     '--target-variant',
     'alphajong-core'
   ]));
 
-  assert(aggressive.id === 'hard-aggressive' && aggressive.policy && aggressive.policy.id === 'hard-aggressive', `expected aggressive target policy, got ${JSON.stringify(aggressive)}`);
-  assert(defensive.id === 'hard-defensive' && defensive.policy && defensive.policy.id === 'hard-defensive', `expected defensive target policy, got ${JSON.stringify(defensive)}`);
-  assert(defensiveDev.id === 'hard-defensive-dev' && defensiveDev.policy && defensiveDev.policy.id === 'hard-defensive-dev', `expected defensive-dev target policy, got ${JSON.stringify(defensiveDev)}`);
-  assert(balanced.id === 'hard-balanced' && balanced.policy && balanced.policy.id === 'hard-balanced', `expected balanced target policy, got ${JSON.stringify(balanced)}`);
-  assert(balancedDev.id === 'hard-balanced-dev' && balancedDev.policy && balancedDev.policy.id === 'hard-balanced-dev', `expected balanced-dev target policy, got ${JSON.stringify(balancedDev)}`);
-  assert(heavy.id === 'hard-heavy' && heavy.policy && heavy.policy.id === 'hard-heavy', `expected heavy target policy, got ${JSON.stringify(heavy)}`);
-  assert(aggressive.policy.discard.enableNoPressureShapeReview === false, `expected aggressive/pure shape gate off, got ${JSON.stringify(aggressive.policy.discard)}`);
-    assert(defensive.policy.defense.enableLowDangerTiebreak === true, `expected defensive tuned defense gate, got ${JSON.stringify(defensive.policy.defense)}`);
-    assert(defensive.policy.defense.enableDefensiveUtilityShadow !== true, `expected stable defensive shadow off, got ${JSON.stringify(defensive.policy.defense)}`);
-    assert(defensiveDev.policy.defense.enableDefensiveUtilityShadow === true, `expected defensive-dev utility shadow enabled, got ${JSON.stringify(defensiveDev.policy.defense)}`);
-    assert(defensiveDev.policy.defense.enableDefensiveCallGate === true, `expected defensive-dev call gate enabled, got ${JSON.stringify(defensiveDev.policy.defense)}`);
-    assert(defensiveDev.policy.riichi.minWaitQualityScore < defensive.policy.riichi.minWaitQualityScore, `expected defensive-dev lower low-pressure riichi gate, got ${JSON.stringify({ defensive: defensive.policy.riichi, defensiveDev: defensiveDev.policy.riichi })}`);
-    assert(balanced.policy.route.enableClosedRouteValueRebalance === true, `expected balanced route scoring, got ${JSON.stringify(balanced.policy.route)}`);
-  assert(balanced.policy.route.enableBalancedRouteState === true, `expected promoted balanced route state, got ${JSON.stringify(balanced.policy.route)}`);
-  assert(balanced.policy.route.closedRouteMaxXiangting === 2, `expected promoted balanced route range, got ${JSON.stringify(balanced.policy.route)}`);
-  assert(balanced.policy.route.closedRouteOverrideMinMargin === 95, `expected promoted balanced route margin, got ${JSON.stringify(balanced.policy.route)}`);
-  assert(balanced.policy.riichi.minWaitQualityScore === 6, `expected promoted balanced riichi gate, got ${JSON.stringify(balanced.policy.riichi)}`);
-  assert(balancedDev.policy.route.enableBalancedRouteState === balanced.policy.route.enableBalancedRouteState, `expected balanced-dev route state to inherit stable, got ${JSON.stringify(balancedDev.policy.route)}`);
-  assert(balancedDev.policy.route.closedRouteMaxXiangting === balanced.policy.route.closedRouteMaxXiangting, `expected balanced-dev route range to inherit stable, got ${JSON.stringify({ balanced: balanced.policy.route, balancedDev: balancedDev.policy.route })}`);
-  assert(balancedDev.policy.route.closedRouteOverrideMinMargin === balanced.policy.route.closedRouteOverrideMinMargin, `expected balanced-dev route margin to inherit stable, got ${JSON.stringify({ balanced: balanced.policy.route, balancedDev: balancedDev.policy.route })}`);
-  assert(balancedDev.policy.riichi.minWaitQualityScore === balanced.policy.riichi.minWaitQualityScore, `expected balanced-dev riichi gate to inherit stable, got ${JSON.stringify({ balanced: balanced.policy.riichi, balancedDev: balancedDev.policy.riichi })}`);
-  assert(balancedDev.policy.devVariant.parent === 'hard-balanced', `expected balanced-dev parent, got ${JSON.stringify(balancedDev.policy.devVariant)}`);
-  assert(heavy.policy.route.enableClosedRouteValueRebalance === true, `expected heavy route scoring, got ${JSON.stringify(heavy.policy.route)}`);
+  assert(pure.id === 'hard-pure-v1' && pure.policy && pure.policy.id === 'hard-pure-v1', `expected pure-v1 target policy, got ${JSON.stringify(pure)}`);
+  assert(tuned.id === 'hard-tuned-v2' && tuned.policy && tuned.policy.id === 'hard-tuned-v2', `expected tuned-v2 target policy, got ${JSON.stringify(tuned)}`);
+  assert(closedDefense.id === 'hard-closed-defense' && closedDefense.policy && closedDefense.policy.id === 'hard-closed-defense', `expected closed-defense target policy, got ${JSON.stringify(closedDefense)}`);
+  assert(standard.id === 'hard-standard' && standard.policy && standard.policy.id === 'hard-standard', `expected standard target policy, got ${JSON.stringify(standard)}`);
+  assert(standardDev.id === 'hard-standard-dev' && standardDev.policy && standardDev.policy.id === 'hard-standard-dev', `expected standard-dev target policy, got ${JSON.stringify(standardDev)}`);
+  assert(valueClassic.id === 'hard-value-classic' && valueClassic.policy && valueClassic.policy.id === 'hard-value-classic', `expected value-classic target policy, got ${JSON.stringify(valueClassic)}`);
+  assert(legacyDefensiveDev.id === 'hard-defensive-dev' && legacyDefensiveDev.policy && legacyDefensiveDev.policy.id === 'hard-closed-defense', `expected legacy defensive-dev alias policy, got ${JSON.stringify(legacyDefensiveDev)}`);
+  assert(pure.policy.discard.enableNoPressureShapeReview === false, `expected pure-v1 shape gate off, got ${JSON.stringify(pure.policy.discard)}`);
+  assert(tuned.policy.defense.enableLowDangerTiebreak === true, `expected tuned-v2 defense gate, got ${JSON.stringify(tuned.policy.defense)}`);
+  assert(tuned.policy.defense.enableDefensiveUtilityShadow !== true, `expected stable tuned-v2 shadow off, got ${JSON.stringify(tuned.policy.defense)}`);
+  assert(closedDefense.policy.defense.enableDefensiveUtilityShadow === true, `expected closed-defense utility shadow enabled, got ${JSON.stringify(closedDefense.policy.defense)}`);
+  assert(closedDefense.policy.defense.enableDefensiveCallGate === true, `expected closed-defense call gate enabled, got ${JSON.stringify(closedDefense.policy.defense)}`);
+  assert(closedDefense.policy.riichi.minWaitQualityScore < tuned.policy.riichi.minWaitQualityScore, `expected closed-defense lower low-pressure riichi gate, got ${JSON.stringify({ tuned: tuned.policy.riichi, closedDefense: closedDefense.policy.riichi })}`);
+  assert(standard.policy.route.enableClosedRouteValueRebalance === true, `expected standard route scoring, got ${JSON.stringify(standard.policy.route)}`);
+  assert(standard.policy.route.enableBalancedRouteState === true, `expected standard route state, got ${JSON.stringify(standard.policy.route)}`);
+  assert(standard.policy.route.closedRouteMaxXiangting === 2, `expected standard route range, got ${JSON.stringify(standard.policy.route)}`);
+  assert(standard.policy.route.closedRouteOverrideMinMargin === 95, `expected standard route margin, got ${JSON.stringify(standard.policy.route)}`);
+  assert(standard.policy.riichi.minWaitQualityScore === 6, `expected standard riichi gate, got ${JSON.stringify(standard.policy.riichi)}`);
+  assert(standardDev.policy.route.enableBalancedRouteState === standard.policy.route.enableBalancedRouteState, `expected standard-dev route state to inherit stable, got ${JSON.stringify(standardDev.policy.route)}`);
+  assert(standardDev.policy.route.closedRouteMaxXiangting === standard.policy.route.closedRouteMaxXiangting, `expected standard-dev route range to inherit stable, got ${JSON.stringify({ standard: standard.policy.route, standardDev: standardDev.policy.route })}`);
+  assert(standardDev.policy.route.closedRouteOverrideMinMargin === standard.policy.route.closedRouteOverrideMinMargin, `expected standard-dev route margin to inherit stable, got ${JSON.stringify({ standard: standard.policy.route, standardDev: standardDev.policy.route })}`);
+  assert(standardDev.policy.riichi.minWaitQualityScore === standard.policy.riichi.minWaitQualityScore, `expected standard-dev riichi gate to inherit stable, got ${JSON.stringify({ standard: standard.policy.riichi, standardDev: standardDev.policy.riichi })}`);
+  assert(standardDev.policy.devVariant.parent === 'hard-standard', `expected standard-dev parent, got ${JSON.stringify(standardDev.policy.devVariant)}`);
+  assert(valueClassic.policy.route.enableClosedRouteValueRebalance === true, `expected value-classic route scoring, got ${JSON.stringify(valueClassic.policy.route)}`);
   assert(alphaJongCore.id === 'alphajong-core' && alphaJongCore.externalAdapter === 'alphajong-core', `expected AlphaJong core external target, got ${JSON.stringify(alphaJongCore)}`);
   assert(alphaJongCore.policy == null, `expected AlphaJong core target to avoid hard policy, got ${JSON.stringify(alphaJongCore.policy)}`);
 
   console.log('[PASS] hard-vs-mortal-personality-target-variant-smoke');
   console.log(`  snapshot=${JSON.stringify({
-    variants: [aggressive.id, defensive.id, defensiveDev.id, balanced.id, balancedDev.id, heavy.id],
+    variants: [pure.id, tuned.id, closedDefense.id, standard.id, standardDev.id, valueClassic.id],
+    legacyAlias: { id: legacyDefensiveDev.id, policyId: legacyDefensiveDev.policy.id },
     externalVariant: { id: alphaJongCore.id, externalAdapter: alphaJongCore.externalAdapter },
-    defensiveDevUtilityShadowEnabled: defensiveDev.policy.defense.enableDefensiveUtilityShadow,
-    balancedRouteMargin: balanced.policy.route.closedRouteOverrideMinMargin,
-    balancedDevRouteState: balancedDev.policy.route.enableBalancedRouteState,
-    heavyRouteEnabled: heavy.policy.route.enableClosedRouteValueRebalance
+    closedDefenseUtilityShadowEnabled: closedDefense.policy.defense.enableDefensiveUtilityShadow,
+    standardRouteMargin: standard.policy.route.closedRouteOverrideMinMargin,
+    standardDevRouteState: standardDev.policy.route.enableBalancedRouteState,
+    valueClassicRouteEnabled: valueClassic.policy.route.enableClosedRouteValueRebalance
   })}`);
 }
 

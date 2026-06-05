@@ -6,6 +6,7 @@
       require('../difficulty/easy-policy'),
       require('../difficulty/normal-policy'),
       require('../difficulty/hard-policy'),
+      require('../difficulty/hard-variants'),
       require('../support/hard-ev'),
       require('../support/round-context'),
       require('../support/hard-defensive-profile')
@@ -18,6 +19,7 @@
     root.AceMahjongEasyDifficultyPolicy || null,
     root.AceMahjongNormalDifficultyPolicy || null,
     root.AceMahjongHardDifficultyPolicy || null,
+    root.AceMahjongHardVariantPolicies || null,
     root.AceMahjongAiHardEv || null,
     root.AceMahjongAiRoundContext || null,
     root.AceMahjongAiHardDefensiveProfile || null
@@ -28,6 +30,7 @@
   easyPolicyApi,
   normalPolicyApi,
   hardPolicyApi,
+  hardVariantApi,
   hardEvApi,
   roundContextApi,
   hardDefensiveProfileApi
@@ -200,18 +203,31 @@
   }
 
   function isHardFamilyPolicyId(policyId) {
-    return policyId === 'hard'
-      || policyId === 'hard-pure'
-      || policyId === 'hard-aggressive'
-      || policyId === 'hard-tuned'
-      || policyId === 'hard-defensive'
-      || policyId === 'hard-balanced'
-      || policyId === 'hard-aggressive-dev'
-      || policyId === 'hard-defensive-dev'
-      || policyId === 'hard-balanced-dev'
-      || policyId === 'hard-heavy'
-      || policyId === 'hard-experimental'
-      || policyId === 'hell';
+    if (hardVariantApi && typeof hardVariantApi.isHardFamilyPolicyId === 'function') {
+      return hardVariantApi.isHardFamilyPolicyId(policyId);
+    }
+    return policyId === 'hard' || policyId === 'hell';
+  }
+
+  function isClosedRouteValuePolicyId(policyId) {
+    if (hardVariantApi && typeof hardVariantApi.isClosedRouteValuePolicyId === 'function') {
+      return hardVariantApi.isClosedRouteValuePolicyId(policyId);
+    }
+    return policyId === 'hard-experimental';
+  }
+
+  function isBalancedRoutePolicyId(policyId) {
+    if (hardVariantApi && typeof hardVariantApi.isBalancedRoutePolicyId === 'function') {
+      return hardVariantApi.isBalancedRoutePolicyId(policyId);
+    }
+    return false;
+  }
+
+  function isClosedDefensePolicyId(policyId) {
+    if (hardVariantApi && typeof hardVariantApi.isClosedDefensePolicyId === 'function') {
+      return hardVariantApi.isClosedDefensePolicyId(policyId);
+    }
+    return false;
   }
 
   function shouldUseHardCallRules(policy = {}, callPolicy = null) {
@@ -497,12 +513,7 @@
       : {};
     const policyId = typeof policy.id === 'string' ? policy.id : '';
     const enabled = routePolicy.enableClosedRouteValueRebalance === true
-      && (
-        policyId === 'hard-experimental'
-        || policyId === 'hard-balanced'
-        || policyId === 'hard-balanced-dev'
-        || policyId === 'hard-heavy'
-      );
+      && isClosedRouteValuePolicyId(policyId);
     const currentXiangting = Number(currentMetrics && currentMetrics.xiangting);
     const nextXiangting = Number(nextMetrics && nextMetrics.xiangting);
     const remainingTiles = getRemainingTiles(runtime);
@@ -553,10 +564,8 @@
       + lostClosedRouteCost
     );
     const margin = passClosedRouteScore - callOpenRouteScore;
-    const usesBalancedRouteState = (
-      (policyId === 'hard-balanced' || policyId === 'hard-balanced-dev')
-      && routePolicy.enableBalancedRouteState === true
-    );
+    const usesBalancedRouteState = isBalancedRoutePolicyId(policyId)
+      && routePolicy.enableBalancedRouteState === true;
     const balancedStateReview = usesBalancedRouteState
       ? resolveBalancedRouteState(routePolicy, {
           remainingTiles,
@@ -652,7 +661,8 @@
     const defensePolicy = policy && policy.defense && typeof policy.defense === 'object'
       ? policy.defense
       : {};
-    if (policyId !== 'hard-defensive-dev' || defensePolicy.enableDefensiveCallGate !== true) return null;
+    if (!isClosedDefensePolicyId(policyId)) return null;
+    if (defensePolicy.enableDefensiveCallGate !== true) return null;
     const api = getHardDefensiveProfileApi();
     if (!api || typeof api.evaluateDefensiveCallGate !== 'function') return null;
     try {

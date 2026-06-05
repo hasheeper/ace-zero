@@ -9,7 +9,7 @@ const { MjaiActionDecoder } = require('../mjai/action-decoder');
 
 const MORTAL_ROOT_CANDIDATES = [
   '/Users/liuhang/Documents/Mortal',
-  '/Users/liuhang/Documents/acezero/third_party/Mortal'
+  '/Users/liuhang/Documents/ace-zero/third_party/Mortal'
 ];
 
 function isMortalRoot(rootPath) {

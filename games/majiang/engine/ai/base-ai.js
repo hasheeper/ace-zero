@@ -2,16 +2,20 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(
       require('./discard-evaluator'),
-      require('./evaluators/call-evaluator')
+      require('./evaluators/call-evaluator'),
+      require('./evaluators/kan-evaluator'),
+      require('./difficulty/hard-variants')
     );
     return;
   }
 
   root.AceMahjongBaseAI = factory(
     root.AceMahjongDiscardEvaluator || null,
-    root.AceMahjongCallEvaluator || null
+    root.AceMahjongCallEvaluator || null,
+    root.AceMahjongKanEvaluator || null,
+    root.AceMahjongHardVariantPolicies || null
   );
-})(typeof globalThis !== 'undefined' ? globalThis : this, function(discardEvaluatorApi, callEvaluatorApi) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function(discardEvaluatorApi, callEvaluatorApi, kanEvaluatorApi, hardVariantApi) {
   'use strict';
 
   const DIFFICULTY_TIERS = Object.freeze(['easy', 'normal', 'hard', 'hell']);
@@ -26,8 +30,27 @@
     if (difficulty === 'rookie') return 'easy';
     if (difficulty === 'beta') return 'normal';
     if (difficulty === 'master') return 'hard';
+    if (hardVariantApi && typeof hardVariantApi.isHardVariantId === 'function' && hardVariantApi.isHardVariantId(difficulty)) {
+      return 'hard';
+    }
     if (DIFFICULTY_TIERS.includes(difficulty)) return difficulty;
     return 'normal';
+  }
+
+  function normalizeVariant(value) {
+    const variant = typeof value === 'string' && value ? value.toLowerCase() : '';
+    if (!variant || !hardVariantApi || typeof hardVariantApi.isHardVariantId !== 'function') return null;
+    if (!hardVariantApi.isHardVariantId(variant)) return null;
+    return typeof hardVariantApi.normalizeHardVariantId === 'function'
+      ? hardVariantApi.normalizeHardVariantId(variant)
+      : variant;
+  }
+
+  function resolveAiPolicy(difficulty, variant) {
+    if (difficulty === 'hard' && variant && hardVariantApi && typeof hardVariantApi.createHardVariantPolicy === 'function') {
+      return hardVariantApi.createHardVariantPolicy(variant) || null;
+    }
+    return null;
   }
 
   function normalizeAiConfig(player = {}, sharedAiConfig = {}) {
@@ -36,12 +59,25 @@
     const defaultDifficulty = typeof sharedAiConfig.defaultDifficulty === 'string'
       ? sharedAiConfig.defaultDifficulty
       : 'normal';
-    const difficulty = normalizeDifficulty(aiSource.difficulty || source.difficulty || defaultDifficulty);
+    const rawDifficulty = aiSource.difficulty || source.difficulty || defaultDifficulty;
+    const variant = normalizeVariant(
+      aiSource.variant
+      || aiSource.policyId
+      || source.variant
+      || source.policyId
+      || rawDifficulty
+      || aiSource.profile
+    );
+    const difficulty = variant ? 'hard' : normalizeDifficulty(rawDifficulty);
+    const policy = resolveAiPolicy(difficulty, variant);
 
     return {
       enabled: aiSource.enabled !== false && source.human !== true,
       difficulty,
+      variant,
       profile: typeof aiSource.profile === 'string' && aiSource.profile ? aiSource.profile : 'default',
+      policy,
+      policyId: policy && policy.id ? policy.id : (variant || difficulty),
       implemented: IMPLEMENTED_DIFFICULTIES.includes(difficulty)
     };
   }
@@ -56,6 +92,19 @@
     return callEvaluatorApi && typeof callEvaluatorApi.createCallEvaluator === 'function'
       ? callEvaluatorApi.createCallEvaluator(options)
       : null;
+  }
+
+  function createKanEvaluator(options = {}) {
+    return kanEvaluatorApi && typeof kanEvaluatorApi.createKanEvaluator === 'function'
+      ? kanEvaluatorApi.createKanEvaluator(options)
+      : null;
+  }
+
+  function resolveDecisionPolicy(config = {}, decisionContext = {}) {
+    if (decisionContext && decisionContext.policy && typeof decisionContext.policy === 'object') {
+      return decisionContext.policy;
+    }
+    return config && config.policy ? config.policy : null;
   }
 
   function selectHuleReaction(actions = []) {
@@ -82,6 +131,7 @@
     const seatConfigs = new Map();
     const discardEvaluator = createDiscardEvaluator(options);
     const callEvaluator = createCallEvaluator(options);
+    const kanEvaluator = createKanEvaluator(options);
 
     seatKeys.forEach((seatKey, index) => {
       const player = playersBySeat.get(seatKey) || players[index] || {};
@@ -106,8 +156,37 @@
         return discardEvaluator.evaluateRuntimeDiscard(runtime, seatKey, {
           ...decisionContext,
           difficulty: config.difficulty,
-          profile: config.profile
+          profile: config.profile,
+          policy: resolveDecisionPolicy(config, decisionContext)
         });
+      },
+      chooseTurnAction(seatKey, availableActions = [], decisionContext = {}) {
+        const config = seatConfigs.get(seatKey);
+        if (!config || !config.enabled || !config.implemented) return null;
+        if (!runtime || !runtime.rulesetProfile || runtime.rulesetProfile.id !== 'riichi-4p') return null;
+        if (!kanEvaluator || typeof kanEvaluator.evaluateKan !== 'function') return null;
+        const kanDecision = kanEvaluator.evaluateKan(runtime, seatKey, availableActions, {
+          ...decisionContext,
+          difficulty: config.difficulty,
+          profile: config.profile,
+          policy: resolveDecisionPolicy(config, decisionContext),
+          isReactionKan: false
+        });
+        if (!kanDecision || !kanDecision.action || !kanDecision.hardKanMetrics || kanDecision.hardKanMetrics.accepted !== true) {
+          return null;
+        }
+        const aiDecision = {
+          difficulty: config.difficulty,
+          variant: config.variant || null,
+          policyId: kanDecision.policy && kanDecision.policy.id ? kanDecision.policy.id : config.policyId,
+          reasons: Array.isArray(kanDecision.reasons) ? kanDecision.reasons.slice() : [],
+          metrics: kanDecision.metrics ? clone(kanDecision.metrics) : null,
+          hardKanMetrics: clone(kanDecision.hardKanMetrics)
+        };
+        return {
+          ...kanDecision.action,
+          aiDecision
+        };
       },
       chooseReaction(seatKey, availableActions = [], decisionContext = {}) {
         const config = seatConfigs.get(seatKey);
@@ -115,16 +194,41 @@
         if (!runtime || !runtime.rulesetProfile || runtime.rulesetProfile.id !== 'riichi-4p') return null;
         const huleAction = selectHuleReaction(availableActions);
         if (huleAction) return huleAction;
+        if (kanEvaluator && typeof kanEvaluator.evaluateKan === 'function') {
+          const kanDecision = kanEvaluator.evaluateKan(runtime, seatKey, availableActions, {
+            ...decisionContext,
+            difficulty: config.difficulty,
+            profile: config.profile,
+            policy: resolveDecisionPolicy(config, decisionContext),
+            isReactionKan: true
+          });
+          if (kanDecision && kanDecision.action && kanDecision.hardKanMetrics && kanDecision.hardKanMetrics.accepted === true) {
+            const aiDecision = {
+              difficulty: config.difficulty,
+              variant: config.variant || null,
+              policyId: kanDecision.policy && kanDecision.policy.id ? kanDecision.policy.id : config.policyId,
+              reasons: Array.isArray(kanDecision.reasons) ? kanDecision.reasons.slice() : [],
+              metrics: kanDecision.metrics ? clone(kanDecision.metrics) : null,
+              hardKanMetrics: clone(kanDecision.hardKanMetrics)
+            };
+            return {
+              ...kanDecision.action,
+              aiDecision
+            };
+          }
+        }
         if (!callEvaluator || typeof callEvaluator.evaluateCalls !== 'function') return null;
         const callDecision = callEvaluator.evaluateCalls(runtime, seatKey, availableActions, {
           ...decisionContext,
           difficulty: config.difficulty,
-          profile: config.profile
+          profile: config.profile,
+          policy: resolveDecisionPolicy(config, decisionContext)
         });
         if (!callDecision || !callDecision.action) return null;
         const aiDecision = {
           difficulty: config.difficulty,
-          policyId: callDecision.policy && callDecision.policy.id ? callDecision.policy.id : config.difficulty,
+          variant: config.variant || null,
+          policyId: callDecision.policy && callDecision.policy.id ? callDecision.policy.id : config.policyId,
           reasons: Array.isArray(callDecision.reasons) ? callDecision.reasons.slice() : [],
           metrics: callDecision.metrics ? clone(callDecision.metrics) : null
         };

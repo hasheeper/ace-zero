@@ -216,7 +216,7 @@ function printHelp() {
   console.log('Options:');
   console.log('  --smoke                         Use smoke Mortal config and one sample per target seat.');
   console.log('  --out <path>                    Write the JSON report to a file instead of only stdout.');
-  console.log('  --target-variant <name>         easy|normal|alphajong[-discard-only|-core]|hard|hard-aggressive[-dev]|hard-defensive[-dev]|hard-balanced[-dev]|hard-heavy|hard-pure|hard-tuned|hard-experimental. Default: target difficulty.');
+  console.log('  --target-variant <name>         easy|normal|alphajong[-discard-only|-core]|hard|hard-standard|hard-closed-defense|hard-value-classic|hard-pure-v1|hard-tuned-v2|hard-experimental. Legacy hard-balanced/hard-defensive-dev/hard-heavy names still work.');
   console.log('  --experimental-overlays <a,b>   Overlays for hard-experimental only.');
   console.log('  --target-difficulty <name>      Difficulty for the evaluated seat. Default: hard.');
   console.log('  --opponent-difficulty <name>    Difficulty for the other three seats. Default: normal.');

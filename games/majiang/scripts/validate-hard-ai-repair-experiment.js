@@ -126,7 +126,7 @@ function assertNoLargeObjects(report) {
 
 function validateHardExperimentalBaseline() {
   const policy = experimentApi.summarizePolicyEquivalence();
-  assert(policy.tunedPolicyId === 'hard-tuned', `expected tuned policy id, got ${policy.tunedPolicyId}`);
+  assert(policy.tunedPolicyId === 'hard-tuned-v2', `expected tuned policy id, got ${policy.tunedPolicyId}`);
   assert(policy.experimentalPolicyId === 'hard-experimental', `expected experimental policy id, got ${policy.experimentalPolicyId}`);
   assert(policy.experimentalOverlay && policy.experimentalOverlay.enabled === false, `expected disabled overlay, got ${JSON.stringify(policy.experimentalOverlay)}`);
   assert(policy.overlayEnabled === false, `expected overlayEnabled false, got ${policy.overlayEnabled}`);
@@ -145,7 +145,7 @@ function validateHardExperimentalOverlayPolicy() {
   const policy = experimentApi.summarizePolicyEquivalence({
     experimentalOverlays: ['defense-equal-safe-backstep-v1']
   });
-  assert(policy.tunedPolicyId === 'hard-tuned', `expected tuned policy id, got ${policy.tunedPolicyId}`);
+  assert(policy.tunedPolicyId === 'hard-tuned-v2', `expected tuned policy id, got ${policy.tunedPolicyId}`);
   assert(policy.experimentalPolicyId === 'hard-experimental', `expected experimental policy id, got ${policy.experimentalPolicyId}`);
   assert(policy.experimentalOverlay && policy.experimentalOverlay.enabled === true, `expected enabled overlay, got ${JSON.stringify(policy.experimentalOverlay)}`);
   assert(policy.overlayEnabled === true, `expected overlayEnabled true, got ${policy.overlayEnabled}`);
@@ -166,7 +166,7 @@ function validateHardExperimentalTileChoiceOverlayPolicy() {
   const policy = experimentApi.summarizePolicyEquivalence({
     experimentalOverlays: ['no-pressure-same-xiangting-rerank-v1']
   });
-  assert(policy.tunedPolicyId === 'hard-tuned', `expected tuned policy id, got ${policy.tunedPolicyId}`);
+  assert(policy.tunedPolicyId === 'hard-tuned-v2', `expected tuned policy id, got ${policy.tunedPolicyId}`);
   assert(policy.experimentalPolicyId === 'hard-experimental', `expected experimental policy id, got ${policy.experimentalPolicyId}`);
   assert(policy.experimentalOverlay && policy.experimentalOverlay.enabled === true, `expected enabled overlay, got ${JSON.stringify(policy.experimentalOverlay)}`);
   assert(policy.overlayEnabled === true, `expected overlayEnabled true, got ${policy.overlayEnabled}`);
@@ -187,7 +187,7 @@ function validateHardExperimentalClosedRouteOverlayPolicy() {
   const policy = experimentApi.summarizePolicyEquivalence({
     experimentalOverlays: ['closed-route-value-rebalance-v1']
   });
-  assert(policy.tunedPolicyId === 'hard-tuned', `expected tuned policy id, got ${policy.tunedPolicyId}`);
+  assert(policy.tunedPolicyId === 'hard-tuned-v2', `expected tuned policy id, got ${policy.tunedPolicyId}`);
   assert(policy.experimentalPolicyId === 'hard-experimental', `expected experimental policy id, got ${policy.experimentalPolicyId}`);
   assert(policy.experimentalOverlay && policy.experimentalOverlay.enabled === true, `expected enabled overlay, got ${JSON.stringify(policy.experimentalOverlay)}`);
   assert(policy.overlayEnabled === true, `expected overlayEnabled true, got ${policy.overlayEnabled}`);

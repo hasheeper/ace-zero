@@ -42,6 +42,12 @@
       flatHandShapeBoost: 4,
       suppressFlatCallsUnderRiichi: true
     },
+    kan: {
+      enableKanReview: true,
+      easyMaxRiichiPressure: 0,
+      easyConcealedMinRemaining: 24,
+      easyAddedMinRemaining: 24
+    },
     defense: {
       enableTileDanger: true,
       usePushFoldState: true,

@@ -33,9 +33,9 @@
 
 相关代码：
 
-- [ai-benchmark-helpers.js](/Users/liuhang/Documents/acezero/majiang/scripts/lib/ai-benchmark-helpers.js)
-- [benchmark-analysis.js](/Users/liuhang/Documents/acezero/majiang/engine/coach/review/benchmark-analysis.js)
-- [benchmark-ai-vs-mortal.js](/Users/liuhang/Documents/acezero/majiang/scripts/benchmark-ai-vs-mortal.js)
+- [ai-benchmark-helpers.js](/Users/liuhang/Documents/ace-zero/games/majiang/scripts/lib/ai-benchmark-helpers.js)
+- [benchmark-analysis.js](/Users/liuhang/Documents/ace-zero/games/majiang/engine/coach/review/benchmark-analysis.js)
+- [benchmark-ai-vs-mortal.js](/Users/liuhang/Documents/ace-zero/games/majiang/scripts/benchmark-ai-vs-mortal.js)
 
 ## Analysis Contract
 

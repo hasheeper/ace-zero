@@ -43,6 +43,14 @@
       minFlatHandValueDelta: 0,
       suppressFlatCallsUnderRiichi: true
     },
+    kan: {
+      enableKanReview: true,
+      normalConcealedMinRemaining: 18,
+      normalAddedMinRemaining: 18,
+      normalOpenMinRemaining: 18,
+      normalTenpaiMaxWaitQualityLoss: 6,
+      normalTenpaiMaxLiveTingpaiLoss: 2
+    },
     defense: {
       enableTileDanger: true,
       usePushFoldState: true,

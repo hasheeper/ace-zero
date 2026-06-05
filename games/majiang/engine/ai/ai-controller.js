@@ -7,6 +7,7 @@
       require('./difficulty/easy-policy'),
       require('./difficulty/normal-policy'),
       require('./difficulty/hard-policy'),
+      require('./difficulty/hard-variants'),
       require('./profiles/default'),
       require('./special/mode-2p'),
       require('./special/mode-3p'),
@@ -22,6 +23,7 @@
     root.AceMahjongEasyDifficultyPolicy || null,
     root.AceMahjongNormalDifficultyPolicy || null,
     root.AceMahjongHardDifficultyPolicy || null,
+    root.AceMahjongHardVariantPolicies || null,
     root.AceMahjongDefaultAiProfile || null,
     root.AceMahjongMode2pSpecialAi || null,
     root.AceMahjongMode3pSpecialAi || null,
@@ -34,6 +36,7 @@
   easyPolicyApi,
   normalPolicyApi,
   hardPolicyApi,
+  hardVariantApi,
   defaultProfileApi,
   mode2pApi,
   mode3pApi,
@@ -50,7 +53,19 @@
     if (difficulty === 'easy') return 'easy';
     if (difficulty === 'hard') return 'hard';
     if (difficulty === 'hell') return 'hell';
+    if (hardVariantApi && typeof hardVariantApi.isHardVariantId === 'function' && hardVariantApi.isHardVariantId(difficulty)) {
+      return 'hard';
+    }
     return 'normal';
+  }
+
+  function normalizeVariant(value) {
+    const variant = typeof value === 'string' && value ? value.toLowerCase() : '';
+    if (!variant || !hardVariantApi || typeof hardVariantApi.isHardVariantId !== 'function') return null;
+    if (!hardVariantApi.isHardVariantId(variant)) return null;
+    return typeof hardVariantApi.normalizeHardVariantId === 'function'
+      ? hardVariantApi.normalizeHardVariantId(variant)
+      : variant;
   }
 
   function normalizeProfile(value) {
@@ -73,7 +88,11 @@
     };
   }
 
-  function getDifficultyPolicy(difficulty) {
+  function getDifficultyPolicy(difficulty, variant = null) {
+    if (difficulty === 'hard' && variant && hardVariantApi && typeof hardVariantApi.createHardVariantPolicy === 'function') {
+      const policy = hardVariantApi.createHardVariantPolicy(variant);
+      if (policy) return policy;
+    }
     if (difficulty === 'easy' && easyPolicyApi && typeof easyPolicyApi.createEasyPolicy === 'function') {
       return easyPolicyApi.createEasyPolicy();
     }
@@ -160,9 +179,19 @@
       const defaultDifficulty = typeof sharedAiConfig.defaultDifficulty === 'string'
         ? sharedAiConfig.defaultDifficulty
         : 'normal';
+      const rawDifficulty = aiSource.difficulty || player.difficulty || defaultDifficulty;
+      const variant = normalizeVariant(
+        aiSource.variant
+        || aiSource.policyId
+        || player.variant
+        || player.policyId
+        || rawDifficulty
+        || aiSource.profile
+      );
       seatConfigs.set(seatKey, {
         enabled: aiSource.enabled !== false && player.human !== true,
-        difficulty: normalizeDifficulty(aiSource.difficulty || player.difficulty || defaultDifficulty),
+        difficulty: variant ? 'hard' : normalizeDifficulty(rawDifficulty),
+        variant,
         profile: typeof aiSource.profile === 'string' && aiSource.profile ? aiSource.profile : 'default'
       });
     });
@@ -184,7 +213,7 @@
         return {
           ...clone(seatConfig),
           difficulty,
-          difficultyPolicy: getDifficultyPolicy(difficulty),
+          difficultyPolicy: getDifficultyPolicy(difficulty, seatConfig.variant),
           profileConfig: normalizeProfile(seatConfig.profile)
         };
       },

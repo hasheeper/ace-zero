@@ -13,13 +13,14 @@ These should stay aligned with the codebase and be kept short:
 
 - [`../CURRENT_FRAMEWORK_REFERENCE.md`](../CURRENT_FRAMEWORK_REFERENCE.md)
 - [`AI_CURRENT_STATUS_AND_ROADMAP.md`](AI_CURRENT_STATUS_AND_ROADMAP.md)
+- [`AI_BASELINE_STATUS.md`](AI_BASELINE_STATUS.md)
+- [`HARD_AI_VARIANTS_V1_V2_V3.md`](HARD_AI_VARIANTS_V1_V2_V3.md)
 
 ### Long-term design
 
 These describe direction and constraints rather than current file layout:
 
 - [`AI_PLAN.md`](AI_PLAN.md)
-- [`HARD_AI_RESEARCH_AND_PLAN.md`](HARD_AI_RESEARCH_AND_PLAN.md)
 - [`FUTURE_DEVELOPMENT_REFERENCE.md`](FUTURE_DEVELOPMENT_REFERENCE.md)
 - [`FUTURE_PROOFING.md`](FUTURE_PROOFING.md)
 - [`MULTI_ROUND_AND_SETTLEMENT_PLAN.md`](MULTI_ROUND_AND_SETTLEMENT_PLAN.md)
@@ -30,23 +31,20 @@ These are the day-to-day references for running and understanding the project:
 
 - [`../test/TESTS.md`](../test/TESTS.md)
 - [`../TEST_SCENARIO_GUIDE.md`](../TEST_SCENARIO_GUIDE.md)
-- [`HARD_AI_H14_CLEANUP_AND_ARENA_RUNBOOK.md`](HARD_AI_H14_CLEANUP_AND_ARENA_RUNBOOK.md)
+- [`AI_BENCHMARK_PLAN.md`](AI_BENCHMARK_PLAN.md)
+- [`AI_ANALYSIS_UI_PLAN.md`](AI_ANALYSIS_UI_PLAN.md)
 - [`../frontend/scripts/runtime/README.md`](../frontend/scripts/runtime/README.md)
 - [`../shared/runtime/README.md`](../shared/runtime/README.md)
 - [`../engine/extensions/extensions.md`](../engine/extensions/extensions.md)
 
-### Archive
-
-Completed phase docs and stale status snapshots move to:
-
-- [`archive`](archive)
+### Cleanup Rule
 
 Rule of thumb:
 
-- if a doc is dated and stops being true after refactors, archive it
+- if a doc is dated and stops being true after refactors, consolidate the still-useful facts into a current doc and delete the stale note
 - if a doc explains a stable boundary or workflow, keep it near the root
 
 Current layout rule:
 
 - root Markdown files should mostly be current-truth docs
-- `docs/` should hold long-term design and archive material
+- stale phase logs should be consolidated into a current doc and removed
