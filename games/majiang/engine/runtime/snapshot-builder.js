@@ -30,6 +30,9 @@ function buildRuntimeSnapshot(runtime) {
     wallState: runtime && typeof runtime.getWallState === 'function'
       ? clone(runtime.getWallState())
       : null,
+    luckMana: runtime && typeof runtime.getLuckManaState === 'function'
+      ? clone(runtime.getLuckManaState())
+      : null,
     interaction: runtime && typeof runtime.getInteractionState === 'function'
       ? clone(runtime.getInteractionState())
       : null,

@@ -2316,6 +2316,30 @@
         dispatch(action) {
           return dispatchRuntimeAction(action);
         },
+        setLuckWindState(seatKey, windState, options) {
+          const runtime = this.getRuntime();
+          return runtime && typeof runtime.setLuckWindState === 'function'
+            ? runtime.setLuckWindState(seatKey, windState, options)
+            : null;
+        },
+        setLuckForceState(seatKey, forceState, options) {
+          const runtime = this.getRuntime();
+          return runtime && typeof runtime.setLuckForceState === 'function'
+            ? runtime.setLuckForceState(seatKey, forceState, options)
+            : null;
+        },
+        getLuckDebugState() {
+          const runtime = this.getRuntime();
+          return runtime && typeof runtime.getLuckDebugState === 'function'
+            ? runtime.getLuckDebugState()
+            : null;
+        },
+        getLuckManaState() {
+          const runtime = this.getRuntime();
+          return runtime && typeof runtime.getLuckManaState === 'function'
+            ? runtime.getLuckManaState()
+            : null;
+        },
         subscribe(listener) {
           const bridge = getRuntimeBridgeApi();
           return bridge && typeof bridge.subscribe === 'function'
@@ -2562,6 +2586,8 @@
       renderTable: renderAll,
       devlog: devLog,
       runtime: createRuntimePublicApi(),
+      luck: window.AceMahjongLuckPanel || null,
+      luckSequence: window.AceMahjongLuckSequencePanel || null,
       table: createTablePublicApi(),
       hand: handApi,
       actions: actionsApi,

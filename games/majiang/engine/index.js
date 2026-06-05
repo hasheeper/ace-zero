@@ -2,6 +2,9 @@
 
 const base = require('./base/majiang-core-adapter');
 const drawPolicy = require('./base/draw-policy');
+const luckCommitRouteEvaluator = require('./base/luck-commit-route-evaluator');
+const luckIntentEvaluator = require('./base/luck-intent-evaluator');
+const luckDrawPolicy = require('./base/luck-draw-policy');
 const seatTopology = require('./base/seat-topology');
 const wallService = require('./base/wall-service');
 const rulesetProfile = require('./base/ruleset-profile');
@@ -16,6 +19,9 @@ const roundResultBuilder = require('./runtime/round-result-builder');
 module.exports = {
   ...base,
   ...drawPolicy,
+  ...luckCommitRouteEvaluator,
+  ...luckIntentEvaluator,
+  ...luckDrawPolicy,
   ...seatTopology,
   ...wallService,
   ...rulesetProfile,

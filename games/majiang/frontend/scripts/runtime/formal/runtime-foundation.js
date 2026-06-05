@@ -234,6 +234,7 @@
             ? runtime.actionWindow.actions.map((action) => deps.clone(action))
             : [],
           wallState: runtime.getWallState(),
+          luckMana: typeof runtime.getLuckManaState === 'function' ? deps.clone(runtime.getLuckManaState()) : null,
           interaction: runtime.getInteractionState(),
           roundResult: runtime.roundResult ? deps.clone(runtime.roundResult) : null,
           eventLog: runtime.eventLog.map((event) => deps.clone(event)),

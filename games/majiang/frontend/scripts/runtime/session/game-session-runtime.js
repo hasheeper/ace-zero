@@ -313,6 +313,26 @@
       getRuntime() {
         return currentRuntime;
       },
+      getLuckManaState() {
+        return currentRuntime && typeof currentRuntime.getLuckManaState === 'function'
+          ? currentRuntime.getLuckManaState()
+          : null;
+      },
+      getLuckDebugState() {
+        return currentRuntime && typeof currentRuntime.getLuckDebugState === 'function'
+          ? currentRuntime.getLuckDebugState()
+          : null;
+      },
+      setLuckWindState(seatKey, windState, options) {
+        return currentRuntime && typeof currentRuntime.setLuckWindState === 'function'
+          ? currentRuntime.setLuckWindState(seatKey, windState, options)
+          : null;
+      },
+      setLuckForceState(seatKey, forceState, options) {
+        return currentRuntime && typeof currentRuntime.setLuckForceState === 'function'
+          ? currentRuntime.setLuckForceState(seatKey, forceState, options)
+          : null;
+      },
       getEventLog() {
         return eventLog.slice();
       },

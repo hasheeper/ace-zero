@@ -510,6 +510,1197 @@
       }
     }
 
+    .luck-array-container {
+      --luck-gold-light: #fef1cc;
+      --luck-gold-main: #b89758;
+      --luck-gold-dark: #6a532d;
+      --luck-silver-light: #fdfdfe;
+      --luck-silver-main: #9ca3af;
+      --luck-seal-red-light: #ff6b6b;
+      --luck-mana-core: #4ce0d2;
+      --luck-mana-glow: rgba(76, 224, 210, 0.4);
+      --luck-mana-dark: #12403b;
+      --luck-panel-scale: 0.78;
+      position: fixed;
+      left: 0.82rem;
+      top: 50%;
+      z-index: 1350;
+      display: flex;
+      align-items: stretch;
+      gap: 0.5rem;
+      max-height: calc(100vh - 2rem);
+      color: var(--luck-gold-light);
+      transform: translateY(-50%) scale(var(--luck-panel-scale));
+      transform-origin: left center;
+      pointer-events: auto;
+      transition: left 220ms ease, transform 220ms ease, opacity 220ms ease;
+    }
+
+    .luck-v-tubes-station {
+      position: relative;
+      flex: 0 0 1.6rem;
+      width: 1.6rem;
+      min-height: 31rem;
+    }
+
+    .luck-tech-track {
+      position: absolute;
+      z-index: 1;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      background: rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+    }
+
+    .luck-track-cutters {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .luck-mana-track {
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      border-color: rgba(76, 224, 210, 0.15);
+    }
+
+    .luck-mana-track .luck-track-cutters {
+      background: repeating-linear-gradient(to bottom, transparent, transparent calc(10% - 1.5px), #000 calc(10% - 1.5px), #000 10%);
+    }
+
+    .luck-mana-energy {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;
+      width: 100%;
+      height: 65%;
+      background: var(--luck-mana-core);
+      box-shadow: 0 0 10px var(--luck-mana-glow);
+      transition: height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 160ms ease;
+    }
+
+    .luck-v-mana-val {
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-top: 10px;
+      text-align: center;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .luck-v-mana-val .digit {
+      font-family: 'Times New Roman', serif;
+      font-size: 1.2rem;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--luck-mana-core);
+      text-shadow: 0 0 10px var(--luck-mana-glow);
+    }
+
+    .luck-v-mana-val .lbl {
+      margin: 8px auto 0;
+      font-size: 0.55rem;
+      letter-spacing: 0.24em;
+      writing-mode: vertical-lr;
+      color: var(--luck-silver-main);
+      opacity: 0.6;
+    }
+
+    .luck-intent-track {
+      left: 1rem;
+      top: 45%;
+      bottom: 0;
+      width: 6px;
+      border-color: rgba(184, 151, 88, 0.15);
+    }
+
+    .luck-intent-track .luck-track-cutters {
+      background: repeating-linear-gradient(to bottom, transparent, transparent calc(33.33% - 1.5px), #000 calc(33.33% - 1.5px), #000 33.33%);
+    }
+
+    .luck-intent-ghost {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1;
+      height: 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(184, 151, 88, 0.6),
+        rgba(184, 151, 88, 0.6) 2px,
+        transparent 2px,
+        transparent 4px
+      );
+      pointer-events: none;
+      transition: height 0.15s linear;
+    }
+
+    .luck-intent-solid {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;
+      height: 0;
+      background: var(--luck-gold-light);
+      box-shadow: 0 0 8px var(--luck-gold-main);
+      pointer-events: none;
+      transition: height 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 160ms ease;
+    }
+
+    .luck-focus-pips {
+      position: absolute;
+      inset: 3px -8px;
+      z-index: 6;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      pointer-events: none;
+    }
+
+    .luck-focus-pip {
+      flex: 1;
+      min-height: 0;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 1px;
+      background: rgba(0, 0, 0, 0.28);
+      box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.8);
+      transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .luck-focus-pip.is-filled {
+      border-color: rgba(254, 241, 204, 0.62);
+      background: rgba(254, 241, 204, 0.72);
+      box-shadow: 0 0 9px rgba(184, 151, 88, 0.46);
+    }
+
+    .luck-array-container.is-curse-layer .luck-focus-pip.is-filled {
+      border-color: rgba(255, 186, 186, 0.7);
+      background: rgba(255, 186, 186, 0.78);
+      box-shadow: 0 0 9px rgba(229, 57, 53, 0.46);
+    }
+
+    .luck-array-container.is-focus-full .luck-intent-track {
+      box-shadow: 0 0 13px rgba(254, 241, 204, 0.24);
+    }
+
+    .luck-array-container.is-budget-preview-blocked .luck-intent-ghost,
+    .luck-array-container.is-budget-blocked .luck-intent-solid {
+      background: #ff6b6b;
+      box-shadow: 0 0 11px rgba(229, 57, 53, 0.68);
+    }
+
+    .luck-array-container.is-budget-blocked .luck-v-console {
+      border-color: rgba(255, 107, 107, 0.58);
+      animation: luck-budget-deny 360ms ease;
+    }
+
+    @keyframes luck-budget-deny {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(2px); }
+      50% { transform: translateX(-2px); }
+      75% { transform: translateX(1px); }
+      100% { transform: translateX(0); }
+    }
+
+    .luck-intent-hitboxes {
+      position: absolute;
+      inset: -4px -15px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .luck-sub-hit {
+      appearance: none;
+      flex: 1;
+      min-height: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .luck-v-console {
+      position: relative;
+      z-index: 2;
+      flex: 0 0 auto;
+      width: 6.45rem;
+      max-height: calc(100vh - 2rem);
+      padding: 1.04rem 0 1.12rem;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-right-color: rgba(184, 151, 88, 0.15);
+      border-left-color: rgba(184, 151, 88, 0.1);
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(35, 30, 25, 0.35) 0%, rgba(10, 8, 6, 0.15) 100%);
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.1),
+        inset 0 0 20px rgba(0, 0, 0, 0.6),
+        0 15px 35px rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(16px) saturate(120%);
+      -webkit-backdrop-filter: blur(16px) saturate(120%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden auto;
+      opacity: 1;
+      transform: translateX(0);
+      transform-origin: left center;
+      transition:
+        opacity 180ms ease,
+        border-color 180ms ease;
+    }
+
+    .luck-v-console-axis {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      z-index: -1;
+      width: 1px;
+      background: linear-gradient(180deg, transparent, rgba(184, 151, 88, 0.4) 15%, rgba(184, 151, 88, 0.4) 85%, transparent);
+      opacity: 0.7;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .luck-v-title-writing {
+      appearance: none;
+      margin-bottom: 0.84rem;
+      border: 0;
+      background: transparent;
+      font-family: 'Zhi Mang Xing', cursive;
+      font-size: 4.2rem;
+      line-height: 1;
+      letter-spacing: 0.08em;
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      color: var(--luck-gold-light);
+      cursor: pointer;
+      background: linear-gradient(180deg, #ffffff 0%, var(--luck-gold-light) 40%, var(--luck-gold-main) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 1)) drop-shadow(0 0 15px rgba(184, 151, 88, 0.3));
+      transition: filter 180ms ease, transform 180ms ease;
+    }
+
+    .luck-v-title-writing:hover {
+      transform: translateY(-1px);
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 1)) drop-shadow(0 0 18px rgba(184, 151, 88, 0.44));
+    }
+
+    .luck-layer-switch {
+      width: 100%;
+      margin: -0.42rem 0 0.78rem;
+      display: flex;
+      justify-content: center;
+      gap: 0.42rem;
+    }
+
+    .luck-layer-btn {
+      appearance: none;
+      position: relative;
+      width: 1.72rem;
+      height: 1.72rem;
+      border: 1px solid rgba(184, 151, 88, 0.24);
+      border-radius: 50%;
+      background: radial-gradient(circle at center, rgba(25, 20, 16, 0.84), rgba(0, 0, 0, 0.72));
+      color: rgba(254, 241, 204, 0.34);
+      cursor: pointer;
+      font-family: 'Zhi Mang Xing', cursive;
+      font-size: 1.04rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    }
+
+    .luck-layer-btn:hover {
+      border-color: rgba(254, 241, 204, 0.4);
+      color: rgba(254, 241, 204, 0.68);
+      transform: translateY(-1px);
+    }
+
+    .luck-layer-btn.is-active {
+      border-color: var(--luck-gold-main);
+      color: var(--luck-gold-light);
+      box-shadow: 0 0 14px rgba(184, 151, 88, 0.28);
+    }
+
+    .luck-layer-btn.is-curse.is-active {
+      border-color: var(--luck-seal-red-light);
+      color: #ffbaba;
+      box-shadow: 0 0 14px rgba(229, 57, 53, 0.32);
+    }
+
+    .luck-array-container.is-curse-layer .luck-v-title-writing {
+      background: linear-gradient(180deg, #fff 0%, #ffbaba 38%, #d32f2f 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 1)) drop-shadow(0 0 17px rgba(229, 57, 53, 0.36));
+    }
+
+    .luck-array-container.is-curse-layer .luck-v-console {
+      border-right-color: rgba(229, 57, 53, 0.22);
+      border-left-color: rgba(229, 57, 53, 0.14);
+      background: linear-gradient(135deg, rgba(42, 18, 18, 0.36) 0%, rgba(10, 4, 4, 0.16) 100%);
+    }
+
+    .luck-array-container.is-curse-layer .luck-v-console-axis {
+      background: linear-gradient(180deg, transparent, rgba(229, 57, 53, 0.38) 15%, rgba(229, 57, 53, 0.38) 85%, transparent);
+    }
+
+    .luck-array-container.is-curse-layer .luck-section-kicker {
+      color: rgba(255, 186, 186, 0.48);
+    }
+
+    .luck-array-container.is-curse-layer .luck-divider-diamond {
+      background: #7e2727;
+    }
+
+    .luck-array-container.is-curse-layer .luck-intent-track {
+      border-color: rgba(229, 57, 53, 0.2);
+    }
+
+    .luck-array-container.is-curse-layer .luck-intent-ghost {
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(229, 57, 53, 0.58),
+        rgba(229, 57, 53, 0.58) 2px,
+        transparent 2px,
+        transparent 4px
+      );
+    }
+
+    .luck-array-container.is-curse-layer .luck-intent-solid {
+      background: #ffbaba;
+      box-shadow: 0 0 9px rgba(229, 57, 53, 0.5);
+    }
+
+    .luck-panel-section {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.52rem;
+      position: relative;
+      transition: opacity 160ms ease, filter 160ms ease;
+    }
+
+    .luck-section-kicker {
+      width: 100%;
+      padding-left: 0.2rem;
+      font-size: 0.58rem;
+      font-weight: 900;
+      letter-spacing: 0.22em;
+      text-align: center;
+      color: rgba(232, 208, 141, 0.42);
+    }
+
+    .luck-sys-array {
+      position: relative;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.54rem;
+    }
+
+    .luck-sys-array::before,
+    .luck-intensity-col::before {
+      content: '';
+      position: absolute;
+      left: 20%;
+      top: -4px;
+      bottom: -4px;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .luck-opt-txt,
+    .luck-intensity-btn {
+      appearance: none;
+      position: relative;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.25);
+      cursor: pointer;
+      font: inherit;
+      line-height: 1;
+      text-align: center;
+      transition: color 180ms ease, text-shadow 180ms ease, transform 180ms ease;
+    }
+
+    .luck-opt-txt {
+      font-family: 'Times New Roman', serif;
+      font-size: 0.82rem;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+    }
+
+    .luck-intensity-btn {
+      font-family: 'Zhi Mang Xing', cursive;
+      font-size: 1.22rem;
+    }
+
+    .luck-opt-txt:hover,
+    .luck-intensity-btn:hover {
+      color: rgba(255, 255, 255, 0.62);
+    }
+
+    .luck-opt-txt::after,
+    .luck-intensity-btn::after {
+      content: '';
+      position: absolute;
+      left: calc(20% - 3px);
+      top: 50%;
+      width: 6px;
+      height: 6px;
+      background: transparent;
+      transform: translateY(-50%) rotate(45deg);
+      transition: background 180ms ease, box-shadow 180ms ease;
+    }
+
+    .luck-opt-txt.is-active,
+    .luck-intensity-btn.is-active {
+      color: var(--luck-silver-light);
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+      transform: translateX(0.04rem);
+    }
+
+    .luck-opt-txt.is-active::after,
+    .luck-intensity-btn.is-active::after {
+      background: #fff;
+      box-shadow: 0 0 8px #fff;
+    }
+
+    .luck-divider-diamond {
+      width: 4px;
+      height: 4px;
+      margin: 0.88rem 0;
+      background: var(--luck-gold-dark);
+      transform: rotate(45deg);
+      flex: 0 0 auto;
+    }
+
+    .luck-wind-col,
+    .luck-curse-target-col {
+      position: relative;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .luck-wind-col[hidden],
+    .luck-curse-target-col[hidden],
+    .luck-commit-route-box[hidden] {
+      display: none;
+    }
+
+    .luck-wind-btn,
+    .luck-curse-target-btn {
+      appearance: none;
+      position: relative;
+      width: 3.4rem;
+      height: 3.4rem;
+      border: 1px solid var(--gold-dim);
+      border-radius: 50%;
+      background: radial-gradient(circle at center, rgba(30, 25, 20, 0.8), #040302);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+      color: rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      overflow: hidden;
+      font: inherit;
+      transition: border-color 220ms ease, color 220ms ease, box-shadow 220ms ease, background 220ms ease, transform 160ms ease;
+    }
+
+    .luck-wind-btn::after,
+    .luck-curse-target-btn::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border: 1px dashed rgba(184, 151, 88, 0.12);
+      border-radius: 50%;
+      transition: border-color 220ms ease, border-style 220ms ease;
+    }
+
+    .luck-wind-btn span,
+    .luck-curse-target-btn span {
+      position: relative;
+      z-index: 2;
+      font-family: 'Zhi Mang Xing', cursive;
+      font-size: 1.86rem;
+      line-height: 1;
+      transform: translateY(-2px);
+      transition: transform 180ms ease, filter 180ms ease;
+    }
+
+    .luck-wind-btn:hover,
+    .luck-curse-target-btn:hover {
+      border-color: rgba(184, 151, 88, 0.5);
+      color: rgba(255, 255, 255, 0.52);
+      box-shadow: 0 0 15px rgba(184, 151, 88, 0.2);
+      transform: translateX(0.04rem);
+    }
+
+    .luck-wind-btn.is-active,
+    .luck-curse-target-btn.is-active {
+      border-color: var(--luck-gold-main);
+      background: radial-gradient(circle at center, rgba(184, 151, 88, 0.15), #000);
+      box-shadow: 0 0 20px rgba(184, 151, 88, 0.25);
+    }
+
+    .luck-wind-btn.is-active::after,
+    .luck-curse-target-btn.is-active::after {
+      border-color: rgba(184, 151, 88, 0.4);
+      border-style: solid;
+    }
+
+    .luck-wind-btn.is-active span,
+    .luck-curse-target-btn.is-active span {
+      background: linear-gradient(180deg, #ffffff 0%, var(--luck-gold-main) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+      transform: translateY(-2px) scale(1.1);
+    }
+
+    .luck-wind-btn.is-selected:not(.is-active),
+    .luck-curse-target-btn.is-selected:not(.is-active) {
+      border-color: rgba(254, 241, 204, 0.34);
+      color: rgba(254, 241, 204, 0.42);
+      box-shadow: 0 0 10px rgba(184, 151, 88, 0.14);
+    }
+
+    .luck-wind-btn[data-level="1"].is-active,
+    .luck-curse-target-btn[data-level="1"].is-active {
+      box-shadow: 0 0 12px rgba(184, 151, 88, 0.2);
+    }
+
+    .luck-wind-btn[data-level="2"].is-active,
+    .luck-curse-target-btn[data-level="2"].is-active {
+      border-width: 2px;
+      box-shadow: 0 0 18px rgba(184, 151, 88, 0.32);
+    }
+
+    .luck-wind-btn[data-level="3"].is-active,
+    .luck-curse-target-btn[data-level="3"].is-active {
+      border-width: 2px;
+      background: radial-gradient(circle at center, rgba(254, 241, 204, 0.22), #000);
+      box-shadow: 0 0 26px rgba(184, 151, 88, 0.44);
+    }
+
+    .luck-wind-btn[data-level="3"].is-active span,
+    .luck-curse-target-btn[data-level="3"].is-active span {
+      transform: translateY(-2px) scale(1.18);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn:hover {
+      border-color: rgba(229, 57, 53, 0.54);
+      box-shadow: 0 0 15px rgba(229, 57, 53, 0.24);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn.is-active {
+      border-color: var(--luck-seal-red-light);
+      background: radial-gradient(circle at center, rgba(229, 57, 53, 0.18), #000);
+      box-shadow: 0 0 20px rgba(229, 57, 53, 0.3);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn.is-selected:not(.is-active) {
+      border-color: rgba(255, 186, 186, 0.38);
+      color: rgba(255, 186, 186, 0.45);
+      box-shadow: 0 0 10px rgba(229, 57, 53, 0.15);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn.is-auto:not(.is-active) {
+      border-style: dashed;
+      border-color: rgba(255, 186, 186, 0.28);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn[data-level="1"].is-active {
+      box-shadow: 0 0 12px rgba(229, 57, 53, 0.24);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn[data-level="2"].is-active {
+      border-width: 2px;
+      box-shadow: 0 0 19px rgba(229, 57, 53, 0.38);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn[data-level="3"].is-active {
+      border-width: 2px;
+      background: radial-gradient(circle at center, rgba(229, 57, 53, 0.3), #000);
+      box-shadow: 0 0 28px rgba(229, 57, 53, 0.54);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn.is-active::after {
+      border-color: rgba(229, 57, 53, 0.46);
+    }
+
+    .luck-array-container.is-curse-layer .luck-curse-target-btn.is-active span {
+      background: linear-gradient(180deg, #fff 0%, #ffbaba 36%, #d32f2f 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
+    }
+
+    .luck-wind-btn.dir-safety.is-active {
+      border-color: var(--luck-seal-red-light);
+      background: radial-gradient(circle at center, rgba(229, 57, 53, 0.15), #000);
+      box-shadow: 0 0 20px rgba(229, 57, 53, 0.25);
+    }
+
+    .luck-wind-btn.dir-safety.is-active::after {
+      border-color: rgba(229, 57, 53, 0.4);
+    }
+
+    .luck-wind-btn.dir-safety.is-active span {
+      background: linear-gradient(180deg, #ffbaba 0%, #d32f2f 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
+    }
+
+    .luck-commit-route-box {
+      width: 5.38rem;
+      margin-top: 0.28rem;
+      padding-top: 0.58rem;
+      border-top: 1px solid rgba(184, 151, 88, 0.18);
+    }
+
+    .luck-commit-route-kicker {
+      margin-bottom: 0.36rem;
+      font-size: 0.52rem;
+      font-weight: 900;
+      letter-spacing: 0.22em;
+      text-align: center;
+      color: rgba(232, 208, 141, 0.38);
+    }
+
+    .luck-commit-route-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.28rem;
+    }
+
+    .luck-commit-route-btn {
+      appearance: none;
+      min-width: 0;
+      height: 1.42rem;
+      padding: 0 0.1rem;
+      border: 1px solid rgba(184, 151, 88, 0.2);
+      border-radius: 2px;
+      background: linear-gradient(180deg, rgba(24, 20, 16, 0.76), rgba(5, 4, 3, 0.72));
+      color: rgba(254, 241, 204, 0.42);
+      cursor: pointer;
+      font-family: 'Zhi Mang Xing', cursive;
+      font-size: 0.92rem;
+      line-height: 1;
+      overflow: hidden;
+      text-overflow: clip;
+      white-space: nowrap;
+      transition: border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 160ms ease, opacity 160ms ease;
+    }
+
+    .luck-commit-route-btn:hover {
+      border-color: rgba(254, 241, 204, 0.38);
+      color: rgba(254, 241, 204, 0.72);
+      transform: translateY(-1px);
+    }
+
+    .luck-commit-route-btn.is-active {
+      border-color: var(--luck-gold-main);
+      color: var(--luck-gold-light);
+      box-shadow: 0 0 12px rgba(184, 151, 88, 0.26), inset 0 0 10px rgba(184, 151, 88, 0.12);
+    }
+
+    .luck-commit-route-btn[data-level="2"].is-active,
+    .luck-commit-route-btn[data-level="3"].is-active {
+      box-shadow: 0 0 16px rgba(184, 151, 88, 0.34), inset 0 0 12px rgba(254, 241, 204, 0.12);
+    }
+
+    .luck-commit-route-btn[data-level="3"].is-active {
+      border-color: rgba(254, 241, 204, 0.72);
+      color: #fff;
+    }
+
+    .luck-commit-route-btn.is-muted,
+    .luck-commit-route-btn:disabled {
+      opacity: 0.36;
+      cursor: default;
+      transform: none;
+    }
+
+    .luck-commit-route-btn.is-auto-route {
+      grid-column: 1 / -1;
+      font-family: 'Times New Roman', serif;
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+    }
+
+    .luck-intensity-col {
+      position: relative;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.48rem;
+    }
+
+    .luck-array-container.is-disabled .luck-mana-energy,
+    .luck-array-container.is-disabled .luck-intent-solid {
+      opacity: 0.42;
+    }
+
+    .luck-array-container.is-disabled .luck-wind-section,
+    .luck-array-container.is-disabled .luck-intensity-section {
+      opacity: 0.58;
+      filter: saturate(0.74);
+    }
+
+    #app.perf-lite .luck-v-console {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
+    @media (max-height: 760px) {
+      .luck-array-container {
+        --luck-panel-scale: 0.72;
+      }
+
+      .luck-v-tubes-station {
+        min-height: 26rem;
+      }
+
+      .luck-v-console {
+        width: 6.05rem;
+        padding-top: 0.82rem;
+        padding-bottom: 0.9rem;
+      }
+
+      .luck-v-title-writing {
+        font-size: 3.6rem;
+        margin-bottom: 0.66rem;
+      }
+
+      .luck-wind-btn,
+      .luck-curse-target-btn {
+        width: 3rem;
+        height: 3rem;
+      }
+
+      .luck-wind-btn span,
+      .luck-curse-target-btn span {
+        font-size: 1.64rem;
+      }
+
+      .luck-divider-diamond {
+        margin: 0.62rem 0;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .luck-array-container {
+        --luck-panel-scale: 0.66;
+        left: 0.44rem;
+      }
+    }
+
+    .luck-sequence-container {
+      --luck-sequence-gold-light: #fef1cc;
+      --luck-sequence-gold-main: #b89758;
+      --luck-sequence-gold-dark: #6a532d;
+      --luck-sequence-red-light: #ff8c8c;
+      --luck-sequence-red-main: #d32f2f;
+      --luck-sequence-void: #78d6cf;
+      --luck-sequence-ink: rgba(4, 3, 2, 0.78);
+      --luck-sequence-scale: 0.84;
+      position: fixed;
+      right: 0.72rem;
+      top: 50%;
+      z-index: 1345;
+      width: 4.72rem;
+      max-height: calc(100vh - 2rem);
+      padding: 0.68rem 0.32rem 0.72rem;
+      border: 1px solid rgba(184, 151, 88, 0.16);
+      border-right-color: rgba(254, 241, 204, 0.2);
+      border-radius: 8px;
+      color: var(--luck-sequence-gold-light);
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent 22%, transparent 78%, rgba(184, 151, 88, 0.08)),
+        linear-gradient(180deg, rgba(32, 26, 20, 0.38), rgba(5, 4, 3, 0.22));
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.08),
+        inset 0 0 18px rgba(0, 0, 0, 0.56),
+        0 14px 32px rgba(0, 0, 0, 0.68);
+      backdrop-filter: blur(14px) saturate(118%);
+      -webkit-backdrop-filter: blur(14px) saturate(118%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.46rem;
+      pointer-events: auto;
+      transform: translateY(-50%) scale(var(--luck-sequence-scale));
+      transform-origin: right center;
+    }
+
+    .luck-sequence-head {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.12rem;
+      pointer-events: none;
+    }
+
+    .luck-sequence-title {
+      font-family: 'Zhi Mang Xing', cursive;
+      font-size: 3.04rem;
+      line-height: 0.92;
+      color: var(--luck-sequence-gold-light);
+      background: linear-gradient(180deg, #fff 0%, var(--luck-sequence-gold-light) 38%, var(--luck-sequence-gold-main) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.98)) drop-shadow(0 0 13px rgba(184, 151, 88, 0.26));
+    }
+
+    .luck-sequence-kicker {
+      font-size: 0.56rem;
+      font-weight: 900;
+      letter-spacing: 0.18em;
+      color: rgba(232, 208, 141, 0.46);
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+    }
+
+    .luck-sequence-rail {
+      position: relative;
+      width: 100%;
+      min-height: 18.8rem;
+      padding: 0.28rem 0;
+    }
+
+    .luck-sequence-axis {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 1px;
+      background: linear-gradient(180deg, transparent, rgba(184, 151, 88, 0.4) 12%, rgba(184, 151, 88, 0.4) 88%, transparent);
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .luck-sequence-list {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.44rem;
+      min-height: 18.8rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .luck-sequence-entry {
+      position: relative;
+      width: 3.28rem;
+      height: 1.38rem;
+      display: grid;
+      grid-template-columns: 0.64rem 1fr 0.58rem;
+      align-items: center;
+      column-gap: 0.1rem;
+      color: rgba(254, 241, 204, 0.48);
+      opacity: 0.78;
+      transform: translateX(0);
+      transition: opacity 180ms ease, filter 180ms ease, transform 180ms ease;
+    }
+
+    .luck-sequence-entry:hover {
+      opacity: 1;
+      transform: translateX(-0.04rem);
+    }
+
+    .luck-sequence-node {
+      width: 0.48rem;
+      height: 0.48rem;
+      border: 1px solid rgba(184, 151, 88, 0.28);
+      background: var(--luck-sequence-ink);
+      box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8);
+      transform: rotate(45deg);
+    }
+
+    .luck-sequence-glyph {
+      justify-self: center;
+      width: 1.48rem;
+      height: 1.48rem;
+      border: 1px solid rgba(184, 151, 88, 0.2);
+      border-radius: 50%;
+      background: radial-gradient(circle at center, rgba(28, 23, 18, 0.76), rgba(0, 0, 0, 0.62));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Zhi Mang Xing', cursive;
+      font-size: 1.02rem;
+      line-height: 1;
+      color: rgba(254, 241, 204, 0.54);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.46);
+    }
+
+    .luck-sequence-seat {
+      justify-self: center;
+      font-size: 0.62rem;
+      font-weight: 900;
+      color: rgba(255, 255, 255, 0.34);
+    }
+
+    .luck-sequence-mana {
+      position: absolute;
+      right: -0.1rem;
+      bottom: -0.05rem;
+      min-width: 1rem;
+      font-family: 'Times New Roman', serif;
+      font-size: 0.46rem;
+      font-weight: 900;
+      line-height: 1;
+      color: rgba(150, 235, 198, 0.88);
+      text-align: right;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.78), 0 0 8px rgba(76, 224, 210, 0.16);
+      pointer-events: none;
+    }
+
+    .luck-sequence-entry.is-riichi .luck-sequence-mana,
+    .luck-sequence-entry.is-curse .luck-sequence-mana,
+    .luck-sequence-entry.is-dominant-curse .luck-sequence-mana {
+      color: rgba(255, 160, 150, 0.92);
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.78), 0 0 8px rgba(211, 47, 47, 0.2);
+    }
+
+    .luck-sequence-spark {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: -1;
+      width: 2.5rem;
+      height: 1px;
+      background: rgba(184, 151, 88, 0.16);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .luck-sequence-entry.is-fortune .luck-sequence-node,
+    .luck-sequence-entry.is-fortune .luck-sequence-glyph {
+      border-color: rgba(254, 241, 204, 0.56);
+      color: var(--luck-sequence-gold-light);
+      background: radial-gradient(circle at center, rgba(254, 241, 204, 0.18), rgba(0, 0, 0, 0.7));
+      box-shadow: 0 0 12px rgba(184, 151, 88, 0.26), inset 0 0 6px rgba(0, 0, 0, 0.7);
+    }
+
+    .luck-sequence-entry.is-curse .luck-sequence-node,
+    .luck-sequence-entry.is-curse .luck-sequence-glyph {
+      border-color: rgba(255, 140, 140, 0.58);
+      color: #ffbaba;
+      background: radial-gradient(circle at center, rgba(211, 47, 47, 0.22), rgba(0, 0, 0, 0.72));
+      box-shadow: 0 0 13px rgba(211, 47, 47, 0.3), inset 0 0 6px rgba(0, 0, 0, 0.74);
+    }
+
+    .luck-sequence-entry.is-contested .luck-sequence-node,
+    .luck-sequence-entry.is-contested .luck-sequence-glyph {
+      border-color: rgba(255, 176, 132, 0.62);
+      color: #ffe0c0;
+      background: linear-gradient(135deg, rgba(254, 241, 204, 0.23), rgba(211, 47, 47, 0.24) 55%, rgba(0, 0, 0, 0.72));
+      box-shadow: 0 0 15px rgba(211, 47, 47, 0.22), 0 0 10px rgba(184, 151, 88, 0.22);
+    }
+
+    .luck-sequence-entry.is-void .luck-sequence-node,
+    .luck-sequence-entry.is-void .luck-sequence-glyph,
+    .luck-sequence-entry.has-void-damping .luck-sequence-node {
+      border-color: rgba(120, 214, 207, 0.48);
+      color: #bff7f1;
+      box-shadow: 0 0 11px rgba(120, 214, 207, 0.22), inset 0 0 6px rgba(0, 0, 0, 0.72);
+    }
+
+    .luck-sequence-entry.is-discard,
+    .luck-sequence-entry.is-call,
+    .luck-sequence-entry.is-kita,
+    .luck-sequence-entry.is-dora,
+    .luck-sequence-entry.is-round-draw {
+      opacity: 0.58;
+      filter: saturate(0.82);
+    }
+
+    .luck-sequence-entry.is-discard .luck-sequence-node,
+    .luck-sequence-entry.is-discard .luck-sequence-glyph,
+    .luck-sequence-entry.is-call .luck-sequence-node,
+    .luck-sequence-entry.is-call .luck-sequence-glyph {
+      border-color: rgba(156, 163, 175, 0.32);
+      color: rgba(254, 241, 204, 0.62);
+      background: radial-gradient(circle at center, rgba(156, 163, 175, 0.1), rgba(0, 0, 0, 0.68));
+    }
+
+    .luck-sequence-entry.is-riichi .luck-sequence-node,
+    .luck-sequence-entry.is-riichi .luck-sequence-glyph,
+    .luck-sequence-entry.is-kan .luck-sequence-node,
+    .luck-sequence-entry.is-kan .luck-sequence-glyph,
+    .luck-sequence-entry.is-dora .luck-sequence-node,
+    .luck-sequence-entry.is-dora .luck-sequence-glyph {
+      border-color: rgba(254, 241, 204, 0.46);
+      color: rgba(254, 241, 204, 0.86);
+      background: radial-gradient(circle at center, rgba(184, 151, 88, 0.16), rgba(0, 0, 0, 0.7));
+      box-shadow: 0 0 10px rgba(184, 151, 88, 0.18), inset 0 0 6px rgba(0, 0, 0, 0.72);
+    }
+
+    .luck-sequence-entry.is-hule .luck-sequence-node,
+    .luck-sequence-entry.is-hule .luck-sequence-glyph {
+      border-color: rgba(254, 241, 204, 0.64);
+      color: #fff4cf;
+      background: radial-gradient(circle at center, rgba(254, 241, 204, 0.2), rgba(0, 0, 0, 0.72));
+      box-shadow: 0 0 16px rgba(184, 151, 88, 0.32), inset 0 0 6px rgba(0, 0, 0, 0.72);
+    }
+
+    .luck-sequence-entry.is-kita .luck-sequence-node,
+    .luck-sequence-entry.is-kita .luck-sequence-glyph,
+    .luck-sequence-entry.is-round-draw .luck-sequence-node,
+    .luck-sequence-entry.is-round-draw .luck-sequence-glyph {
+      border-color: rgba(120, 214, 207, 0.28);
+      color: rgba(191, 247, 241, 0.7);
+      background: radial-gradient(circle at center, rgba(120, 214, 207, 0.1), rgba(0, 0, 0, 0.7));
+    }
+
+    .luck-sequence-entry.is-fallback,
+    .luck-sequence-entry.is-silent,
+    .luck-sequence-entry.is-draw {
+      opacity: 0.5;
+      filter: saturate(0.72);
+    }
+
+    .luck-sequence-entry.intensity-0 .luck-sequence-spark {
+      opacity: 0.34;
+    }
+
+    .luck-sequence-entry.intensity-1 .luck-sequence-spark {
+      opacity: 0.58;
+    }
+
+    .luck-sequence-entry.intensity-2 .luck-sequence-spark {
+      opacity: 0.82;
+      box-shadow: 0 0 7px currentColor;
+    }
+
+    .luck-sequence-entry.intensity-3 .luck-sequence-spark {
+      opacity: 1;
+      height: 2px;
+      box-shadow: 0 0 12px currentColor;
+    }
+
+    .luck-sequence-entry.intensity-2,
+    .luck-sequence-entry.intensity-3 {
+      opacity: 0.94;
+    }
+
+    .luck-sequence-entry.is-dominant-curse .luck-sequence-spark {
+      background: rgba(211, 47, 47, 0.34);
+      color: rgba(211, 47, 47, 0.72);
+    }
+
+    .luck-sequence-entry.is-dominant-fortune .luck-sequence-spark {
+      background: rgba(184, 151, 88, 0.34);
+      color: rgba(184, 151, 88, 0.72);
+    }
+
+    .luck-sequence-entry.is-dominant-void .luck-sequence-spark,
+    .luck-sequence-entry.has-void-damping .luck-sequence-spark {
+      background: rgba(120, 214, 207, 0.26);
+      color: rgba(120, 214, 207, 0.66);
+    }
+
+    .luck-sequence-entry.is-discard .luck-sequence-spark,
+    .luck-sequence-entry.is-call .luck-sequence-spark {
+      background: rgba(156, 163, 175, 0.14);
+      color: rgba(156, 163, 175, 0.42);
+    }
+
+    .luck-sequence-entry.is-riichi .luck-sequence-spark,
+    .luck-sequence-entry.is-kan .luck-sequence-spark,
+    .luck-sequence-entry.is-dora .luck-sequence-spark,
+    .luck-sequence-entry.is-hule .luck-sequence-spark {
+      background: rgba(184, 151, 88, 0.24);
+      color: rgba(184, 151, 88, 0.62);
+    }
+
+    .luck-sequence-entry.is-kita .luck-sequence-spark,
+    .luck-sequence-entry.is-round-draw .luck-sequence-spark {
+      background: rgba(120, 214, 207, 0.16);
+      color: rgba(120, 214, 207, 0.46);
+    }
+
+    .luck-sequence-container.is-empty .luck-sequence-axis {
+      opacity: 0.48;
+    }
+
+    .luck-sequence-foot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.28rem;
+      font-size: 0.56rem;
+      font-weight: 900;
+      color: rgba(232, 208, 141, 0.4);
+      pointer-events: none;
+    }
+
+    .luck-sequence-foot b {
+      font-family: 'Times New Roman', serif;
+      font-size: 0.82rem;
+      color: rgba(254, 241, 204, 0.68);
+    }
+
+    #app.perf-lite .luck-sequence-container {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
+    @media (max-height: 760px) {
+      .luck-sequence-container {
+        --luck-sequence-scale: 0.78;
+      }
+
+      .luck-sequence-rail,
+      .luck-sequence-list {
+        min-height: 15.4rem;
+      }
+
+      .luck-sequence-list {
+        gap: 0.32rem;
+      }
+
+      .luck-sequence-title {
+        font-size: 2.56rem;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .luck-sequence-container {
+        --luck-sequence-scale: 0.72;
+        right: 0.22rem;
+      }
+    }
+
     .cutin-layer {
       position: fixed;
       inset: 0;

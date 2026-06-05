@@ -166,6 +166,73 @@ node /Users/liuhang/Documents/acezero/majiang/scripts/validate-friendly-json-rul
 node /Users/liuhang/Documents/acezero/majiang/scripts/validate-shibari-rules.js
 ```
 
+### Run Luck Runtime Core Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-runtime-core.js
+```
+
+### Run Luck Draw Policy Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-draw-policy.js
+```
+
+### Run Luck Mana Ledger Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-mana-ledger.js
+```
+
+### Run Luck Mana Draw Policy Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-mana-draw-policy.js
+```
+
+### Run Luck Mana Runtime Events Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-mana-runtime-events.js
+```
+
+### Run Luck Panel Focus Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-panel-focus.js
+```
+
+### Run Luck Sequence Panel Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-sequence-panel.js
+```
+
+### Run Luck Auto Intent Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-auto-intent.js
+```
+
+### Run Luck Commit Route Smoke
+
+```bash
+node games/majiang/scripts/validate-luck-commit-routes.js
+```
+
+### Run Luck Regression Matrix
+
+```bash
+node games/majiang/scripts/validate-luck-regression-matrix.js
+LUCK_REGRESSION_SEEDS=200 node games/majiang/scripts/validate-luck-regression-matrix.js
+```
+
+### Run Luck Regression Report
+
+```bash
+node games/majiang/scripts/validate-luck-regression-report.js
+```
+
 ### Run Easy AI Smoke
 
 ```bash

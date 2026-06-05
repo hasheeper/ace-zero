@@ -72,6 +72,56 @@
       afterDraw(payload) {
         return runHook('afterDraw', payload);
       },
+      setLuckWindState(seat, windState) {
+        let latest = null;
+        for (const policy of normalizedPolicies) {
+          if (!policy || typeof policy.setLuckWindState !== 'function') continue;
+          latest = policy.setLuckWindState(seat, windState);
+        }
+        return latest;
+      },
+      setLuckForceState(seat, forceState) {
+        let latest = null;
+        for (const policy of normalizedPolicies) {
+          if (!policy || typeof policy.setLuckForceState !== 'function') continue;
+          latest = policy.setLuckForceState(seat, forceState);
+        }
+        return latest;
+      },
+      setLuckManaState(seat, manaState) {
+        let latest = null;
+        for (const policy of normalizedPolicies) {
+          if (!policy || typeof policy.setLuckManaState !== 'function') continue;
+          latest = policy.setLuckManaState(seat, manaState);
+        }
+        return latest;
+      },
+      getLuckManaState() {
+        for (const policy of normalizedPolicies) {
+          if (!policy || typeof policy.getLuckManaState !== 'function') continue;
+          const state = policy.getLuckManaState();
+          if (state != null) return state;
+        }
+        return null;
+      },
+      applyLuckManaEvent(event) {
+        let latest = null;
+        for (const policy of normalizedPolicies) {
+          if (!policy || typeof policy.applyLuckManaEvent !== 'function') continue;
+          latest = policy.applyLuckManaEvent(event);
+        }
+        return latest;
+      },
+      getLuckDebugState() {
+        return normalizedPolicies
+          .map((policy) => {
+            if (policy && typeof policy.getLuckDebugState === 'function') {
+              return policy.getLuckDebugState();
+            }
+            return null;
+          })
+          .filter(Boolean);
+      },
       getDebugState() {
         return normalizedPolicies.map((policy) => {
           if (policy && typeof policy.getDebugState === 'function') {

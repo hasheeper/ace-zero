@@ -999,9 +999,37 @@
       && typeof normalizedConfig.engine.wall.scripted === 'object'
         ? normalizedConfig.engine.wall.scripted
         : null;
+    const luckConfig = normalizedConfig
+      && normalizedConfig.engine
+      && normalizedConfig.engine.luck
+      && typeof normalizedConfig.engine.luck === 'object'
+        ? normalizedConfig.engine.luck
+        : null;
 
     if (scriptedWall && typeof drawPolicyApi.createScriptedDrawPolicy === 'function') {
       policies.push(drawPolicyApi.createScriptedDrawPolicy(scriptedWall));
+    }
+
+    if (luckConfig
+      && luckConfig.enabled === true
+      && global.AceMahjongLuckDrawPolicy
+      && typeof global.AceMahjongLuckDrawPolicy.createLuckDrawPolicy === 'function') {
+      const panelWindState = getLuckPanelWindState();
+      const panelForceState = getLuckPanelForceState();
+      const luckOptions = {
+        ...clone(luckConfig),
+        id: luckConfig.id || 'browser-luck-draw-policy',
+        seed: luckConfig.seed || 'browser-luck',
+        windStateBySeat: {
+          ...(luckConfig.windStateBySeat && typeof luckConfig.windStateBySeat === 'object' ? clone(luckConfig.windStateBySeat) : {}),
+          ...(panelWindState ? { bottom: panelWindState } : {})
+        },
+        forceStateBySeat: {
+          ...(luckConfig.forceStateBySeat && typeof luckConfig.forceStateBySeat === 'object' ? clone(luckConfig.forceStateBySeat) : {}),
+          ...(panelForceState ? { bottom: panelForceState } : {})
+        }
+      };
+      policies.push(global.AceMahjongLuckDrawPolicy.createLuckDrawPolicy(luckOptions));
     }
 
     if (!policies.length) {
@@ -1014,6 +1042,175 @@
     }
 
     return policies[0];
+  }
+
+  function getLuckPanelWindState() {
+    const panel = global.AceMahjongLuckPanel || null;
+    if (!panel || typeof panel.getState !== 'function') return null;
+    try {
+      const state = panel.getState();
+      return state && state.windState && typeof state.windState === 'object'
+        ? clone(state.windState)
+        : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function getLuckPanelForceState() {
+    const panel = global.AceMahjongLuckPanel || null;
+    if (!panel || typeof panel.getState !== 'function') return null;
+    try {
+      const state = panel.getState();
+      return state && state.forceState && typeof state.forceState === 'object'
+        ? clone(state.forceState)
+        : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function getInitialLuckWindStateBySeat(runtime) {
+    const engineLuck = runtime
+      && runtime.config
+      && runtime.config.engine
+      && runtime.config.engine.luck
+      && typeof runtime.config.engine.luck === 'object'
+        ? runtime.config.engine.luck
+        : {};
+    const initial = engineLuck.windStateBySeat && typeof engineLuck.windStateBySeat === 'object'
+      ? clone(engineLuck.windStateBySeat)
+      : {};
+    const panelWindState = getLuckPanelWindState();
+    if (panelWindState) {
+      initial.bottom = panelWindState;
+    }
+    return initial;
+  }
+
+  function getInitialLuckForceStateBySeat(runtime) {
+    const engineLuck = runtime
+      && runtime.config
+      && runtime.config.engine
+      && runtime.config.engine.luck
+      && typeof runtime.config.engine.luck === 'object'
+        ? runtime.config.engine.luck
+        : {};
+    const initial = engineLuck.forceStateBySeat && typeof engineLuck.forceStateBySeat === 'object'
+      ? clone(engineLuck.forceStateBySeat)
+      : {};
+    const panelForceState = getLuckPanelForceState();
+    if (panelForceState) {
+      initial.bottom = panelForceState;
+    }
+    return initial;
+  }
+
+  function attachLuckRuntimeMethods(runtime) {
+    runtime.luckWindStateBySeat = getInitialLuckWindStateBySeat(runtime);
+    runtime.luckForceStateBySeat = getInitialLuckForceStateBySeat(runtime);
+
+    runtime.setLuckWindState = function(seatKey, windState = {}, options = {}) {
+      const seat = seatKey || 'bottom';
+      const nextWindState = windState && typeof windState === 'object' ? clone(windState) : {};
+      runtime.luckWindStateBySeat[seat] = nextWindState;
+      let policyResult = null;
+      if (runtime.drawPolicy && typeof runtime.drawPolicy.setLuckWindState === 'function') {
+        policyResult = runtime.drawPolicy.setLuckWindState(seat, nextWindState);
+      }
+      if (options.silent !== true && typeof runtime.emit === 'function') {
+        runtime.emit('luck:wind-update', {
+          seat,
+          windState: clone(nextWindState),
+          policyResult: policyResult == null ? null : clone(policyResult)
+        }, {
+          source: 'runtime-luck'
+        });
+      }
+      return clone(nextWindState);
+    };
+
+    runtime.setLuckForceState = function(seatKey, forceState = {}, options = {}) {
+      const seat = seatKey || 'bottom';
+      const nextForceState = forceState && typeof forceState === 'object' ? clone(forceState) : {};
+      runtime.luckForceStateBySeat[seat] = nextForceState;
+      let policyResult = null;
+      if (runtime.drawPolicy && typeof runtime.drawPolicy.setLuckForceState === 'function') {
+        policyResult = runtime.drawPolicy.setLuckForceState(seat, nextForceState);
+      }
+      if (options.silent !== true && typeof runtime.emit === 'function') {
+        runtime.emit('luck:force-update', {
+          seat,
+          forceState: clone(nextForceState),
+          policyResult: policyResult == null ? null : clone(policyResult)
+        }, {
+          source: 'runtime-luck'
+        });
+      }
+      return clone(nextForceState);
+    };
+
+    runtime.getLuckDebugState = function() {
+      const drawPolicyDebug = runtime.drawPolicy && typeof runtime.drawPolicy.getLuckDebugState === 'function'
+        ? runtime.drawPolicy.getLuckDebugState()
+        : runtime.drawPolicy && typeof runtime.drawPolicy.getDebugState === 'function'
+          ? runtime.drawPolicy.getDebugState()
+          : null;
+      return {
+        enabled: Boolean(
+          runtime.config
+          && runtime.config.engine
+          && runtime.config.engine.luck
+          && runtime.config.engine.luck.enabled === true
+        ),
+        windStateBySeat: clone(runtime.luckWindStateBySeat || {}),
+        forceStateBySeat: clone(runtime.luckForceStateBySeat || {}),
+        drawPolicy: clone(drawPolicyDebug)
+      };
+    };
+
+    runtime.getLuckManaState = function() {
+      if (runtime.drawPolicy && typeof runtime.drawPolicy.getLuckManaState === 'function') {
+        return runtime.drawPolicy.getLuckManaState();
+      }
+      return null;
+    };
+
+    runtime.applyLuckManaEvent = function(event = {}) {
+      if (!runtime.drawPolicy || typeof runtime.drawPolicy.applyLuckManaEvent !== 'function') return null;
+      return runtime.drawPolicy.applyLuckManaEvent(event);
+    };
+
+    runtime.recordLuckManaEvents = function(events = []) {
+      const luckApi = global.AceMahjongLuck || null;
+      const entries = [];
+      let latestState = null;
+      (Array.isArray(events) ? events : [events]).filter(Boolean).forEach((event) => {
+        const result = runtime.applyLuckManaEvent(event);
+        if (!result) return;
+        if (result.entry) entries.push(result.entry);
+        if (result.manaState) latestState = result.manaState;
+      });
+      if (!entries.length) return null;
+      if (luckApi && typeof luckApi.buildManaPublicSummary === 'function') {
+        return luckApi.buildManaPublicSummary(entries, latestState || runtime.getLuckManaState() || {}, entries[0].seat);
+      }
+      return {
+        manaDelta: entries.reduce((sum, entry) => sum + (Number(entry.delta) || 0), 0),
+        entries: entries.map((entry) => clone(entry))
+      };
+    };
+
+    Object.entries(runtime.luckWindStateBySeat || {}).forEach(([seat, windState]) => {
+      if (runtime.drawPolicy && typeof runtime.drawPolicy.setLuckWindState === 'function') {
+        runtime.drawPolicy.setLuckWindState(seat, windState);
+      }
+    });
+    Object.entries(runtime.luckForceStateBySeat || {}).forEach(([seat, forceState]) => {
+      if (runtime.drawPolicy && typeof runtime.drawPolicy.setLuckForceState === 'function') {
+        runtime.drawPolicy.setLuckForceState(seat, forceState);
+      }
+    });
   }
 
   function getRiichiChoices(runtime, seatIndex) {
@@ -1339,6 +1536,7 @@
       applyTestingRuntimeSetup,
       refreshAllFuritenStates
     });
+    attachLuckRuntimeMethods(runtime);
 
     browserRuntimeActions.attachActionMethods(runtime, {
       FORMAL_PHASES,
@@ -1387,7 +1585,8 @@
       applyPendingReactionFuriten,
       markSameTurnFuriten,
       observeMissedWinningTile,
-      applyReactionPassFuriten
+      applyReactionPassFuriten,
+      luckRuntime: global.AceMahjongLuck || null
     });
 
     return runtime;

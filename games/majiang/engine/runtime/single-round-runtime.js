@@ -57,6 +57,7 @@ const createRuntimeHuleGateHelpers = require('../../shared/runtime/scoring/hule-
 const createRuntimeSeatStatusHelpers = require('../../shared/runtime/state/seat-status');
 const createRuntimeRiichiFlowHelpers = require('../../shared/runtime/rules/riichi-flow');
 const createRuntimeDrawSupportHelpers = require('../../shared/runtime/state/draw-support');
+const luckRuntime = require('../../shared/runtime/luck');
 const roundContinuationPolicy = createRoundContinuationPolicy();
 const runtimeRuleHelpers = createRuntimeRuleHelpers({
   seatKeys: SEAT_KEYS,
@@ -525,6 +526,24 @@ function expandSeatValues(activeSeats, values, fallbackValue) {
   });
 }
 
+function getResultFanshu(result = {}) {
+  if (Number.isFinite(Number(result && result.fanshu))) return Math.max(0, Math.floor(Number(result.fanshu)));
+  const hupai = Array.isArray(result && result.hupai) ? result.hupai : [];
+  return hupai.reduce((sum, item) => {
+    const fanshu = Number(item && item.fanshu);
+    return Number.isFinite(fanshu) && fanshu > 0 ? sum + fanshu : sum;
+  }, 0);
+}
+
+function buildHuleManaBonusPayload(result = {}) {
+  const damanguan = Number(result && result.damanguan);
+  return {
+    han: getResultFanshu(result),
+    yakuman: Number.isFinite(damanguan) && damanguan > 0,
+    damanguan: Number.isFinite(damanguan) ? damanguan : 0
+  };
+}
+
 class SingleRoundRuntime {
   constructor(options = {}) {
     this.mode = 'single-round';
@@ -589,6 +608,7 @@ class SingleRoundRuntime {
       shan: options.shan || (options.engine && options.engine.wall && options.engine.wall.shan) || null,
       logger: options.logger || null
     });
+    this.drawPolicy = this.wallService && this.wallService.policy ? this.wallService.policy : null;
     this.actionWindow = null;
     this.lastEvent = null;
     this.listeners = new Set();
@@ -857,6 +877,76 @@ class SingleRoundRuntime {
     };
   }
 
+  buildLuckRuntimeState(seatKey) {
+    const activeSeats = this.topology && Array.isArray(this.topology.activeSeats)
+      ? this.topology.activeSeats.slice()
+      : SEAT_KEYS.slice();
+    const seatIndex = this.getSeatIndex(seatKey);
+    const shoupai = seatIndex >= 0 && this.board && Array.isArray(this.board.shoupai)
+      ? this.board.shoupai[seatIndex]
+      : null;
+    const seats = activeSeats.map((activeSeatKey) => {
+      const activeSeatIndex = this.getSeatIndex(activeSeatKey);
+      const activeShoupai = activeSeatIndex >= 0 && this.board && Array.isArray(this.board.shoupai)
+        ? this.board.shoupai[activeSeatIndex]
+        : null;
+      const river = activeSeatIndex >= 0 && this.board && Array.isArray(this.board.he)
+        ? this.board.he[activeSeatIndex]
+        : null;
+      return {
+        seat: activeSeatKey,
+        riverCodes: river && Array.isArray(river._pai) ? river._pai.slice() : [],
+        melds: activeShoupai && Array.isArray(activeShoupai._fulou) ? activeShoupai._fulou.slice() : []
+      };
+    });
+
+    return {
+      seat: seatKey,
+      activeSeats,
+      dealerSeat: typeof this.getDealerSeat === 'function' ? this.getDealerSeat() : activeSeats[0] || null,
+      handCodes: typeof this.getSeatHandCodes === 'function' ? this.getSeatHandCodes(seatKey) : [],
+      shoupaiString: shoupai && typeof shoupai.toString === 'function' ? shoupai.toString() : '',
+      seats,
+      scores: typeof this.getScoreMap === 'function' ? this.getScoreMap() : {},
+      riichiState: clone(this.riichiState || {}),
+      wallState: typeof this.getWallState === 'function' ? this.getWallState() : {},
+      roundConfig: {
+        zhuangfeng: this.board ? this.board.zhuangfeng : this.roundConfig.zhuangfeng,
+        jushu: this.board ? this.board.jushu : this.roundConfig.jushu,
+        changbang: this.board ? this.board.changbang : this.roundConfig.changbang,
+        lizhibang: this.board ? this.board.lizhibang : this.roundConfig.lizhibang
+      },
+      rule: clone(this.rule || {})
+    };
+  }
+
+  getLuckManaState() {
+    if (this.drawPolicy && typeof this.drawPolicy.getLuckManaState === 'function') {
+      return this.drawPolicy.getLuckManaState();
+    }
+    return null;
+  }
+
+  applyLuckManaEvent(event = {}) {
+    if (!this.drawPolicy || typeof this.drawPolicy.applyLuckManaEvent !== 'function') return null;
+    return this.drawPolicy.applyLuckManaEvent(event);
+  }
+
+  recordLuckManaEvents(events = []) {
+    const entries = [];
+    let latestState = null;
+    (Array.isArray(events) ? events : [events]).filter(Boolean).forEach((event) => {
+      const result = this.applyLuckManaEvent(event);
+      if (!result) return;
+      if (result.entry) entries.push(result.entry);
+      if (result.manaState) latestState = result.manaState;
+    });
+    if (!entries.length) return null;
+    const seat = entries[0] ? entries[0].seat : null;
+    const manaState = latestState || this.getLuckManaState();
+    return luckRuntime.buildManaPublicSummary(entries, manaState || {}, seat);
+  }
+
   getInteractionState() {
     const isBottomDiscardPhase = this.getCurrentTurnSeat() === 'bottom'
       && this.stateMachine
@@ -954,11 +1044,13 @@ class SingleRoundRuntime {
       const drawResult = method === 'gangzimo' && typeof this.wallService.drawGangTile === 'function'
         ? this.wallService.drawGangTile({
             seat: this.getSeatKeyByIndex(seatIndex),
+            luckRuntimeState: this.buildLuckRuntimeState(this.getSeatKeyByIndex(seatIndex)),
             reason: 'runtime-gang-draw'
           })
         : (method === 'zimo' && typeof this.wallService.drawTile === 'function'
           ? this.wallService.drawTile({
               seat: this.getSeatKeyByIndex(seatIndex),
+              luckRuntimeState: this.buildLuckRuntimeState(this.getSeatKeyByIndex(seatIndex)),
               reason: 'runtime-draw'
             })
           : null);
@@ -1029,6 +1121,12 @@ class SingleRoundRuntime {
 
   discardTile(seatKey, tileCode, options = {}) {
     const seatIndex = this.getSeatIndex(seatKey);
+    const shoupaiBeforeDiscard = this.board && Array.isArray(this.board.shoupai)
+      ? this.board.shoupai[seatIndex]
+      : null;
+    const meldCount = shoupaiBeforeDiscard && Array.isArray(shoupaiBeforeDiscard._fulou)
+      ? shoupaiBeforeDiscard._fulou.length
+      : 0;
     consumePendingIppatsuExpiry(this, seatKey);
     prepareSeatForDiscard(this, seatKey);
     this.pendingSupplementDrawType = null;
@@ -1047,10 +1145,26 @@ class SingleRoundRuntime {
     refreshSeatFuritenState(this, seatKey);
     this.clearPendingReaction();
     this.stateMachine.setPhase(ROUND_PHASES.AWAIT_REACTION);
+    const manaEvents = [{
+      kind: luckRuntime.MANA_EVENT_KINDS.DISCARD,
+      seat: seatKey,
+      reason: 'discard',
+      meldCount,
+      closed: meldCount <= 0
+    }];
+    if (options.riichi) {
+      manaEvents.push({
+        kind: luckRuntime.MANA_EVENT_KINDS.RIICHI_DECLARATION,
+        seat: seatKey,
+        reason: 'riichi-declaration'
+      });
+    }
+    const manaSummary = this.recordLuckManaEvents(manaEvents);
     this.emit('tile:discard', {
       seat: seatKey,
       tileCode,
-      riichi: Boolean(options.riichi)
+      riichi: Boolean(options.riichi),
+      manaSummary
     });
     this.openReactionWindow(seatKey, tileCode);
     return this.getSnapshot();
@@ -1149,7 +1263,12 @@ class SingleRoundRuntime {
     });
     this.board.lunban = seatIndex;
     this.stateMachine.setPhase(ROUND_PHASES.AWAIT_DISCARD);
-    return this.emit('meld:call', { seat: seatKey, meld: meldString }).snapshot;
+    const manaSummary = this.recordLuckManaEvents([{
+      kind: luckRuntime.MANA_EVENT_KINDS.CALL,
+      seat: seatKey,
+      reason: 'call'
+    }]);
+    return this.emit('meld:call', { seat: seatKey, meld: meldString, manaSummary }).snapshot;
   }
 
   declareKan(seatKey, meldString) {
@@ -1178,7 +1297,13 @@ class SingleRoundRuntime {
     }
     this.board.lunban = seatIndex;
     this.stateMachine.setPhase(ROUND_PHASES.AWAIT_RESOLUTION);
-    return this.emit('meld:kan', { seat: seatKey, meld: meldString, kanType }).snapshot;
+    const manaSummary = this.recordLuckManaEvents([{
+      kind: luckRuntime.MANA_EVENT_KINDS.KAN,
+      seat: seatKey,
+      kanType,
+      reason: 'kan'
+    }]);
+    return this.emit('meld:kan', { seat: seatKey, meld: meldString, kanType, manaSummary }).snapshot;
   }
 
   completePendingKanSequence(options = {}) {
@@ -1387,6 +1512,17 @@ class SingleRoundRuntime {
       kitaCount: Number(hupaiContext.kita || 0)
     }, settlementHooks);
 
+    const preLizhibang = Number(this.board && this.board.lizhibang || 0) || 0;
+    const preChangbang = Number(this.board && this.board.changbang || 0) || 0;
+    const dealInPointLoss = rongpai && resolvedFromSeat
+      ? Math.max(0, -Number(
+          result
+          && Array.isArray(result.fenpei)
+          && this.getSeatIndex(resolvedFromSeat) >= 0
+            ? result.fenpei[this.getSeatIndex(resolvedFromSeat)]
+            : 0
+        ) || 0)
+      : 0;
     applyHuleSettlement(this, seatIndex, result, {
       rongpai,
       baojiaIndex: resolvedFromSeat ? this.getSeatIndex(resolvedFromSeat) : null
@@ -1410,10 +1546,53 @@ class SingleRoundRuntime {
       kitaCount: Number(result && result.kitaCount || 0),
       kitaTiles: Array.isArray(result && result.kitaTiles) ? result.kitaTiles.map((tile) => ({ ...tile })) : []
     });
+    const huleBonus = buildHuleManaBonusPayload(result);
+    const manaEvents = [
+      {
+        kind: rongpai ? luckRuntime.MANA_EVENT_KINDS.RON_WIN : luckRuntime.MANA_EVENT_KINDS.SELF_DRAW_WIN,
+        seat: seatKey,
+        reason: rongpai ? 'ron-win' : 'self-draw-win'
+      },
+      {
+        kind: luckRuntime.MANA_EVENT_KINDS.HULE_BONUS,
+        seat: seatKey,
+        reason: 'hule-han-bonus',
+        ...huleBonus
+      }
+    ];
+    if (preLizhibang > 0) {
+      manaEvents.push({
+        kind: luckRuntime.MANA_EVENT_KINDS.RIICHI_STICK_COLLECT,
+        seat: seatKey,
+        count: preLizhibang,
+        reason: 'riichi-stick-collect'
+      });
+    }
+    if (preChangbang > 0) {
+      manaEvents.push({
+        kind: luckRuntime.MANA_EVENT_KINDS.HONBA_COLLECT,
+        seat: seatKey,
+        count: preChangbang,
+        reason: 'honba-collect'
+      });
+    }
+    if (rongpai && resolvedFromSeat) {
+      manaEvents.push({
+        kind: luckRuntime.MANA_EVENT_KINDS.DEAL_IN,
+        seat: resolvedFromSeat,
+        reason: 'deal-in-pain-recovery',
+        pointLoss: dealInPointLoss
+      });
+    }
+    const manaSummary = this.recordLuckManaEvents(manaEvents);
+    if (manaSummary) {
+      this.roundResult.luckMana = clone(manaSummary);
+    }
     this.emit('round:hule', {
       seat: seatKey,
       result,
-      roundResult: this.roundResult
+      roundResult: this.roundResult,
+      manaSummary
     });
     this.emit('round:end', {
       type: 'hule',

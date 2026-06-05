@@ -47,6 +47,11 @@
   "engine": {
     "wall": {
       "preset": false
+    },
+    "luck": {
+      "enabled": true,
+      "seed": "browser-luck",
+      "auditLimit": 100
     }
   }
 }

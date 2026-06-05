@@ -435,6 +435,11 @@
     function createContext(extra = {}) {
       const contextSeatCount = Number(extra.seatCount || defaultSeatCount) || defaultSeatCount;
       const contextHandSize = Number(extra.handSize || defaultHandSize) || defaultHandSize;
+      const managedState = shan && shan.__aceWallState ? shan.__aceWallState : null;
+      const publicWallState = buildWallState();
+      const extraWallState = extra && extra.wallState && typeof extra.wallState === 'object'
+        ? extra.wallState
+        : {};
       return {
         rule,
         rulesetProfile: { ...rulesetProfile },
@@ -448,11 +453,17 @@
         deadWallSize: Number(rulesetProfile.deadWallSize || 14) || 14,
         remaining: shan.paishu,
         baopai: shan.baopai.slice(),
-        wallState: buildWallState(),
+        ...extra,
+        wallState: {
+          ...publicWallState,
+          ...extraWallState,
+          liveWall: managedState && Array.isArray(managedState.liveWall)
+            ? managedState.liveWall.slice()
+            : []
+        },
         peekDrawStack: Array.isArray(shan._pai) ? shan._pai.slice(-24) : [],
         takeTile: removeTileFromWall,
-        service: api,
-        ...extra
+        service: api
       };
     }
 
@@ -493,7 +504,20 @@
 
       const candidate = policy[hookName](createContext(context));
       if (!candidate) return null;
-      if (typeof candidate !== 'string') {
+      const normalizedCandidate = typeof candidate === 'string'
+        ? { tileCode: candidate, meta: null, source: null }
+        : (
+          candidate
+          && typeof candidate === 'object'
+          && typeof candidate.tileCode === 'string'
+            ? {
+                tileCode: candidate.tileCode,
+                meta: candidate.meta && typeof candidate.meta === 'object' ? candidate.meta : null,
+                source: typeof candidate.source === 'string' ? candidate.source : null
+              }
+            : null
+        );
+      if (!normalizedCandidate) {
         log('warn', '摸牌策略返回了非法牌编码，已忽略', {
           hookName,
           candidate
@@ -501,22 +525,23 @@
         return null;
       }
 
-      const takenTile = removeTileFromWall(candidate);
+      const takenTile = removeTileFromWall(normalizedCandidate.tileCode);
       if (!takenTile) {
         log('warn', '摸牌策略请求的牌不在剩余牌山中，已回退到正常摸牌', {
           hookName,
-          candidate
+          candidate: normalizedCandidate.tileCode
         });
         return null;
       }
 
       return {
         tileCode: takenTile,
-        source: `policy:${policy.id || hookName}`,
+        source: normalizedCandidate.source || `policy:${policy.id || hookName}`,
         meta: {
           hook: hookName,
           policyId: policy.id || 'unknown',
-          policyName: policy.name || 'Unknown Draw Policy'
+          policyName: policy.name || 'Unknown Draw Policy',
+          ...(normalizedCandidate.meta || {})
         }
       };
     }

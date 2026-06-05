@@ -21,9 +21,12 @@ These should stay aligned with the codebase and be kept short:
 These describe direction and constraints rather than current file layout:
 
 - [`AI_PLAN.md`](AI_PLAN.md)
+- [`BASIC_LUCK_DEALING_V0_1.md`](BASIC_LUCK_DEALING_V0_1.md)
 - [`FUTURE_DEVELOPMENT_REFERENCE.md`](FUTURE_DEVELOPMENT_REFERENCE.md)
 - [`FUTURE_PROOFING.md`](FUTURE_PROOFING.md)
+- [`LUCK_DEALING_ALGORITHM_DEEP_DIVE_V0_1.md`](LUCK_DEALING_ALGORITHM_DEEP_DIVE_V0_1.md)
 - [`MULTI_ROUND_AND_SETTLEMENT_PLAN.md`](MULTI_ROUND_AND_SETTLEMENT_PLAN.md)
+- [`WIND_SYSTEM_V0_1.md`](WIND_SYSTEM_V0_1.md)
 
 ### Operational docs
 
